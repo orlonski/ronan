@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { enqueueDocumentoAdmissao } from "@/lib/sync";
 import { escolherArquivo, podeEscolherArquivo } from "@/lib/escolher-arquivo";
 import { usePendingDocumentos } from "@/hooks/use-pending-documentos";
+import { MiniaturaDocumento } from "@/components/miniatura-documento";
 import { useDocumentosDaObra, type DocumentoDaObra } from "@/lib/queries";
 
 /**
@@ -408,11 +409,26 @@ function ItemDocumento({
   return (
     <View className={`rounded-2xl border-2 bg-card p-4 ${borda}`}>
       <View className="flex-row items-start gap-3">
-        <Icone
-          pronto={pronto}
-          vencido={vencido || recusado}
-          faltaAssinar={faltaAssinar || esperandoConferencia}
-        />
+        {/* ⚠️ Quando o arquivo existe, o lugar do ícone é DELE.
+            
+            A lista dizia "Chegou no escritório" e não mostrava nada: ele
+            tirava a foto, o app confirmava, e ele ficava sem saber qual das
+            tentativas entrou — nem se mandou a CNH no lugar do comprovante.
+            Miniatura ruim é melhor que nada; ela não precisa dar pra LER o
+            documento, precisa dar pra RECONHECER qual é. */}
+        {doc.recebido && !esperandoSinal ? (
+          <MiniaturaDocumento
+            exigenciaId={doc.id}
+            mimetype={doc.mimetype ?? null}
+            titulo={doc.titulo}
+          />
+        ) : (
+          <Icone
+            pronto={pronto}
+            vencido={vencido || recusado}
+            faltaAssinar={faltaAssinar || esperandoConferencia}
+          />
+        )}
         <View className="flex-1">
           <Text className="text-lg font-semibold text-foreground">{doc.titulo}</Text>
 
@@ -533,9 +549,24 @@ function ItemDocumento({
             // nada na tela diga isso.
             null
           ) : (
-            <Pressable onPress={onMandar} accessibilityRole="button" className="mt-2 py-1">
-              <Text className="text-base text-muted-foreground underline">Mandar outra foto</Text>
-            </Pressable>
+            /* ⚠️ BOTÃO, não texto sublinhado.
+            
+               Isto era um link cinza, e pra quem tem pouca familiaridade com
+               celular um texto sublinhado não é um alvo: é uma frase. Quem
+               quisesse trocar a foto não tinha como saber que dava. Alvo de
+               44px, borda visível, verbo do que acontece — o mesmo padrão dos
+               outros botões da tela, só que secundário porque o documento já
+               está lá. */
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onPress={onMandar}
+              accessibilityLabel={`Trocar a foto de ${doc.titulo}`}
+            >
+              <Camera size={18} color="#13316b" />
+              <Text className="ml-2 text-base font-semibold text-foreground">Trocar a foto</Text>
+            </Button>
           )}
         </View>
       </View>
