@@ -12,6 +12,7 @@ import { chaveDaExigencia, chaveDocumento } from "../common/chave-documento";
 import { regimeVivo } from "../common/regime-vigente";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
+import { PushService } from "../push/push.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { detectarAssinaturaEmbutida, hashDoArquivo } from "./assinatura-arquivo";
 
@@ -79,6 +80,7 @@ export class AdmissaoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
+    private readonly push: PushService,
   ) {}
 
   // --------------------------------------------------- o que se exige ---
@@ -622,7 +624,7 @@ export class AdmissaoService {
       throw new BadRequestException("Escreva o que houve com o documento.");
     }
     const doc = await this.acharPorChave(motoristaId, chaveOuExigencia);
-    return this.prisma.motoristaDocumento.update({
+    const atualizado = await this.prisma.motoristaDocumento.update({
       where: { id: doc.id },
       data: {
         recusadoEm: new Date(),
@@ -631,7 +633,46 @@ export class AdmissaoService {
         conferidoEm: null,
         conferidoPor: null,
       },
+      include: { exigencia: { select: { titulo: true } } },
     });
+
+    /**
+     * ⚠️ AVISAR É PARTE DA RECUSA, não um extra.
+     *
+     * Sem a push, devolver um documento é escrever num lugar que o motorista
+     * não tem motivo pra abrir: ele já tinha feito a parte dele, a tela dizia
+     * que estava resolvido, e ele só descobriria na portaria da obra — que é
+     * exatamente o que este módulo existe pra evitar.
+     *
+     * É um dos DOIS únicos avisos desta feature (o outro é o convite). Nada de
+     * lembrete recorrente de "ainda faltam 4": cobrança periódica no celular
+     * de quem já sabe o que deve é o que faz a pessoa desligar a notificação —
+     * e aí ela perde a que importa.
+     *
+     * `tentar` e não `enviar`: falha de push não pode desfazer a recusa, que
+     * já está gravada. O item aparece no app dele assim que ele abrir.
+     */
+    const m = await this.prisma.motorista.findFirst({
+      where: { id: motoristaId },
+      select: { id: true, expoPushToken: true },
+    });
+    if (m?.expoPushToken) {
+      const nome = atualizado.exigencia?.titulo ?? "Um documento";
+      await this.push
+        .enviar({
+          motoristaId: m.id,
+          token: m.expoPushToken,
+          titulo: `${nome}: precisa mandar de novo`,
+          corpo: texto,
+          tipo: "documento-recusado",
+          criadoPorId: usuarioId,
+        })
+        .catch(() => {
+          // Já está gravado; ele vê ao abrir o app.
+        });
+    }
+
+    return atualizado;
   }
 
   /** Aceita a chave (`exig:<id>` / `gaveta:<TIPO>`) ou só o id da exigência. */

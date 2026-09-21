@@ -140,7 +140,14 @@ function servico(over: {
         return create;
       },
     },
-    motorista: { findFirst: async () => ({ id: "mot1", nome: "João", cpf: "11122233344" }) },
+    motorista: {
+      findFirst: async () => ({
+        id: "mot1",
+        nome: "João",
+        cpf: "11122233344",
+        expoPushToken: "tok-1",
+      }),
+    },
     // A trava de vínculo: é ela que diz se esta pessoa é contratada aqui.
     regimeVigente: { findFirst: async () => over.regime ?? null },
     assinaturaDocumento: {
@@ -161,7 +168,17 @@ function servico(over: {
     removeObject: async () => undefined,
     getObjectBuffer: async () => over.arquivoGuardado ?? Buffer.from("conteudo do papel"),
   };
-  return { s: new AdmissaoService(prisma as never, uploads as never), escritas };
+  // Push de mentira: o teste checa QUE avisou, não como.
+  const push = {
+    enviar: async (args: Record<string, unknown>) => {
+      escritas.push({ tabela: "push", data: args });
+      return { ok: true };
+    },
+  };
+  return {
+    s: new AdmissaoService(prisma as never, uploads as never, push as never),
+    escritas,
+  };
 }
 
 const ARQUIVO = {
@@ -1052,5 +1069,38 @@ describe("anexar pela gaveta cai na exigência dela", () => {
     expect(escritas.find((e) => e.tabela === "documento")!.data.chave).toBe(
       "gaveta:REGISTRO_MOTORISTA",
     );
+  });
+});
+
+/**
+ * AVISAR É PARTE DA RECUSA.
+ *
+ * ⚠️ Sem a push, devolver um documento é escrever num lugar que o motorista
+ * não tem motivo pra abrir: ele já tinha feito a parte dele, a tela dizia que
+ * estava resolvido, e ele só descobriria na portaria da obra — que é
+ * exatamente o que este módulo existe pra evitar.
+ */
+describe("recusar avisa o motorista", () => {
+  const UM = [
+    { tipo: "CNH", titulo: "CNH", obrigatorio: true, empresaId: null, publico: "TODOS" as const },
+  ];
+
+  it("manda push com o MOTIVO no corpo", async () => {
+    const { s, escritas } = servico({ exigidos: UM, enviados: [{ tipo: "CNH" }] });
+    await s.recusarDocumento("mot1", "e1", "a foto está cortada", "u1");
+
+    const push = escritas.find((e) => e.tabela === "push")!.data;
+    expect(push.tipo).toBe("documento-recusado");
+    // O motivo vai no corpo: "mande de novo" sozinho faz a pessoa repetir o
+    // mesmo erro.
+    expect(push.corpo).toBe("a foto está cortada");
+  });
+
+  it("conferir NÃO manda push", async () => {
+    // Conferir não pede nada dele. Avisar seria ruído — e ruído faz a pessoa
+    // desligar a notificação, perdendo a que importa.
+    const { s, escritas } = servico({ exigidos: UM, enviados: [{ tipo: "CNH" }] });
+    await s.conferirDocumento("mot1", "e1", "u1");
+    expect(escritas.some((e) => e.tabela === "push")).toBe(false);
   });
 });

@@ -466,6 +466,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             // Não temos tela de detalhe de abastecimento no app motorista —
             // abre a central pra ver a notificação completa com o diff.
             router.push("/notificacoes");
+          } else if (kind === "documento-recusado") {
+            // ⚠️ Vai direto pra tela do documento, não pra central. O aviso
+            // diz "precisa mandar de novo": mandar ele procurar onde resolver
+            // é pedir um passo a mais de quem já está travado — e foi
+            // exatamente o defeito dos convites, que chegavam por push e não
+            // tinham porta (ver `perfil.tsx`).
+            void queryClient.invalidateQueries({ queryKey: ["documentos-obra"] });
+            router.push("/documentos-da-obra");
           } else if (kind === "mensagem-admin") {
             router.push("/notificacoes");
           }
