@@ -57,7 +57,20 @@ export function DocumentosDrawer({ open, onClose, motoristaId, motoristaNome }: 
       doc: d as MotoristaDocumentoOutput,
     }));
     const gavetasOcupadas = new Set(existentes.map((d) => d.tipo));
-    const vazias = TIPOS_DOCUMENTO_MOTORISTA.filter((t) => !gavetasOcupadas.has(t)).map((t) => ({
+    /**
+     * ⚠️ A gaveta que TEM EXIGÊNCIA não vira linha vazia aqui.
+     *
+     * Senão a duplicata volta pela tela: o escritório veria "CNH — nenhum
+     * arquivo anexado" bem abaixo da CNH que o motorista já mandou pela
+     * exigência, anexaria ali, e passariam a existir duas CNH de novo. Um
+     * documento, uma linha — e quando há exigência, a linha é a dela.
+     */
+    const comExigencia = new Set(
+      existentes.filter((d) => d.exigenciaId).map((d) => d.tipo),
+    );
+    const vazias = TIPOS_DOCUMENTO_MOTORISTA.filter(
+      (t) => !gavetasOcupadas.has(t) && !comExigencia.has(t),
+    ).map((t) => ({
       chave: `gaveta:${t}`,
       tipo: t as TipoDocumentoMotorista,
       doc: undefined,

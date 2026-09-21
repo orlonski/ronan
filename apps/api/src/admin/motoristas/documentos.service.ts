@@ -96,10 +96,31 @@ export class MotoristasDocumentosService {
 
     // Quando o escritório sobe pra uma exigência, é ela que manda — inclusive
     // na gaveta, que é detalhe de armazenamento dela.
-    const exigencia = exigenciaId
+    let exigencia = exigenciaId
       ? await this.prisma.documentoExigido.findFirst({ where: { id: exigenciaId } })
       : null;
     if (exigenciaId && !exigencia) throw new NotFoundException("Exigência não encontrada");
+
+    /**
+     * ⚠️ UM DOCUMENTO, UMA LINHA.
+     *
+     * Anexar pela gaveta quando existe UMA exigência ativa nela cai nessa
+     * exigência, em vez de criar um anexo solto ao lado. Sem isto, a mesma CNH
+     * passava a existir duas vezes na ficha — uma "anexo do escritório" e
+     * outra atendendo a exigência —, e o motorista continuava sendo cobrado de
+     * um documento que já estava ali do lado.
+     *
+     * Com DUAS exigências na mesma gaveta (RG e CTPS em `REGISTRO_MOTORISTA`)
+     * não há como adivinhar qual é, e aí o anexo continua avulso: escolher uma
+     * por sorteio é como o arquivo sumia antes.
+     */
+    if (!exigencia) {
+      const daGaveta = await this.prisma.documentoExigido.findMany({
+        where: { tipo, ativo: true },
+        take: 2,
+      });
+      if (daGaveta.length === 1) exigencia = daGaveta[0]!;
+    }
 
     const { doc } = await this.admissao.receberDocumento({
       motoristaId,

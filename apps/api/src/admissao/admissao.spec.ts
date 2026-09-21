@@ -1005,3 +1005,52 @@ describe("quem tem vínculo manda documento, com ou sem obra", () => {
     expect(r.total).toBe(0);
   });
 });
+
+/**
+ * UM DOCUMENTO, UMA LINHA.
+ *
+ * ⚠️ A separação por exigência resolveu "18 papéis não cabem em 12 gavetas",
+ * mas abriu a porta pro contrário: a mesma CNH existindo duas vezes — um anexo
+ * avulso na gaveta e o documento da exigência. Não existem duas CNH, e o dono
+ * foi direto: "temos que ter uma única fonte e um único tipo e ponto final".
+ */
+describe("anexar pela gaveta cai na exigência dela", () => {
+  it("gaveta com UMA exigência: o anexo do painel vira o documento dela", async () => {
+    const { s, escritas } = servico({
+      exigidos: [
+        { tipo: "CNH", titulo: "CNH", obrigatorio: true, empresaId: null },
+      ],
+    });
+    // Sem `exigenciaId`: é o caminho do painel anexando "na gaveta CNH".
+    await s.receberDocumento({
+      motoristaId: "mot1",
+      exigencia: (await s.exigidosPara("mot1"))[0] ?? null,
+      tipo: "CNH",
+      arquivo: ARQUIVO,
+      origem: "PAINEL",
+    });
+    expect(escritas.find((e) => e.tabela === "documento")!.data.chave).toBe("exig:e1");
+  });
+
+  it("gaveta com DUAS exigências continua aceitando anexo avulso", async () => {
+    // Aqui não há como adivinhar se é o RG ou a CTPS, e escolher por sorteio é
+    // exatamente como o arquivo sumia antes. O anexo fica solto e a tela
+    // mostra de onde ele veio.
+    const { s, escritas } = servico({
+      exigidos: [
+        { tipo: "REGISTRO_MOTORISTA", titulo: "RG", obrigatorio: true, empresaId: null },
+        { tipo: "REGISTRO_MOTORISTA", titulo: "CTPS", obrigatorio: true, empresaId: null },
+      ],
+    });
+    await s.receberDocumento({
+      motoristaId: "mot1",
+      exigencia: null,
+      tipo: "REGISTRO_MOTORISTA",
+      arquivo: ARQUIVO,
+      origem: "PAINEL",
+    });
+    expect(escritas.find((e) => e.tabela === "documento")!.data.chave).toBe(
+      "gaveta:REGISTRO_MOTORISTA",
+    );
+  });
+});
