@@ -70,10 +70,11 @@ export default function PontoTab() {
    * query e na lista. Turno da noite é o público desta tela.
    */
   const [dia, setDia] = useState(hojeISO);
-  const [agora, setAgora] = useState(relogio);
+  // 10s, e não 30: este intervalo é o único que vira o `dia` da tela. Esticar
+  // pra economizar render triplicaria a janela em que a lista e a query ainda
+  // olham ontem.
   useEffect(() => {
     const t = setInterval(() => {
-      setAgora(relogio());
       setDia((d) => {
         const hoje = hojeISO();
         return hoje === d ? d : hoje;
@@ -173,6 +174,16 @@ export default function PontoTab() {
   async function bater() {
     setBatendo(true);
     const marcadoEm = new Date().toISOString();
+    /**
+     * ⚠️ O dia do PAYLOAD sai de `hojeISO()` no instante do toque, nunca do
+     * estado da tela.
+     *
+     * O `dia` do cliente é gravado cru e vira a chave do registro na
+     * apuração. Bater 00:00:20 com o estado ainda em ontem arquivaria a
+     * batida no dia ANTERIOR, com `marcadoEm` de hoje — e a janela seria do
+     * tamanho do intervalo do tick. Aqui ela é zero.
+     */
+    const diaDoToque = hojeISO();
     try {
       // GPS é EVIDÊNCIA, nunca porteiro: usa a permissão que já existe, nunca
       // pede na hora, e desiste em 3s. Sem `race`, um GPS pendurado deixaria o
@@ -197,7 +208,7 @@ export default function PontoTab() {
         /* sem GPS o registro vale do mesmo jeito */
       }
 
-      await enqueuePonto({ marcadoEm, dia, ...coords });
+      await enqueuePonto({ marcadoEm, dia: diaDoToque, ...coords });
       // ⚠️ O háptico de sucesso vem DEPOIS da gravação. Antes, ele saía junto
       // com o disparo do timer: se o armazenamento local falhasse, a pessoa
       // sentia o "pronto" e não existia batida em lugar nenhum.
@@ -227,27 +238,28 @@ export default function PontoTab() {
       <SafeAreaView edges={["top"]} className="bg-brand">
         {/* O banner global de "sem internet" é absoluto e cobriria a metade de
             cima do relógio — justamente quando a hora mais precisa ser lida. */}
+        {/* ⚠️ SEM RELÓGIO. Tinha um de 60pt aqui mostrando a hora atual — que
+            a barra de status do sistema já mostra, dois centímetros acima. Era
+            o espaço mais nobre da tela gasto repetindo o SO.
+            
+            E trocar o conteúdo dele pela "última batida" só mudaria de quem a
+            repetição é: a hora reaparece na lista logo abaixo e o estado
+            reaparece na tarja. A hora da última batida foi pra DENTRO da
+            tarja, que já é o lugar do estado.
+            
+            O que fica é o que o sistema não sabe: de qual empresa é este
+            ponto, e que dia o app vai gravar. A data é a afirmação mais forte
+            do topo de propósito — data errada já foi bug aqui, com quem vira
+            a noite. */}
         <View className="px-5 pb-3 pt-2" style={online ? undefined : { paddingTop: 44 }}>
-          <View className="flex-row items-end justify-between">
-            <Text
-              accessibilityLabel={`Agora são ${agora}`}
-              accessibilityLiveRegion="none"
-              maxFontSizeMultiplier={1.15}
-              className="text-6xl font-bold tracking-tight text-white"
-            >
-              {agora}
-            </Text>
-            <View className="ml-3 flex-1 items-end">
-              <Text numberOfLines={1} className="text-xs font-medium text-white/70">
-                {data?.funcionario
-                  ? `${data.funcionario.cargo ?? "Registrado"}${data.funcionario.empresa ? ` · ${data.funcionario.empresa}` : ""}`
-                  : "Carregando…"}
-              </Text>
-              <Text numberOfLines={1} className="text-sm text-white/85">
-                {dataPorExtenso(dia)}
-              </Text>
-            </View>
-          </View>
+          <Text numberOfLines={1} className="text-sm font-medium text-white/70">
+            {data?.funcionario
+              ? `${data.funcionario.cargo ?? "Registrado"}${data.funcionario.empresa ? ` · ${data.funcionario.empresa}` : ""}`
+              : "Meu ponto"}
+          </Text>
+          <Text numberOfLines={1} className="text-xl font-semibold text-white">
+            {dataPorExtenso(dia)}
+          </Text>
         </View>
       </SafeAreaView>
 
@@ -319,6 +331,11 @@ export default function PontoTab() {
           falhou={falhou ? { dia: falhou.payload.dia, hoje: dia } : null}
           naFila={doDia.length}
           batidas={batidas.length}
+          ultima={batidas.length > 0 ? batidas[batidas.length - 1]!.hora : null}
+          // Só afirma "nenhuma batida" quando HOUVE resposta pra este dia.
+          // Sem isso, os 100-400ms de leitura do cache viram o app dizendo,
+          // em toda abertura, que a pessoa não bateu.
+          carregando={data == null && naFila.length === 0}
           onResolver={() => router.push("/pendentes")}
         />
 
@@ -413,12 +430,16 @@ function Tarja({
   falhou,
   naFila,
   batidas,
+  ultima,
+  carregando,
   onResolver,
 }: {
   erroLocal: string | null;
   falhou: { dia: string; hoje: string } | null;
   naFila: number;
   batidas: number;
+  ultima: string | null;
+  carregando: boolean;
   onResolver: () => void;
 }) {
   const base = "flex-row items-center gap-3 rounded-2xl border-2 px-4 py-3";
@@ -445,7 +466,7 @@ function Tarja({
         <TriangleAlert size={22} color={COR_ERRO} />
         <Text className="flex-1 text-sm font-medium text-foreground">
           {doDiaAtual
-            ? "Uma batida não chegou. Toque para resolver."
+            ? `Sua batida${ultima ? ` das ${ultima}` : ""} não chegou. Toque para resolver.`
             : `Uma batida do dia ${falhou.dia.slice(-2)} não chegou. Toque para resolver.`}
         </Text>
         <ChevronRight size={20} color="#64748b" />
@@ -458,7 +479,7 @@ function Tarja({
         <CloudOff size={22} color={COR_AVISO} />
         <Text className="flex-1 text-sm text-foreground">
           {naFila === 1
-            ? "1 batida guardada aqui. Sobe sozinha quando o sinal voltar."
+            ? `1 batida guardada aqui${ultima ? `, das ${ultima}` : ""}. Sobe sozinha quando o sinal voltar.`
             : `${naFila} batidas guardadas aqui. Sobem sozinhas quando o sinal voltar.`}
         </Text>
       </View>
@@ -469,7 +490,9 @@ function Tarja({
       <View className={`${base} border-success/50 bg-success/10`} style={estilo}>
         <Check size={22} color={COR_OK} strokeWidth={3} />
         <Text className="flex-1 text-sm text-foreground">
-          Tudo certo — suas batidas chegaram no escritório.
+          {ultima
+            ? `Tudo certo — sua última foi ${ultima}.`
+            : "Tudo certo — suas batidas chegaram no escritório."}
         </Text>
       </View>
     );
@@ -478,17 +501,15 @@ function Tarja({
     <View className={`${base} border-border bg-muted`} style={estilo}>
       <Clock size={22} color="#64748b" />
       <Text className="flex-1 text-sm text-foreground">
-        Bata quando começar, na saída e na volta do almoço, e no fim.
+        {carregando
+          ? "Carregando suas batidas…"
+          : "Bata quando começar, na saída e na volta do almoço, e no fim."}
       </Text>
     </View>
   );
 }
 
-/** Hora de Brasília, não a do fuso que o aparelho acha que tem. */
-function relogio(): string {
-  const d = new Date(Date.now() - 3 * 60 * 60 * 1000);
-  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
-}
+/* `relogio()` saiu junto com o relógio do cabeçalho. */
 
 function horaBR(iso: string): string {
   const d = new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000);
