@@ -114,6 +114,8 @@ export const FRASE_PADRAO: Record<MotivoDivergencia, string> = {
     "Este lançamento ficou preso no celular do motorista e só subiu depois. Confira os dados antes de aprovar.",
   PAYLOAD_PARCIAL:
     "O app enviou dados que o servidor não entendeu por inteiro (versão antiga). Confira os campos da viagem.",
+  VIAGEM_ABANDONADA:
+    "Esta viagem ficou aberta e foi fechada sem o motorista ter finalizado. O que o app já tinha (eventos, GPS, fotos) está aqui — complete o que falta pra ela poder ser faturada.",
 };
 
 /**

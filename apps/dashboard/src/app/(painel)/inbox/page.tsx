@@ -27,6 +27,9 @@ const TIPO_LABEL: Record<string, string> = {
   "local-em-validacao": "Local em validação",
   "motorista-cadastro": "Novo cadastro",
   "motorista-senha-reset": "Redefinição de senha",
+  "alerta-torre": "Alerta da torre",
+  "conta-auto-cadastro": "Empresa nova",
+  "lead-novo": "Contato pelo site",
 };
 
 export default function InboxPage() {

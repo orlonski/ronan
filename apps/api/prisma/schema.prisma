@@ -84,6 +84,10 @@ enum MotivoDivergencia {
   /// Payload que o schema não entendeu por inteiro (app antigo, campo renomeado).
   /// A viagem entra com o que deu pra aproveitar e o resto vai em `dados`.
   PAYLOAD_PARCIAL
+  /// A viagem ficou aberta e foi fechada sem o motorista ter finalizado (pelo
+  /// painel ou pela varredura de abandono). Informativo, nunca bloqueante: o que
+  /// segura a viagem fora do fechamento são os FALTA_* que vão junto.
+  VIAGEM_ABANDONADA
 }
 
 /// O que impediu a viagem de entrar completa. Uma linha por motivo, idempotente
@@ -567,6 +571,7 @@ model Conta {
   enviosFechamento              EnvioFechamento[]
   auditLogs                     AuditLog[]
   configuracoesTracking         ConfiguracaoTracking[]
+  configuracoesTorre            ConfiguracaoTorre[]
   configuracoesIa               ConfiguracaoIa[]
   configuracoesAgente           ConfiguracaoAgente[]
   configuracoesAvisoGrupo       ConfiguracaoAvisoGrupo[]
@@ -672,6 +677,7 @@ model User {
   resgatesResolvidos          LancamentoResgatado[]
   layoutsEnvio                LayoutEnvio[]
   configsTracking             ConfiguracaoTracking[]
+  configsTorre                ConfiguracaoTorre[]
   configsIa                   ConfiguracaoIa[]
   configsAgente               ConfiguracaoAgente[]
   configsBuscaLocais          ConfiguracaoBuscaLocais[]
@@ -3247,6 +3253,11 @@ enum TipoAlertaOperacional {
   NAO_INICIOU
   /// Ocorrência aberta esperando alguém resolver.
   OCORRENCIA_ABERTA
+  /// Viagem que ficou aberta e já não é operação: passou do teto de idade da
+  /// torre. Não é PARADA_LONGA porque a ação é outra — ninguém descobre nada
+  /// ligando pro motorista de uma viagem de três dias atrás; alguém fecha ela
+  /// no painel. Nunca vira notificação.
+  VIAGEM_ESQUECIDA
 }
 
 /**
@@ -3275,13 +3286,29 @@ model AlertaOperacional {
   /// Números que geraram o alerta, pra tela poder explicar sem recalcular.
   dados          Json?
   detectadoEm    DateTime              @default(now())
+  /// Quando este alerta virou sininho, e com que severidade. Existe pra que o
+  /// mesmo problema notifique UMA vez: a varredura seguinte atualiza a linha e
+  /// só volta a incomodar alguém se a situação PIOROU (MEDIA → ALTA).
+  notificadoEm   DateTime?
+  severidadeNotificada String?
   resolvidoEm    DateTime?
+  /// Resolvido sozinho pela varredura (viagem fechou, ou a condição passou),
+  /// em vez de alguém ter clicado. Separa "o supervisor tratou" de "deixou de
+  /// existir" — que é a diferença entre a torre ter servido e a torre ter feito
+  /// barulho à toa.
+  resolvidoAuto  Boolean               @default(false)
   resolvidoPor   User?                 @relation("ResolveuAlerta", fields: [resolvidoPorId], references: [id], onDelete: SetNull)
   resolvidoPorId String?
 
-  /// Um alerta vivo por tipo e viagem: o cron roda a cada 5 min e não pode
-  /// empilhar o mesmo aviso doze vezes por hora.
-  @@unique([viagemId, tipo, resolvidoEm])
+  /// O dedup de verdade é um índice PARCIAL (`WHERE "resolvidoEm" IS NULL`),
+  /// criado por SQL na migration `torre_alerta_dedupe` — o Prisma 6 não modela
+  /// índice parcial, então ele é invisível daqui.
+  ///
+  /// Estava declarado como `@@unique([viagemId, tipo, resolvidoEm])` e NUNCA
+  /// funcionou: alerta vivo tem `resolvidoEm = NULL`, e no Postgres dois NULL
+  /// não colidem num índice único. O `create` passava sempre, o `catch` que o
+  /// código tratava como "caminho normal" jamais foi atingido, e uma viagem
+  /// esquecida rendia 288 alertas e 288 notificações por dia, por pessoa.
   @@index([contaId, resolvidoEm, severidade])
   @@index([contaId])
   @@map("alertas_operacionais")
@@ -4519,6 +4546,44 @@ model GeocodingCache {
 
 /// Configuração global do tracking GPS aplicado a todos os motoristas.
 /// Singleton: só existe uma linha (id="default"). Operadora ajusta pelo dashboard.
+/// Os números da torre de controle, por conta.
+///
+/// Eram sete constantes chumbadas em `common/torre.ts` — e pedreira e obra não
+/// têm o mesmo relógio. Os defaults reproduzem exatamente o comportamento
+/// antigo, então existir esta tabela não muda nada pra quem não abrir a tela.
+///
+/// Fica sob `programacao.*` (é a mesma pessoa que monta o dia e acompanha o
+/// dia) e dentro do módulo `torre`, junto com a tela que ela configura.
+model ConfiguracaoTorre {
+  contaId             String   @default("__SEM_CONTA__")
+  conta               Conta    @relation(fields: [contaId], references: [id])
+  id                  String   @id @default(uuid())
+  /// Sem evento por N minutos → alerta de "sem novidade" (na tela, sem sininho).
+  paradaLongaMin      Int      @default(120)
+  /// Sem evento por N minutos → o alerta vira ALTA. Só ALTA notifica.
+  paradaLongaAltaMin  Int      @default(240)
+  /// Teto de idade: acima disso não é mais operação, é casca aberta pra fechar.
+  viagemEsquecidaMin  Int      @default(720)
+  /// Sem posição de GPS por N minutos (só vale pra conta com tracking ligado).
+  semSinalMin         Int      @default(180)
+  /// Janela em que a notificação pode sair (hora de Brasília). O alerta em si
+  /// nasce em qualquer hora — a janela segura só o sininho.
+  horaInicio          Int      @default(6)
+  horaFim             Int      @default(20)
+  notificaDomingo     Boolean  @default(true)
+  /// Fecha sozinha (EM_ANDAMENTO → INCOMPLETA) a viagem abandonada há N horas.
+  /// 0 = desligado, e é o default: fechar viagem de gente é decisão da empresa,
+  /// não padrão de fábrica.
+  fecharAbandonadaHoras Int    @default(0)
+  // Audit
+  alteradoEm          DateTime @updatedAt
+  alteradoPor         User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId       String?
+
+  @@unique([contaId])
+  @@map("configuracao_torre")
+}
+
 model ConfiguracaoTracking {
   contaId               String   @default("__SEM_CONTA__")
   conta                 Conta    @relation(fields: [contaId], references: [id])

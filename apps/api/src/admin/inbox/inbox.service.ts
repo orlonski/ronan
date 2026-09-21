@@ -1,7 +1,10 @@
 import { Injectable, Logger, NotFoundException, OnModuleDestroy } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
 import { Prisma, type AdminNotificacao } from "@prisma/client";
 import { Subject, type Observable } from "rxjs";
 import { PrismaService } from "../../prisma/prisma.service";
+import { comoSistema } from "../../common/conta/conta-context";
+import { comLockDeCron } from "../../common/cron-exclusivo";
 
 export type TipoNotificacaoAdmin =
   | "nova-viagem"
@@ -18,13 +21,28 @@ export type TipoNotificacaoAdmin =
   // Uma empresa se cadastrou sozinha pelo site. Vai pro sininho da PLATAFORMA.
   | "conta-auto-cadastro"
   // Alguém pediu contato pelo formulário do site. Também é da plataforma.
-  | "lead-novo";
+  | "lead-novo"
+  // Torre de controle: viagem em curso que precisa de alguém. Tipo PRÓPRIO — a
+  // torre mandava isto como "nova-viagem" (o primeiro da lista, escolhido só
+  // pra passar no typecheck), e o sininho anunciava "Nova viagem" pra um
+  // caminhão parado há três dias.
+  | "alerta-torre";
 
 export type DispararNotificacaoInput = {
   tipo: TipoNotificacaoAdmin;
   titulo: string;
   corpo: string;
   dados?: Prisma.InputJsonValue;
+  /**
+   * Chave de permissão que o destinatário precisa ter pra receber.
+   *
+   * Sem ela, o fan-out é todo usuário ativo — e `User.acessoGlobal` é
+   * `@default(true)`, então "todo usuário ativo" é literalmente todo mundo que
+   * consegue logar. Serve pra evento que interessa a qualquer um (viagem nova,
+   * cadastro pendente). Não serve pra alerta operacional: notificar quem não
+   * pode nem abrir a tela onde o alerta se resolve é ruído por construção.
+   */
+  permissao?: string;
 };
 
 /**
@@ -50,6 +68,32 @@ export class AdminInboxService implements OnModuleDestroy {
   }
 
   /**
+   * Notificação lida também vence.
+   *
+   * A tabela nunca teve expurgo: nada apagava uma linha aqui, nem lida nem de
+   * dois anos atrás. Enquanto o volume era "poucos eventos por dia" isso não
+   * doeu; bastou um cron gerar 288 avisos por dia por pessoa pro sininho ficar
+   * impraticável. Só o que já foi lido é apagado — não-lida é trabalho que
+   * ninguém viu, e some só quando a pessoa vê.
+   */
+  @Cron("0 20 4 * * *", { name: "expurgo-inbox", timeZone: "America/Sao_Paulo" })
+  async expurgar(): Promise<void> {
+    try {
+      await comLockDeCron(this.prisma, "expurgo-inbox", async () => {
+        const corte = new Date(Date.now() - 60 * 86_400_000);
+        const { count } = await comoSistema(() =>
+          this.prisma.adminNotificacao.deleteMany({
+            where: { lida: true, criadoEm: { lt: corte } },
+          }),
+        );
+        if (count > 0) this.log.log(`expurgo do inbox: ${count} notificações lidas apagadas`);
+      });
+    } catch (e) {
+      this.log.error(`falha no expurgo do inbox: ${(e as Error).message}`);
+    }
+  }
+
+  /**
    * Fan-out: cria 1 linha por admin/operador ativo e emite no stream de cada
    * um. Best-effort: erro aqui não derruba a operação que disparou (caller
    * sempre envolve em try/catch).
@@ -63,6 +107,7 @@ export class AdminInboxService implements OnModuleDestroy {
     const destinos = await this.prisma.user.findMany({
       where: {
         ativo: true,
+        ...(input.permissao ? { papel: { permissoes: { has: input.permissao } } } : {}),
         OR: [
           { acessoGlobal: true },
           // Usuário restrito só recebe evento de frota que ele enxerga. Evento

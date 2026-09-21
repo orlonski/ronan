@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   avaliarViagem,
+  decidirAlerta,
+  dentroDaJanelaDaTorre,
   limiteDeAtrasoMin,
   medianaMinutos,
   valorDaEstadia,
+  LIMIARES_TORRE_PADRAO,
   type ViagemEmCurso,
 } from "./torre";
 
@@ -108,7 +111,160 @@ describe("avaliarViagem — parada longa", () => {
     });
     const p = a.find((x) => x.tipo === "PARADA_LONGA");
     expect(p).toBeDefined();
-    expect(p!.detalhe).toContain("nenhum evento");
+    expect(p!.detalhe).toContain("nenhuma etapa");
+  });
+
+  it("não põe o parceiro como sujeito de uma omissão", () => {
+    // "sem registrar nada" é ficha de ocorrência de funcionário — e motorista
+    // aqui é parceiro autônomo. Quem está sem novidade é a viagem.
+    const a = avaliarViagem(viagem({ ultimoEventoEm: min(130) }), {
+      limiteAtrasoMin: null,
+      agora: AGORA,
+      temTracking: true,
+    });
+    const p = a.find((x) => x.tipo === "PARADA_LONGA")!;
+    expect(p.titulo).not.toContain("sem registrar");
+    expect(p.titulo).toContain("sem novidade");
+  });
+});
+
+describe("avaliarViagem — teto de idade", () => {
+  // O bug que encheu a caixa de entrada: uma viagem esquecida aberta ficava
+  // ALTA pra sempre e notificava a cada varredura. Acima do teto ela deixa de
+  // ser operação — ninguém descobre nada ligando pro motorista de três dias
+  // atrás — e vira pendência de cadastro, que não incomoda ninguém.
+  const esquecida = () =>
+    avaliarViagem(viagem({ iniciadoEm: min(4000), ultimoEventoEm: null }), {
+      limiteAtrasoMin: 180,
+      agora: AGORA,
+      temTracking: true,
+    });
+
+  it("passado o teto vira VIAGEM_ESQUECIDA, não parada longa", () => {
+    const a = esquecida();
+    expect(a.map((x) => x.tipo)).toEqual(["VIAGEM_ESQUECIDA"]);
+  });
+
+  it("viagem esquecida NUNCA é alta — é ela que enchia o sininho", () => {
+    expect(esquecida()[0]!.severidade).toBe("MEDIA");
+  });
+
+  it("não acumula atraso nem sem sinal por cima", () => {
+    // Quem esqueceu a viagem aberta não precisa saber que ela também está
+    // "atrasada" há três dias: é consequência, não um segundo problema.
+    const a = avaliarViagem(
+      viagem({ iniciadoEm: min(4000), ultimoEventoEm: null, ultimaPosicaoEm: min(3000) }),
+      {
+        limiteAtrasoMin: 60,
+        agora: AGORA,
+        temTracking: true,
+      },
+    );
+    expect(a).toHaveLength(1);
+  });
+
+  it("logo abaixo do teto ainda é parada longa", () => {
+    const a = avaliarViagem(viagem({ ultimoEventoEm: min(719) }), {
+      limiteAtrasoMin: null,
+      agora: AGORA,
+      temTracking: true,
+    });
+    expect(a.find((x) => x.tipo === "PARADA_LONGA")).toBeDefined();
+  });
+
+  it("o teto é configurável por conta", () => {
+    const a = avaliarViagem(viagem({ ultimoEventoEm: min(300) }), {
+      limiteAtrasoMin: null,
+      agora: AGORA,
+      temTracking: true,
+      limiares: { ...LIMIARES_TORRE_PADRAO, viagemEsquecidaMin: 240 },
+    });
+    expect(a[0]!.tipo).toBe("VIAGEM_ESQUECIDA");
+  });
+});
+
+describe("decidirAlerta — o mesmo problema avisa UMA vez", () => {
+  const det = (severidade: "BAIXA" | "MEDIA" | "ALTA") =>
+    ({
+      tipo: "PARADA_LONGA",
+      severidade,
+      viagemId: "v1",
+      motoristaId: "m1",
+      titulo: "t",
+      detalhe: "d",
+      dados: {},
+    }) as const;
+
+  it("alerta novo e grave: cria e avisa", () => {
+    expect(decidirAlerta(det("ALTA"), null)).toEqual({ acao: "criar", notificar: true });
+  });
+
+  it("alerta novo e leve: cria e fica quieto", () => {
+    // Notificar tudo é como se ensina alguém a ignorar notificação.
+    expect(decidirAlerta(det("MEDIA"), null)).toEqual({ acao: "criar", notificar: false });
+  });
+
+  it("MESMO alerta grave na varredura seguinte: atualiza e NÃO avisa de novo", () => {
+    // ESTE é o bug que encheu a caixa de entrada. O cron rodava a cada 5 min,
+    // o `create` cego passava sempre (o índice único não dedupe NULL no
+    // Postgres) e cada passagem virava notificação: 288 por dia, por pessoa.
+    expect(decidirAlerta(det("ALTA"), { severidade: "ALTA" })).toEqual({
+      acao: "atualizar",
+      notificar: false,
+    });
+  });
+
+  it("problema que PIOROU volta a avisar", () => {
+    // O outro lado da moeda: consertar só o índice faria o alerta que nasceu
+    // MEDIA nunca mais virar ALTA, e o caso grave deixaria de avisar.
+    expect(decidirAlerta(det("ALTA"), { severidade: "MEDIA" })).toEqual({
+      acao: "atualizar",
+      notificar: true,
+    });
+  });
+
+  it("problema que melhorou não avisa", () => {
+    expect(decidirAlerta(det("MEDIA"), { severidade: "ALTA" })).toEqual({
+      acao: "atualizar",
+      notificar: false,
+    });
+  });
+
+  it("viagem esquecida nunca notifica, nem na primeira vez", () => {
+    const esquecida = avaliarViagem(viagem({ iniciadoEm: min(4000), ultimoEventoEm: null }), {
+      limiteAtrasoMin: null,
+      agora: AGORA,
+      temTracking: true,
+    })[0]!;
+    expect(decidirAlerta(esquecida, null).notificar).toBe(false);
+  });
+});
+
+describe("dentroDaJanelaDaTorre", () => {
+  const janela = (over = {}) => ({ ...LIMIARES_TORRE_PADRAO, ...over });
+  // 14:00Z = 11:00 em Brasília.
+  const meioDia = new Date("2026-06-10T14:00:00Z");
+  // 05:00Z = 02:00 em Brasília, de uma quarta-feira.
+  const madrugada = new Date("2026-06-10T05:00:00Z");
+
+  it("no horário comercial passa", () => {
+    expect(dentroDaJanelaDaTorre(meioDia, janela())).toBe(true);
+  });
+
+  it("de madrugada não notifica ninguém", () => {
+    expect(dentroDaJanelaDaTorre(madrugada, janela())).toBe(false);
+  });
+
+  it("janela que vira a noite é intervalo aberto", () => {
+    expect(dentroDaJanelaDaTorre(madrugada, janela({ horaInicio: 20, horaFim: 6 }))).toBe(true);
+    expect(dentroDaJanelaDaTorre(meioDia, janela({ horaInicio: 20, horaFim: 6 }))).toBe(false);
+  });
+
+  it("domingo pode ser desligado", () => {
+    // 14/06/2026 é um domingo.
+    const domingo = new Date("2026-06-14T14:00:00Z");
+    expect(dentroDaJanelaDaTorre(domingo, janela())).toBe(true);
+    expect(dentroDaJanelaDaTorre(domingo, janela({ notificaDomingo: false }))).toBe(false);
   });
 });
 

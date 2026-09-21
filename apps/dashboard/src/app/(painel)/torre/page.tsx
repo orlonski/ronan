@@ -35,7 +35,13 @@ import { fetchApi, useAuthToken } from "@/lib/client-api";
 
 type Alerta = {
   id: string;
-  tipo: "ATRASO" | "PARADA_LONGA" | "SEM_SINAL" | "NAO_INICIOU" | "OCORRENCIA_ABERTA";
+  tipo:
+    | "ATRASO"
+    | "PARADA_LONGA"
+    | "SEM_SINAL"
+    | "NAO_INICIOU"
+    | "OCORRENCIA_ABERTA"
+    | "VIAGEM_ESQUECIDA";
   severidade: "ALTA" | "MEDIA" | "BAIXA";
   titulo: string;
   detalhe: string | null;
@@ -80,10 +86,13 @@ type Payload = {
 
 const TIPO_LABEL: Record<Alerta["tipo"], string> = {
   ATRASO: "Atraso",
-  PARADA_LONGA: "Parado",
+  // "Parado" descreve o motorista; "sem novidade" descreve o que o sistema de
+  // fato sabe — que é a verdade, e não acusa ninguém.
+  PARADA_LONGA: "Sem novidade",
   SEM_SINAL: "Sem sinal",
   NAO_INICIOU: "Não iniciou",
   OCORRENCIA_ABERTA: "Ocorrência",
+  VIAGEM_ESQUECIDA: "Ficou aberta",
 };
 
 const SEVERIDADE: Record<Alerta["severidade"], string> = {

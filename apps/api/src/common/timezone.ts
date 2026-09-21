@@ -55,3 +55,43 @@ export function inicioDoDiaBR(ymd: string): Date {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d, 3));
 }
+
+/** A hora cheia (0–23) em São Paulo. O container roda em UTC e `getHours()` mentiria. */
+export function horaEmSaoPaulo(d: Date = new Date()): number {
+  return Number(
+    new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      hour: "2-digit",
+      hour12: false,
+    }).format(d),
+  );
+}
+
+/** Dia da semana em São Paulo, no mesmo índice do `getDay()` (0 = domingo). */
+export function diaDaSemanaEmSaoPaulo(d: Date = new Date()): number {
+  const s = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "short",
+  }).format(d);
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(s);
+}
+
+/** "14:35" no relógio de Brasília — pra texto que uma pessoa vai ler. */
+export function horaMinutoSaoPaulo(d: Date): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(d);
+}
+
+/** "12/09 às 07:10" — pra quando o dia já não é hoje e a hora sozinha confunde. */
+export function dataHoraCurtaSaoPaulo(d: Date): string {
+  const dia = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+  }).format(d);
+  return `${dia} às ${horaMinutoSaoPaulo(d)}`;
+}

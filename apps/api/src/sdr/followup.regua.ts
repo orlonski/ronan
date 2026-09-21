@@ -1,4 +1,5 @@
 import { GAP_NOVA_CONVERSA_MIN } from "../common/gap-conversa";
+import { diaDaSemanaEmSaoPaulo, horaEmSaoPaulo } from "../common/timezone";
 
 /**
  * O que fazer com uma conversa que parou — e, quase sempre, nada.
@@ -90,25 +91,13 @@ function horasEntre(antes: Date, agora: Date): number {
   return (agora.getTime() - antes.getTime()) / HORA;
 }
 
-/** A hora cheia em São Paulo. O container roda em UTC e `getHours()` mentiria. */
-export function horaEmSaoPaulo(d: Date): number {
-  return Number(
-    new Intl.DateTimeFormat("pt-BR", {
-      timeZone: "America/Sao_Paulo",
-      hour: "2-digit",
-      hour12: false,
-    }).format(d),
-  );
-}
-
-/** Domingo não se cobra ninguém. Sábado passa — caminhão roda no sábado. */
-export function diaDaSemanaEmSaoPaulo(d: Date): number {
-  const s = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Sao_Paulo",
-    weekday: "short",
-  }).format(d);
-  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(s);
-}
+/**
+ * Relógio de Brasília: a implementação mora em `common/timezone.ts`, que é onde
+ * o resto do sistema já ancora fronteira de dia. Reexportadas aqui porque a
+ * régua do follow-up é a API pública desse assunto pro SDR — e domingo não se
+ * cobra ninguém, sábado passa (caminhão roda no sábado).
+ */
+export { horaEmSaoPaulo, diaDaSemanaEmSaoPaulo };
 
 export function dentroDaJanelaDeEnvio(agora: Date, p: PrazosFollowup): boolean {
   const hora = horaEmSaoPaulo(agora);

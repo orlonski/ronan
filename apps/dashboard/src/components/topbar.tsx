@@ -6,11 +6,13 @@ import type { Route } from "next";
 import { useState } from "react";
 import {
   Bell,
+  Building2,
   Camera,
   ClipboardCheck,
   KeyRound,
   MapPin,
   PiggyBank,
+  TriangleAlert,
   UserPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -156,6 +158,12 @@ function ItemNotificacao({
 
 export function IconeTipo({ tipo }: { tipo: string }) {
   const cls = "h-4 w-4";
+  // A torre mandava o alerta como "nova-viagem", então um caminhão parado há
+  // três dias chegava com a prancheta azul de lançamento.
+  if (tipo === "alerta-torre")
+    return <TriangleAlert className={`${cls} text-red-600`} />;
+  if (tipo === "conta-auto-cadastro" || tipo === "lead-novo")
+    return <Building2 className={`${cls} text-emerald-600`} />;
   if (tipo === "nova-viagem")
     return <ClipboardCheck className={`${cls} text-blue-600`} />;
   if (tipo === "resposta-divergencia-pedagio")
@@ -192,6 +200,9 @@ export function tempoRelativo(iso: string): string {
  */
 export function rotaParaNotificacao(n: AdminNotificacao): string | null {
   const dados = n.dados ?? {};
+  // Alerta vai pra TORRE, sempre — é a única tela onde ele se resolve. Ia pra
+  // /viagens/:id, que não tem ação nenhuma pra isso.
+  if (n.tipo === "alerta-torre") return "/torre";
   if (n.tipo === "nova-viagem" && dados.viagemId) {
     return `/viagens/${dados.viagemId}`;
   }
