@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react-native";
 import { api } from "@/lib/api";
@@ -35,7 +35,13 @@ export default function CorrigirPontoScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const { data: catalogo } = useCatalogoPonto();
-  const [dia, setDia] = useState(hojeISO());
+  // Chegando pelo toque num dia do espelho, a data já vem escolhida — é o
+  // caminho natural ("esse dia aqui está errado") e evita ela procurar a
+  // data de novo no calendário.
+  const { dia: diaParam } = useLocalSearchParams<{ dia?: string }>();
+  const [dia, setDia] = useState(
+    typeof diaParam === "string" && /^\d{4}-\d{2}-\d{2}$/.test(diaParam) ? diaParam : hojeISO(),
+  );
   /** ISO completo do instante escolhido — o `HoraField` devolve assim. */
   const [instante, setInstante] = useState("");
   const [motivoCodigo, setMotivoCodigo] = useState("");

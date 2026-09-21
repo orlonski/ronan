@@ -272,3 +272,32 @@ describe("dia que ainda não aconteceu", () => {
     expect(d!.minutosPrevistos).toBe(540);
   });
 });
+
+/**
+ * Horário incluído por correção não pode parecer batida do trabalhador.
+ *
+ * Num documento de jornada, a distinção entre "ele registrou" e "fizeram por
+ * ele" é a informação mais importante da linha — some ela e o espelho vira
+ * uma lista de horas sem dono.
+ */
+describe("o que veio de correção fica marcado", () => {
+  it("carrega a marca até o par, lado a lado", () => {
+    const entrada = { ...m("2026-09-21T10:00:00Z"), incluida: true };
+    const saida = m("2026-09-21T19:00:00Z");
+    const [p] = parearPeriodo([entrada, saida]);
+    expect(p!.entradaIncluida).toBe(true);
+    expect(p!.saidaIncluida).toBe(false);
+  });
+
+  it("batida normal não fica marcada", () => {
+    const [p] = parearPeriodo([m("2026-09-21T10:00:00Z"), m("2026-09-21T19:00:00Z")]);
+    expect(p!.entradaIncluida).toBe(false);
+    expect(p!.saidaIncluida).toBe(false);
+  });
+
+  it("par em aberto também carrega a marca", () => {
+    const [p] = parearPeriodo([{ ...m("2026-09-21T10:00:00Z"), incluida: true }]);
+    expect(p!.emAberto).toBe(true);
+    expect(p!.entradaIncluida).toBe(true);
+  });
+});

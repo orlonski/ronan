@@ -743,7 +743,12 @@ export class PontoAdminService {
     let i = 0;
     for (const c of correcoes) {
       if (c.tipo === "INCLUSAO" && c.instantePretendido) {
-        apuradas.push({ numero: -++i, marcadoEm: c.instantePretendido, desconsiderada: false });
+        apuradas.push({
+          numero: -++i,
+          marcadoEm: c.instantePretendido,
+          desconsiderada: false,
+          incluida: true,
+        });
       }
     }
 

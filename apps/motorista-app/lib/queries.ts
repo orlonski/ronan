@@ -793,7 +793,15 @@ export type EspelhoPontoApp = {
   dias: {
     dia: string;
     futuro: boolean;
-    pares: { entrada: string; saida: string | null; emAberto: boolean; minutos: number }[];
+    pares: {
+      entrada: string;
+      saida: string | null;
+      emAberto: boolean;
+      minutos: number;
+      /** Veio de correção aprovada, não do dedo dele. A tela marca. */
+      entradaIncluida: boolean;
+      saidaIncluida: boolean;
+    }[];
     minutosPrevistos: number;
     minutosConsiderados: number;
     saldoMin: number;

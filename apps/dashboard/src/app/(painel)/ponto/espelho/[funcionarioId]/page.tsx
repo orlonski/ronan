@@ -11,7 +11,16 @@ import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { hojeSP } from "@/lib/datetime-br";
 import { diaBr, duracao, hm, PATH } from "../../_lib";
 
-type Par = { entrada: string; saida: string | null; emAberto: boolean; minutos: number; numeros: number[] };
+type Par = {
+  entrada: string;
+  saida: string | null;
+  emAberto: boolean;
+  minutos: number;
+  numeros: number[];
+  /** Veio de correção aprovada, não do registro do trabalhador. */
+  entradaIncluida: boolean;
+  saidaIncluida: boolean;
+};
 type DiaEspelho = {
   dia: string;
   futuro: boolean;
@@ -179,8 +188,27 @@ function Conteudo({ funcionarioId }: { funcionarioId: string }) {
                         ) : (
                           d.pares.map((p, i) => (
                             <span key={i} className="rounded border px-2 py-0.5 font-mono text-xs">
-                              {hora(p.entrada)}
-                              {p.saida ? `–${hora(p.saida)}` : " – ?"}
+                              {/* O que foi INCLUÍDO por correção não pode sair
+                                  igual ao que o trabalhador registrou: num
+                                  documento de jornada, essa é a distinção que
+                                  mais importa na linha. */}
+                              <span
+                                className={p.entradaIncluida ? "font-bold text-blue-700" : ""}
+                                title={p.entradaIncluida ? "incluído por correção" : undefined}
+                              >
+                                {hora(p.entrada)}
+                                {p.entradaIncluida ? "*" : ""}
+                              </span>
+                              {p.saida ? (
+                                <span
+                                  className={p.saidaIncluida ? "font-bold text-blue-700" : ""}
+                                  title={p.saidaIncluida ? "incluído por correção" : undefined}
+                                >
+                                  {`–${hora(p.saida)}${p.saidaIncluida ? "*" : ""}`}
+                                </span>
+                              ) : (
+                                " – ?"
+                              )}
                             </span>
                           ))
                         )}
@@ -224,7 +252,8 @@ function Conteudo({ funcionarioId }: { funcionarioId: string }) {
           )}
 
           <p className="text-xs text-muted-foreground">
-            As batidas vêm do registro do próprio funcionário e não podem ser alteradas — nem por
+            Horário com <strong>*</strong> foi incluído por correção — não foi o funcionário que
+            registrou. As batidas vêm do registro do próprio funcionário e não podem ser alteradas — nem por
             nós. O que muda a conta é a correção, que é sempre linha nova, com autor e motivo.
           </p>
         </>

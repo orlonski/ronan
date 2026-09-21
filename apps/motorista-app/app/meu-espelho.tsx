@@ -193,9 +193,13 @@ export default function MeuEspelhoScreen() {
                   (c) => c.dia === d.dia && c.status === "PENDENTE",
                 );
                 return (
-                <View
+                <Pressable
                   key={d.dia}
-                  className={`flex-row items-center gap-3 rounded-xl border px-3 py-2 ${
+                  accessibilityRole="button"
+                  accessibilityLabel={`Pedir correção do dia ${d.dia.slice(-2)}`}
+                  disabled={d.futuro || data.fechado}
+                  onPress={() => router.push(`/corrigir-ponto?dia=${d.dia}`)}
+                  className={`flex-row items-center gap-3 rounded-xl border px-3 py-2 active:opacity-70 ${
                     pedido ? "border-warning/60 bg-warning/5" : "border-border"
                   } ${d.futuro ? "opacity-40" : ""}`}
                 >
@@ -203,15 +207,33 @@ export default function MeuEspelhoScreen() {
                     {d.dia.slice(-2)}
                   </Text>
                   <View className="flex-1 flex-row flex-wrap gap-1">
-                    {d.pares.length === 0 ? (
+                    {d.pares.length === 0 && !pedido ? (
                       <Text className="text-sm text-muted-foreground">—</Text>
                     ) : (
                       d.pares.map((p, i) => (
                         <Text key={i} className="text-sm text-foreground">
-                          {hora(p.entrada)}
-                          {p.saida ? `–${hora(p.saida)}` : " – ?"}
+                          {/* Lado a lado: o que ELE bateu e o que foi incluído
+                              por correção não podem sair iguais. */}
+                          <Text className={p.entradaIncluida ? "text-[#1D4ED8] font-semibold" : ""}>
+                            {hora(p.entrada)}
+                            {p.entradaIncluida ? "*" : ""}
+                          </Text>
+                          {p.saida ? (
+                            <Text className={p.saidaIncluida ? "text-[#1D4ED8] font-semibold" : ""}>
+                              {`–${hora(p.saida)}${p.saidaIncluida ? "*" : ""}`}
+                            </Text>
+                          ) : (
+                            <Text> – ?</Text>
+                          )}
                         </Text>
                       ))
+                    )}
+                    {/* O horário PEDIDO aparece junto dos outros, do jeito que
+                        ele imaginou o dia — com a cara de "ainda não vale". */}
+                    {pedido?.instantePretendido && (
+                      <Text className="text-sm font-semibold text-[#B4501A]">
+                        {hora(pedido.instantePretendido)} (pedido)
+                      </Text>
                     )}
                     {d.alertas.length > 0 && (
                       <Text className="w-full text-xs text-[#B4501A]">
@@ -232,9 +254,15 @@ export default function MeuEspelhoScreen() {
                   >
                     {d.futuro ? "" : hm(d.saldoMin)}
                   </Text>
-                </View>
+                </Pressable>
                 );
               })}
+              <Text className="mt-1 text-xs text-muted-foreground">
+                Toque num dia pra pedir correção dele.
+                {data.dias.some((d) => d.pares.some((p) => p.entradaIncluida || p.saidaIncluida))
+                  ? " O horário com * foi incluído por correção, não foi você que bateu."
+                  : ""}
+              </Text>
             </View>
 
             {/* MEUS PEDIDOS.

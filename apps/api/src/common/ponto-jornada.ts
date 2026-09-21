@@ -22,6 +22,14 @@ export type MarcacaoApurada = {
   marcadoEm: Date;
   /** Desconsiderada por correção aprovada. Continua no espelho, riscada. */
   desconsiderada: boolean;
+  /**
+   * Veio de uma CORREÇÃO aprovada, não do dedo do trabalhador.
+   *
+   * ⚠️ Tem que viajar até a tela. Um horário incluído por ajuste aparecendo
+   * igual a um que a pessoa bateu apaga a única distinção que importa num
+   * documento de jornada: o que ela registrou e o que fizeram por ela.
+   */
+  incluida?: boolean;
 };
 
 export type Par = {
@@ -33,6 +41,10 @@ export type Par = {
   /** O dia a que este par pertence: o da ABERTURA. Ver `apurarPeriodo`. */
   dia: Ymd;
   numeros: number[];
+  /** A abertura veio de correção aprovada, não do dedo dele. */
+  entradaIncluida: boolean;
+  /** Idem pro fechamento. Um par pode ter um lado de cada. */
+  saidaIncluida: boolean;
 };
 
 export type Tolerancia = { porMarcacaoMin: number; diariaMin: number };
@@ -145,6 +157,8 @@ export function parearPeriodo(
       minutos: Math.round(dur / UM_MINUTO),
       dia: diaBR(aberta.marcadoEm),
       numeros: [aberta.numero, m.numero],
+      entradaIncluida: aberta.incluida === true,
+      saidaIncluida: m.incluida === true,
     });
     aberta = null;
   }
@@ -160,6 +174,8 @@ function emAberto(m: MarcacaoApurada): Par {
     minutos: 0,
     dia: diaBR(m.marcadoEm),
     numeros: [m.numero],
+    entradaIncluida: m.incluida === true,
+    saidaIncluida: false,
   };
 }
 
