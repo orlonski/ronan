@@ -765,6 +765,8 @@ export type DocumentoDaObra = {
   soComCertificado: boolean;
   recebido: boolean;
   recebidoEm: string | null;
+  /** Serve pra saber se o app consegue MOSTRAR o papel antes de assinar. */
+  mimetype: string | null;
   assinado: boolean;
   assinadoEm: string | null;
   validade: string | null;

@@ -417,6 +417,13 @@ export class AdmissaoService {
         soComCertificado: d.exigeIcpBrasil,
         recebido: d.recebido,
         recebidoEm: d.recebidoEm,
+        /**
+         * O app decide com isto se consegue MOSTRAR o papel antes de assinar.
+         * Foto ele desenha; PDF não — não há visualizador de PDF no app, e
+         * mandar assinar sem ver é o defeito que a assinatura simples não
+         * sobrevive numa audiência.
+         */
+        mimetype: d.mimetype,
         assinado: d.assinado,
         assinadoEm: d.assinadoEm,
         validade: d.validade,
@@ -425,6 +432,154 @@ export class AdmissaoService {
       total: estado.total,
       faltamObrigatorios: estado.faltamObrigatorios,
     };
+  }
+
+  /**
+   * O motorista mandando um arquivo PELO APP.
+   *
+   * Mesma regra de gravação das outras portas; o que muda é quem responde por
+   * ela. Aqui não há teto de envios como no link: o teto do link existe porque
+   * endpoint público de escrita sem limite vira hospedagem grátis pra quem
+   * descobrir a URL — com JWT, quem está do outro lado é o dono dos documentos.
+   */
+  async receberDoMotorista(
+    motoristaId: string,
+    exigenciaId: string,
+    arquivo: { buffer: Buffer; mimetype: string; size: number; originalname: string },
+  ) {
+    if (!MIMES_PERMITIDOS.has(arquivo.mimetype) && !ehExtensaoAssinada(arquivo.originalname)) {
+      throw new BadRequestException("Mande uma foto ou um PDF.");
+    }
+    if (arquivo.size > MAX_BYTES) {
+      throw new BadRequestException("O arquivo é grande demais. O limite é 25 MB.");
+    }
+
+    const exigidos = await this.exigidosPara(motoristaId, { soDoPublicoDele: true });
+    const exigencia = exigidos.find((e) => e.id === exigenciaId);
+    if (!exigencia) throw new BadRequestException("Este documento não é pedido pra você.");
+
+    const { assinaturaEmbutida } = await this.receberDocumento({
+      motoristaId,
+      exigencia,
+      tipo: exigencia.tipo,
+      arquivo,
+      origem: "APP",
+    });
+
+    this.log.log(`Documento "${exigencia.titulo}" recebido pelo app.`);
+    return { recebido: true, exigenciaId, assinaturaEmbutida };
+  }
+
+  /**
+   * O arquivo que o motorista já mandou, pra ele ver.
+   *
+   * ⚠️ Isto é o contrário da regra do link público, e de propósito: lá o GET
+   * nunca devolve arquivo porque quem abre pode não ser o titular. Aqui o
+   * titular está provado pelo JWT do cadastro dele.
+   *
+   * E é o que torna a assinatura pelo app valer alguma coisa: o documento que
+   * exige assinatura quase sempre foi subido pelo ESCRITÓRIO (contrato,
+   * ordem de serviço, ficha de EPI). Sem mostrar, o motorista assinaria um
+   * papel que nunca viu — que é exatamente a fragilidade que a assinatura
+   * simples não sobrevive numa audiência.
+   *
+   * O `vistoEm` é carimbado aqui, pelo servidor. Não é o app que declara.
+   */
+  async arquivoParaMotorista(motoristaId: string, exigenciaId: string) {
+    const chave = chaveDaExigencia(exigenciaId);
+    const doc = await this.prisma.motoristaDocumento.findFirst({
+      where: { motoristaId, chave },
+      select: { id: true, storageKey: true, mimetype: true, nomeArquivo: true },
+    });
+    if (!doc) throw new NotFoundException("Documento não encontrado.");
+
+    await this.prisma.motoristaDocumento.update({
+      where: { id: doc.id },
+      data: { vistoEm: new Date() },
+    });
+    return doc;
+  }
+
+  /**
+   * O aceite eletrônico PELO APP.
+   *
+   * A diferença que importa em relação ao link: quem assina está autenticado
+   * com CPF e senha, num aparelho que ele usa há meses. A trilha registra isso
+   * (`origem: APP`) e registra se ele ABRIU o documento antes — e esse segundo
+   * fato vem do banco, não de um campo que o app manda.
+   *
+   * O CPF continua sendo conferido contra o cadastro mesmo com JWT: é a
+   * invariante que impede a porta nova de afrouxar a regra da porta velha.
+   */
+  async assinarPeloMotorista(
+    motoristaId: string,
+    exigenciaId: string,
+    dados: { nome: string; cpf: string },
+    ip?: string,
+    userAgent?: string,
+  ) {
+    const exigidos = await this.exigidosPara(motoristaId, { soDoPublicoDele: true });
+    const exigencia = exigidos.find((e) => e.id === exigenciaId);
+    if (!exigencia) throw new BadRequestException("Este documento não é pedido pra você.");
+    if (!exigencia.exigeAssinatura) {
+      throw new BadRequestException("Este documento não precisa de assinatura.");
+    }
+    if (exigencia.exigeIcpBrasil) {
+      throw new BadRequestException(
+        "Este documento exige certificado digital: ele tem que chegar já assinado.",
+      );
+    }
+
+    const chave = chaveDaExigencia(exigencia.id);
+    const doc = await this.prisma.motoristaDocumento.findFirst({
+      where: { motoristaId, chave },
+      select: { storageKey: true, vistoEm: true },
+    });
+    if (!doc) throw new BadRequestException("O arquivo ainda não chegou aqui.");
+
+    const motorista = await this.prisma.motorista.findFirst({
+      where: { id: motoristaId },
+      select: { cpf: true },
+    });
+    const so = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
+    if (motorista?.cpf && so(motorista.cpf) !== so(dados.cpf)) {
+      throw new BadRequestException("O CPF não confere com o do seu cadastro.");
+    }
+
+    // O hash sai do arquivo GUARDADO: é o papel que ele está assinando agora.
+    const buffer = await this.uploads.getObjectBuffer(doc.storageKey);
+
+    const assinatura = await this.prisma.assinaturaDocumento.upsert({
+      where: { motoristaId_chave: { motoristaId, chave } },
+      create: {
+        motoristaId,
+        tipoDocumento: exigencia.tipo,
+        chave,
+        modo: "SIMPLES",
+        origem: "APP",
+        viuDocumento: doc.vistoEm !== null,
+        nomeDeclarado: dados.nome,
+        cpfDeclarado: so(dados.cpf),
+        ip: ip ?? null,
+        userAgent: userAgent?.slice(0, 500) ?? null,
+        hashArquivo: hashDoArquivo(buffer),
+      },
+      update: {
+        modo: "SIMPLES",
+        origem: "APP",
+        viuDocumento: doc.vistoEm !== null,
+        nomeDeclarado: dados.nome,
+        cpfDeclarado: so(dados.cpf),
+        ip: ip ?? null,
+        userAgent: userAgent?.slice(0, 500) ?? null,
+        hashArquivo: hashDoArquivo(buffer),
+        conviteColetaId: null,
+        assinadoEm: new Date(),
+      },
+    });
+
+    this.log.log(`Documento "${exigencia.titulo}" assinado pelo app.`);
+    return { assinado: true, exigenciaId, assinadoEm: assinatura.assinadoEm };
   }
 
   /**

@@ -25,6 +25,10 @@ import {
   listPendingCompletarPeso,
   listPendingEncerrarDiaria,
   listPendingPonto,
+  listPendingDocumentosAdmissao,
+  upsertPendingDocumentoAdmissao,
+  deletePendingDocumentoAdmissao,
+  type PendingDocumentoAdmissao,
   listPendingPresencaObra,
   listPendingEventosViagem,
   listPendingFotos,
@@ -411,6 +415,22 @@ export async function tentarNovamenteStoryPendente(clientId: string): Promise<vo
   const item = (await listPendingStories()).find((x) => x.clientId === clientId);
   if (!item) return;
   await upsertPendingStory(resetItem(item));
+  notify();
+  void drain();
+}
+
+export async function descartarDocumentoAdmissaoPendente(clientId: string): Promise<void> {
+  const item = (await listPendingDocumentosAdmissao()).find((x) => x.clientId === clientId);
+  await deletePendingDocumentoAdmissao(clientId);
+  // A cópia local só existia pra esta fila.
+  if (item) void FileSystem.deleteAsync(item.arquivoUri, { idempotent: true }).catch(() => {});
+  notify();
+}
+
+export async function tentarNovamenteDocumentoAdmissaoPendente(clientId: string): Promise<void> {
+  const item = (await listPendingDocumentosAdmissao()).find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingDocumentoAdmissao(resetItem(item));
   notify();
   void drain();
 }
@@ -972,6 +992,8 @@ export async function pendingCounts(): Promise<{
   outros: number;
   /** Batidas de ponto esperando subir. */
   ponto: number;
+  /** Documentos de admissão esperando subir. */
+  documentos: number;
   /**
    * TUDO que está esperando subir.
    *
@@ -984,7 +1006,7 @@ export async function pendingCounts(): Promise<{
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po, pt] = await Promise.all([
+  const [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po, pt, dc] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
@@ -998,10 +1020,11 @@ export async function pendingCounts(): Promise<{
     listPendingStories(),
     listPendingPresencaObra(),
     listPendingPonto(),
+    listPendingDocumentosAdmissao(),
   ]);
   // foto/local/story ficavam de fora da contagem: item travado desses não
   // aparecia em lugar nenhum, nem no badge da home nem na tela de Pendentes.
-  const comErro = [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po, pt].reduce(
+  const comErro = [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po, pt, dc].reduce(
     (acc, lista) => acc + lista.filter((i) => i.attempts >= MAX_ATTEMPTS).length,
     0,
   );
@@ -1015,7 +1038,11 @@ export async function pendingCounts(): Promise<{
     outros: fo.length + lo.length + st.length + po.length,
     /** Batidas de ponto esperando subir. Separado porque é prova de jornada. */
     ponto: pt.length,
-    total: [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po, pt].reduce((acc, l) => acc + l.length, 0),
+    documentos: dc.length,
+    total: [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po, pt, dc].reduce(
+      (acc, l) => acc + l.length,
+      0,
+    ),
     comErro,
   };
 }
@@ -1243,6 +1270,7 @@ async function snapshotPendentes(): Promise<{ total: number; motivo?: string }> 
     listPendingViagemCancelar(),
     listPendingPresencaObra(),
     listPendingPonto(),
+    listPendingDocumentosAdmissao(),
   ]);
   const todos = listas.flat();
   const motivo = todos.map((i) => i.errorMsg).find(Boolean) ?? undefined;
@@ -1324,6 +1352,9 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
     await drainAbastecimentos();
     await drainStories();
     await drainMensagensChat();
+    // Documento por ÚLTIMO: é o item mais gordo da fila (até 25 MB) e ninguém
+    // depende dele pra nada. O ponto continua primeiro — é prova de jornada.
+    await drainDocumentosAdmissao();
     const depois = await snapshotPendentes();
     return {
       enviados: Math.max(0, antes.total - depois.total),
@@ -1375,6 +1406,11 @@ async function rescueStaleItems(): Promise<void> {
   for (const m of await listPendingMensagensChat()) {
     if (m.status === "syncing" && isStale(m.lastTriedAt)) {
       await upsertPendingMensagemChat({ ...m, status: "pending" });
+    }
+  }
+  for (const d of await listPendingDocumentosAdmissao()) {
+    if (d.status === "syncing" && isStale(d.lastTriedAt)) {
+      await upsertPendingDocumentoAdmissao({ ...d, status: "pending" });
     }
   }
   for (const cp of await listPendingCompletarPeso()) {
@@ -1600,6 +1636,116 @@ async function processEncerrarDiaria(item: PendingEncerrarDiaria): Promise<void>
  * empregado. Deixar atrás de uma foto de 4 MB num 4G ruim seria priorizar o
  * que ninguém cobra sobre o que um juiz cobra.
  */
+/**
+ * Os documentos de admissão.
+ *
+ * Fila própria porque o item é grande e lento: misturado com os outros, um
+ * upload de 20 MB em 4G ruim seguraria a batida de ponto atrás dele.
+ */
+async function drainDocumentosAdmissao(): Promise<void> {
+  const list = await listPendingDocumentosAdmissao();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!(await podeTentar("documento-admissao"))) return;
+    await processDocumentoAdmissao(item);
+  }
+}
+
+async function processDocumentoAdmissao(item: PendingDocumentoAdmissao): Promise<void> {
+  // O arquivo É o conteúdo aqui: sem ele não há o que reenviar, e retentar pra
+  // sempre deixaria o motorista achando que mandou. Vira erro VISÍVEL, com
+  // caminho de saída ("tirar de novo") na tela.
+  if (!(await fotoAindaExiste(item.arquivoUri))) {
+    reportarFotoPerdida("documento-admissao", item.clientId, item.arquivoUri);
+    await upsertPendingDocumentoAdmissao({
+      ...item,
+      status: "error",
+      attempts: MAX_ATTEMPTS,
+      errorPermanenteLocal: true,
+      errorMsg: "O arquivo não está mais no aparelho. Tire a foto de novo.",
+      lastTriedAt: Date.now(),
+    });
+    notify();
+    return;
+  }
+
+  await upsertPendingDocumentoAdmissao({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    const fd = new FormData();
+    fd.append("arquivo", {
+      uri: item.arquivoUri,
+      name: item.arquivoNome,
+      type: item.arquivoMime,
+    } as unknown as Blob);
+    // ⚠️ Timeout próprio: o padrão de upload (45s) não cobre um documento
+    // grande num 4G de beira de estrada. E tem que ficar ABAIXO do
+    // STALE_SYNCING_MS (5min), senão o rescue devolve pra fila um item que
+    // ainda está subindo — e upload duplicado DERRUBA A ASSINATURA de um
+    // documento que acabou de ser assinado.
+    await api.postForm(`/m/admissao/documentos/${item.clientId}`, fd, {
+      outbox: true,
+      timeoutMs: 120_000,
+    });
+    await deletePendingDocumentoAdmissao(item.clientId);
+    // A cópia local já cumpriu o papel. Falha ao apagar não é erro de tela.
+    void FileSystem.deleteAsync(item.arquivoUri, { idempotent: true }).catch(() => {});
+  } catch (err) {
+    const permanente = isErroPermanente(err);
+    const base = proximoEstadoFalha(item, err, permanente, "documento-admissao");
+    await upsertPendingDocumentoAdmissao({ ...item, ...base });
+  }
+  notify();
+}
+
+/**
+ * Enfileira o documento.
+ *
+ * ⚠️ Copia o arquivo pra `documentDirectory` ANTES de enfileirar. A câmera e o
+ * manipulador gravam em `Caches/`, que o iOS esvazia sob pressão de
+ * armazenamento — e este item pode esperar dias por sinal.
+ */
+export async function enqueueDocumentoAdmissao(e: {
+  exigenciaId: string;
+  titulo: string;
+  uri: string;
+  mime: string;
+  /** Nome original, quando veio dos arquivos do celular (PDF). */
+  nome?: string;
+}): Promise<void> {
+  // A extensão sai do MIME, não do palpite: PDF guardado como `.jpg` faria o
+  // servidor recusar o arquivo depois de ele já ter esperado dias na fila.
+  const ext = e.mime.includes("pdf")
+    ? "pdf"
+    : e.mime.includes("png")
+      ? "png"
+      : e.mime.includes("webp")
+        ? "webp"
+        : "jpg";
+  const destino = `${FileSystem.documentDirectory}doc-${e.exigenciaId}.${ext}`;
+  try {
+    await FileSystem.deleteAsync(destino, { idempotent: true });
+  } catch {
+    /* não existir é o caso normal */
+  }
+  await FileSystem.copyAsync({ from: e.uri, to: destino });
+
+  await upsertPendingDocumentoAdmissao({
+    // clientId = exigência: refazer a foto TROCA o item, nunca empilha dois.
+    clientId: e.exigenciaId,
+    titulo: e.titulo,
+    arquivoUri: destino,
+    arquivoMime: e.mime,
+    arquivoNome: e.nome ?? `documento.${ext}`,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
 async function drainPonto(): Promise<void> {
   const list = await listPendingPonto();
   for (const item of list) {

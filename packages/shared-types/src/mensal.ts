@@ -252,6 +252,26 @@ export const AssinarDocumentoInput = z.object({
 export type AssinarDocumentoInput = z.infer<typeof AssinarDocumentoInput>;
 
 /**
+ * O aceite eletrônico DENTRO DO APP.
+ *
+ * Não tem `tipo` nem `exigenciaId`: o documento vem na rota, e quem assina vem
+ * do token. O nome também não é digitado — no link ele é a única prova de que
+ * alguém declarou ser quem é, mas no app a sessão já provou, e 25 letras num
+ * teclado de celular dentro de um caminhão é a parede que faz a pessoa
+ * desistir. O CPF continua sendo digitado: são 11 números que ele sabe de cor,
+ * e é o que sobra do ato de declarar "sou eu".
+ */
+export const AssinarDocumentoAppInput = z.object({
+  nome: z.string().trim().min(5),
+  cpf: z.string().trim().min(11, "Confirme seu CPF para assinar."),
+  /** O aceite tem que ser um ato. */
+  aceito: z.literal(true, {
+    errorMap: () => ({ message: "Confirme que você leu e concorda." }),
+  }),
+});
+export type AssinarDocumentoAppInput = z.infer<typeof AssinarDocumentoAppInput>;
+
+/**
  * O que o contratante mediu, como ele mandou.
  *
  * Duas formas porque existem duas planilhas no mundo, e a diferença decide o

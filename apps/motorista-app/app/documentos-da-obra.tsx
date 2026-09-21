@@ -1,9 +1,13 @@
-import { RefreshControl, ScrollView, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Modal, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Check, CloudOff, FileText, PenLine, X } from "lucide-react-native";
-import { Pressable } from "react-native";
+import { useEffect, useState } from "react";
+import { Camera, Check, CloudOff, FileText, Paperclip, PenLine, X } from "lucide-react-native";
+import { PhotoCapture } from "@/components/photo-capture";
+import { Button } from "@/components/ui/button";
+import { enqueueDocumentoAdmissao } from "@/lib/sync";
+import { escolherArquivo, podeEscolherArquivo } from "@/lib/escolher-arquivo";
+import { usePendingDocumentos } from "@/hooks/use-pending-documentos";
 import { useDocumentosDaObra, type DocumentoDaObra } from "@/lib/queries";
 
 /**
@@ -78,6 +82,38 @@ export default function DocumentosDaObraScreen() {
   const faltam = data ? data.total - data.prontos : 0;
   const lista = [...(data?.documentos ?? [])].sort((a, b) => peso(a) - peso(b));
 
+  /**
+   * O que está na fila do aparelho, por exigência.
+   *
+   * Sem isto a tela ficaria mentindo enquanto não há sinal: ele tira a foto, o
+   * servidor ainda não sabe de nada, e o item continuaria dizendo "ainda não
+   * chegou" — que é exatamente o jeito de fazer alguém tirar a mesma foto
+   * quatro vezes.
+   */
+  const naFila = usePendingDocumentos();
+  const filaPor = new Map(naFila.map((i) => [i.clientId, i]));
+
+  /** Qual documento está com a tela de envio aberta. */
+  const [capturando, setCapturando] = useState<DocumentoDaObra | null>(null);
+
+  /**
+   * Este build consegue abrir os ARQUIVOS do celular?
+   *
+   * `expo-document-picker` é módulo nativo: chega num build de loja, não por
+   * OTA. Enquanto não chegar, o botão não aparece — em vez de aparecer e
+   * falhar, ou pior, derrubar o app. Ver `lib/escolher-arquivo.ts`.
+   */
+  const [temArquivos, setTemArquivos] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    void podeEscolherArquivo().then((ok) => {
+      if (vivo) setTemArquivos(ok);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <View className="bg-brand px-5 pb-6 pt-14">
@@ -134,16 +170,133 @@ export default function DocumentosDaObraScreen() {
             <Contagem faltam={faltam} total={data.total} />
             <View className="mt-4 gap-3">
               {lista.map((d) => (
-                <ItemDocumento key={d.id} doc={d} />
+                <ItemDocumento
+                  key={d.id}
+                  doc={d}
+                  fila={filaPor.get(d.id)}
+                  onMandar={() => setCapturando(d)}
+                  onAssinar={() =>
+                    router.push({
+                      pathname: "/assinar-documento",
+                      params: { id: d.id, titulo: d.titulo, mimetype: d.mimetype ?? "" },
+                    })
+                  }
+                />
               ))}
             </View>
             <Text className="mt-6 text-center text-sm text-muted-foreground">
-              Por enquanto os documentos são mandados pelo link que o escritório passa. Em
-              breve dá pra mandar por aqui mesmo.
+              Se algum papel só existe em arquivo de computador, mande pelo link que o
+              escritório passa.
             </Text>
           </>
         )}
       </ScrollView>
+
+      {/* Mandar o arquivo.
+
+          ⚠️ NÃO abre a câmera direto (`autoOpen`), e isso é a mesma lição que a
+          tela pública de coleta já pagou: forçar a câmera esconde a galeria, e
+          é NA GALERIA que mora o print que o contratante mandou por WhatsApp —
+          metade dos papéis chega assim. As duas portas ficam lado a lado, e o
+          título em cima diz qual documento ele está mandando: sem isso, quem
+          tocou no botão errado só descobre depois. */}
+      <Modal
+        visible={capturando !== null}
+        animationType="slide"
+        onRequestClose={() => setCapturando(null)}
+      >
+        {/* ⚠️ `SafeAreaProvider` PRÓPRIO: `Modal` do RN abre uma janela
+            separada, e os insets do provider do app não chegam lá dentro. Sem
+            isto o título fica atrás da Dynamic Island — que foi exatamente o
+            que apareceu ao abrir esta tela no iPhone. */}
+        <SafeAreaProvider>
+          <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
+            {capturando ? (
+            <View className="flex-1 p-5">
+              <View className="flex-row items-start justify-between gap-3">
+                <View className="flex-1">
+                  <Text className="text-2xl font-bold text-foreground">{capturando.titulo}</Text>
+                  {capturando.ajuda ? (
+                    <Text className="mt-1 text-base text-muted-foreground">
+                      {capturando.ajuda}
+                    </Text>
+                  ) : null}
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Fechar"
+                  onPress={() => setCapturando(null)}
+                  className="p-2"
+                >
+                  <X size={26} color="#13316b" />
+                </Pressable>
+              </View>
+
+              <Text className="mt-4 text-base text-foreground">
+                Tire uma foto agora ou use uma que já está no celular.
+              </Text>
+
+              <View className="mt-5">
+                <PhotoCapture
+                  value={null}
+                  onChange={async (foto) => {
+                    const alvo = capturando;
+                    setCapturando(null);
+                    if (!foto || !alvo) return;
+                    await enqueueDocumentoAdmissao({
+                      exigenciaId: alvo.id,
+                      titulo: alvo.titulo,
+                      uri: foto.uri,
+                      mime: foto.mime,
+                    });
+                  }}
+                  onCancel={() => {
+                    /* fechar a câmera volta pra esta tela, não pra lista */
+                  }}
+                />
+              </View>
+
+              {/* O terceiro caminho: o papel que chegou em PDF, por e-mail ou
+                  WhatsApp. A galeria do celular NÃO mostra PDF, então sem este
+                  botão "manda pelo app" quebra na metade da lista — eSocial,
+                  certificado de NR e contrato chegam assim. */}
+              {temArquivos ? (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="mt-4"
+                  onPress={async () => {
+                    const alvo = capturando;
+                    const arq = await escolherArquivo();
+                    if (!arq || !alvo) return;
+                    setCapturando(null);
+                    await enqueueDocumentoAdmissao({
+                      exigenciaId: alvo.id,
+                      titulo: alvo.titulo,
+                      uri: arq.uri,
+                      mime: arq.mime,
+                      nome: arq.nome,
+                    });
+                  }}
+                  accessibilityLabel="Escolher um arquivo do celular"
+                >
+                  <Paperclip size={20} color="#13316b" />
+                  <Text className="ml-2 text-base font-semibold text-foreground">
+                    Mandar um arquivo (PDF)
+                  </Text>
+                </Button>
+              ) : null}
+
+              <Text className="mt-5 text-sm text-muted-foreground">
+                {temArquivos
+                  ? "Fica guardado no celular e vai pro escritório sozinho quando tiver sinal. Você não precisa esperar aqui."
+                  : "A foto fica guardada no celular e vai pro escritório sozinha quando tiver sinal. Se o papel for um PDF, mande pelo link que o escritório passa."}
+              </Text>
+            </View>
+            ) : null}
+          </SafeAreaView>
+        </SafeAreaProvider>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -183,12 +336,26 @@ function Contagem({ faltam, total }: { faltam: number; total: number }) {
   );
 }
 
-function ItemDocumento({ doc }: { doc: DocumentoDaObra }) {
+function ItemDocumento({
+  doc,
+  fila,
+  onMandar,
+  onAssinar,
+}: {
+  doc: DocumentoDaObra;
+  fila?: { status: string; attempts: number; errorMsg?: string };
+  onMandar: () => void;
+  onAssinar: () => void;
+}) {
   const validade = estadoValidade(doc.validade);
   const vencido = doc.recebido && validade === "VENCIDO";
   const vencendo = doc.recebido && validade === "VENCENDO";
   const faltaAssinar = doc.recebido && doc.precisaAssinar && !doc.assinado;
   const pronto = doc.recebido && !faltaAssinar && !vencido;
+  // Na fila do aparelho: "guardado" enquanto tenta, "deu erro" quando o
+  // servidor recusou de verdade e só ele pode resolver.
+  const deuErro = fila?.status === "error" || (fila?.attempts ?? 0) >= 8;
+  const esperandoSinal = fila !== undefined && !deuErro;
 
   const borda = vencido
     ? "border-destructive"
@@ -220,13 +387,22 @@ function ItemDocumento({ doc }: { doc: DocumentoDaObra }) {
           ) : null}
 
           <Text className={`mt-2 text-base ${vencido ? "font-semibold text-destructive" : "text-muted-foreground"}`}>
-            <Situacao
-              doc={doc}
-              pronto={pronto}
-              vencido={vencido}
-              vencendo={vencendo}
-              faltaAssinar={faltaAssinar}
-            />
+            {/* A fila do aparelho vence o que o servidor diz: ele acabou de
+                tirar a foto, e dizer "ainda não chegou" faria ele tirar de
+                novo. */}
+            {esperandoSinal ? (
+              "Guardado aqui. Chega no escritório quando o sinal voltar."
+            ) : deuErro ? (
+              fila?.errorMsg || "Essa não deu. Tire outra foto."
+            ) : (
+              <Situacao
+                doc={doc}
+                pronto={pronto}
+                vencido={vencido}
+                vencendo={vencendo}
+                faltaAssinar={faltaAssinar}
+              />
+            )}
           </Text>
 
           {doc.soComCertificado && !doc.assinado ? (
@@ -234,6 +410,46 @@ function ItemDocumento({ doc }: { doc: DocumentoDaObra }) {
               Este aqui não dá pra assinar pelo celular. O escritório te explica como fazer.
             </Text>
           ) : null}
+
+          {/* A AÇÃO. Um alvo por item, e o botão é o alvo — a linha inteira não
+              é pressionável: ação destrutiva ou de câmera aninhada dentro de
+              outro toque, num caminhão sacudindo, é acidente esperando.
+
+              Todos laranja (rotina). Verde aparece UMA vez só, no botão final
+              da tela de assinar — doze botões verdes numa lista destroem o
+              significado de verde no app inteiro. */}
+          {faltaAssinar && !doc.soComCertificado ? (
+            <Button size="lg" className="mt-3" onPress={onAssinar} accessibilityLabel={`Ler e assinar ${doc.titulo}`}>
+              <PenLine size={20} color="#fff" />
+              <Text className="ml-2 text-base font-bold text-white">Ler e assinar</Text>
+            </Button>
+          ) : esperandoSinal ? null : !doc.recebido || vencido || deuErro ? (
+            <Button
+              size="lg"
+              className="mt-3"
+              variant={doc.obrigatorio || vencido || deuErro ? "default" : "outline"}
+              onPress={onMandar}
+              accessibilityLabel={`Mandar foto de ${doc.titulo}`}
+            >
+              <Camera size={20} color={doc.obrigatorio || vencido || deuErro ? "#fff" : "#13316b"} />
+              <Text
+                className={`ml-2 text-base font-bold ${doc.obrigatorio || vencido || deuErro ? "text-white" : "text-foreground"}`}
+              >
+                {deuErro ? "Tirar outra foto" : vencido ? "Mandar o novo" : "Mandar foto"}
+              </Text>
+            </Button>
+          ) : doc.precisaAssinar ? (
+            // Documento que exige assinatura é papel do ESCRITÓRIO (contrato,
+            // ordem de serviço, ficha de EPI): ele não manda, ele assina. E
+            // trocar o arquivo DERRUBA a assinatura — oferecer "mandar outra"
+            // aqui seria oferecer desfazer o que ele acabou de fazer, sem que
+            // nada na tela diga isso.
+            null
+          ) : (
+            <Pressable onPress={onMandar} accessibilityRole="button" className="mt-2 py-1">
+              <Text className="text-base text-muted-foreground underline">Mandar outra foto</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </View>

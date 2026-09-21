@@ -23,7 +23,7 @@ function servico(over: {
     exigeIcpBrasil?: boolean;
     publico?: "MENSAL" | "TODOS";
   }[];
-  enviados?: { tipo: string; storageKey?: string; hashArquivo?: string }[];
+  enviados?: { tipo: string; storageKey?: string; hashArquivo?: string; vistoEm?: Date }[];
   assinaturas?: { tipoDocumento: string; modo: string; assinadoEm: Date; hashArquivo?: string }[];
   arquivoGuardado?: Buffer;
   alocacao?: Record<string, unknown> | null;
@@ -50,6 +50,7 @@ function servico(over: {
     chave: chaveDoTipo(d.tipo),
     storageKey: d.storageKey ?? "chave/no/minio",
     hashArquivo: d.hashArquivo ?? null,
+    vistoEm: d.vistoEm ?? null,
   }));
   const assinaturas = (over.assinaturas ?? []).map((a) => ({
     ...a,
@@ -97,6 +98,10 @@ function servico(over: {
     },
     motoristaDocumento: {
       findMany: async () => enviados,
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        escritas.push({ tabela: "documento-update", data });
+        return data;
+      },
       findFirst: async ({ where }: { where?: { chave?: string } } = {}) =>
         where?.chave ? (enviados.find((d) => d.chave === where.chave) ?? null) : (enviados[0] ?? null),
       upsert: async ({ create }: { create: Record<string, unknown> }) => {
@@ -669,5 +674,90 @@ describe("quem não está em obra não é cobrado de papelada de obra", () => {
     const r = await s.paraOMotorista("mot1");
     expect(r.total).toBe(0);
     expect(r.faltamObrigatorios).toBe(0);
+  });
+});
+
+/**
+ * O motorista mandando e assinando PELO APP.
+ */
+describe("a porta do app", () => {
+  const COM_ASSINATURA = [
+    {
+      tipo: "OS",
+      titulo: "Ordem de serviço",
+      obrigatorio: true,
+      empresaId: null,
+      exigeAssinatura: true,
+      publico: "TODOS" as const,
+    },
+  ];
+
+  it("recusa mandar documento que não é pedido pra ELE", async () => {
+    // Sem isto, um motorista autenticado poderia gravar arquivo em qualquer
+    // exigência da conta — inclusive de exigência que não é do público dele.
+    const { s } = servico({ exigidos: COM_ASSINATURA });
+    await expect(s.receberDoMotorista("mot1", "nao-existe", ARQUIVO)).rejects.toThrow(
+      /não é pedido pra você/i,
+    );
+  });
+
+  it("grava com origem APP", async () => {
+    // É o número que responde "o app está trazendo documento?".
+    const { s, escritas } = servico({ exigidos: COM_ASSINATURA });
+    await s.receberDoMotorista("mot1", "e1", ARQUIVO);
+    expect(escritas.find((e) => e.tabela === "documento")!.data.origem).toBe("APP");
+  });
+
+  it("assinar pelo app registra a origem e SE ele abriu o papel antes", async () => {
+    const { s, escritas } = servico({
+      exigidos: COM_ASSINATURA,
+      enviados: [{ tipo: "OS", vistoEm: new Date() }],
+    });
+    await s.assinarPeloMotorista("mot1", "e1", { nome: "João da Silva", cpf: "11122233344" });
+
+    const a = escritas.find((e) => e.tabela === "assinatura")!.data;
+    expect(a.origem).toBe("APP");
+    expect(a.viuDocumento).toBe(true);
+    // Sem convite: não veio por link nenhum.
+    expect(a.conviteColetaId).toBeUndefined();
+  });
+
+  it("quem NÃO abriu o papel assina, mas isso fica escrito", async () => {
+    // Não bloqueia — bloquear seria inventar uma regra que o link não tem.
+    // Mas mentir que ele leu seria pior do que registrar que não abriu.
+    const { s, escritas } = servico({
+      exigidos: COM_ASSINATURA,
+      enviados: [{ tipo: "OS" }],
+    });
+    await s.assinarPeloMotorista("mot1", "e1", { nome: "João da Silva", cpf: "11122233344" });
+    expect(escritas.find((e) => e.tabela === "assinatura")!.data.viuDocumento).toBe(false);
+  });
+
+  it("CPF que não é o dele continua sendo recusado, mesmo com sessão autenticada", async () => {
+    // A invariante da porta velha não afrouxa na porta nova.
+    const { s } = servico({
+      exigidos: COM_ASSINATURA,
+      enviados: [{ tipo: "OS" }],
+    });
+    await expect(
+      s.assinarPeloMotorista("mot1", "e1", { nome: "Outra Pessoa", cpf: "99988877766" }),
+    ).rejects.toThrow(/CPF não confere/i);
+  });
+
+  it("não dá pra assinar antes do arquivo chegar", async () => {
+    const { s } = servico({ exigidos: COM_ASSINATURA });
+    await expect(
+      s.assinarPeloMotorista("mot1", "e1", { nome: "João da Silva", cpf: "11122233344" }),
+    ).rejects.toThrow(/ainda não chegou/i);
+  });
+
+  it("documento de certificado digital não se assina pelo app", async () => {
+    const { s } = servico({
+      exigidos: [{ ...COM_ASSINATURA[0], exigeIcpBrasil: true }],
+      enviados: [{ tipo: "OS" }],
+    });
+    await expect(
+      s.assinarPeloMotorista("mot1", "e1", { nome: "João da Silva", cpf: "11122233344" }),
+    ).rejects.toThrow(/já assinado/i);
   });
 });

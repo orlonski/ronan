@@ -1820,6 +1820,13 @@ model MotoristaDocumento {
 
   origem      OrigemDocumento        @default(PAINEL)
 
+  /// Quando o MOTORISTA abriu este arquivo no app.
+  ///
+  /// É o que transforma "ele clicou em assinar" em "ele abriu o papel e depois
+  /// assinou". Carimbado pelo servidor no download, não declarado pelo app —
+  /// declaração do cliente não prova nada contra quem a escreveu.
+  vistoEm     DateTime?
+
   validade    DateTime?              @db.Date
   criadoEm    DateTime               @default(now())
   alteradoEm  DateTime               @updatedAt
@@ -6608,6 +6615,22 @@ model AssinaturaDocumento {
 
   /// Por qual link ela assinou, quando veio pela coleta pública.
   conviteColetaId String?
+
+  /// Por onde a assinatura entrou.
+  ///
+  /// `conviteColetaId` nulo já significava "não foi por link", mas significava
+  /// isso tanto pra assinatura do app quanto pra qualquer coisa futura — e a
+  /// diferença importa: pelo app, quem assinou estava autenticado com CPF e
+  /// senha, num aparelho com histórico de uso. Isso é o que separa indício de
+  /// autoria razoável, e tem que estar escrito.
+  origem OrigemDocumento @default(LINK)
+
+  /// O signatário abriu o arquivo antes de assinar?
+  ///
+  /// Falso não invalida nada — é registro honesto do que aconteceu. Pelo link
+  /// público ninguém vê o documento antes (o GET nunca devolve arquivo), e
+  /// dizer que viu seria inventar.
+  viuDocumento Boolean @default(false)
 
   assinadoEm DateTime @default(now())
 

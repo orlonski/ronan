@@ -575,8 +575,20 @@ export const api = {
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, { body }),
   patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, { body }),
   delete: <T>(path: string) => request<T>("DELETE", path),
-  postForm: <T>(path: string, body: FormData, opts?: { outbox?: boolean }) =>
-    request<T>("POST", path, { body, isFormData: true, outbox: opts?.outbox }),
+  postForm: <T>(
+    path: string,
+    body: FormData,
+    // `timeoutMs` porque os 45s do upload de foto não cobrem um documento de
+    // vários MB num 4G de beira de estrada — e o item morreria em "sem sinal"
+    // sem nunca ter tido chance.
+    opts?: { outbox?: boolean; timeoutMs?: number },
+  ) =>
+    request<T>("POST", path, {
+      body,
+      isFormData: true,
+      outbox: opts?.outbox,
+      timeoutMs: opts?.timeoutMs,
+    }),
   loginMotorista: async (cpf: string, senha: string) => {
     const res = await request<AuthResposta>("POST", "/m/auth/login", {
       // Diz ao servidor que esta versão sabe entrar sem empresa nenhuma. Sem a
@@ -626,6 +638,20 @@ export const api = {
     }),
   meusConvites: () =>
     request<ConviteEmpresa[]>("GET", "/m/eu/convites", { comoIdentidade: true }),
+  /**
+   * Assinar um documento de admissão pelo app.
+   *
+   * NÃO passa pelo outbox de propósito: assinatura é um ato, e um ato que fica
+   * "guardado pra depois" é uma declaração que a pessoa não sabe se aconteceu.
+   * Sem sinal, a tela diz que não deu e ela tenta de novo — diferente da foto,
+   * que é conteúdo e pode esperar.
+   */
+  assinarDocumentoAdmissao: (exigenciaId: string, nome: string, cpf: string) =>
+    request<{ assinado: true; assinadoEm: string }>(
+      "POST",
+      `/m/admissao/documentos/${exigenciaId}/assinar`,
+      { body: { nome, cpf, aceito: true } },
+    ),
   /** Os acertos FECHADOS/PAGOS da empresa ativa. Rascunho do escritório não vem. */
   meusAcertos: () => request<AcertoDoMotorista[]>("GET", "/m/acertos"),
   /** A programação que o escritório publicou pra ele. */

@@ -28,6 +28,7 @@ import {
   type PendingFoto,
   type PendingLocal,
   type PendingStory,
+  type PendingDocumentoAdmissao,
   type ZodIssueSaved,
 } from "@/db/database";
 import { usePendingViagens } from "@/hooks/use-pending-viagens";
@@ -40,6 +41,7 @@ import { usePendingEncerrarDiaria } from "@/hooks/use-pending-encerrar-diaria";
 import { usePendingPonto } from "@/hooks/use-pending-ponto";
 import { usePendingPresencaObra } from "@/hooks/use-pending-presenca-obra";
 import { usePendingOutros } from "@/hooks/use-pending-outros";
+import { usePendingDocumentos } from "@/hooks/use-pending-documentos";
 import {
   descartarViagemPendente,
   descartarPedagioPendente,
@@ -49,6 +51,7 @@ import {
   descartarFotoPendente,
   descartarLocalPendente,
   descartarStoryPendente,
+  descartarDocumentoAdmissaoPendente,
   drain,
   tentarNovamenteViagemPendente,
   tentarNovamentePedagioPendente,
@@ -63,6 +66,7 @@ import {
   tentarNovamenteFotoPendente,
   tentarNovamenteLocalPendente,
   tentarNovamenteStoryPendente,
+  tentarNovamenteDocumentoAdmissaoPendente,
 } from "@/lib/sync";
 import { descartarViagemGuiada } from "@/lib/lifecycle";
 import { useCatalogos } from "@/lib/queries";
@@ -81,7 +85,8 @@ type PendingRow =
   | { kind: "abastecimento"; item: PendingAbastecimento }
   | { kind: "foto"; item: PendingFoto }
   | { kind: "local"; item: PendingLocal }
-  | { kind: "story"; item: PendingStory };
+  | { kind: "story"; item: PendingStory }
+  | { kind: "documento"; item: PendingDocumentoAdmissao };
 
 const TIPO_COMBUSTIVEL_LABEL: Record<string, string> = {
   DIESEL_S10: "Diesel S10",
@@ -101,6 +106,7 @@ export default function Pendentes() {
   const ponto = usePendingPonto();
   const presencaObra = usePendingPresencaObra();
   const outros = usePendingOutros();
+  const documentos = usePendingDocumentos();
   const cat = useCatalogos();
   const [sincronizando, setSincronizando] = useState(false);
 
@@ -200,9 +206,10 @@ export default function Pendentes() {
       ...outros.fotos.map((item) => ({ kind: "foto" as const, item })),
       ...outros.locais.map((item) => ({ kind: "local" as const, item })),
       ...outros.stories.map((item) => ({ kind: "story" as const, item })),
+      ...documentos.map((item) => ({ kind: "documento" as const, item })),
     ];
     return all.sort((a, b) => a.item.createdAt - b.item.createdAt);
-  }, [viagens, pedagios, abastecimentos, outros]);
+  }, [viagens, pedagios, abastecimentos, outros, documentos]);
 
   // Helpers de lookup por id no catalogo
   const lookups = useMemo(() => {
@@ -222,6 +229,7 @@ export default function Pendentes() {
     foto: "esta foto",
     local: "este local",
     story: "este story",
+    documento: "este documento",
   };
 
   async function confirmarExcluir(row: PendingRow) {
@@ -239,6 +247,7 @@ export default function Pendentes() {
     else if (row.kind === "abastecimento") await descartarAbastecimentoPendente(id);
     else if (row.kind === "foto") await descartarFotoPendente(id);
     else if (row.kind === "local") await descartarLocalPendente(id);
+    else if (row.kind === "documento") await descartarDocumentoAdmissaoPendente(id);
     else await descartarStoryPendente(id);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
@@ -251,6 +260,7 @@ export default function Pendentes() {
     else if (row.kind === "abastecimento") await tentarNovamenteAbastecimentoPendente(id);
     else if (row.kind === "foto") await tentarNovamenteFotoPendente(id);
     else if (row.kind === "local") await tentarNovamenteLocalPendente(id);
+    else if (row.kind === "documento") await tentarNovamenteDocumentoAdmissaoPendente(id);
     else await tentarNovamenteStoryPendente(id);
   }
 
@@ -870,6 +880,17 @@ function resumoCard(
       tipoLabel: "Story",
       titulo: row.item.legenda?.trim() || "Foto do trecho",
       subtitulo: fmtData(new Date(row.item.createdAt).toISOString()),
+    };
+  }
+  if (row.kind === "documento") {
+    // O conteúdo é o arquivo local, como foto e story. O TÍTULO vem guardado no
+    // item: sem ele a tela diria "documento" e o motorista não saberia qual dos
+    // doze está preso.
+    return {
+      tipoLabel: "Documento",
+      titulo: row.item.titulo,
+      subtitulo: fmtData(new Date(row.item.createdAt).toISOString()),
+      linha3: "Foto guardada aqui, esperando sinal pra chegar no escritório.",
     };
   }
   if (row.kind === "local") {

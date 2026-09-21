@@ -292,6 +292,38 @@ export type PendingPresencaObra = {
  * `marcadoEm` é carimbado no TOQUE, não no envio: o outbox pode drenar horas
  * depois, e é a hora do toque que vale.
  */
+/**
+ * Um documento de admissão esperando pra subir.
+ *
+ * ⚠️ O `clientId` é o ID DA EXIGÊNCIA, não um uuid novo. Refazer a foto antes
+ * de sincronizar tem que TROCAR o item da fila, não empilhar dois — senão o
+ * servidor recebe a foto tremida depois da boa, e a última a chegar é a que
+ * fica (a chave é determinística por exigência).
+ *
+ * O arquivo não viaja no payload: fica uma cópia dele em `documentDirectory`.
+ * ⚠️ NUNCA em `Caches/` — o iOS esvazia esse diretório sob pressão de
+ * armazenamento, e um documento pode esperar dias por sinal. Perder a foto de
+ * um ticket é aborrecimento; perder a da CTPS faz o motorista chegar na obra
+ * convencido de que mandou.
+ */
+export type PendingDocumentoAdmissao = {
+  /** = exigenciaId. */
+  clientId: string;
+  /** Pra tela de Pendentes dizer QUAL papel é, sem ir buscar na rede. */
+  titulo: string;
+  arquivoUri: string;
+  arquivoMime: string;
+  arquivoNome: string;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
+};
+
 export type PendingPonto = {
   clientId: string;
   payload: {
@@ -452,6 +484,7 @@ const COMPLETAR_PESO_KEY = "outbox.viagem-completar-peso";
 const ENCERRAR_DIARIA_KEY = "outbox.viagem-encerrar-diaria";
 const PRESENCA_OBRA_KEY = "outbox.presenca-obra";
 const PONTO_KEY = "outbox.ponto";
+const DOCUMENTO_ADMISSAO_KEY = "outbox.documento-admissao";
 
 /** Todos os sufixos do outbox — usado pela adoção/limpeza do storage legado. */
 const SUFIXOS_OUTBOX = [
@@ -474,6 +507,7 @@ const SUFIXOS_OUTBOX = [
   ENCERRAR_DIARIA_KEY,
   PRESENCA_OBRA_KEY,
   PONTO_KEY,
+  DOCUMENTO_ADMISSAO_KEY,
 ];
 
 async function readList<T>(key: string): Promise<T[]> {
@@ -715,6 +749,28 @@ export async function deletePendingPonto(clientId: string): Promise<void> {
   const list = await listPendingPonto();
   await writeList(
     PONTO_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingDocumentosAdmissao(): Promise<PendingDocumentoAdmissao[]> {
+  return readList<PendingDocumentoAdmissao>(DOCUMENTO_ADMISSAO_KEY);
+}
+
+export async function upsertPendingDocumentoAdmissao(
+  item: PendingDocumentoAdmissao,
+): Promise<void> {
+  const list = await listPendingDocumentosAdmissao();
+  const i = list.findIndex((x) => x.clientId === item.clientId);
+  if (i >= 0) list[i] = item;
+  else list.push(item);
+  await writeList(DOCUMENTO_ADMISSAO_KEY, list);
+}
+
+export async function deletePendingDocumentoAdmissao(clientId: string): Promise<void> {
+  const list = await listPendingDocumentosAdmissao();
+  await writeList(
+    DOCUMENTO_ADMISSAO_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }
