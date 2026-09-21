@@ -560,3 +560,46 @@ describe("alocar quem já é registrado em carteira", () => {
     ).rejects.toThrow(/folha/i);
   });
 });
+
+/**
+ * O EMPREGADO NÃO VÊ A CONTA DE DIÁRIAS.
+ *
+ * ⚠️ Ele é alocado na obra (a alocação mede o caminhão-dia pro contratante),
+ * mas o bloco de diárias é léxico de PARCEIRO AUTÔNOMO de ponta a ponta:
+ * "somar o dia", "sua conta do mês". Mostrá-lo a quem tem carteira assinada
+ * desenha os dois vínculos na mesma pessoa, na mesma tela, no mesmo período —
+ * que é exatamente o que a trava de regime existe pra impedir.
+ */
+describe("a conta de diárias é de quem é parceiro", () => {
+  it("o app do empregado não recebe alocação nenhuma em obra/hoje", async () => {
+    // O fake devolve a alocação só quando o `where` pede PARCEIRO — como o
+    // banco faz.
+    const prismaFiltrou: { regime?: string } = {};
+    const { s } = servicoComEspiaDeWhere(prismaFiltrou);
+    await s.obraDeHoje("mot1");
+    expect(prismaFiltrou.regime).toBe("PARCEIRO");
+  });
+
+  it("marcar diária sendo empregado é recusado com 4xx, não com 500", async () => {
+    // 4xx manda o item pra tela de Pendentes; 500 travaria o outbox em loop.
+    const { s } = servico({
+      alocacao: { id: "a1", ativa: true, inicio: new Date("2026-09-01"), regime: "EMPREGADO" },
+    });
+    await expect(
+      s.registrarPresenca("mot1", { data: "2026-09-21", clientId: "c1" }),
+    ).rejects.toThrow(/não é contado por diária/i);
+  });
+});
+
+/** Espia o `where` que o service manda pro banco em `obraDeHoje`. */
+function servicoComEspiaDeWhere(destino: { regime?: string }) {
+  const prisma = {
+    alocacaoObra: {
+      findFirst: async ({ where }: { where?: { regime?: string } } = {}) => {
+        destino.regime = where?.regime;
+        return null;
+      },
+    },
+  } as Record<string, unknown>;
+  return { s: new MensalService(prisma as never) };
+}

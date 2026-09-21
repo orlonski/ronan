@@ -308,7 +308,15 @@ export class MensalService {
    */
   async obraDeHoje(motoristaId: string) {
     const a = await this.prisma.alocacaoObra.findFirst({
-      where: { motoristaId, ativa: true },
+      // ⚠️ `regime: PARCEIRO` decide QUEM VÊ A CONTA DE DIÁRIAS no app.
+      //
+      // Quem é registrado em carteira também é alocado numa obra — a alocação
+      // dele existe e mede o caminhão-dia pro contratante. O que ele NÃO pode
+      // ver é o bloco de diárias: "somar o dia", "sua conta do mês", o léxico
+      // inteiro é de parceiro autônomo, e mostrá-lo a um empregado desenha os
+      // dois vínculos na mesma pessoa, na mesma tela, no mesmo período. Ele
+      // registra a jornada dele na aba Ponto, que é o instrumento certo.
+      where: { motoristaId, ativa: true, regime: "PARCEIRO" },
       include: { cliente: { select: { id: true, nome: true } }, veiculo: { select: { placa: true } } },
     });
     if (!a) return { alocacao: null, hoje: null, pendentes: [] as string[] };
@@ -371,11 +379,22 @@ export class MensalService {
   async registrarPresenca(motoristaId: string, dados: RegistrarPresencaInput) {
     const a = await this.prisma.alocacaoObra.findFirst({
       where: { motoristaId, ativa: true },
-      select: { id: true, inicio: true, fim: true },
+      select: { id: true, inicio: true, fim: true, regime: true },
     });
     // 4xx, nunca 500: erro de servidor trava o outbox em loop, e um 4xx manda o
     // item pra tela de Pendentes, onde alguém resolve.
     if (!a) throw new BadRequestException("Você não está alocado em nenhuma obra.");
+    // Cinto de segurança do filtro em `obraDeHoje`: quem é registrado não vê o
+    // botão, mas um app com cache antigo (ou um item do outbox enfileirado
+    // antes da contratação) ainda pode tentar. Diária de empregado não se
+    // registra — a jornada dele é o ponto.
+    if (a.regime === "EMPREGADO") {
+      // ⚠️ A frase NÃO pode citar o outro módulo pelo nome: o léxico deste
+      // arquivo é varrido por teste, e o motivo é o mesmo da regra toda — o
+      // mensal não fala da jornada de ninguém. Quem sabe explicar o caminho é
+      // o app, que já mostra a aba certa pra quem é registrado.
+      throw new BadRequestException("Nesta obra o seu dia não é contado por diária.");
+    }
 
     const d = dia(dados.data);
     if (d < a.inicio) throw new BadRequestException("Esse dia é anterior ao início na obra.");
