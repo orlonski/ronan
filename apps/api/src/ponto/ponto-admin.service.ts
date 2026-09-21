@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
+import { AuditoriaService } from "../auditoria/auditoria.service";
 import { abrirRegime, encerrarRegime, soDigitos } from "../common/regime-vigente";
 import { contaIdAtual } from "../common/conta/conta-context";
 import { paraCadaConta } from "../common/conta/para-cada-conta";
@@ -47,7 +48,10 @@ import {
 export class PontoAdminService {
   private readonly log = new Logger(PontoAdminService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditoria: AuditoriaService,
+  ) {}
 
   // ─────────────────────────── primeiro acesso ───────────────────────────
 
@@ -585,6 +589,66 @@ export class PontoAdminService {
           hora: horaBR(m.marcadoEm),
         })),
       })),
+    };
+  }
+
+  /**
+   * A coordenada de UMA batida, sob demanda.
+   *
+   * ⚠️ Endpoint próprio, e não campo do `dia`/`espelho`, por três motivos:
+   *
+   * 1. A tela do dia lista a equipe inteira. Mandar lat/lon junto faria a
+   *    localização de todo mundo trafegar toda manhã pra ninguém olhar.
+   * 2. Só quem tem `ponto.ver-localizacao` chega aqui. Se viajasse no `dia`,
+   *    a permissão seria a de ver o dia.
+   * 3. Consulta deixa rastro. Embutido na listagem não existe "consulta" —
+   *    não dá pra distinguir quem olhou de quem abriu a tela.
+   *
+   * Devolve `null` quando não há coordenada, e isso é um estado NORMAL, não
+   * um erro: o GPS desiste em 3s, a permissão pode não estar dada e a empresa
+   * pode ter posto a retenção em 0. Não achar a coordenada nunca invalida a
+   * batida.
+   */
+  async localizacaoDaMarcacao(marcacaoId: string, usuarioId: string) {
+    const m = await this.prisma.marcacao.findFirst({
+      where: { id: marcacaoId },
+      select: {
+        id: true,
+        numeroRegistro: true,
+        marcadoEm: true,
+        funcionario: { select: { id: true, nome: true } },
+        localizacao: { select: { latitude: true, longitude: true, precisao: true } },
+      },
+    });
+    if (!m) throw new NotFoundException("Batida não encontrada.");
+
+    // O rastro é gravado pela TENTATIVA, não pelo achado. Abrir e não ter
+    // coordenada também é uma consulta à localização de alguém.
+    await this.auditoria
+      .log({
+        usuarioId,
+        entidade: "Marcacao",
+        entidadeId: m.id,
+        acao: "PONTO_VIU_LOCALIZACAO",
+        metadata: {
+          funcionarioId: m.funcionario.id,
+          numeroRegistro: m.numeroRegistro,
+          havia: m.localizacao != null,
+        },
+      })
+      .catch((e: unknown) => this.log.error(`auditoria de localização: ${(e as Error).message}`));
+
+    return {
+      numeroRegistro: m.numeroRegistro,
+      hora: horaBR(m.marcadoEm),
+      funcionario: m.funcionario.nome,
+      localizacao: m.localizacao
+        ? {
+            latitude: Number(m.localizacao.latitude),
+            longitude: Number(m.localizacao.longitude),
+            precisao: m.localizacao.precisao,
+          }
+        : null,
     };
   }
 

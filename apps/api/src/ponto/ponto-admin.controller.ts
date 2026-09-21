@@ -147,6 +147,12 @@ export class PontoAdminController {
     return this.service.dia(data);
   }
 
+  @RequerPermissao("ponto.ver-localizacao")
+  @Get("marcacoes/:id/localizacao")
+  localizacao(@Param("id") id: string, @CurrentUser() user: { id: string }) {
+    return this.service.localizacaoDaMarcacao(id, user.id);
+  }
+
   @RequerPermissao("espelho-ponto.ver")
   @Get("competencia")
   competencia(@Query("competencia", new ZodValidationPipe(COMPETENCIA)) c: string) {

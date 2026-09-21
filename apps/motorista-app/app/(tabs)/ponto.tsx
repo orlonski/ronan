@@ -20,11 +20,12 @@ import {
   ChevronRight,
   Clock,
   CloudOff,
+  MapPin,
   PenLine,
   TriangleAlert,
 } from "lucide-react-native";
 import { usePendingPonto } from "@/hooks/use-pending-ponto";
-import { usePontoHoje } from "@/lib/queries";
+import { useCatalogoPonto, usePontoHoje } from "@/lib/queries";
 import { enqueuePonto } from "@/lib/sync";
 import { useConnectivity } from "@/lib/connectivity";
 import { hojeISO } from "@/lib/datetime";
@@ -69,6 +70,9 @@ export default function PontoTab() {
    * a noite abriria às 23h e bateria 00:10 com a data de ONTEM no payload, na
    * query e na lista. Turno da noite é o público desta tela.
    */
+  const { data: catalogo } = useCatalogoPonto();
+  // `?? false`: sem catálogo em mãos, não coleta. Ver CatalogoPonto.
+  const capturaLocalizacao = catalogo?.capturaLocalizacao ?? false;
   const [dia, setDia] = useState(hojeISO);
   // 10s, e não 30: este intervalo é o único que vira o `dia` da tela. Esticar
   // pra economizar render triplicaria a janela em que a lista e a query ainda
@@ -190,7 +194,12 @@ export default function PontoTab() {
       // botão desabilitado e a pessoa sem conseguir bater.
       let coords: { latitude: number; longitude: number; precisao?: number } | undefined;
       try {
-        const { status } = await Location.getForegroundPermissionsAsync();
+        // O interruptor é aqui, e não no servidor: empresa que desligou a
+        // coleta não pode ter a coordenada saindo do aparelho nem entrando na
+        // fila do outbox. "Não guardamos" ≠ "não coletamos".
+        const { status } = capturaLocalizacao
+          ? await Location.getForegroundPermissionsAsync()
+          : { status: "denied" as const };
         if (status === "granted") {
           const pos = await Promise.race([
             Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
@@ -429,6 +438,8 @@ export default function PontoTab() {
           As batidas são suas e ninguém pode apagá-las — nem a empresa, nem nós. O que muda a
           conta é a correção, e ela fica registrada com autor e motivo.
         </Text>
+
+        {capturaLocalizacao && <AvisoLocalizacao texto={catalogo?.empresa?.avisoLgpdTexto} />}
       </ScrollView>
     </View>
   );
@@ -538,4 +549,46 @@ function dataPorExtenso(ymd: string): string {
   const [a, m, d] = ymd.split("-").map(Number);
   const semana = DIAS[new Date(Date.UTC(a!, (m ?? 1) - 1, d ?? 1)).getUTCDay()];
   return `${semana}, ${d} de ${MESES[(m ?? 1) - 1]}`;
+}
+
+/**
+ * O aviso de que a batida leva a localização junto.
+ *
+ * ⚠️ Só aparece quando a empresa de fato coleta, e some quando ela desliga.
+ * Aviso que fica na tela independente do que o sistema faz vira paisagem, e
+ * paisagem não informa ninguém.
+ *
+ * A linha curta é sempre visível porque é a que precisa ser lida; o texto
+ * completo (configurável pela empresa em Regras de ponto) abre no toque.
+ * Empilhar dois parágrafos jurídicos embaixo do botão faria as duas coisas
+ * não serem lidas.
+ *
+ * Inline, e não `Modal`: nesta tela já existe overlay de confirmação, e
+ * `Modal` sobre `Modal` no Android é o defeito que já custou caro aqui.
+ */
+function AvisoLocalizacao({ texto }: { texto?: string }) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Sobre a localização das suas batidas"
+      accessibilityState={{ expanded: aberto }}
+      onPress={() => setAberto((v) => !v)}
+      className="flex-row items-start gap-2 rounded-2xl bg-muted px-4 py-3 active:opacity-75"
+    >
+      <MapPin size={16} color="#64748b" style={{ marginTop: 2 }} />
+      <View className="flex-1">
+        <Text className="text-xs text-muted-foreground">
+          Cada batida guarda também onde você estava.{" "}
+          <Text className="font-semibold text-brand">{aberto ? "esconder" : "entenda"}</Text>
+        </Text>
+        {aberto && (
+          <Text className="mt-2 text-xs leading-5 text-muted-foreground">
+            {texto?.trim() ||
+              "Ao bater o ponto, o aplicativo registra a data, a hora e — quando o aparelho informa — a sua localização naquele instante. A localização serve só como evidência do registro e é apagada depois do prazo configurado pela empresa."}
+          </Text>
+        )}
+      </View>
+    </Pressable>
+  );
 }

@@ -258,7 +258,13 @@ export class PontoService {
   async catalogo() {
     const [cfg, motivos] = await Promise.all([
       this.prisma.configPonto.findFirst({
-        select: { razaoSocial: true, cnpj: true, identificacaoRep: true, avisoLgpdTexto: true },
+        select: {
+          razaoSocial: true,
+          cnpj: true,
+          identificacaoRep: true,
+          avisoLgpdTexto: true,
+          diasRetencaoLocalizacao: true,
+        },
       }),
       this.prisma.motivoCorrecaoPonto.findMany({
         where: { ativo: true },
@@ -266,7 +272,29 @@ export class PontoService {
         select: { codigo: true, descricao: true, exigeAnexo: true },
       }),
     ]);
-    return { empresa: cfg, motivos };
+    /**
+     * ⚠️ `capturaLocalizacao` é o INTERRUPTOR, e ele vive aqui porque quem
+     * tem que parar de coletar é o aparelho.
+     *
+     * Antes, o app sempre pedia o GPS e sempre mandava lat/lon; a API é que
+     * decidia não gravar quando a retenção era 0. Resultado: a empresa que
+     * escolheu não guardar nenhuma localização tinha a coordenada do
+     * empregado na fila do celular dele e trafegando na rede assim mesmo.
+     * "Não guardamos" não é a mesma promessa que "não coletamos", e o painel
+     * dizia a segunda.
+     */
+    return {
+      empresa: cfg
+        ? {
+            razaoSocial: cfg.razaoSocial,
+            cnpj: cfg.cnpj,
+            identificacaoRep: cfg.identificacaoRep,
+            avisoLgpdTexto: cfg.avisoLgpdTexto,
+          }
+        : null,
+      capturaLocalizacao: (cfg?.diasRetencaoLocalizacao ?? 0) > 0,
+      motivos,
+    };
   }
 
   /**

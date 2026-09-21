@@ -116,7 +116,11 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // marcação em nome de alguém) é outro poder que `decidir` (aprovar o que a
   // pessoa pediu), e `reabrir` uma competência fechada é outro poder que
   // `fechar`.
-  { recurso: "ponto", label: "Ponto do dia", modulo: "Pessoas", acoes: ["ver"] },
+  // `ver-localizacao` é ação SEPARADA de propósito: ver que alguém bateu às
+  // 7h12 e ver ONDE a pessoa estava às 7h12 não são o mesmo poder. Sem a
+  // separação, dar a tela do dia pra quem confere presença entregaria junto a
+  // localização de todo mundo, todo dia.
+  { recurso: "ponto", label: "Ponto do dia", modulo: "Pessoas", acoes: ["ver", "ver-localizacao"] },
   { recurso: "funcionarios", label: "Funcionários (CLT)", modulo: "Pessoas", acoes: ["ver", "criar", "editar", "desligar", "importar"] },
   { recurso: "jornadas", label: "Jornadas e escalas", modulo: "Pessoas", acoes: ["ver", "editar"] },
   { recurso: "espelho-ponto", label: "Espelho de ponto", modulo: "Pessoas", acoes: ["ver", "exportar"] },

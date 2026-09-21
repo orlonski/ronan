@@ -844,6 +844,20 @@ export function useMeuEspelhoPonto(competencia: string, enabled = true) {
 
 export type CatalogoPonto = {
   empresa: { razaoSocial: string; cnpj: string; identificacaoRep: string; avisoLgpdTexto: string } | null;
+  /**
+   * A empresa guarda a localização das batidas?
+   *
+   * ⚠️ Quem decide COLETAR é o aparelho, então a decisão tem que chegar aqui.
+   * Enquanto isto não existia, o app sempre pedia o GPS e sempre mandava
+   * lat/lon; era a API que decidia não gravar. A empresa que escolheu não
+   * guardar nenhuma localização tinha a coordenada do empregado na fila do
+   * celular dele assim mesmo.
+   *
+   * Na dúvida (catálogo ainda não baixado, campo ausente numa versão velha da
+   * API) o app NÃO coleta. Deixar de guardar uma evidência é recuperável;
+   * coletar sem base, não.
+   */
+  capturaLocalizacao?: boolean;
   motivos: { codigo: string; descricao: string; exigeAnexo: boolean }[];
 };
 

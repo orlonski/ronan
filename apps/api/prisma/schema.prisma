@@ -217,6 +217,11 @@ enum AcaoAuditoria {
   /// A assinatura de uma empresa foi cancelada. Nome próprio, e não UPDATE,
   /// pelo mesmo motivo do ADMIN_ALTEROU_KM: mexe em dinheiro, exige motivo
   /// escrito e é o tipo de decisão que alguém vai querer reconstituir depois.
+  /// Alguém do painel abriu a coordenada de GPS de uma batida de ponto.
+  /// Tem nome próprio porque é o único acesso do sistema a onde um EMPREGADO
+  /// estava num instante: coletar já é sensível, consultar sem deixar rastro
+  /// seria pior. A linha guarda quem olhou, de quem e quando.
+  PONTO_VIU_LOCALIZACAO
   CANCELAR_ASSINATURA
   /// Uma mensalidade foi dada como paga sem o gateway confirmar (Pix na conta,
   /// TED). É a única forma de cobrança virar paga sem prova externa — então
