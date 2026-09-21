@@ -397,14 +397,29 @@ export default function PontoTab() {
           </View>
         )}
 
+        {/* Mesmo corpo do cartão do espelho, de propósito. Isto aqui era um
+            ícone de 18 com um texto do lado, sem borda e sem fundo — do lado
+            de um cartão de verdade, lia como legenda, não como coisa que se
+            toca. Num app de dedão grosso, alvo sem corpo não existe. */}
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Pedir correção de uma batida de hoje"
           onPress={() => router.push(`/corrigir-ponto?dia=${dia}`)}
-          className="flex-row items-center gap-2 active:opacity-70"
-          style={{ minHeight: 48 }}
+          className="flex-row items-center gap-3 rounded-2xl border-2 border-border bg-card px-4 active:opacity-75"
+          style={{ minHeight: 72 }}
         >
-          <PenLine size={18} color={COR_BRAND} />
-          <Text className="text-base font-semibold text-brand">Bateu errado hoje? Peça correção</Text>
+          <View className="h-12 w-12 items-center justify-center rounded-2xl bg-secondary">
+            <PenLine size={24} color={COR_BRAND} />
+          </View>
+          <View className="flex-1">
+            {/* A pergunta é o título porque é o que a pessoa reconhece: ela
+                não procura "correção", ela lembra que bateu errado. */}
+            <Text className="text-base font-semibold text-foreground">
+              Bateu errado ou esqueceu?
+            </Text>
+            <Text className="text-sm text-muted-foreground">peça a correção de hoje</Text>
+          </View>
+          <ChevronRight size={20} color="#64748b" />
         </Pressable>
 
         {/* Fica na tela DIÁRIA, palavra por palavra. É o único argumento
