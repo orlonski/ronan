@@ -1911,6 +1911,12 @@ export class ViagensMotoristaService {
     const [viagem, catalogo, ocorrencias] = await Promise.all([
       this.prisma.viagem.findFirst({
         where: { motoristaId, status: "EM_ANDAMENTO" },
+        // A trava de "uma aberta por motorista" foi removida (era ela que
+        // travava a fila do caminhão inteiro), então pode haver mais de uma. Sem
+        // `orderBy` o Postgres devolvia uma QUALQUER: as outras ficavam
+        // invisíveis pro motorista pra sempre, sem jeito de finalizar nem
+        // descartar. A mais recente é a que ele está rodando agora.
+        orderBy: [{ iniciadoEm: "desc" }, { sincronizadoEm: "desc" }],
         include: {
           ...VIAGEM_INCLUDE,
           eventosViagem: { orderBy: { ocorridoEm: "asc" } },

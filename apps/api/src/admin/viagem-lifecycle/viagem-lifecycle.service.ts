@@ -1,4 +1,6 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
+import { MotivoDivergencia } from "@prisma/client";
 import type {
   AtualizarTipoEventoViagemInput,
   CriarTipoEventoViagemInput,
@@ -6,9 +8,15 @@ import type {
 import { PrismaService } from "../../prisma/prisma.service";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
+import { aplicarDivergencias, Divergencias } from "../../common/divergencias";
+import { comLockDeCron } from "../../common/cron-exclusivo";
+import { paraCadaConta } from "../../common/conta/para-cada-conta";
+import { inicioDoDiaData } from "../../common/timezone";
 
 @Injectable()
 export class ViagemLifecycleAdminService {
+  private readonly log = new Logger(ViagemLifecycleAdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditoria: AuditoriaService,
@@ -99,6 +107,141 @@ export class ViagemLifecycleAdminService {
         },
       },
     });
+  }
+
+  /**
+   * Fecha uma viagem que ficou aberta, SEM destruir o que ela já tem.
+   *
+   * Até aqui o painel não tinha como fechar uma casca órfã — só apagar. O
+   * carimbo `VIAGEM_ANTERIOR_ABERTA` mandava o conferente "conferir o que ela
+   * tem e fechar na mão", e essa ação não existia: `PATCH /admin/viagens/:id`
+   * não tem transição pra EM_ANDAMENTO e `AtualizarViagemInput` nem aceita
+   * `status`. As duas saídas do painel eram DELETE físico, jogando fora eventos,
+   * GPS da carga, fotos e as horas que a pessoa rodou.
+   *
+   * A saída certa é INCOMPLETA, e a máquina toda já existe: INCOMPLETA já está
+   * em STATUS_FORA_FECHAMENTO (nenhum ponto novo de exclusão a revisar — era a
+   * objeção registrada aqui contra criar status novo), o painel já sabe
+   * completar viagem incompleta preenchendo campo, e
+   * `resolverDivergenciasSupridas` promove sozinha pra ENVIADA quando não falta
+   * mais nada. O conferente termina a viagem que o motorista não terminou.
+   */
+  async fecharEmAndamento(
+    id: string,
+    usuarioId: string | null,
+    origem: "painel" | "varredura" = "painel",
+  ) {
+    const v = await this.prisma.viagem.findUnique({
+      where: { id },
+      include: {
+        tipoServico: { select: { medicao: true } },
+        _count: { select: { eventosViagem: true } },
+      },
+    });
+    if (!v) throw new NotFoundException("Viagem não encontrada");
+    if (v.status !== "EM_ANDAMENTO") {
+      throw new ConflictException("Só dá pra fechar viagem que está em andamento.");
+    }
+
+    // O que falta vira carimbo, um por campo — é o mesmo vocabulário que o
+    // conferente já vê nas viagens que entraram incompletas pelo app, então a
+    // tela de "Falta preencher" resolve esta igual às outras.
+    const divs = new Divergencias();
+    divs.add(MotivoDivergencia.VIAGEM_ABANDONADA, {
+      origem,
+      iniciadoEm: v.iniciadoEm?.toISOString() ?? null,
+      eventos: v._count.eventosViagem,
+    });
+    if (!v.clienteId) divs.add(MotivoDivergencia.FALTA_CLIENTE);
+    if (!v.materialId) divs.add(MotivoDivergencia.FALTA_MATERIAL);
+    if (!v.localDescargaId) divs.add(MotivoDivergencia.FALTA_LOCAL_DESCARGA);
+    if (v.km == null) divs.add(MotivoDivergencia.FALTA_KM);
+    // Diária não tem peso: cobrar tonelada dela seria carimbo que nunca fecha.
+    if (v.tipoServico?.medicao !== "PERIODO" && (v.toneladas == null || Number(v.toneladas) <= 0)) {
+      divs.add(MotivoDivergencia.FALTA_TONELADAS);
+    }
+
+    const atualizada = await this.prisma.viagem.update({
+      where: { id },
+      data: {
+        status: divs.statusFinal("ENVIADA"),
+        // Sem `data` a viagem fica invisível na tela de Viagens: o filtro
+        // default é `data >= primeiro dia do mês`, e `gte` não casa com NULL.
+        // Fechar sem isto seria trocar uma casca escondida por outra.
+        ...(v.data ? {} : { data: inicioDoDiaData(v.iniciadoEm ?? new Date()) }),
+      },
+    });
+    await aplicarDivergencias(this.prisma, id, divs);
+
+    // O alerta da torre morre junto. A varredura faria isso em até 5 minutos,
+    // mas quem acabou de clicar "Fechar" precisa ver o card sumir agora.
+    await this.prisma.alertaOperacional.updateMany({
+      where: { viagemId: id, resolvidoEm: null },
+      data: { resolvidoEm: new Date(), resolvidoAuto: true },
+    });
+
+    await this.auditoria.log({
+      usuarioId: usuarioId ?? undefined,
+      entidade: "Viagem",
+      entidadeId: id,
+      acao: "UPDATE",
+      motivo:
+        origem === "painel"
+          ? "Viagem em andamento fechada pelo painel"
+          : "Viagem em andamento fechada pela varredura de abandono",
+      valorAntes: { status: v.status, data: v.data },
+      valorDepois: { status: atualizada.status, data: atualizada.data },
+    });
+
+    return atualizada;
+  }
+
+  /**
+   * Fecha sozinha a viagem abandonada há mais de N horas.
+   *
+   * Nasce DESLIGADA (`fecharAbandonadaHoras = 0`): fechar viagem de gente é
+   * decisão da empresa, não padrão de fábrica. Enquanto estiver desligada, a
+   * torre segue mostrando a viagem esquecida na tela e alguém fecha no botão.
+   */
+  @Cron("0 10 5 * * *", { name: "fechar-viagens-abandonadas", timeZone: "America/Sao_Paulo" })
+  async fecharAbandonadas(): Promise<void> {
+    try {
+      await comLockDeCron(this.prisma, "fechar-viagens-abandonadas", async () => {
+        await paraCadaConta(this.prisma, () => this.fecharAbandonadasDaConta());
+      });
+    } catch (e) {
+      this.log.error(`falha ao fechar viagens abandonadas: ${(e as Error).message}`);
+    }
+  }
+
+  private async fecharAbandonadasDaConta(): Promise<void> {
+    const cfg = await this.prisma.configuracaoTorre.findFirst({
+      select: { fecharAbandonadaHoras: true },
+    });
+    const horas = cfg?.fecharAbandonadaHoras ?? 0;
+    if (horas <= 0) return;
+
+    const corte = new Date(Date.now() - horas * 3_600_000);
+    const presas = await this.prisma.viagem.findMany({
+      where: {
+        status: "EM_ANDAMENTO",
+        // `iniciadoEm` é nullable; sem ele vale quando a viagem chegou no servidor.
+        OR: [{ iniciadoEm: { lt: corte } }, { iniciadoEm: null, sincronizadoEm: { lt: corte } }],
+      },
+      select: { id: true },
+      take: 200,
+    });
+
+    for (const v of presas) {
+      try {
+        await this.fecharEmAndamento(v.id, null, "varredura");
+      } catch (e) {
+        this.log.warn(`não deu pra fechar a viagem ${v.id}: ${(e as Error).message}`);
+      }
+    }
+    if (presas.length > 0) {
+      this.log.log(`${presas.length} viagens abandonadas fechadas como incompletas`);
+    }
   }
 
   /**

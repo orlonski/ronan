@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   ArrowRight,
+  CheckCircle2,
   Clock,
   ExternalLink,
   MapPin,
@@ -12,8 +14,10 @@ import {
   Truck,
   User,
 } from "lucide-react";
-import { RequerTela } from "@/components/requer-tela";
+import { Permitido, RequerTela } from "@/components/requer-tela";
 import { ExcluirButton } from "@/components/excluir-button";
+import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
@@ -92,6 +96,57 @@ function fmtTon(v: number | null): string | null {
   return `${v.toLocaleString("pt-BR")} t`;
 }
 
+/**
+ * Fecha a viagem que ficou aberta sem apagar nada.
+ *
+ * A única ação que existia aqui era `Cancelar`, que é DELETE físico: o
+ * supervisor só podia destruir eventos, GPS e fotos de uma viagem que alguém
+ * rodou de verdade. Fechar manda a viagem pra INCOMPLETA com o que falta
+ * carimbado, e ela passa a aparecer na fila de "Falta preencher" como qualquer
+ * outra.
+ */
+function FecharButton({ id, temEventos }: { id: string; temEventos: boolean }) {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const { confirmar, ConfirmDialog } = useConfirm();
+
+  const fechar = useMutation({
+    mutationFn: () =>
+      fetchApi(`${PATH}/${id}/fechar`, { token, method: "POST" }),
+    onSuccess: () => {
+      toast.success("Viagem fechada. Ela foi pra Viagens, esperando o que falta.");
+      void qc.invalidateQueries({ queryKey: [PATH] });
+    },
+    onError: (e: unknown) =>
+      toast.error(e instanceof Error ? e.message : "Não deu pra fechar a viagem."),
+  });
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="success"
+        disabled={fechar.isPending}
+        onClick={async () => {
+          const ok = await confirmar({
+            title: "Fechar esta viagem?",
+            description: temEventos
+              ? "Ela vai pra Viagens como incompleta, com os eventos e as fotos que já tem. Você completa o que falta por lá."
+              : "Ela não tem nenhum evento registrado. Vai pra Viagens como incompleta, esperando os dados.",
+            confirmLabel: "Fechar viagem",
+            variant: "default",
+          });
+          if (ok) fechar.mutate();
+        }}
+      >
+        <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+        Fechar
+      </Button>
+      {ConfirmDialog}
+    </>
+  );
+}
+
 function ViagemCard({ v, agora }: { v: ViagemAndamento; agora: number }) {
   const eventos = [...v.eventosViagem].sort(
     (a, b) => new Date(a.ocorridoEm).getTime() - new Date(b.ocorridoEm).getTime(),
@@ -124,15 +179,23 @@ function ViagemCard({ v, agora }: { v: ViagemAndamento; agora: number }) {
             <Clock className="mr-1 h-3 w-3" />
             {tempoRelativo(v.iniciadoEm, agora)}
           </Badge>
+          <Permitido chave="viagens.editar">
+            <FecharButton id={v.id} temEventos={eventos.length > 0} />
+          </Permitido>
           <ExcluirButton
             perm="viagens.editar"
             path={PATH}
             id={v.id}
             nomeRecurso="esta viagem em andamento"
+            descricaoConfirmacao="Apaga a viagem e tudo que ela tem: eventos, GPS da carga e fotos. Pra guardar o que já foi rodado, use Fechar."
+            tituloConfirmacao="Apagar esta viagem em andamento?"
+            rotuloConfirmar="Apagar"
             invalidateKeys={[PATH]}
             size="sm"
-            variant="outline"
-            label="Cancelar"
+            /* Era `outline` com rótulo "Cancelar" — no semáforo, contorno é
+               "voltar", e o que este botão faz é DELETE físico. Ao lado de um
+               "Fechar" verde a ambiguidade viraria erro caro. */
+            label="Apagar"
           />
         </div>
       </div>

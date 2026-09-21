@@ -82,4 +82,16 @@ export class ViagensAndamentoAdminController {
   cancelar(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.cancelarEmAndamento(id, user.id);
   }
+
+  /**
+   * Fecha a viagem presa sem destruir nada: ela vira INCOMPLETA e o que falta
+   * vira carimbo. É a ação que o carimbo `VIAGEM_ANTERIOR_ABERTA` prometia
+   * ("confira o que ela tem e feche na mão") e que não existia — a única saída
+   * pelo painel era apagar, jogando fora eventos, GPS e fotos.
+   */
+  @RequerPermissao("viagens.editar")
+  @Post(":id/fechar")
+  fechar(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.fecharEmAndamento(id, user.id);
+  }
 }

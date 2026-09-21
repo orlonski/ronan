@@ -374,13 +374,23 @@ function Conteudo() {
                       </Button>
                     </a>
                   )}
-                  {a.viagemId && (
-                    <Link href={`/viagens/${a.viagemId}`}>
-                      <Button size="sm" variant="outline">
-                        Ver viagem
-                      </Button>
-                    </Link>
-                  )}
+                  {a.viagemId &&
+                    // Viagem esquecida se resolve FECHANDO, e o botão de fechar
+                    // mora na tela Ao vivo. Mandar pra /viagens/:id era mandar
+                    // pra uma tela onde a única ação possível é apagar.
+                    (a.tipo === "VIAGEM_ESQUECIDA" ? (
+                      <Link href="/viagens-andamento">
+                        <Button size="sm" variant="outline">
+                          Fechar no Ao vivo
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Link href={`/viagens/${a.viagemId}`}>
+                        <Button size="sm" variant="outline">
+                          Ver viagem
+                        </Button>
+                      </Link>
+                    ))}
                   <Permitido chave="programacao.editar">
                     <Button size="sm" variant="ghost" onClick={() => void resolver(a.id)}>
                       <Check className="h-3.5 w-3.5" /> Resolvido
