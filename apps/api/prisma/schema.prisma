@@ -629,6 +629,7 @@ model Conta {
 
   @@index([ativa])
   @@map("contas")
+  onboardingUsuarios OnboardingUsuario[]
 }
 
 model User {
@@ -750,6 +751,7 @@ model User {
   assinaturasCanceladas  Assinatura[]          @relation("CancelouAssinatura")
   cobrancasBaixadas      CobrancaAssinatura[]  @relation("BaixouCobranca")
   aceitesTermo           AceiteTermo[]
+  onboarding             OnboardingUsuario?
 
   alocacoesObraCriadas AlocacaoObra[]
   presencasLancadas    RegistroPresenca[]
@@ -7427,4 +7429,36 @@ model CienciaEspelho {
   @@unique([contaId, funcionarioId, competencia])
   @@index([contaId, competencia])
   @@map("ponto_ciencias_espelho")
+}
+
+/// O que cada PESSOA do painel já viu do onboarding.
+///
+/// Por USUÁRIO e não por conta: quem entra numa empresa que já opera há um ano
+/// é tão novo quanto a empresa que nasceu ontem, e o contrário também vale — o
+/// dono que já se virou não deve rever a chegada porque contratou um auxiliar.
+///
+/// No banco, e não em localStorage, porque a mesma pessoa abre o painel do
+/// computador do escritório e do notebook de casa: dispensar num não pode
+/// significar ver de novo no outro.
+model OnboardingUsuario {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  /// PK é o usuário: uma linha por pessoa, criada só quando ela interage.
+  usuarioId String @id
+  usuario   User   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  /// Chaves de tour já vistas ("home.v1"). A versão vive DENTRO da chave, então
+  /// redesenhar uma tela e querer mostrar de novo é trocar o sufixo — não
+  /// apagar linha de ninguém.
+  toursVistos String[] @default([])
+
+  /// Quando a pessoa disse "já entendi, tira isto da home".
+  chegadaDispensadaEm DateTime?
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@index([contaId])
+  @@map("onboarding_usuarios")
 }

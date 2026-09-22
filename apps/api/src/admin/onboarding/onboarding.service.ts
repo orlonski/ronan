@@ -21,6 +21,36 @@ export class OnboardingService {
   ) {}
 
   /**
+   * O que ESTA pessoa já dispensou. Uma linha por usuário, criada só quando ele
+   * interage — conta nova não nasce com uma linha por gente que nunca entrou.
+   */
+  async estado(usuarioId: string): Promise<{ chegadaDispensada: boolean; toursVistos: string[] }> {
+    const linha = await this.prisma.onboardingUsuario.findUnique({
+      where: { usuarioId },
+      select: { chegadaDispensadaEm: true, toursVistos: true },
+    });
+    return {
+      chegadaDispensada: linha?.chegadaDispensadaEm != null,
+      toursVistos: linha?.toursVistos ?? [],
+    };
+  }
+
+  /**
+   * "Já entendi, tira isto da home."
+   *
+   * Só esconde a CHEGADA (o bloco grande de boas-vindas). O checklist continua
+   * na home enquanto houver passo pendente, e segue inteiro em /comecar: quem
+   * dispensou disse que sabe por onde ir, não que terminou.
+   */
+  async dispensarChegada(usuarioId: string): Promise<void> {
+    await this.prisma.onboardingUsuario.upsert({
+      where: { usuarioId },
+      create: { usuarioId, chegadaDispensadaEm: new Date() },
+      update: { chegadaDispensadaEm: new Date() },
+    });
+  }
+
+  /**
    * "Quero continuar" — o caminho de volta de quem chegou ao fim do teste.
    *
    * Não abre checkout de propósito: com o ticket que a Movatruck cobra, quem

@@ -5,6 +5,7 @@ import type { AuthAdminUser } from "../../auth/types";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { IgnoraEscopo } from "../../common/escopo/escopo.decorator";
+import { OnboardingService } from "../onboarding/onboarding.service";
 import { PrimeirosPassosService } from "./primeiros-passos.service";
 
 /**
@@ -24,10 +25,24 @@ import { PrimeirosPassosService } from "./primeiros-passos.service";
 @IgnoraEscopo()
 @Controller("admin/primeiros-passos")
 export class PrimeirosPassosController {
-  constructor(private readonly service: PrimeirosPassosService) {}
+  constructor(
+    private readonly service: PrimeirosPassosService,
+    private readonly onboarding: OnboardingService,
+  ) {}
 
+  /**
+   * Uma chamada só, porque é a home de quem acabou de entrar.
+   *
+   * `chegadaDispensada` vem junto de propósito: a tela precisa das duas
+   * respostas pra decidir o que mostrar, e duas requisições fariam a chegada
+   * piscar enquanto a segunda não voltasse. O resto do shape não mudou.
+   */
   @Get()
-  listar(@CurrentUser() user: AuthAdminUser) {
-    return this.service.listar(user);
+  async listar(@CurrentUser() user: AuthAdminUser) {
+    const [passos, estado] = await Promise.all([
+      this.service.listar(user),
+      this.onboarding.estado(user.id),
+    ]);
+    return { ...passos, chegadaDispensada: estado.chegadaDispensada };
   }
 }

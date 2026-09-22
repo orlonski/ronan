@@ -6,6 +6,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import {
   Activity,
+  Compass,
   AlertCircle,
   ArrowUpCircle,
   BarChart3,
@@ -104,6 +105,19 @@ type Grupo = {
 };
 
 const DASHBOARD_ITEM = { href: "/", label: "Dashboard", icon: LayoutDashboard };
+
+/**
+ * "Começar" fica fora dos grupos e SEM permissão, como o Contrato.
+ *
+ * Sem permissão porque é a tela que explica o caminho: exigir uma chave pra
+ * vê-la calaria justamente quem ainda não tem papel configurado — e os passos
+ * lá dentro já vêm podados pelo que a pessoa consegue fazer.
+ *
+ * Aqui em cima, e não no rodapé, porque quem procura por onde começar olha
+ * onde começa a lista. Continua valendo depois de pronto: é por esta tela que
+ * o dono explica o sistema pro auxiliar que entrou em março.
+ */
+const COMECAR_ITEM = { href: "/comecar", label: "Começar", icon: Compass };
 /**
  * Relatórios fica FORA dos grupos: é transversal e de uso diário, e o accordion
  * de um grupo por vez transformaria cada consulta em dois cliques. O href é o
@@ -402,6 +416,27 @@ export function Sidebar({
               >
                 <Icon className="h-4 w-4" />
                 {DASHBOARD_ITEM.label}
+              </Link>
+            );
+          })()}
+
+          {(() => {
+            const Icon = COMECAR_ITEM.icon;
+            const active = isRotaAtiva(pathname, COMECAR_ITEM.href);
+            return (
+              <Link
+                href={COMECAR_ITEM.href as any}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                  active
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
+                    : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {COMECAR_ITEM.label}
               </Link>
             );
           })()}

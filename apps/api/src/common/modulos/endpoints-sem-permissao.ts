@@ -38,6 +38,10 @@ export const ENDPOINTS_SEM_PERMISSAO: ReadonlySet<string> = new Set([
   // falando da própria conta, como a caixa pessoal acima, e exigir chave aqui
   // calaria justamente quem ainda não tem papel configurado.
   "OnboardingController.querorContinuar",
+
+  // "Já entendi, tira isto da home." É preferência do próprio usuário sobre a
+  // própria tela, do mesmo tipo que marcar um aviso como lido.
+  "OnboardingController.dispensar",
 ]);
 
 /** Nome estável de um handler pro registro acima. */

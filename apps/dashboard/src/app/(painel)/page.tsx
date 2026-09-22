@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import {
@@ -28,7 +29,9 @@ import { LoadingCard } from "@/components/loading";
 import { TendenciaChart } from "@/components/tendencia-chart";
 import { AnalisesChart } from "@/components/analises-chart";
 import { StatCard } from "@/components/stat-card";
-import { PrimeirosPassos } from "@/components/primeiros-passos";
+import { PrimeirosPassos, usePrimeirosPassos } from "@/components/primeiros-passos";
+import { Chegada } from "@/components/chegada";
+import { usePermissoes } from "@/lib/permissoes";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { fmtBRL, fmtNum } from "@/lib/fechamento-helpers";
 
@@ -96,6 +99,42 @@ export default function PainelHome() {
     year: "numeric",
   });
   const primeiroNome = session?.user?.name?.split(" ")[0] ?? "";
+
+  const { data: caminho } = usePrimeirosPassos();
+  const [verPainel, setVerPainel] = useState(false);
+  const { assumida } = usePermissoes();
+  /**
+   * A chegada só na conta CRUA, e só pra quem é dela.
+   *
+   * - `feitos === 0` em vez de "primeiro login": `User.ultimoLoginEm` é
+   *   sobrescrito no próprio login, então quando o painel monta o dado de
+   *   "nunca entrou" já se perdeu. Zero passo cumprido é um sinal honesto, e
+   *   nenhum veterano o satisfaz.
+   * - `assumida` de fora: operador da plataforma visitando um cliente não é o
+   *   alvo do onboarding, e dispensar dentro da conta dele apagaria a chegada
+   *   do dono de verdade.
+   */
+  const mostrarChegada =
+    !verPainel &&
+    !!caminho &&
+    !caminho.concluido &&
+    !caminho.chegadaDispensada &&
+    !assumida &&
+    caminho.passos.every((p) => !p.cumprido);
+
+  if (mostrarChegada) {
+    return (
+      <div className="space-y-8">
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {primeiroNome ? `Olá, ${primeiroNome}` : "Olá"}
+          </h1>
+          <p className="text-sm capitalize text-muted-foreground">{dataHoje}</p>
+        </header>
+        <Chegada passos={caminho.passos} onVerPainel={() => setVerPainel(true)} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

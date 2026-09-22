@@ -30,6 +30,18 @@ export class OnboardingController {
    * pra ser chamado por quem JÁ está travado. Sem o escape, o pedido de voltar
    * a ser cliente morreria no mesmo guard que bloqueou a pessoa.
    */
+  /**
+   * `@PermiteSomenteLeitura` porque esconder um bloco da própria home é ajuste
+   * de sessão, não operação da empresa — e quem está em somente leitura também
+   * tem o direito de tirar da frente um convite que não pode mais cumprir.
+   */
+  @PermiteSomenteLeitura()
+  @Post("dispensar")
+  @HttpCode(204)
+  async dispensar(@CurrentUser() user: AuthAdminUser): Promise<void> {
+    await this.service.dispensarChegada(user.id);
+  }
+
   @PermiteSomenteLeitura()
   @Post("quero-continuar")
   @HttpCode(200)
