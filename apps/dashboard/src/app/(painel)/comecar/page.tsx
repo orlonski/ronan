@@ -1,6 +1,11 @@
 "use client";
 
-import { CheckCircle2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMutation } from "@tanstack/react-query";
+import { CheckCircle2, PlayCircle } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { Card } from "@/components/ui/card";
 import { LinksLoja } from "@/components/links-loja";
 import { LoadingCard } from "@/components/loading";
@@ -27,16 +32,50 @@ import {
  */
 export default function ComecarPage() {
   const { data, isLoading } = usePrimeirosPassos();
+  const token = useAuthToken();
+  const router = useRouter();
+
+  /**
+   * Rever o passo a passo.
+   *
+   * Mora aqui, e não num botão de ajuda no topo, porque o botão de ajuda ainda
+   * não existe — e um texto que manda procurar algo inexistente é pior que não
+   * oferecer nada. Quando a ajuda entrar, este mesmo endpoint serve os dois.
+   */
+  const rever = useMutation({
+    mutationFn: () =>
+      fetchApi<void>("/admin/onboarding/tour/rever", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ chave: "home.v1" }),
+      }),
+    onSuccess: () => {
+      toast.success("Vou te mostrar de novo na tela inicial.");
+      router.push("/");
+    },
+  });
 
   const { feitos, total } = contar(data?.passos ?? []);
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Começar</h1>
-        <p className="text-sm text-muted-foreground">
-          O caminho até a primeira viagem chegar no painel.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Começar</h1>
+          <p className="text-sm text-muted-foreground">
+            O caminho até a primeira viagem chegar no painel.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          disabled={rever.isPending}
+          onClick={() => rever.mutate()}
+        >
+          <PlayCircle className="h-4 w-4" aria-hidden />
+          Rever o passo a passo
+        </Button>
       </header>
 
       {isLoading && <LoadingCard label="Carregando seu caminho..." />}

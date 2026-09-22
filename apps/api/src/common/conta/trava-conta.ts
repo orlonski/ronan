@@ -93,6 +93,12 @@ const MODELS_GLOBAIS = new Set<string>([
   // o post sai no perfil da Movatruck, não no de cliente nenhum. Sem contaId,
   // então toda leitura precisa citar o alvo no where ou rodar em comoSistema.
   "PostInstagram",
+  // O passo a passo guiado sobre a tela do painel. As telas são do produto, não
+  // de empresa nenhuma — o que varia por conta é quem VÊ cada passo, e isso sai
+  // da permissão. Sem contaId, toda leitura precisa citar o alvo no where ou
+  // rodar em comoSistema.
+  "TourPainel",
+  "PassoTour",
   // A série diária de seguidores do mesmo perfil, pelo mesmo motivo.
   "SeguidoresInstagram",
   // O evento cru do gateway de pagamento, guardado antes de ser processado.

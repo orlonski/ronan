@@ -105,6 +105,9 @@ export function AceiteTermos() {
       role="dialog"
       aria-modal="true"
       aria-labelledby="titulo-aceite"
+      // Marca que o passo a passo procura antes de abrir sozinho: enquanto
+      // este modal estiver de pé, ele é a única coisa com que dá pra interagir.
+      data-aceite-termos=""
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 pt-safe pb-safe"
     >
       <div className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-background shadow-xl">

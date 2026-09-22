@@ -10,6 +10,21 @@ import { AdminInboxService } from "../inbox/inbox.service";
  */
 const WHATSAPP_PADRAO = "5542991563750";
 
+export type PassoParaTela = {
+  id: string;
+  /** `data-coach` do elemento. Nulo = balão centralizado, sem furo. */
+  alvo: string | null;
+  titulo: string;
+  corpo: string;
+};
+
+export type TourParaTela = {
+  chave: string;
+  automatico: boolean;
+  visto: boolean;
+  passos: PassoParaTela[];
+};
+
 @Injectable()
 export class OnboardingService {
   private readonly log = new Logger(OnboardingService.name);
@@ -33,6 +48,89 @@ export class OnboardingService {
       chegadaDispensada: linha?.chegadaDispensadaEm != null,
       toursVistos: linha?.toursVistos ?? [],
     };
+  }
+
+  /**
+   * O tour que vale para esta rota, já podado e já sabendo se a pessoa viu.
+   *
+   * A rota casa por PREFIXO, com o mais específico primeiro — a mesma regra do
+   * `permDaRota` do painel, onde "/ponto/competencia" tem que ganhar de
+   * "/ponto". O "/" é caso à parte: prefixo de tudo, então só casa exato,
+   * senão o tour da home abriria em cima de qualquer tela.
+   */
+  async tourDaRota(
+    rota: string,
+    usuario: { id: string; permissoes: string[]; plataforma: boolean },
+  ): Promise<TourParaTela | null> {
+    const [tours, estado] = await Promise.all([
+      comoSistema(() =>
+        this.prisma.tourPainel.findMany({
+          where: { ativo: true },
+          include: { passos: { orderBy: { ordem: "asc" } } },
+        }),
+      ),
+      this.estado(usuario.id),
+    ]);
+
+    const candidatos = tours
+      .filter((t) => (t.rota === "/" ? rota === "/" : rota.startsWith(t.rota)))
+      .sort((a, b) => b.rota.length - a.rota.length);
+
+    const tour = candidatos[0];
+    if (!tour) return null;
+
+    // Passo de um botão que a pessoa não tem não existe pra ela — mesma poda do
+    // checklist. Operador da plataforma enxerga tudo: é ele quem revisa o texto.
+    const permissoes = new Set(usuario.permissoes);
+    const passos = tour.passos.filter(
+      (p) => !p.permissao || usuario.plataforma || permissoes.has(p.permissao),
+    );
+    // Sobrou só o "bem-vindo" e o "é isso"? Dois balões centrais sem nada no
+    // meio não ensinam onde fica nada: melhor não abrir.
+    if (passos.filter((p) => p.alvo).length === 0) return null;
+
+    return {
+      chave: tour.chave,
+      automatico: tour.automatico,
+      visto: estado.toursVistos.includes(tour.chave),
+      passos: passos.map((p) => ({
+        id: p.id,
+        alvo: p.alvo,
+        titulo: p.titulo,
+        corpo: p.corpo,
+      })),
+    };
+  }
+
+  /**
+   * Marca o tour como visto. Idempotente, e guarda a CHAVE (com a versão
+   * dentro): publicar "home.v2" volta a aparecer sem apagar histórico.
+   */
+  async marcarTourVisto(usuarioId: string, chave: string): Promise<void> {
+    const atual = await this.prisma.onboardingUsuario.findUnique({
+      where: { usuarioId },
+      select: { toursVistos: true },
+    });
+    if (atual?.toursVistos.includes(chave)) return;
+
+    await this.prisma.onboardingUsuario.upsert({
+      where: { usuarioId },
+      create: { usuarioId, toursVistos: [chave] },
+      update: { toursVistos: { push: chave } },
+    });
+  }
+
+  /** Faz o tour aparecer de novo pra esta pessoa — o "rever" do botão de ajuda. */
+  async esquecerTour(usuarioId: string, chave: string): Promise<void> {
+    const atual = await this.prisma.onboardingUsuario.findUnique({
+      where: { usuarioId },
+      select: { toursVistos: true },
+    });
+    if (!atual) return;
+    await this.prisma.onboardingUsuario.update({
+      where: { usuarioId },
+      data: { toursVistos: atual.toursVistos.filter((c) => c !== chave) },
+    });
   }
 
   /**

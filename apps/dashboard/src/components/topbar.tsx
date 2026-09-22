@@ -59,6 +59,7 @@ export function Topbar() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
+          data-coach="sino"
           type="button"
           className="relative rounded-md p-2 text-foreground hover:bg-muted"
           aria-label="Notificações"

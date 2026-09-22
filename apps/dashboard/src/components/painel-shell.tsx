@@ -11,6 +11,7 @@ import { GlobalLoadingBar } from "@/components/loading";
 import { LogoConta } from "@/components/logo-conta";
 import { Topbar } from "@/components/topbar";
 import { TelaGuard } from "@/components/requer-tela";
+import { TourHost } from "@/components/tour-host";
 import { useInboxStream } from "@/lib/inbox";
 
 /**
@@ -29,6 +30,10 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
       {/* Bloqueia o painel quando há termo pendente. Renderiza null quando
           não há — ver o componente. */}
       <AceiteTermos />
+      {/* Depois do aceite, e nunca por cima dele: o modal de termos é
+          bloqueante, e um tour por baixo apontaria pra coisas que ninguém
+          consegue ver nem clicar. O host checa isso antes de abrir sozinho. */}
+      <TourHost />
       {/* Quem navega por teclado passava pelos 50+ links do menu antes de
           chegar no conteúdo, em toda tela. */}
       <a

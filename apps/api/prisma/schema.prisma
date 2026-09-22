@@ -7462,3 +7462,58 @@ model OnboardingUsuario {
   @@index([contaId])
   @@map("onboarding_usuarios")
 }
+
+/// Um passo a passo guiado sobre a tela do painel — o foco de luz.
+///
+/// Global, sem `contaId`: as telas são do produto, não de empresa nenhuma. O
+/// que é por empresa é quem VÊ cada passo, e isso sai da permissão, não de uma
+/// cópia por conta. ⚠️ Entra em `MODELS_GLOBAIS`.
+///
+/// A versão mora DENTRO da chave ("home.v1"): redesenhar a home e querer
+/// mostrar de novo é publicar "home.v2", não apagar o que cada pessoa já viu.
+model TourPainel {
+  id    String @id @default(uuid())
+  chave String @unique
+  nome  String
+
+  /// Prefixo da rota onde ele vale ("/" só na home, "/viagens" cobre o detalhe).
+  /// Casado como o `permDaRota` do painel: o mais específico primeiro.
+  rota String
+
+  /// Abre sozinho na primeira visita de cada pessoa. Falso = só pelo botão de
+  /// ajuda. Tour que se abre sozinho fora da home interrompe quem navegou de
+  /// propósito, então isto nasce restrito e é decisão de quem edita.
+  automatico Boolean @default(false)
+  ativo      Boolean @default(true)
+
+  passos PassoTour[]
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@map("tours_painel")
+}
+
+model PassoTour {
+  id     String     @id @default(uuid())
+  tour   TourPainel @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  tourId String
+  ordem  Int
+
+  /// O `data-coach` do elemento a destacar. Vazio = balão no centro, sem furo
+  /// (é assim que começa e termina um tour).
+  ///
+  /// Âncora de código, não seletor livre: um CSS arbitrário aqui apontaria pro
+  /// nada na primeira refatoração de layout, em silêncio.
+  alvo String?
+
+  titulo String
+  corpo  String
+
+  /// Passo de um botão que a pessoa não tem simplesmente não existe pra ela —
+  /// mesma poda do checklist. Vazio = todo mundo vê.
+  permissao String?
+
+  @@index([tourId, ordem])
+  @@map("passos_tour")
+}

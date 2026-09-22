@@ -42,6 +42,13 @@ export const ENDPOINTS_SEM_PERMISSAO: ReadonlySet<string> = new Set([
   // "Já entendi, tira isto da home." É preferência do próprio usuário sobre a
   // própria tela, do mesmo tipo que marcar um aviso como lido.
   "OnboardingController.dispensar",
+
+  // O passo a passo guiado da tela em que a pessoa está, e o "já vi isso".
+  // Mesmo motivo dos dois acima: é preferência do próprio usuário sobre a
+  // própria tela. Os PASSOS, esses sim, são podados por permissão lá dentro.
+  "OnboardingController.tour",
+  "OnboardingController.tourVisto",
+  "OnboardingController.tourRever",
 ]);
 
 /** Nome estável de um handler pro registro acima. */

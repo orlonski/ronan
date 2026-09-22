@@ -94,6 +94,8 @@ type Item = {
 
 type Grupo = {
   titulo: string;
+  /** Âncora estável do passo a passo. Não muda quando o rótulo muda. */
+  coach: string;
   itens: Item[];
   /**
    * Grupo das ferramentas internas da Movatruck. Some inteiro pra quem não é da
@@ -152,6 +154,7 @@ const RELATORIOS_ITEM = {
 const GRUPOS: Grupo[] = [
   {
     titulo: "Dia a dia",
+    coach: "grupo-dia-a-dia",
     itens: [
       { href: "/torre", label: "Torre de controle", icon: TowerControl, perm: "programacao.ver" },
       { href: "/programacao", label: "Programação do dia", icon: CalendarDays, perm: "programacao.ver" },
@@ -163,6 +166,7 @@ const GRUPOS: Grupo[] = [
   },
   {
     titulo: "Lançamentos",
+    coach: "grupo-lancamentos",
     itens: [
       { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "viagens.ver" },
       { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel, perm: "abastecimentos.ver" },
@@ -173,6 +177,7 @@ const GRUPOS: Grupo[] = [
   },
   {
     titulo: "Faturamento",
+    coach: "grupo-faturamento",
     itens: [
       { href: "/fechamentos", label: "Planilhas dos clientes", icon: FileSpreadsheet, perm: "fechamentos.ver" },
       { href: "/envios", label: "Planilhas enviadas", icon: Send, perm: "envios.ver" },
@@ -183,6 +188,7 @@ const GRUPOS: Grupo[] = [
   },
   {
     titulo: "Financeiro",
+    coach: "grupo-financeiro",
     itens: [
       { href: "/financeiro", label: "Contas a pagar e receber", icon: Wallet, perm: "financeiro.ver" },
       { href: "/acertos", label: "Acertos com motorista", icon: HandCoins, perm: "acertos.ver" },
@@ -190,6 +196,7 @@ const GRUPOS: Grupo[] = [
   },
   {
     titulo: "Frota e pessoas",
+    coach: "grupo-frota-e-pessoas",
     itens: [
       { href: "/motoristas", label: "Motoristas", icon: HardHat, perm: "motoristas.ver" },
       { href: "/veiculos", label: "Veículos", icon: Truck, perm: "veiculos.ver" },
@@ -204,6 +211,7 @@ const GRUPOS: Grupo[] = [
     // Misturar os dois no menu é o primeiro passo pra misturar as duas coisas
     // na cabeça de quem opera — e elas têm bases legais diferentes.
     titulo: "Ponto",
+    coach: "grupo-ponto",
     itens: [
       { href: "/ponto", label: "Ponto do dia", icon: Clock, perm: "ponto.ver" },
       { href: "/ponto/competencia", label: "Fechar o mês", icon: CalendarCheck, perm: "fechamento-ponto.ver" },
@@ -215,6 +223,7 @@ const GRUPOS: Grupo[] = [
   },
   {
     titulo: "Cadastros",
+    coach: "grupo-cadastros",
     itens: [
       // "Empresas" nomeava DUAS entidades diferentes em dois itens de menu
       // adjacentes. Este é o tomador do serviço — e é o nome que a própria tela
@@ -231,6 +240,7 @@ const GRUPOS: Grupo[] = [
   },
   {
     titulo: "Comunicação",
+    coach: "grupo-comunicacao",
     itens: [
       { href: "/chat", label: "Chat dos motoristas", icon: MessagesSquare, perm: "chat.ver" },
       // O sininho do topo também se chama "Notificações" e é outra coisa: são os
@@ -241,6 +251,7 @@ const GRUPOS: Grupo[] = [
   },
   {
     titulo: "Configurações",
+    coach: "grupo-configuracoes",
     itens: [
       { href: "/configuracoes/empresa", label: "Minha empresa", icon: Landmark, perm: "minha-empresa.editar" },
       // SEM permissão, de propósito. O modal de aceite bloqueia TODO usuário
@@ -264,6 +275,7 @@ const GRUPOS: Grupo[] = [
   },
   {
     titulo: "Movatruck",
+    coach: "grupo-movatruck",
     soPlataforma: true,
     itens: [
       { href: "/demandas", label: "Pedidos de melhoria", icon: Lightbulb, perm: "demandas.ver" },
@@ -427,6 +439,10 @@ export function Sidebar({
               <Link
                 href={COMECAR_ITEM.href as any}
                 aria-current={active ? "page" : undefined}
+                // Âncora do passo a passo. Fica num item SOLTO de propósito:
+                // dentro de grupo do accordion, o alvo mede 0x0 quando o grupo
+                // está fechado, e o furo sairia no canto da tela.
+                data-coach="comecar"
                 className={cn(
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
@@ -487,6 +503,13 @@ export function Sidebar({
               <div key={grupo.titulo} className="space-y-1">
                 <button
                   type="button"
+                  // O cabeçalho do grupo é medível mesmo fechado — por isso o
+                  // tour aponta pra ele, e não pro item lá dentro.
+                  //
+                  // A chave é declarada no grupo, não derivada do título: o
+                  // título tem acento ("Lançamentos") e pode ser renomeado, e
+                  // nos dois casos o alvo do tour deixaria de casar EM SILÊNCIO.
+                  data-coach={grupo.coach}
                   onClick={() => toggleGrupo(grupo.titulo)}
                   className="flex w-full items-center justify-between rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-muted-foreground"
                 >
