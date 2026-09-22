@@ -24,7 +24,7 @@ type Exigido = {
   id: string;
   titulo: string;
   ajuda?: string | null;
-  publico?: "MENSAL" | "TODOS";
+  publico?: "MENSAL" | "TODOS" | "REGISTRADOS";
   comoAssinar?: "NAO" | "NO_APP" | "JA_ASSINADO";
   tipo: TipoDocumentoMotorista;
   empresaId: string | null;
@@ -202,6 +202,11 @@ function Grupo({
                       toda a frota
                     </span>
                   )}
+                  {e.publico === "REGISTRADOS" && (
+                    <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-normal text-blue-900 dark:bg-blue-950 dark:text-blue-200">
+                      registrados em carteira
+                    </span>
+                  )}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   guardado em {ROTULO_DOCUMENTO_MOTORISTA[e.tipo] ?? e.tipo}
@@ -238,7 +243,7 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
   const token = useAuthToken();
   const [titulo, setTitulo] = useState("");
   const [ajuda, setAjuda] = useState("");
-  const [publico, setPublico] = useState<"MENSAL" | "TODOS">("MENSAL");
+  const [publico, setPublico] = useState<"MENSAL" | "TODOS" | "REGISTRADOS">("MENSAL");
   const [tipo, setTipo] = useState<string>("CNH");
   const [empresaId, setEmpresaId] = useState<string>();
   const [obrigatorio, setObrigatorio] = useState(true);
@@ -324,6 +329,7 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
           </p>
         </div>
 
+        {publico !== "REGISTRADOS" && (
         <div>
           <Label>De qual contratante</Label>
           <Combobox
@@ -336,16 +342,24 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
             Vazio = vale em qualquer obra. Com contratante, só na obra dele.
           </p>
         </div>
+        )}
 
         <div>
           <Label>De quem se pede</Label>
           <Select
             value={publico}
-            onChange={(e) => setPublico(e.target.value as "MENSAL" | "TODOS")}
+            onChange={(e) => setPublico(e.target.value as "MENSAL" | "TODOS" | "REGISTRADOS")}
           >
             <option value="MENSAL">Só de quem é contratado</option>
             <option value="TODOS">De todo motorista da frota</option>
+            <option value="REGISTRADOS">De quem é registrado em carteira</option>
           </Select>
+          {publico === "REGISTRADOS" && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Vale pra todo registrado da empresa, tenha ele cadastro de motorista ou não (o
+              mecânico, o escritório). Ele manda pelo app, e você confere em Quem bate ponto.
+            </p>
+          )}
           <p className="mt-1 text-xs text-muted-foreground">
             Papelada de admissão é de quem tem vínculo com a empresa — registrado em carteira
             ou parceiro. Marcando &quot;toda a frota&quot;, quem só roda frete comum passa a ver

@@ -440,6 +440,11 @@ export function ehRotaDoPonto(path: string): boolean {
   return path === "/m/ponto" || path.startsWith("/m/ponto/") || path.startsWith("/m/ponto?");
 }
 
+/** Documentos que a empresa pede: o registrado sem cadastro de motorista também manda. */
+export function ehRotaDosDocumentos(path: string): boolean {
+  return path.startsWith("/m/admissao/");
+}
+
 export async function request<T>(
   method: string,
   path: string,
@@ -503,7 +508,12 @@ export async function request<T>(
     }
     if (pontoComoPessoa) pontoDaEmpresa = registrado;
   }
-  const comoIdentidade = comoIdentidadePedido || pontoComoPessoa;
+  // Documentos: com o token da pessoa SÓ quando não há cadastro de motorista.
+  // Quem tem os dois (motorista CLT) manda o do cadastro, e o servidor junta
+  // o que se pede do motorista com o que se pede do registrado.
+  const documentosComoPessoa =
+    auth && !comoCadastro && !pontoComoPessoa && ehRotaDosDocumentos(path) && !(await motoristaAtivoId());
+  const comoIdentidade = comoIdentidadePedido || pontoComoPessoa || documentosComoPessoa;
   const headers: Record<string, string> = { ...appVersionHeaders() };
   if (pontoDaEmpresa) headers["x-conta-id"] = pontoDaEmpresa;
   if (body !== undefined && !isFormData) headers["content-type"] = "application/json";

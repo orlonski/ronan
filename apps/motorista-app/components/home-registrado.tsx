@@ -2,8 +2,9 @@ import { router } from "expo-router";
 import { useState, useSyncExternalStore } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowRight, Building2, CalendarDays, Check, Clock, Receipt } from "lucide-react-native";
-import { usePontoHoje } from "@/lib/queries";
+import { ArrowRight, Building2, CalendarDays, Check, Clock, FileText, Receipt } from "lucide-react-native";
+import { useDocumentosDaObra, usePontoHoje } from "@/lib/queries";
+import { BlocoDocumentos } from "@/components/bloco-documentos";
 import { hojeISO } from "@/lib/datetime";
 import { usePendingPonto } from "@/hooks/use-pending-ponto";
 import { assinarVinculoRegistrado, vinculoRegistradoSync } from "@/lib/vinculo-registrado";
@@ -40,6 +41,9 @@ export function HomeRegistrado() {
   const hoje = usePontoHoje(hojeISO());
   const baterPonto = usePermite("app.ponto.bater");
   const verEspelho = usePermite("app.ponto.espelho");
+  // Os papéis que a empresa pede de quem é registrado (admissão, ficha de EPI…).
+  const verDocumentos = usePermite("app.documentos.enviar");
+  const documentos = useDocumentosDaObra(verDocumentos);
   const [puxando, setPuxando] = useState(false);
   const naFila = usePendingPonto();
   const esperando = naFila.filter((p) => p.status !== "error").length;
@@ -123,12 +127,27 @@ export function HomeRegistrado() {
         </Pressable>
         )}
 
+        {/* O que falta mandar. Some sozinho quando está tudo entregue. */}
+        {verDocumentos && <BlocoDocumentos />}
+
         {verEspelho && (
           <Atalho
             icone={<CalendarDays size={22} color="#13316b" />}
             titulo="Meu espelho"
             descricao="Seus registros do mês, dia a dia"
             onPress={() => router.push("/meu-espelho")}
+          />
+        )}
+
+        {/* A porta fixa dos documentos: o bloco acima some quando não falta
+            nada, e aí ele não teria como rever o que mandou. Só existe se a
+            empresa pede algum papel de quem é registrado. */}
+        {verDocumentos && (documentos.data?.total ?? 0) > 0 && (
+          <Atalho
+            icone={<FileText size={22} color="#13316b" />}
+            titulo="Meus documentos"
+            descricao="O que a empresa pediu e o que você já mandou"
+            onPress={() => router.push("/documentos-da-obra")}
           />
         )}
 

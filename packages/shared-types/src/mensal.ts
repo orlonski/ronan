@@ -206,7 +206,9 @@ export const CriarDocumentoExigidoInput = z.object({
    * faz o motorista de frete comum abrir o app com uma papelada de obra em que
    * ele nunca pôs o caminhão.
    */
-  publico: z.enum(["MENSAL", "TODOS"]).default("MENSAL"),
+  // `REGISTRADOS` = de quem é registrado em carteira (tenha ou não cadastro de
+  // motorista); o arquivo mora no cadastro de funcionário.
+  publico: z.enum(["MENSAL", "TODOS", "REGISTRADOS"]).default("MENSAL"),
   obrigatorio: z.boolean().default(true),
   ordem: z.number().int().min(0).default(0),
   /**

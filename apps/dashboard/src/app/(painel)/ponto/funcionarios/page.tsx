@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Smartphone, Users } from "lucide-react";
+import { FileText, Plus, Smartphone, Users } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { RequerTela } from "@/components/requer-tela";
@@ -23,6 +23,7 @@ import { apiBaseUrl, fetchApi, useAuthToken } from "@/lib/client-api";
 import { hojeSP } from "@/lib/datetime-br";
 import { usePermissoes } from "@/lib/permissoes";
 import { AcessoAppCard } from "../../motoristas/[id]/acesso-app-card";
+import { DocumentosDoFuncionario } from "./documentos-funcionario";
 import { PATH, PrecisaFundamento, useConfigPonto } from "../_lib";
 
 type Funcionario = {
@@ -66,6 +67,7 @@ function Conteudo() {
   const [novo, setNovo] = useState(false);
   const [inativos, setInativos] = useState(false);
   const [vendoAcesso, setVendoAcesso] = useState<Funcionario | null>(null);
+  const [vendoDocs, setVendoDocs] = useState<Funcionario | null>(null);
   const config = useConfigPonto();
 
   const lista = useQuery({
@@ -137,6 +139,9 @@ function Conteudo() {
                   desligado
                 </span>
               )}
+              <Button variant="outline" size="sm" onClick={() => setVendoDocs(f)}>
+                <FileText className="mr-1 h-4 w-4" /> Documentos
+              </Button>
               {f.ativo && (
                 <Button variant="outline" size="sm" onClick={() => setVendoAcesso(f)}>
                   <Smartphone className="mr-1 h-4 w-4" /> Acesso ao app
@@ -151,6 +156,13 @@ function Conteudo() {
       {novo && <DialogContratar onFechar={() => setNovo(false)} />}
       {/* O mesmo card da ficha do motorista: o acesso é da pessoa, e quem só
           é registrado também precisa ver (e explicar) o que aparece no app dele. */}
+      {vendoDocs && (
+        <DocumentosDoFuncionario
+          funcionarioId={vendoDocs.id}
+          nome={vendoDocs.nome}
+          onFechar={() => setVendoDocs(null)}
+        />
+      )}
       {vendoAcesso && (
         <Dialog open onOpenChange={(o) => !o && setVendoAcesso(null)}>
           <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">

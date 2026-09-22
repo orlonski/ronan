@@ -78,6 +78,21 @@
   correção de ponto são LIVRES; só criar coisa nova exige capacidade.
   **Não mudou:** os `@AcessoMotorista` antigos e o WHERE do chat seguem nas
   colunas `pode*`, que o resolvedor escreve (mesmo resultado nas regras).
+- **F5**: documentos de quem é REGISTRADO. `MotoristaDocumento` e
+  `AssinaturaDocumento` ganharam `funcionarioId` (dono = motorista OU
+  funcionário, CHECK `*_um_dono`) e o público `REGISTRADOS`. As mesmas rotas
+  `/m/admissao/documentos*` servem os dois: exigência de registrado vai pro
+  cadastro de funcionário, o resto pro de motorista, e o motorista CLT vê as
+  duas numa lista só. O registrado sem cadastro de motorista manda com o token
+  da pessoa. Assinatura confere o CPF contra o cadastro DONO do papel. Painel:
+  "De quem é registrado em carteira" em Documentos exigidos, e "Documentos"
+  em Quem bate ponto (ver, baixar, conferir, devolver com motivo, subir). O
+  perfil herdado de registrado ganhou `app.documentos.enviar` (não aparece
+  nada até a empresa pedir algum papel). **D5**: registrado pago por produção
+  no cadastro de motorista pede motivo (auditoria), nunca trava.
+  **Não feito, de propósito (decisão do dono, D1):** tirar o registrado do
+  `m/eu/frete*` e ligar as camadas REGIME e CONTRATO — isso corta, e corta
+  empresa por empresa com a lista na frente, pela aba Plataforma.
 
 ---
 

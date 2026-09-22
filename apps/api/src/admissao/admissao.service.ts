@@ -61,12 +61,38 @@ type DadosExigencia = {
   ajuda?: string | null;
   tipo: string;
   empresaId?: string;
-  publico?: "MENSAL" | "TODOS";
+  publico?: "MENSAL" | "TODOS" | "REGISTRADOS";
   obrigatorio?: boolean;
   ordem?: number;
   comoAssinar?: "NAO" | "NO_APP" | "JA_ASSINADO";
   exigeIcpBrasil?: boolean;
 };
+
+/**
+ * DE QUEM é um documento: do cadastro de motorista ou do de funcionário
+ * (registrado em carteira sem cadastro de motorista — mecânico, escritório).
+ * O banco garante que é exatamente um dos dois (CHECK `*_um_dono`).
+ */
+export type DonoDocumento = { motoristaId: string } | { funcionarioId: string };
+
+/** Quem está no app: o que o token traz. O motorista CLT traz os dois. */
+export type QuemNoApp = { motoristaId?: string | null; funcionarioId?: string | null };
+
+function ehDoMotorista(d: DonoDocumento): d is { motoristaId: string } {
+  return "motoristaId" in d;
+}
+function ondeDono(d: DonoDocumento) {
+  return ehDoMotorista(d) ? { motoristaId: d.motoristaId } : { funcionarioId: d.funcionarioId };
+}
+function unicoDoDono(d: DonoDocumento, chave: string) {
+  return ehDoMotorista(d)
+    ? { motoristaId_chave: { motoristaId: d.motoristaId, chave } }
+    : { funcionarioId_chave: { funcionarioId: d.funcionarioId, chave } };
+}
+/** A pasta no storage. `func-` não colide com uuid de motorista. */
+function pastaDoDono(d: DonoDocumento) {
+  return ehDoMotorista(d) ? d.motoristaId : `func-${d.funcionarioId}`;
+}
 
 @Injectable()
 export class AdmissaoService {
@@ -128,11 +154,25 @@ export class AdmissaoService {
     return this.prisma.documentoExigido.findMany({
       where: {
         ativo: true,
+        // O que se pede de REGISTRADO mora no cadastro de funcionário, não no
+        // de motorista: aparece junto no app dele, mas não é deste dono.
+        publico: { not: "REGISTRADOS" },
         OR: [{ empresaId: null }, ...(empresaId ? [{ empresaId }] : [])],
         // Sem vínculo, só o que vale pra todo mundo — e só quando quem
         // pergunta é o app dele.
         ...(opts?.soDoPublicoDele && !temVinculo ? { publico: "TODOS" as const } : {}),
       },
+      orderBy: [{ ordem: "asc" }, { titulo: "asc" }],
+    });
+  }
+
+  /**
+   * O que se pede de quem é REGISTRADO EM CARTEIRA. Vale pra empresa inteira:
+   * papel de admissão CLT não é de obra nenhuma.
+   */
+  exigidosDoRegistrado() {
+    return this.prisma.documentoExigido.findMany({
+      where: { ativo: true, publico: "REGISTRADOS" },
       orderBy: [{ ordem: "asc" }, { titulo: "asc" }],
     });
   }
@@ -151,7 +191,8 @@ export class AdmissaoService {
         titulo: dados.titulo,
         ajuda: dados.ajuda?.trim() || null,
         tipo: dados.tipo,
-        empresaId: dados.empresaId ?? null,
+        // Papel de registrado é da empresa inteira, nunca de um contratante.
+        empresaId: dados.publico === "REGISTRADOS" ? null : (dados.empresaId ?? null),
         // Default MENSAL: o silêncio é o padrão seguro. Exigência que nasce
         // valendo pra frota inteira cobra gente que nunca foi chamada pra obra.
         publico: dados.publico ?? "MENSAL",
@@ -181,7 +222,7 @@ export class AdmissaoService {
       data: {
         titulo: dados.titulo,
         ajuda: dados.ajuda?.trim() || null,
-        empresaId: dados.empresaId ?? null,
+        empresaId: (dados.publico ?? e.publico) === "REGISTRADOS" ? null : (dados.empresaId ?? null),
         publico: dados.publico ?? e.publico,
         obrigatorio: dados.obrigatorio ?? e.obrigatorio,
         ordem: dados.ordem ?? e.ordem,
@@ -377,11 +418,21 @@ export class AdmissaoService {
    * Roda dentro da conta: quem chama é responsável pelo `comConta`.
    */
   async estadoDosDocumentos(motoristaId: string, opts?: { soDoPublicoDele?: boolean }) {
-    const exigidos = await this.exigidosPara(motoristaId, opts);
+    return this.estadoDe({ motoristaId }, await this.exigidosPara(motoristaId, opts));
+  }
 
+  /** O mesmo estado, do cadastro de funcionário (quem é registrado). */
+  async estadoDoFuncionario(funcionarioId: string) {
+    return this.estadoDe({ funcionarioId }, await this.exigidosDoRegistrado());
+  }
+
+  private async estadoDe(
+    dono: DonoDocumento,
+    exigidos: Awaited<ReturnType<AdmissaoService["exigidosDoRegistrado"]>>,
+  ) {
     const [enviados, assinaturas] = await Promise.all([
       this.prisma.motoristaDocumento.findMany({
-        where: { motoristaId },
+        where: ondeDono(dono),
         select: {
           chave: true,
           nomeArquivo: true,
@@ -397,7 +448,7 @@ export class AdmissaoService {
         },
       }),
       this.prisma.assinaturaDocumento.findMany({
-        where: { motoristaId },
+        where: ondeDono(dono),
         select: { chave: true, modo: true, assinadoEm: true, hashArquivo: true },
       }),
     ]);
@@ -514,15 +565,38 @@ export class AdmissaoService {
    * nenhuma e cuja transportadora não exige nada. O app some com a tela.
    */
   async paraOMotorista(motoristaId: string) {
-    const [estado, alocacao] = await Promise.all([
+    return this.paraOApp({ motoristaId });
+  }
+
+  /**
+   * A tela "Meus documentos" de quem está no app: o que se pede do cadastro
+   * de motorista E, se a pessoa é registrada em carteira, o que se pede do
+   * registrado. Uma lista só: pra ela é tudo "papel que a empresa pediu".
+   */
+  async paraOApp(quem: QuemNoApp) {
+    const [doMotorista, doRegistrado, alocacao] = await Promise.all([
       // Na tela DELE, só o que é dele: quem não está em obra não é cobrado de
       // papelada de obra.
-      this.estadoDosDocumentos(motoristaId, { soDoPublicoDele: true }),
-      this.prisma.alocacaoObra.findFirst({
-        where: { motoristaId, ativa: true },
-        select: { cliente: { select: { nome: true } } },
-      }),
+      quem.motoristaId ? this.estadoDosDocumentos(quem.motoristaId, { soDoPublicoDele: true }) : null,
+      quem.funcionarioId ? this.estadoDoFuncionario(quem.funcionarioId) : null,
+      quem.motoristaId
+        ? this.prisma.alocacaoObra.findFirst({
+            where: { motoristaId: quem.motoristaId, ativa: true },
+            select: { cliente: { select: { nome: true } } },
+          })
+        : null,
     ]);
+    const partes = [doMotorista, doRegistrado].filter((p): p is NonNullable<typeof p> => p !== null);
+    const soma = (k: "prontos" | "total" | "faltamObrigatorios" | "faltamDele" | "comOEscritorio") =>
+      partes.reduce((t, p) => t + p[k], 0);
+    const estado = {
+      documentos: partes.flatMap((p) => p.documentos),
+      prontos: soma("prontos"),
+      total: soma("total"),
+      faltamObrigatorios: soma("faltamObrigatorios"),
+      faltamDele: soma("faltamDele"),
+      comOEscritorio: soma("comOEscritorio"),
+    };
 
     return {
       obra: alocacao?.cliente.nome ?? null,
@@ -583,6 +657,65 @@ export class AdmissaoService {
     };
   }
 
+  // ------------------------------------ documentos do registrado (painel) ---
+
+  private async garantirFuncionario(funcionarioId: string) {
+    const f = await this.prisma.funcionario.findFirst({
+      where: { id: funcionarioId },
+      select: { id: true },
+    });
+    if (!f) throw new NotFoundException("Funcionário não encontrado.");
+  }
+
+  /** O que se pediu deste registrado e o estado de cada papel, pro escritório. */
+  async documentosDoFuncionario(funcionarioId: string) {
+    await this.garantirFuncionario(funcionarioId);
+    return this.estadoDoFuncionario(funcionarioId);
+  }
+
+  /**
+   * O arquivo, pro ESCRITÓRIO baixar. Não carimba `vistoEm`: esse carimbo é a
+   * prova de que o TITULAR abriu o papel antes de assinar.
+   */
+  async arquivoDoFuncionario(funcionarioId: string, exigenciaId: string) {
+    await this.garantirFuncionario(funcionarioId);
+    const doc = await this.prisma.motoristaDocumento.findFirst({
+      where: { funcionarioId, chave: chaveDaExigencia(exigenciaId) },
+      select: { storageKey: true, mimetype: true, nomeArquivo: true },
+    });
+    if (!doc) throw new NotFoundException("Documento não encontrado.");
+    return doc;
+  }
+
+  /**
+   * O escritório sobe o papel de um registrado: o contrato que ELE emitiu pra
+   * o funcionário assinar pelo app, ou a cópia que a pessoa trouxe em mãos.
+   * Mesma regra de gravação das outras portas (`receberDocumento`).
+   */
+  async receberDoPainelFuncionario(
+    funcionarioId: string,
+    exigenciaId: string,
+    arquivo: { buffer: Buffer; mimetype: string; size: number; originalname: string },
+  ) {
+    await this.garantirFuncionario(funcionarioId);
+    checarArquivoEnviado(arquivo, {
+      mimes: MIMES_DOCUMENTO,
+      maxBytes: MAX_BYTES,
+      extensoesTambem: ASSINATURA_DESTACADA,
+      comoDizer: "Use PDF, JPG, PNG ou WebP.",
+    });
+    const exigencia = (await this.exigidosDoRegistrado()).find((e) => e.id === exigenciaId);
+    if (!exigencia) throw new BadRequestException("Esta exigência não é de quem é registrado.");
+    const { doc } = await this.receberDocumento({
+      dono: { funcionarioId },
+      exigencia,
+      tipo: exigencia.tipo,
+      arquivo,
+      origem: "PAINEL",
+    });
+    return { recebido: true, exigenciaId, criadoEm: doc.criadoEm };
+  }
+
   // ------------------------------------------------- conferência humana ---
 
   /**
@@ -598,7 +731,11 @@ export class AdmissaoService {
    * lançamento de presença pelo painel: quem decide por outra pessoa assina.
    */
   async conferirDocumento(motoristaId: string, chaveOuExigencia: string, usuarioId: string) {
-    const doc = await this.acharPorChave(motoristaId, chaveOuExigencia);
+    return this.conferirDoDono({ motoristaId }, chaveOuExigencia, usuarioId);
+  }
+
+  async conferirDoDono(dono: DonoDocumento, chaveOuExigencia: string, usuarioId: string) {
+    const doc = await this.acharPorChave(dono, chaveOuExigencia);
     return this.prisma.motoristaDocumento.update({
       where: { id: doc.id },
       data: {
@@ -624,11 +761,20 @@ export class AdmissaoService {
     motivo: string,
     usuarioId: string,
   ) {
+    return this.recusarDoDono({ motoristaId }, chaveOuExigencia, motivo, usuarioId);
+  }
+
+  async recusarDoDono(
+    dono: DonoDocumento,
+    chaveOuExigencia: string,
+    motivo: string,
+    usuarioId: string,
+  ) {
     const texto = motivo.trim();
     if (texto.length < 3) {
       throw new BadRequestException("Escreva o que houve com o documento.");
     }
-    const doc = await this.acharPorChave(motoristaId, chaveOuExigencia);
+    const doc = await this.acharPorChave(dono, chaveOuExigencia);
     const atualizado = await this.prisma.motoristaDocumento.update({
       where: { id: doc.id },
       data: {
@@ -657,10 +803,14 @@ export class AdmissaoService {
      * `tentar` e não `enviar`: falha de push não pode desfazer a recusa, que
      * já está gravada. O item aparece no app dele assim que ele abrir.
      */
-    const m = await this.prisma.motorista.findFirst({
-      where: { id: motoristaId },
-      select: { id: true, expoPushToken: true },
-    });
+    // A push mora no cadastro de motorista. O registrado sem esse cadastro
+    // vê a recusa no próprio item, quando abrir a tela.
+    const m = ehDoMotorista(dono)
+      ? await this.prisma.motorista.findFirst({
+          where: { id: dono.motoristaId },
+          select: { id: true, expoPushToken: true },
+        })
+      : null;
     if (m?.expoPushToken) {
       const nome = atualizado.exigencia?.titulo ?? "Um documento";
       await this.push
@@ -681,13 +831,13 @@ export class AdmissaoService {
   }
 
   /** Aceita a chave (`exig:<id>` / `gaveta:<TIPO>`) ou só o id da exigência. */
-  private async acharPorChave(motoristaId: string, chaveOuExigencia: string) {
+  private async acharPorChave(dono: DonoDocumento, chaveOuExigencia: string) {
     const chave =
       chaveOuExigencia.startsWith("exig:") || chaveOuExigencia.startsWith("gaveta:")
         ? chaveOuExigencia
         : chaveDaExigencia(chaveOuExigencia);
     const doc = await this.prisma.motoristaDocumento.findFirst({
-      where: { motoristaId, chave },
+      where: { ...ondeDono(dono), chave },
       select: { id: true },
     });
     if (!doc) throw new NotFoundException("Documento não encontrado.");
@@ -707,6 +857,31 @@ export class AdmissaoService {
     exigenciaId: string,
     arquivo: { buffer: Buffer; mimetype: string; size: number; originalname: string },
   ) {
+    return this.receberDoApp({ motoristaId }, exigenciaId, arquivo);
+  }
+
+  /**
+   * A exigência que esta pessoa pode atender pelo app, e DE QUEM fica o
+   * arquivo: o que se pede de registrado vai pro cadastro de funcionário, o
+   * resto pro de motorista. Exigência que não é pra ela → 400, como sempre.
+   */
+  private async exigenciaDoApp(quem: QuemNoApp, exigenciaId: string) {
+    const [doMotorista, doRegistrado] = await Promise.all([
+      quem.motoristaId ? this.exigidosPara(quem.motoristaId, { soDoPublicoDele: true }) : [],
+      quem.funcionarioId ? this.exigidosDoRegistrado() : [],
+    ]);
+    const m = doMotorista.find((e) => e.id === exigenciaId);
+    if (m && quem.motoristaId) return { exigencia: m, dono: { motoristaId: quem.motoristaId } as DonoDocumento };
+    const f = doRegistrado.find((e) => e.id === exigenciaId);
+    if (f && quem.funcionarioId) return { exigencia: f, dono: { funcionarioId: quem.funcionarioId } as DonoDocumento };
+    throw new BadRequestException("Este documento não é pedido pra você.");
+  }
+
+  async receberDoApp(
+    quem: QuemNoApp,
+    exigenciaId: string,
+    arquivo: { buffer: Buffer; mimetype: string; size: number; originalname: string },
+  ) {
     checarArquivoEnviado(arquivo, {
       mimes: MIMES_DOCUMENTO,
       maxBytes: MAX_BYTES,
@@ -716,12 +891,10 @@ export class AdmissaoService {
       comoDizer: "Mande uma foto ou um PDF.",
     });
 
-    const exigidos = await this.exigidosPara(motoristaId, { soDoPublicoDele: true });
-    const exigencia = exigidos.find((e) => e.id === exigenciaId);
-    if (!exigencia) throw new BadRequestException("Este documento não é pedido pra você.");
+    const { exigencia, dono } = await this.exigenciaDoApp(quem, exigenciaId);
 
     const { assinaturaEmbutida } = await this.receberDocumento({
-      motoristaId,
+      dono,
       exigencia,
       tipo: exigencia.tipo,
       arquivo,
@@ -748,9 +921,20 @@ export class AdmissaoService {
    * O `vistoEm` é carimbado aqui, pelo servidor. Não é o app que declara.
    */
   async arquivoParaMotorista(motoristaId: string, exigenciaId: string) {
+    return this.arquivoParaApp({ motoristaId }, exigenciaId);
+  }
+
+  async arquivoParaApp(quem: QuemNoApp, exigenciaId: string) {
     const chave = chaveDaExigencia(exigenciaId);
+    // Procura nos dois donos DELE: o arquivo pode ter sido subido pelo
+    // escritório numa exigência de registrado ou de motorista.
+    const donos = [
+      ...(quem.motoristaId ? [{ motoristaId: quem.motoristaId }] : []),
+      ...(quem.funcionarioId ? [{ funcionarioId: quem.funcionarioId }] : []),
+    ];
+    if (!donos.length) throw new NotFoundException("Documento não encontrado.");
     const doc = await this.prisma.motoristaDocumento.findFirst({
-      where: { motoristaId, chave },
+      where: { OR: donos, chave },
       // `hashArquivo` vai junto porque a miniatura é guardada POR VERSÃO: sem
       // ele, trocar a foto devolveria a miniatura antiga pra sempre.
       select: {
@@ -788,9 +972,17 @@ export class AdmissaoService {
     ip?: string,
     userAgent?: string,
   ) {
-    const exigidos = await this.exigidosPara(motoristaId, { soDoPublicoDele: true });
-    const exigencia = exigidos.find((e) => e.id === exigenciaId);
-    if (!exigencia) throw new BadRequestException("Este documento não é pedido pra você.");
+    return this.assinarPeloApp({ motoristaId }, exigenciaId, dados, ip, userAgent);
+  }
+
+  async assinarPeloApp(
+    quem: QuemNoApp,
+    exigenciaId: string,
+    dados: { nome: string; cpf: string },
+    ip?: string,
+    userAgent?: string,
+  ) {
+    const { exigencia, dono } = await this.exigenciaDoApp(quem, exigenciaId);
     if (!exigencia.exigeAssinatura) {
       throw new BadRequestException("Este documento não precisa de assinatura.");
     }
@@ -802,17 +994,17 @@ export class AdmissaoService {
 
     const chave = chaveDaExigencia(exigencia.id);
     const doc = await this.prisma.motoristaDocumento.findFirst({
-      where: { motoristaId, chave },
+      where: { ...ondeDono(dono), chave },
       select: { storageKey: true, vistoEm: true },
     });
     if (!doc) throw new BadRequestException("O arquivo ainda não chegou aqui.");
 
-    const motorista = await this.prisma.motorista.findFirst({
-      where: { id: motoristaId },
-      select: { cpf: true },
-    });
+    // O CPF confere contra o cadastro DONO do papel, seja qual for.
+    const cadastro = ehDoMotorista(dono)
+      ? await this.prisma.motorista.findFirst({ where: { id: dono.motoristaId }, select: { cpf: true } })
+      : await this.prisma.funcionario.findFirst({ where: { id: dono.funcionarioId }, select: { cpf: true } });
     const so = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
-    if (motorista?.cpf && so(motorista.cpf) !== so(dados.cpf)) {
+    if (cadastro?.cpf && so(cadastro.cpf) !== so(dados.cpf)) {
       throw new BadRequestException("O CPF não confere com o do seu cadastro.");
     }
 
@@ -820,9 +1012,9 @@ export class AdmissaoService {
     const buffer = await this.uploads.getObjectBuffer(doc.storageKey);
 
     const assinatura = await this.prisma.assinaturaDocumento.upsert({
-      where: { motoristaId_chave: { motoristaId, chave } },
+      where: unicoDoDono(dono, chave),
       create: {
-        motoristaId,
+        ...ondeDono(dono),
         tipoDocumento: exigencia.tipo,
         chave,
         modo: "SIMPLES",
@@ -865,7 +1057,9 @@ export class AdmissaoService {
    * Quem chama é responsável pelo `comConta` — e pelo `await` DENTRO dele.
    */
   async receberDocumento(e: {
-    motoristaId: string;
+    /** Quem é o dono. `motoristaId` sozinho segue valendo (link e painel). */
+    dono?: DonoDocumento;
+    motoristaId?: string;
     exigencia: {
       id: string;
       tipo: string;
@@ -879,7 +1073,8 @@ export class AdmissaoService {
     conviteColetaId?: string | null;
     validade?: Date | null;
   }) {
-    const { motoristaId, exigencia, tipo, arquivo, origem } = e;
+    const { exigencia, tipo, arquivo, origem } = e;
+    const dono: DonoDocumento = e.dono ?? { motoristaId: e.motoristaId! };
     const chave = chaveDocumento({ exigenciaId: exigencia?.id ?? null, tipo });
 
     const deteccao = detectarAssinaturaEmbutida(
@@ -917,14 +1112,14 @@ export class AdmissaoService {
     // O objeto anterior sai do MinIO antes do novo entrar: a key muda quando a
     // extensão muda, e sem remover ficava lixo no bucket.
     const anterior = await this.prisma.motoristaDocumento.findFirst({
-      where: { motoristaId, chave },
+      where: { ...ondeDono(dono), chave },
       select: { storageKey: true },
     });
 
     const storageKey = await this.uploads.putMotoristaDocumento(
       arquivo.buffer,
       arquivo.mimetype,
-      motoristaId,
+      pastaDoDono(dono),
       chave,
       arquivo.originalname,
     );
@@ -936,9 +1131,9 @@ export class AdmissaoService {
     }
 
     const doc = await this.prisma.motoristaDocumento.upsert({
-      where: { motoristaId_chave: { motoristaId, chave } },
+      where: unicoDoDono(dono, chave),
       create: {
-        motoristaId,
+        ...ondeDono(dono),
         tipo: tipo as never,
         exigenciaId: exigencia?.id ?? null,
         chave,
@@ -975,7 +1170,7 @@ export class AdmissaoService {
     // Trocar o arquivo DERRUBA a assinatura antiga. Ela apontava, pelo hash,
     // pro papel anterior — mantê-la faria a tela dizer que a pessoa assinou um
     // documento que ela nunca viu.
-    await this.prisma.assinaturaDocumento.deleteMany({ where: { motoristaId, chave } });
+    await this.prisma.assinaturaDocumento.deleteMany({ where: { ...ondeDono(dono), chave } });
 
     // Arquivo que já chega assinado dispensa o aceite: a assinatura é o
     // próprio arquivo, e pedir pra digitar o nome depois seria teatro.
@@ -992,7 +1187,7 @@ export class AdmissaoService {
     if (exigencia?.comoAssinar === "JA_ASSINADO") {
       await this.prisma.assinaturaDocumento.create({
         data: {
-          motoristaId,
+          ...ondeDono(dono),
           tipoDocumento: tipo,
           chave,
           modo: deteccao.temAssinaturaEmbutida ? "ICP_BRASIL" : "NO_PAPEL",
@@ -1007,7 +1202,7 @@ export class AdmissaoService {
       // pedir o aceite por cima seria pedir duas vezes a mesma coisa.
       await this.prisma.assinaturaDocumento.create({
         data: {
-          motoristaId,
+          ...ondeDono(dono),
           tipoDocumento: tipo,
           chave,
           modo: "ICP_BRASIL",

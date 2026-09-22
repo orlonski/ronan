@@ -21,7 +21,7 @@ function servico(over: {
     empresaId?: string | null;
     exigeAssinatura?: boolean;
     exigeIcpBrasil?: boolean;
-    publico?: "MENSAL" | "TODOS";
+    publico?: "MENSAL" | "TODOS" | "REGISTRADOS";
     comoAssinar?: "NAO" | "NO_APP" | "JA_ASSINADO";
   }[];
   enviados?: {
@@ -105,8 +105,15 @@ function servico(over: {
     documentoExigido: {
       // Respeita o filtro de público como o banco faz: é o que separa a
       // papelada de obra de quem só roda frete comum.
-      findMany: async ({ where }: { where?: { publico?: string } } = {}) =>
-        where?.publico ? exigidos.filter((e) => (e.publico ?? "MENSAL") === where.publico) : exigidos,
+      // `publico` pode vir exato ("TODOS") ou negado ({ not: "REGISTRADOS" }):
+      // o que se pede de registrado mora no cadastro de funcionário.
+      findMany: async ({ where }: { where?: { publico?: string | { not: string } } } = {}) => {
+        const p = where?.publico;
+        if (!p) return exigidos;
+        return exigidos.filter((e) =>
+          typeof p === "string" ? (e.publico ?? "MENSAL") === p : (e.publico ?? "MENSAL") !== p.not,
+        );
+      },
       findFirst: async ({ where }: { where?: { id?: string } } = {}) =>
         exigidos.find((e) => e.id === where?.id) ?? null,
       create: async () => ({}),
@@ -1102,5 +1109,38 @@ describe("recusar avisa o motorista", () => {
     const { s, escritas } = servico({ exigidos: UM, enviados: [{ tipo: "CNH" }] });
     await s.conferirDocumento("mot1", "e1", "u1");
     expect(escritas.some((e) => e.tabela === "push")).toBe(false);
+  });
+});
+
+describe("o que se pede de registrado não é do cadastro de motorista", () => {
+  /**
+   * O papel de admissão CLT mora no cadastro de FUNCIONÁRIO. Se ele vazasse
+   * pra lista do motorista, o arquivo que o motorista CLT mandasse iria pro
+   * dono errado, e o registrado sem cadastro de motorista nunca o veria.
+   */
+  const MISTO = [
+    { tipo: "CNH", titulo: "CNH", obrigatorio: true, empresaId: null, publico: "TODOS" as const },
+    { tipo: "ESOCIAL", titulo: "Ficha de registro", obrigatorio: true, empresaId: null, publico: "REGISTRADOS" as const },
+  ];
+
+  it("a lista do motorista (tela dele e ficha do painel) não traz a de registrado", async () => {
+    const { s } = servico({ exigidos: MISTO });
+    const naTelaDele = await s.estadoDosDocumentos("mot1", { soDoPublicoDele: true });
+    const naFicha = await s.estadoDosDocumentos("mot1");
+    expect(naTelaDele.documentos.map((d) => d.titulo)).toEqual(["CNH"]);
+    expect(naFicha.documentos.map((d) => d.titulo)).toEqual(["CNH"]);
+  });
+
+  it("e o motorista que não é registrado não consegue mandar a de registrado", async () => {
+    const { s } = servico({ exigidos: MISTO });
+    const idRegistro = (await s.listarExigidos()).find((e) => e.titulo === "Ficha de registro")!.id;
+    await expect(
+      s.receberDoMotorista("mot1", idRegistro, {
+        buffer: Buffer.from("%PDF-1.4"),
+        mimetype: "application/pdf",
+        size: 8,
+        originalname: "ficha.pdf",
+      }),
+    ).rejects.toThrow(/não é pedido pra você/);
   });
 });

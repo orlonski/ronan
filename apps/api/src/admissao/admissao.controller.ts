@@ -29,13 +29,13 @@ import { Public } from "../auth/decorators/public.decorator";
 import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
-import type { AuthAdminUser, AuthMotorista } from "../auth/types";
+import type { AuthAdminUser, AuthFuncionario, AuthMotorista } from "../auth/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { ipDaRequisicao } from "../common/rate-limit/ip";
 import { criarRateLimitIpGuard } from "../common/rate-limit/rate-limit-ip.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
-import { AdmissaoService } from "./admissao.service";
+import { AdmissaoService, type QuemNoApp } from "./admissao.service";
 import { RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 /** O escritório: o que se exige e pra quem se manda o link. */
@@ -197,7 +197,9 @@ export class ColetaPublicaController {
 @ApiTags("motorista/admissao")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("MOTORISTA")
+// Registrado em carteira sem cadastro de motorista também manda documento:
+// o token dele é o da pessoa, promovido a FUNCIONARIO.
+@Roles("MOTORISTA", "FUNCIONARIO")
 @Controller("m/admissao")
 @RequerCapacidade("app.documentos.enviar")
 export class AdmissaoMotoristaController {
@@ -206,6 +208,19 @@ export class AdmissaoMotoristaController {
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
   ) {}
+
+  /**
+   * Quem está pedindo, e de que cadastros. O motorista CLT traz os dois; o
+   * registrado sem cadastro de motorista, só o de funcionário.
+   *
+   * Aprovação é coisa do cadastro de MOTORISTA; o funcionário foi contratado
+   * pelo escritório, e é o próprio vínculo ativo que o token já conferiu.
+   */
+  private async quem(user: AuthMotorista | AuthFuncionario): Promise<QuemNoApp> {
+    if (user.kind === "FUNCIONARIO") return { funcionarioId: user.funcionarioId };
+    await this.exigirAprovado(user.id);
+    return { motoristaId: user.id, funcionarioId: user.funcionarioId ?? null };
+  }
 
   private async exigirAprovado(motoristaId: string) {
     const m = await this.prisma.motorista.findUnique({
@@ -219,9 +234,8 @@ export class AdmissaoMotoristaController {
 
   /** O que a obra pede, e o que já chegou. */
   @Get("documentos")
-  async documentos(@CurrentUser() user: AuthMotorista) {
-    await this.exigirAprovado(user.id);
-    return this.service.paraOMotorista(user.id);
+  async documentos(@CurrentUser() user: AuthMotorista | AuthFuncionario) {
+    return this.service.paraOApp(await this.quem(user));
   }
 
   /**
@@ -232,13 +246,12 @@ export class AdmissaoMotoristaController {
    */
   @Get("documentos/:exigenciaId/arquivo")
   async arquivo(
-    @CurrentUser() user: AuthMotorista,
+    @CurrentUser() user: AuthMotorista | AuthFuncionario,
     @Param("exigenciaId") exigenciaId: string,
     @Query("mini") mini: string | undefined,
     @Res() res: Response,
   ) {
-    await this.exigirAprovado(user.id);
-    const doc = await this.service.arquivoParaMotorista(user.id, exigenciaId);
+    const doc = await this.service.arquivoParaApp(await this.quem(user), exigenciaId);
 
     /**
      * ⚠️ `?mini=1` NÃO é otimização, é o pacote de dados do motorista.
@@ -282,13 +295,13 @@ export class AdmissaoMotoristaController {
   @Post("documentos/:exigenciaId")
   @UseInterceptors(FileInterceptor("arquivo"))
   async enviarDoApp(
-    @CurrentUser() user: AuthMotorista,
+    @CurrentUser() user: AuthMotorista | AuthFuncionario,
     @Param("exigenciaId") exigenciaId: string,
     @UploadedFile() arquivo: Express.Multer.File | undefined,
   ) {
-    await this.exigirAprovado(user.id);
+    const quem = await this.quem(user);
     if (!arquivo) throw new BadRequestException("Escolha um arquivo.");
-    return this.service.receberDoMotorista(user.id, exigenciaId, {
+    return this.service.receberDoApp(quem, exigenciaId, {
       buffer: arquivo.buffer,
       mimetype: arquivo.mimetype,
       size: arquivo.size,
@@ -304,14 +317,13 @@ export class AdmissaoMotoristaController {
    */
   @Post("documentos/:exigenciaId/assinar")
   async assinarDoApp(
-    @CurrentUser() user: AuthMotorista,
+    @CurrentUser() user: AuthMotorista | AuthFuncionario,
     @Param("exigenciaId") exigenciaId: string,
     @Body(new ZodValidationPipe(AssinarDocumentoAppInput)) body: AssinarDocumentoAppInput,
     @Req() req: Request,
   ) {
-    await this.exigirAprovado(user.id);
-    return this.service.assinarPeloMotorista(
-      user.id,
+    return this.service.assinarPeloApp(
+      await this.quem(user),
       exigenciaId,
       { nome: body.nome, cpf: body.cpf },
       ipDaRequisicao(req),

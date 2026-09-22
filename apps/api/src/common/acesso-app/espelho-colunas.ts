@@ -54,9 +54,19 @@ export function capacidadesDasColunas(colunas: ColunasAcesso): CapacidadeApp[] {
   return out;
 }
 
-/** O que todo registrado tem hoje: o ponto inteiro. */
+/**
+ * O que todo registrado tem: o ponto inteiro e os documentos que a empresa
+ * pedir de quem é registrado.
+ *
+ * Documentos entrou em 22/09/2026, quando o registrado passou a poder mandar
+ * papel pelo app. Não muda nada pra ninguém até a empresa criar uma exigência
+ * "de quem é registrado": a tela só aparece quando há o que mandar.
+ */
 export function capacidadesDoRegistradoHerdado(): CapacidadeApp[] {
-  return CAPACIDADES_APP.filter((d) => d.vinculo === "FUNCIONARIO").map((d) => d.chave);
+  return [
+    ...CAPACIDADES_APP.filter((d) => d.vinculo === "FUNCIONARIO").map((d) => d.chave),
+    "app.documentos.enviar",
+  ];
 }
 
 const chaveDoConjunto = (c: readonly string[]) => [...c].sort().join("|");

@@ -677,7 +677,7 @@ export class AcessoAppService {
             "O que a maioria dos motoristas tinha na ficha. Editável como qualquer perfil.");
           const herdadoF = await this.perfilHerdado(tx, PERFIL_HERDADO_FUNCIONARIO,
             capacidadesDoRegistradoHerdado(),
-            "O que todo registrado em carteira já tinha no app: o ponto.");
+            "O que todo registrado em carteira tem no app: o ponto e os documentos que a empresa pedir.");
           await tx.configuracaoAcessoApp.update({
             where: { contaId },
             data: { perfilPadraoMotoristaId: herdadoM, perfilPadraoFuncionarioId: herdadoF },

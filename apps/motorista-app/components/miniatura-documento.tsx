@@ -4,6 +4,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { CloudUpload, FileText, X } from "lucide-react-native";
 import { API_URL } from "@/lib/api-url";
 import { motoristaAtivoId, tokensDe } from "@/lib/sessoes";
+import { tokensIdentidade } from "@/lib/identidade";
 
 /**
  * O QUE ELE MANDOU, na tela.
@@ -74,7 +75,9 @@ export function MiniaturaDocumento({
     let vivo = true;
     void (async () => {
       const dono = await motoristaAtivoId();
-      const t = dono ? await tokensDe(dono) : null;
+      // Registrado sem cadastro de motorista: o documento vem com o token da
+      // PESSOA (o servidor o promove a funcionário), igual ao ponto.
+      const t = dono ? await tokensDe(dono) : await tokensIdentidade();
       if (vivo) setToken(t?.accessToken ?? null);
     })();
     return () => {

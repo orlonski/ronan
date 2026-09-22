@@ -13,6 +13,7 @@ import { API_URL } from "@/lib/api-url";
 import { motoristaAtivoId, tokensDe } from "@/lib/sessoes";
 import { useMe } from "@/lib/queries";
 import { formatCpf } from "@ronan/shared-types";
+import { tokensIdentidade } from "@/lib/identidade";
 
 /**
  * Ler e assinar um papel que o escritório mandou.
@@ -64,7 +65,9 @@ export default function AssinarDocumentoScreen() {
     let vivo = true;
     void (async () => {
       const dono = await motoristaAtivoId();
-      const t = dono ? await tokensDe(dono) : null;
+      // Registrado sem cadastro de motorista: o documento vem com o token da
+      // PESSOA (o servidor o promove a funcionário), igual ao ponto.
+      const t = dono ? await tokensDe(dono) : await tokensIdentidade();
       if (vivo) setToken(t?.accessToken ?? null);
     })();
     return () => {

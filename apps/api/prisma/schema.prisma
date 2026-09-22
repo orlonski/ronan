@@ -1813,9 +1813,13 @@ enum OrigemDocumento {
 model MotoristaDocumento {
   contaId     String    @default("__SEM_CONTA__")
   conta       Conta     @relation(fields: [contaId], references: [id])
-  id          String    @id @default(uuid())
-  motoristaId String
-  motorista   Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  id          String     @id @default(uuid())
+  /// De QUEM é o arquivo: do cadastro de motorista OU do de funcionário
+  /// (registrado em carteira). Exatamente um dos dois — CHECK no banco.
+  motoristaId String?
+  motorista   Motorista? @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  funcionarioId String?
+  funcionario   Funcionario? @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
 
   /// A gaveta onde o arquivo mora. Continua existindo porque é ela que o
   /// painel lista, o ZIP nomeia e a conta sem módulo de admissão usa. O que
@@ -1880,8 +1884,10 @@ model MotoristaDocumento {
   alteradoEm DateTime  @updatedAt
 
   @@unique([motoristaId, chave])
+  @@unique([funcionarioId, chave])
   @@index([motoristaId])
   @@index([motoristaId, tipo])
+  @@index([funcionarioId])
   @@index([exigenciaId])
   @@index([contaId])
   @@map("motorista_documento")
@@ -6565,6 +6571,9 @@ enum PublicoDocumento {
   MENSAL
   /// De todo motorista da transportadora, esteja em obra ou não.
   TODOS
+  /// De quem é REGISTRADO EM CARTEIRA nesta empresa (tenha ou não cadastro
+  /// de motorista). O arquivo mora no cadastro de funcionário.
+  REGISTRADOS
 }
 
 /// Um papel que UM contratante exige. Catálogo, não constante.
@@ -6724,8 +6733,11 @@ model AssinaturaDocumento {
   conta   Conta  @relation(fields: [contaId], references: [id])
   id      String @id @default(uuid())
 
-  motoristaId String
-  motorista   Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  /// Mesmo dono do documento assinado: motorista OU funcionário (CHECK).
+  motoristaId String?
+  motorista   Motorista? @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  funcionarioId String?
+  funcionario   Funcionario? @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
 
   /// A gaveta do documento assinado (mesma chave de `MotoristaDocumento.tipo`).
   /// Continua aqui porque é o que a auditoria lê; a identidade é a `chave`.
@@ -6783,7 +6795,9 @@ model AssinaturaDocumento {
   /// Um documento, uma assinatura. Reassinar substitui — é o caso de reenviar
   /// o arquivo corrigido e assinar de novo.
   @@unique([motoristaId, chave])
+  @@unique([funcionarioId, chave])
   @@index([motoristaId, tipoDocumento])
+  @@index([funcionarioId])
   @@index([contaId])
   @@map("assinaturas_documento")
 }
@@ -7225,6 +7239,8 @@ model Funcionario {
   perfilAcesso       PerfilAcessoApp?  @relation(fields: [perfilAcessoId], references: [id], onDelete: SetNull)
   perfilFixadoMotivo String?
   acessoEfetivoApp   AcessoEfetivoApp?
+  documentos         MotoristaDocumento[]
+  assinaturas        AssinaturaDocumento[]
 
   jornadas  VinculoJornada[]
   marcacoes Marcacao[]
