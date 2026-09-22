@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   Activity,
   Compass,
@@ -23,6 +23,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   ClipboardList,
+  Construction,
   Clock,
   Columns3,
   FileCheck2,
@@ -90,6 +91,16 @@ type Item = {
   // hoje só o "Contrato" usa — o aceite dos Termos bloqueia todo mundo, então
   // esconder de alguém o que ela foi obrigada a aceitar seria incoerente.
   perm?: string;
+  /**
+   * Abre uma seção DENTRO do grupo, com este rótulo.
+   *
+   * ⚠️ Existe por causa de "Ajustes", que é longo por natureza — e longo não é
+   * defeito num lugar onde a pessoa chega já sabendo que quer configurar algo.
+   * O defeito é catorze linhas sem nenhuma pista de onde parar de ler. A seção
+   * só aparece se sobrar item nela depois do filtro de permissão: rótulo de
+   * seção vazia é pior que rótulo nenhum.
+   */
+  secao?: string;
 };
 
 type Grupo = {
@@ -161,7 +172,6 @@ const GRUPOS: Grupo[] = [
       { href: "/viagens-andamento", label: "Ao vivo", icon: Radio, perm: "viagens.ver" },
       { href: "/mapa", label: "Mapa", icon: Map, perm: "mapa.ver" },
       { href: "/pedidos", label: "Pedidos do cliente", icon: ClipboardList, perm: "pedidos.ver" },
-      { href: "/obras", label: "Obras e diárias", icon: HardHat, perm: "alocacoes.ver" },
     ],
   },
   {
@@ -176,25 +186,36 @@ const GRUPOS: Grupo[] = [
     ],
   },
   {
-    titulo: "Faturamento",
-    coach: "grupo-faturamento",
+    /**
+     * ⚠️ "Faturamento" e "Financeiro" eram DOIS grupos, e pra quem não é
+     * contador as duas palavras querem dizer a mesma coisa. Quem procurava
+     * "onde vejo o que tenho a receber" abria o errado — e o errado tinha
+     * cinco itens plausíveis, então a pessoa nem percebia que tinha errado.
+     *
+     * Um grupo com a palavra que ela usaria. Dentro, a ordem conta a
+     * história: o que eu cobro do cliente primeiro, o que eu pago depois.
+     */
+    titulo: "Dinheiro",
+    coach: "grupo-dinheiro",
     itens: [
       { href: "/fechamentos", label: "Planilhas dos clientes", icon: FileSpreadsheet, perm: "fechamentos.ver" },
       { href: "/envios", label: "Planilhas enviadas", icon: Send, perm: "envios.ver" },
       { href: "/tabelas-preco", label: "Tabela de preços", icon: Tag, perm: "tabelas-preco.ver" },
       { href: "/regras-minimo", label: "Mínimo faturado por km", icon: Ruler, perm: "regras-minimo.ver" },
       { href: "/cte", label: "CT-e emitidos", icon: FileCheck2, perm: "cte.ver" },
-    ],
-  },
-  {
-    titulo: "Financeiro",
-    coach: "grupo-financeiro",
-    itens: [
       { href: "/financeiro", label: "Contas a pagar e receber", icon: Wallet, perm: "financeiro.ver" },
       { href: "/acertos", label: "Acertos com motorista", icon: HandCoins, perm: "acertos.ver" },
     ],
   },
   {
+    /**
+     * Quem roda e o que rola — e o que se fala com eles.
+     *
+     * "Comunicação" era um grupo de três itens raros, e grupo raro custa uma
+     * linha de menu o tempo todo pra ser aberto uma vez por mês. Chat e avisos
+     * são sobre os motoristas: moram com eles. O WhatsApp foi pra "Ajustes",
+     * que é onde se liga e desliga integração.
+     */
     titulo: "Frota e pessoas",
     coach: "grupo-frota-e-pessoas",
     itens: [
@@ -202,17 +223,44 @@ const GRUPOS: Grupo[] = [
       { href: "/veiculos", label: "Veículos", icon: Truck, perm: "veiculos.ver" },
       { href: "/frota", label: "Manutenção e documentos", icon: Wrench, perm: "manutencao.ver" },
       { href: "/transportadoras", label: "Transportadoras", icon: Building, perm: "transportadoras.ver" },
+      // Veio de "Cadastros", onde ficava no fim de uma lista de tabelas fixas.
+      // Não é tabela de apoio: é o que você exige das PESSOAS, e quem procura
+      // isso está pensando em motorista, não em cadastro.
+      { href: "/documentos-exigidos", label: "Documentos exigidos", icon: FileCheck2, perm: "documentos-exigidos.ver" },
       { href: "/pedagios-rodovia", label: "Praças de pedágio", icon: TrafficCone, perm: "pedagios.ver" },
+      { href: "/chat", label: "Chat dos motoristas", icon: MessagesSquare, perm: "chat.ver" },
+      // O sininho do topo também se chama "Notificações" e é outra coisa: são os
+      // avisos PRA VOCÊ. Este é o histórico do que foi disparado pros motoristas.
+      { href: "/notificacoes", label: "Avisos enviados ao app", icon: Bell, perm: "notificacoes.ver" },
     ],
   },
   {
-    // Grupo próprio, e não um item dentro de "Frota e pessoas": ponto é de
-    // FUNCIONÁRIO REGISTRADO, e o resto daquele grupo é do parceiro autônomo.
-    // Misturar os dois no menu é o primeiro passo pra misturar as duas coisas
-    // na cabeça de quem opera — e elas têm bases legais diferentes.
-    titulo: "Ponto",
-    coach: "grupo-ponto",
+    /**
+     * QUEM A EMPRESA CONTRATA — por diária ou por carteira assinada.
+     *
+     * ⚠️ Antes eram duas coisas em dois lugares: "Obras e diárias" sozinha no
+     * meio do dia a dia, e "Ponto" como grupo inteiro. Quem contratava obra e
+     * diária via UM item aparecer; quem contratava ponto via SEIS. O cliente
+     * pagava dois adicionais e não reconhecia o que tinha comprado em nenhum
+     * dos dois.
+     *
+     * ⚠️ O grupo anterior era separado de propósito, com um argumento que eu
+     * mantenho onde ele vale: diária é de PARCEIRO AUTÔNOMO e jornada é de
+     * EMPREGADO REGISTRADO, e as duas coisas não podem virar uma na cabeça de
+     * quem opera. O que mudou é onde a separação é cobrada: o banco impede a
+     * mesma pessoa nos dois regimes (`RegimeVigente`), a ficha do motorista
+     * mostra qual é o dela, e os rótulos aqui dentro nunca se misturam.
+     * Separar no MENU cobrava esse imposto de quem só queria achar a tela — e
+     * não impedia nada, porque a confusão que importa é no dado, não no título.
+     */
+    titulo: "Mensalista",
+    coach: "grupo-mensalista",
     itens: [
+      // Ícone próprio: `HardHat` já era o de "Motoristas", e ícone repetido
+      // deixa de servir como pista de varredura — o arquivo inteiro segue essa
+      // regra ("um ícone, um conceito"). A repetição passava despercebida
+      // porque os dois viviam em grupos diferentes; agora um abre o grupo.
+      { href: "/obras", label: "Obras e diárias", icon: Construction, perm: "alocacoes.ver" },
       { href: "/ponto", label: "Ponto do dia", icon: Clock, perm: "ponto.ver" },
       { href: "/ponto/competencia", label: "Fechar o mês", icon: CalendarCheck, perm: "fechamento-ponto.ver" },
       { href: "/ponto/correcoes", label: "Acerto de ponto", icon: PenLine, perm: "correcoes-ponto.ver" },
@@ -222,6 +270,8 @@ const GRUPOS: Grupo[] = [
     ],
   },
   {
+    // Só tabela de apoio: o que se preenche uma vez e se consulta o ano
+    // inteiro. Nada que se faça todo dia, e nada que se configure.
     titulo: "Cadastros",
     coach: "grupo-cadastros",
     itens: [
@@ -235,25 +285,19 @@ const GRUPOS: Grupo[] = [
       { href: "/tipos-servico", label: "Como a viagem é cobrada", icon: Timer, perm: "tipos-servico.ver" },
       { href: "/modalidades", label: "Vínculos do motorista", icon: IdCard, perm: "modalidades.ver" },
       { href: "/tipos-evento-viagem", label: "Paradas e ocorrências", icon: ListChecks, perm: "tipos-evento-viagem.ver" },
-      { href: "/documentos-exigidos", label: "Documentos exigidos pela obra", icon: FileCheck2, perm: "documentos-exigidos.ver" },
     ],
   },
   {
-    titulo: "Comunicação",
-    coach: "grupo-comunicacao",
+    /**
+     * O que se mexe uma vez e se esquece. É longo de propósito — quem chega
+     * aqui já sabe que quer configurar alguma coisa, e o custo de um menu
+     * longo só existe pra quem está PROCURANDO. As seções de dentro dão onde
+     * parar de ler.
+     */
+    titulo: "Ajustes",
+    coach: "grupo-ajustes",
     itens: [
-      { href: "/chat", label: "Chat dos motoristas", icon: MessagesSquare, perm: "chat.ver" },
-      // O sininho do topo também se chama "Notificações" e é outra coisa: são os
-      // avisos PRA VOCÊ. Este é o histórico do que foi disparado pros motoristas.
-      { href: "/notificacoes", label: "Avisos enviados ao app", icon: Bell, perm: "notificacoes.ver" },
-      { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, perm: "whatsapp.ver" },
-    ],
-  },
-  {
-    titulo: "Configurações",
-    coach: "grupo-configuracoes",
-    itens: [
-      { href: "/configuracoes/empresa", label: "Minha empresa", icon: Landmark, perm: "minha-empresa.editar" },
+      { href: "/configuracoes/empresa", label: "Minha empresa", icon: Landmark, perm: "minha-empresa.editar", secao: "Sua conta" },
       // SEM permissão, de propósito. O modal de aceite bloqueia TODO usuário
       // do painel — ele não pode ser gateado, senão quem não tem a chave
       // ficaria preso nele pra sempre. Se a pessoa é obrigada a aceitar, ela
@@ -263,14 +307,26 @@ const GRUPOS: Grupo[] = [
       { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver" },
       { href: "/configuracoes/permissoes", label: "Papéis e permissões", icon: ShieldCheck, perm: "permissoes.gerenciar" },
       { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver" },
-      { href: "/configuracoes/campos-layout", label: "Colunas da planilha do cliente", icon: Columns3, perm: "config-campos-layout.ver" },
+
+      { href: "/configuracoes/campos-layout", label: "Colunas da planilha do cliente", icon: Columns3, perm: "config-campos-layout.ver", secao: "Como o sistema se comporta" },
       { href: "/configuracoes/cte", label: "Configurar emissor de CT-e", icon: Settings, perm: "cte.ver" },
       { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Satellite, perm: "config-tracking.ver" },
       { href: "/configuracoes/busca-locais", label: "Busca de locais", icon: Search, perm: "config-busca-locais.ver" },
-      { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, perm: "config-ia.ver" },
-      { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: Bot, perm: "config-agente.ver" },
       { href: "/configuracoes/km-atipico", label: "Alerta de km fora do padrão", icon: Gauge, perm: "config-km-atipico.ver" },
       { href: "/configuracoes/torre", label: "Alertas da torre", icon: SignalHigh, perm: "programacao.ver" },
+
+      /**
+       * Chaves de `RECURSOS_PLATAFORMA`: a empresa não as recebe, então na
+       * prática esta seção só existe pra nós.
+       *
+       * ⚠️ NÃO foram pro grupo "Movatruck", e isso é decisão: a chave PODE ser
+       * concedida a um cliente caso a caso pela matriz (está escrito lá), e num
+       * grupo `soPlataforma` ele receberia a permissão e continuaria sem o
+       * menu. A seção rotula sem esconder.
+       */
+      { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, perm: "whatsapp.ver", secao: "Ferramentas da Movatruck" },
+      { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, perm: "config-ia.ver" },
+      { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: Bot, perm: "config-agente.ver" },
     ],
   },
   {
@@ -521,24 +577,41 @@ export function Sidebar({
                   )}
                 </button>
                 {aberto &&
-                  grupo.itens.map(({ href, label, icon: Icon }) => {
+                  grupo.itens.map(({ href, label, icon: Icon, secao }, i) => {
                     const active = isRotaAtiva(pathname, href);
+                    /**
+                     * O rótulo da seção sai no PRIMEIRO item dela que
+                     * sobreviveu ao filtro de permissão.
+                     *
+                     * ⚠️ Por isso a comparação é com o item anterior da lista
+                     * JÁ FILTRADA, e não com a declaração: quando a pessoa não
+                     * tem nenhuma chave da seção, o rótulo simplesmente não
+                     * chega a existir. Renderizar pela declaração deixaria um
+                     * título de seção sobre o vazio.
+                     */
+                    const abreSecao = secao != null && secao !== grupo.itens[i - 1]?.secao;
                     return (
-                      <Link
-                        key={href}
-                        href={href as any}
-                        aria-current={active ? "page" : undefined}
-                        className={cn(
-                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-                          active
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
-                            : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                      <Fragment key={href}>
+                        {abreSecao && (
+                          <p className="mt-3 px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                            {secao}
+                          </p>
                         )}
-                      >
-                        <Icon className="h-4 w-4" />
-                        {label}
-                      </Link>
+                        <Link
+                          href={href as any}
+                          aria-current={active ? "page" : undefined}
+                          className={cn(
+                            "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                            active
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
+                              : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                          )}
+                        >
+                          <Icon className="h-4 w-4" />
+                          {label}
+                        </Link>
+                      </Fragment>
                     );
                   })}
               </div>
