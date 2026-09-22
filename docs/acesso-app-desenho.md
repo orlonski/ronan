@@ -53,9 +53,17 @@
   as 6 telas correspondentes têm guarda ("Isso não está no seu app nesta
   empresa"). A decisão (`capacidadeNaConta`) é pura e testada; o ponto se
   decide na empresa onde a pessoa é registrada.
-  **Ainda não:** header `x-acessos-versao`, `x-conta-id` no ponto, o fim do
-  `use-eh-funcionario`/`vinculo-registrado` e o `CAPACIDADE_DESLIGADA` no
-  `sync.ts` (só existe quando o servidor barrar, F4).
+- **F3 (parte 2)**: `x-acessos-versao: <contaId>:<versao>` em toda resposta
+  `/m/*` (cache de 15s por conta); o app revalida quando sobe. `x-conta-id`
+  no token da pessoa escolhe DE QUAL empregador é a batida, e pedida uma conta
+  onde ela não é funcionária não cai pra outra (B3: parceiro na A e
+  registrado na B tomava 403 no ponto; agora o app manda o token da pessoa +
+  a conta do vínculo). `useEhFuncionario` não deduz mais nada do
+  `/m/ponto/hoje`: lê o vínculo guardado e o acesso calculado.
+  **Fica de propósito:** `vinculo-registrado` (carrega nome da empresa e
+  admissão, que a home do registrado mostra e o acesso não traz), e o
+  `CAPACIDADE_DESLIGADA` no `sync.ts` entra junto da F4, que é quando o
+  servidor passa a responder isso.
 
 ---
 

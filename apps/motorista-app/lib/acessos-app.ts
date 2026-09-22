@@ -70,9 +70,41 @@ export async function guardarAcessosApp(v: AcessoAppDaConta[] | undefined): Prom
   if (mudou) avisar();
 }
 
+/**
+ * A última `x-acessos-versao` vista, por empresa (o servidor manda
+ * `<contaId>:<versao>` em toda resposta `/m/*`). Só em memória: a primeira
+ * resposta de cada empresa depois de abrir o app revalida uma vez, e daí em
+ * diante só quando a versão sobe.
+ */
+const versoesVistas = new Map<string, string>();
+let revalidando = false;
+
+/**
+ * `true` quando esta resposta diz que o acesso da empresa mudou desde a última
+ * vez. Uma revalidação por vez: duas requisições juntas não disparam duas.
+ */
+export function versaoDeAcessosMudou(cabecalho: string | null): boolean {
+  if (!cabecalho) return false;
+  const i = cabecalho.lastIndexOf(":");
+  if (i <= 0) return false;
+  const conta = cabecalho.slice(0, i);
+  const versao = cabecalho.slice(i + 1);
+  if (versoesVistas.get(conta) === versao) return false;
+  if (revalidando) return false;
+  versoesVistas.set(conta, versao);
+  revalidando = true;
+  // Solta depois de alguns segundos: o bastante pra rajada de requisições do
+  // boot não virar rajada de revalidações.
+  setTimeout(() => {
+    revalidando = false;
+  }, 5_000);
+  return true;
+}
+
 /** Some no logout: o próximo a entrar neste aparelho não herda o acesso do anterior. */
 export async function esquecerAcessosApp(): Promise<void> {
   _atual = null;
+  versoesVistas.clear();
   try {
     await AsyncStorage.removeItem(KEY);
   } catch {

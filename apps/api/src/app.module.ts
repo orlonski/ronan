@@ -37,6 +37,7 @@ import { MensalModule } from "./mensal/mensal.module";
 import { PontoModule } from "./ponto/ponto.module";
 import { AdmissaoModule } from "./admissao/admissao.module";
 import { AppVersionInterceptor } from "./common/app-version.interceptor";
+import { AcessosVersaoInterceptor } from "./common/acesso-app/acessos-versao.interceptor";
 import { ContaMiddleware } from "./common/conta/conta.middleware";
 import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
 
@@ -84,6 +85,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     // tem precedência pro tipo que ele declara em @Catch.
     { provide: APP_FILTER, useClass: PrismaExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: AppVersionInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: AcessosVersaoInterceptor },
   ],
 })
 export class AppModule implements NestModule {

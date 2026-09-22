@@ -30,12 +30,12 @@ import { API_URL } from "./api-url";
 // ciclo com `queries.ts`, que importa este módulo.
 import type { RotaNav } from "./queries";
 import { clearTokens, loadTokens, saveTokens, type Tokens } from "./auth";
-import { motoristaAtivoId, salvarTokensDe, tokensDe } from "./sessoes";
+import { motoristaAtivoId, salvarTokensDe, sessaoAtiva, tokensDe } from "./sessoes";
 import { esquecerIdentidade, salvarIdentidade, tokensIdentidade } from "./identidade";
 import { setAuthState } from "./auth-state";
 import { clearCadastroStatus, setCadastroStatus } from "./cadastro-status";
-import { guardarVinculoRegistrado } from "./vinculo-registrado";
-import { guardarAcessosApp } from "./acessos-app";
+import { guardarVinculoRegistrado, vinculoRegistradoSync } from "./vinculo-registrado";
+import { guardarAcessosApp, versaoDeAcessosMudou } from "./acessos-app";
 import { humanizeZodIssues, type ZodIssueLite } from "./validation";
 import { marcarInternetFalha, marcarInternetOk } from "./connectivity";
 
@@ -484,12 +484,28 @@ export async function request<T>(
   // e a jornada nunca carregava. O servidor já aceitava o token da pessoa
   // (promove a FUNCIONARIO na leitura); faltava o app mandá-lo.
   //
-  // Só quando NÃO há empresa ativa: quem tem cadastro de motorista e é CLT na
-  // mesma empresa segue batendo com o token do cadastro, como sempre.
-  const comoIdentidade =
-    comoIdentidadePedido ||
-    (auth && !comoCadastro && ehRotaDoPonto(path) && !(await motoristaAtivoId()));
+  // Quem tem cadastro de motorista e é CLT na MESMA empresa segue batendo com o
+  // token do cadastro, como sempre.
+  //
+  // ⚠️ E quem roda como PARCEIRO numa empresa e é REGISTRADO em outra: o
+  // token da empresa ativa não tem funcionário, e o ponto dele dava 403. Aí
+  // também vai o token da pessoa, com `x-conta-id` dizendo qual é o
+  // empregador — o servidor promove o funcionário DESSA conta, e nunca cai
+  // pra outra.
+  let pontoDaEmpresa: string | null = null;
+  let pontoComoPessoa = false;
+  if (auth && !comoCadastro && ehRotaDoPonto(path)) {
+    const registrado = vinculoRegistradoSync()?.contaId ?? null;
+    if (!(await motoristaAtivoId())) {
+      pontoComoPessoa = true;
+    } else if (registrado && registrado !== (await sessaoAtiva())?.contaId) {
+      pontoComoPessoa = true;
+    }
+    if (pontoComoPessoa) pontoDaEmpresa = registrado;
+  }
+  const comoIdentidade = comoIdentidadePedido || pontoComoPessoa;
   const headers: Record<string, string> = { ...appVersionHeaders() };
+  if (pontoDaEmpresa) headers["x-conta-id"] = pontoDaEmpresa;
   if (body !== undefined && !isFormData) headers["content-type"] = "application/json";
   // Aceita gzip — backend agora tem compression() middleware
   headers["accept-encoding"] = "gzip, deflate";
@@ -581,6 +597,11 @@ export async function request<T>(
   // enquanto ela vinha, este dado é da empresa anterior — e quem grava depois
   // (cache em disco, React Query, outbox) já está no namespace da nova. Descarta.
   await conferirDono(dono, !!comoCadastro);
+
+  // O escritório mudou o acesso de alguém da empresa: revalida de fundo.
+  if (versaoDeAcessosMudou(res.headers.get("x-acessos-versao"))) {
+    void api.revalidarAcessos().catch(() => {});
+  }
 
   if (!res.ok) {
     let parsed: unknown;

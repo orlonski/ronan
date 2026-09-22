@@ -8,6 +8,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { resolverContaEfetiva } from "../conta-efetiva";
 import { estadoDaConta } from "../../common/conta/estado-da-conta";
 import type { AuthUser, JwtPayload } from "../types";
+import type { Request } from "express";
 
 /** O que a regra de estado precisa saber da empresa, num lugar só. */
 const SELECT_ESTADO = {
@@ -18,6 +19,13 @@ const SELECT_ESTADO = {
   trialExpiraEm: true,
   motivoBloqueio: true,
 } as const;
+
+/** O `x-conta-id` da requisição, se veio e tem cara de id. */
+function cabecalhoContaId(req: Request): string | null {
+  const v = req.headers["x-conta-id"];
+  const s = Array.isArray(v) ? v[0] : v;
+  return s && /^[A-Za-z0-9_-]{1,64}$/.test(s) ? s : null;
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -39,6 +47,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ]),
       ignoreExpiration: false,
       secretOrKey: secret,
+      // Pra ler o `x-conta-id` (qual empregador) no token da pessoa.
+      passReqToCallback: true,
     });
   }
 
@@ -54,7 +64,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * do banco a cada requisição, então mover um usuário de conta ou desativar uma
    * empresa vale na hora, sem esperar token expirar.
    */
-  async validate(payload: JwtPayload): Promise<AuthUser> {
+  async validate(req: Request, payload: JwtPayload): Promise<AuthUser> {
     if (payload.type !== "access") throw new UnauthorizedException("Token inválido");
 
     if (payload.kind === "ADMIN_USER") {
@@ -156,9 +166,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // E NÃO se recusa o acesso quando há dois: o registro de jornada nunca é
       // bloqueado por dúvida nossa (ver `ponto.controller.ts`). Escolhe-se o
       // mais recente e registra-se o aviso pra alguém desfazer o empate.
+      //
+      // ⚠️ `x-conta-id`: o app diz DE QUAL empregador é a batida (o que ele
+      // guardou do perfil). Não precisa validar contra "as contas dele": a
+      // busca já é pelo CPF da pessoa, então só acha vínculo DELA. E pedida uma
+      // conta onde ela não é funcionária, NÃO se cai pra outra: carimbar a
+      // batida no empregador errado é o defeito que o desempate acima evita.
+      const contaPedida = cabecalhoContaId(req);
       const funcionarios = await comoSistema(() =>
         this.prisma.funcionario.findMany({
-          where: { cpf: identidade.cpf.replace(/\D/g, ""), ativo: true },
+          where: {
+            cpf: identidade.cpf.replace(/\D/g, ""),
+            ativo: true,
+            ...(contaPedida ? { contaId: contaPedida } : {}),
+          },
           select: { id: true, contaId: true, conta: { select: SELECT_ESTADO } },
           orderBy: [{ admitidoEm: "desc" }, { criadoEm: "desc" }, { id: "asc" }],
           take: 2,
