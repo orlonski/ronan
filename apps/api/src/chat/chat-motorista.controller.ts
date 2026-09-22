@@ -17,7 +17,6 @@ import {
   AbrirConversaInput,
   BloquearMotoristaInput,
   DenunciarMensagemInput,
-  EnviarAudioChatInput,
   EnviarMensagemChatInput,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -82,18 +81,20 @@ export class ChatMotoristaController {
   }
 
   /**
-   * Mensagem de áudio. O arquivo já subiu em `/m/uploads/chat-audio`; aqui só
-   * entra a mensagem. A transcrição roda em background e chega depois pelo poll.
+   * ⚠️ Aqui existia `POST conversas/:id/audio`, e ele saiu em 22/09/2026 junto
+   * com o upload do áudio.
+   *
+   * Sair fechou um buraco que a remoção do app em 12/08 tinha deixado de pé: a
+   * `audioKey` vinha do CORPO como string livre, e o GET abaixo lê essa chave
+   * do MinIO sem conferir de quem ela é. Com o upload fora, ninguém mais
+   * consegue uma chave legítima — mas o endpoint continuava aceitando
+   * QUALQUER string, inclusive a chave de um arquivo de outra empresa, e
+   * devolvendo o conteúdo pelo player. Era leitura de arquivo alheio com
+   * cara de mensagem de voz.
+   *
+   * O GET fica: mensagem antiga ainda tem áudio até a retenção de 60 dias
+   * levar o arquivo, e agora ele só alcança chave que o upload gravou.
    */
-  @Post("conversas/:id/audio")
-  enviarAudio(
-    @CurrentUser() user: AuthMotorista,
-    @Param("id") id: string,
-    @Body(new ZodValidationPipe(EnviarAudioChatInput)) body: EnviarAudioChatInput,
-  ) {
-    return this.service.enviarAudio(user.id, id, body);
-  }
-
   @Get("mensagens/:id/audio")
   async audio(
     @CurrentUser() user: AuthMotorista,

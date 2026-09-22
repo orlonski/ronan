@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Controller,
   Post,
   UploadedFile,
@@ -15,22 +14,7 @@ import type { AuthMotorista } from "../auth/types";
 import { UploadsService } from "./uploads.service";
 import { checarArquivoEnviado, MIMES_IMAGEM } from "../common/arquivo-enviado";
 
-
 const MAX_BYTES = 10 * 1024 * 1024;
-
-// m4a/aac é o que expo-audio grava nas duas plataformas; o resto cobre
-// aparelho que devolve container diferente.
-const AUDIO_PERMITIDO = [
-  "audio/m4a",
-  "audio/mp4",
-  "audio/aac",
-  "audio/mpeg",
-  "audio/ogg",
-  "audio/opus",
-  "audio/webm",
-  "video/mp4", // Android às vezes rotula .m4a assim
-];
-const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 
 @ApiTags("uploads")
 @ApiBearerAuth()
@@ -92,27 +76,16 @@ export class UploadsController {
   }
 
   /**
-   * Áudio de mensagem do chat. Teto próprio (5MB) — a gravação é limitada a
-   * poucos minutos no app, e um arquivo muito maior que isso é sinal de coisa
-   * errada, não de motorista falante.
+   * ⚠️ Aqui existia `POST m/uploads/chat-audio`, e ele saiu em 22/09/2026.
+   *
+   * O áudio do chat foi removido do app em 12/08/2026, e o endpoint ficou:
+   * porta aberta que nenhuma tela usava, com lista de mimes própria e teto
+   * próprio pra manter. Ficou de pé mais um mês só porque build antigo
+   * instalado poderia chamá-lo — e a conta disso é uma gravação que falha no
+   * envio, não um app que quebra.
+   *
+   * O que NÃO saiu, e tem serviço a prestar: ler, transcrever e APAGAR o
+   * áudio que já está no banco. Mensagem antiga continua tendo `audioKey` até
+   * a retenção de 60 dias levar o arquivo.
    */
-  @Roles("MOTORISTA")
-  @Post("m/uploads/chat-audio")
-  @UseInterceptors(FileInterceptor("audio"))
-  async uploadChatAudio(
-    @CurrentUser() user: AuthMotorista,
-    @UploadedFile() file: Express.Multer.File | undefined,
-  ) {
-    if (!file) throw new BadRequestException("Áudio não enviado");
-    // Sem `startsWith("audio/")` puro: o Android manda video/mp4 pra .m4a em
-    // alguns aparelhos, e recusar isso derrubaria a gravação neles.
-    const ok =
-      AUDIO_PERMITIDO.includes(file.mimetype) || file.mimetype.startsWith("audio/");
-    if (!ok) throw new BadRequestException(`Tipo não permitido: ${file.mimetype}`);
-    if (file.size > MAX_AUDIO_BYTES) {
-      throw new BadRequestException("Áudio maior que 5MB");
-    }
-    const key = await this.uploads.putMensagemAudio(file.buffer, file.mimetype, user.id);
-    return { storageKey: key };
-  }
 }

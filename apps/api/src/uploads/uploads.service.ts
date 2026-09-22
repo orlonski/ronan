@@ -126,29 +126,6 @@ export class UploadsService implements OnModuleInit {
     return key;
   }
 
-  /**
-   * Áudio de mensagem do chat. Guarda a extensão real (o app grava m4a; o
-   * Whisper e o <audio> do player precisam do content-type certo pra decodificar).
-   */
-  async putMensagemAudio(
-    buffer: Buffer,
-    mimetype: string,
-    motoristaId: string,
-  ): Promise<string> {
-    const ext = mimetype.includes("mpeg")
-      ? "mp3"
-      : mimetype.includes("ogg") || mimetype.includes("opus")
-        ? "ogg"
-        : mimetype.includes("webm")
-          ? "webm"
-          : "m4a";
-    const key = `${contaIdAtual()}/chat-audio/${diaBR()}/${motoristaId}/${randomUUID()}.${ext}`;
-    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
-      "Content-Type": mimetype,
-    });
-    return key;
-  }
-
   async putFechamentoOriginal(
     buffer: Buffer,
     nomeArquivo: string,

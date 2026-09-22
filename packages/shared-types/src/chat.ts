@@ -56,22 +56,17 @@ export const EnviarMensagemChatInput = z.object({
 export type EnviarMensagemChatInput = z.infer<typeof EnviarMensagemChatInput>;
 
 /**
- * Teto de duração do áudio. 5 min é generoso pra um recado de motorista e
- * segura tanto o custo do Whisper quanto o tempo de upload em 4G ruim.
+ * ⚠️ Aqui existiam `MAX_DURACAO_AUDIO_SEG` e `EnviarAudioChatInput`, removidos
+ * em 22/09/2026 junto com o envio de áudio (que já tinha saído do app em
+ * 12/08). Mensagem de áudio ANTIGA continua sendo lida e tocada; o que não
+ * existe mais é criar uma.
+ *
+ * O schema aceitava `audioKey` como string livre vinda do corpo, e o endpoint
+ * que toca o áudio lê essa chave do MinIO sem conferir de quem ela é. Enquanto
+ * existiu o upload, a chave só podia ser uma que o próprio sistema gravou;
+ * depois que o upload saiu do app, sobrou só a string livre — e uma string
+ * livre lida do storage é leitura de arquivo alheio com cara de recado de voz.
  */
-export const MAX_DURACAO_AUDIO_SEG = 300;
-
-/**
- * Mensagem de áudio. Dois passos, como o story: o arquivo sobe antes
- * (`/m/uploads/chat-audio`) e vira `audioKey`; aqui só entra a mensagem.
- * Idempotente por `clientId`, igual à de texto.
- */
-export const EnviarAudioChatInput = z.object({
-  clientId: z.string().uuid(),
-  audioKey: z.string().min(1),
-  duracaoSegundos: z.number().int().min(1).max(MAX_DURACAO_AUDIO_SEG),
-});
-export type EnviarAudioChatInput = z.infer<typeof EnviarAudioChatInput>;
 
 export const DenunciarMensagemInput = z.object({
   motivo: MotivoDenunciaEnum,
