@@ -64,6 +64,8 @@ type Motorista = AppVersaoInfo & {
   criadoPor: { id: string; nome: string } | null;
   viagensTotal: number;
   viagensMes: number;
+  /** Como a pessoa é paga aqui. `null` = ninguém declarou ainda, e é o comum. */
+  regime: { tipo: "PARCEIRO" | "EMPREGADO"; desde: string } | null;
 };
 type ResumoVersoes = {
   latestVersion: string | null;
@@ -79,6 +81,36 @@ const SEM_VERSAO = "sem-versao";
  * O lado do MOTORISTA no vínculo. Só aparece quando ele não disse sim: na lista
  * de todo dia, o normal é ser da equipe e o badge só faria ruído.
  */
+/**
+ * COMO ESTA PESSOA É PAGA — a etiqueta, numa implementação só.
+ *
+ * ⚠️ A coluna da tabela e o card usam este mesmo componente porque a visão
+ * PADRÃO desta tela é a de cards: uma coluna sozinha seria invisível pra quem
+ * não troca pra tabela, que é quase todo mundo. Descobri isso abrindo a tela,
+ * não lendo o código — no código as duas visões são listas diferentes e nada
+ * denuncia qual delas abre primeiro.
+ *
+ * "Não declarado" não vira etiqueta: é o caso mais comum (motorista de frete
+ * nunca teve regime aberto), e trinta etiquetas cinzas esconderiam as cinco
+ * que importam.
+ */
+function RegimeBadge({ regime }: { regime: Motorista["regime"] }) {
+  if (!regime) return null;
+  const empregado = regime.tipo === "EMPREGADO";
+  return (
+    <Badge
+      className={
+        empregado
+          ? "border-blue-300 bg-blue-50 text-blue-700"
+          : "border-border text-muted-foreground"
+      }
+      title={`Desde ${new Date(regime.desde).toLocaleDateString("pt-BR", { timeZone: "UTC" })}`}
+    >
+      {empregado ? "Registrado" : "Parceiro"}
+    </Badge>
+  );
+}
+
 function AceiteBadge({ aceite }: { aceite: Motorista["aceite"] }) {
   if (aceite === "ACEITO") return null;
   return aceite === "PENDENTE" ? (
@@ -141,6 +173,28 @@ export default function MotoristasPage() {
         cell: ({ row }) => (
           <span className="font-mono text-xs">{formatCpf(row.original.cpf)}</span>
         ),
+      },
+      {
+        /**
+         * ⚠️ "Quem aqui é registrado em carteira?" era pergunta que só a ficha
+         * respondia, uma pessoa por vez. Com trinta motoristas e cinco CLT,
+         * ninguém abre trinta fichas: decora. E estado que só se descobre um a
+         * um não é estado que alguém corrige — é estado que alguém contorna,
+         * que foi como quatro regras de pagamento divergiram sem ninguém ver.
+         *
+         * Fica logo depois do CPF porque é dado de IDENTIDADE, não de
+         * operação: quem varre a lista procurando os registrados para no
+         * primeiro sinal de quem a pessoa é.
+         */
+        id: "regime",
+        header: () => <span className="block">Regime</span>,
+        enableSorting: false,
+        cell: ({ row }) =>
+          row.original.regime ? (
+            <RegimeBadge regime={row.original.regime} />
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
       },
       {
         id: "telefone",
@@ -478,6 +532,7 @@ export default function MotoristasPage() {
                   ) : (
                     <AceiteBadge aceite={m.aceite} />
                   )}
+                  <RegimeBadge regime={m.regime} />
                 </div>
                 {m.status === "PENDENTE_APROVACAO" && (
                   <AprovacaoMotoristaButtons id={m.id} nome={m.nome} />

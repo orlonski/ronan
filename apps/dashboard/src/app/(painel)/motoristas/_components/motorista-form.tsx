@@ -39,6 +39,14 @@ export type Motorista = {
   id: string;
   nome: string;
   cpf: string;
+  /**
+   * Como esta pessoa é paga nesta empresa. Vem da listagem e da ficha.
+   *
+   * `null` é resposta de verdade e a mais comum: o registro só nasce com
+   * alocação em obra ou com contratação. Opcional porque o formulário é
+   * reaproveitado em telas que não pedem esse dado.
+   */
+  regime?: { tipo: "PARCEIRO" | "EMPREGADO"; desde: string } | null;
   telefone: string | null;
   email: string | null;
   ativo: boolean;

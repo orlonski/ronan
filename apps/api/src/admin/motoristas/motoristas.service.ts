@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AcaoAuditoria, type Prisma } from "@prisma/client";
+import { AcaoAuditoria, type Prisma, type RegimeTrabalho } from "@prisma/client";
 import type {
   CriarMotoristaInput,
   AtualizarMotoristaInput,
@@ -23,7 +23,7 @@ import { EnvioWhatsappService } from "../../whatsapp/envio/envio-whatsapp.servic
 import { SessaoService } from "../../whatsapp/sessao.service";
 import { contaIdAtual } from "../../common/conta/conta-context";
 // Só LEITURA da trava: a ficha mostra o regime, nunca decide com ele.
-import { regimeDe } from "../../common/regime-vigente";
+import { regimeDe, soDigitos } from "../../common/regime-vigente";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
 import { ymdSaoPaulo } from "../../common/timezone";
 import { adotarLancamentosOrfaos } from "../../common/transportadora";
@@ -205,15 +205,46 @@ export class MotoristasService {
     const flat = result.data.map(
       (m) => this.flatten(m as Parameters<typeof this.flatten>[0]) as Record<string, unknown>,
     );
-    const contagens = await this.contarViagens(flat.map((m) => m.id as string), escopo);
+    const [contagens, regimes] = await Promise.all([
+      this.contarViagens(flat.map((m) => m.id as string), escopo),
+      this.regimesDaPagina(flat.map((m) => m.cpf as string | null)),
+    ]);
     return {
       data: flat.map((m) => ({
         ...m,
         viagensTotal: contagens.total.get(m.id as string) ?? 0,
         viagensMes: contagens.mes.get(m.id as string) ?? 0,
+        regime: regimes.get(soDigitos((m.cpf as string) ?? "")) ?? null,
       })),
       pagination: result.pagination,
     };
+  }
+
+  /**
+   * Como cada pessoa da PÁGINA é paga. Uma consulta só, não uma por linha.
+   *
+   * ⚠️ Existe porque "quem aqui é registrado em carteira?" era uma pergunta que
+   * só a ficha respondia — uma pessoa por vez. Quem tem trinta motoristas e
+   * cinco CLT abria trinta fichas pra achar os cinco, e na prática não abria:
+   * decorava. Estado que só se descobre um a um não é estado que alguém
+   * corrige; é estado que alguém contorna.
+   *
+   * Mesmo desenho do `contarViagens`: filtra pelos CPFs desta página, então não
+   * varre a base. O índice é o `(contaId, chaveViva)` da própria trava.
+   */
+  private async regimesDaPagina(cpfs: (string | null)[]) {
+    const chaves = cpfs.map((c) => soDigitos(c ?? "")).filter((c) => c.length === 11);
+    const mapa = new Map<string, { tipo: RegimeTrabalho; desde: Date }>();
+    if (chaves.length === 0) return mapa;
+
+    const linhas = await this.prisma.regimeVigente.findMany({
+      where: { chaveViva: { in: chaves } },
+      select: { chaveViva: true, regime: true, iniciouEm: true },
+    });
+    for (const l of linhas) {
+      if (l.chaveViva) mapa.set(l.chaveViva, { tipo: l.regime, desde: l.iniciouEm });
+    }
+    return mapa;
   }
 
   /**
