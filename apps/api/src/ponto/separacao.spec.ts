@@ -83,7 +83,9 @@ describe("ponto e mensal não se misturam", () => {
     const comuns = [...doPonto].filter((x) => doMensal.has(x));
     // Infra em `common/` que os dois usam por serem código Nest, não por
     // compartilharem assunto: pipe de validação, fuso e contexto de conta.
-    const INFRA = ["zod-validation.pipe", "timezone", "conta/"];
+    // O decorator de capacidade é a mesma coisa: todo endpoint do app declara
+    // o que exige do acesso, e isso não é assunto compartilhado.
+    const INFRA = ["zod-validation.pipe", "timezone", "conta/", "acesso-app/capacidade.decorator"];
     const dominio = comuns.filter(
       (x) => x.includes("/common/") && !INFRA.some((i) => x.includes(i)),
     );

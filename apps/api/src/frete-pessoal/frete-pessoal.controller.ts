@@ -32,6 +32,7 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { FretePessoalService } from "./frete-pessoal.service";
 import { DocumentosPessoaisService } from "./documentos-pessoais.service";
 import { NavegacaoService } from "../roteamento/navegacao.service";
+import { CapacidadeLivre } from "../common/acesso-app/capacidade.decorator";
 
 /** 8 MB: foto de documento tirada pelo celular cabe com folga. */
 const TAMANHO_MAX = 8 * 1024 * 1024;
@@ -47,6 +48,7 @@ const TAMANHO_MAX = 8 * 1024 * 1024;
 @UseGuards(RolesGuard)
 @Roles("IDENTIDADE")
 @Controller("m/eu/frete")
+@CapacidadeLivre("O app da PESSOA: perfil, convites e o que ela registra por conta própria. Não é de empresa nenhuma.")
 export class FretePessoalController {
   constructor(
     private readonly service: FretePessoalService,

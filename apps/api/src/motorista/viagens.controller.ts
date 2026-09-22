@@ -27,6 +27,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { AppInfo, type AppInfoHeaders } from "../auth/decorators/app-info.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { ViagensMotoristaService } from "./viagens.service";
+import { CapacidadeLivre, RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 /**
  * SEM `checarObrigatoriosDoModo` de propósito.
@@ -113,6 +114,7 @@ export class ViagensMotoristaController {
   constructor(private readonly service: ViagensMotoristaService) {}
 
   @Get()
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   list(
     @CurrentUser() user: AuthMotorista,
     @Query(new ZodValidationPipe(ListarViagensQuery))
@@ -128,6 +130,7 @@ export class ViagensMotoristaController {
   }
 
   @Get("resumo")
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   resumo(
     @CurrentUser() user: AuthMotorista,
     @Query(new ZodValidationPipe(ResumoMesQuery))
@@ -142,6 +145,7 @@ export class ViagensMotoristaController {
    * colidir com a rota dinâmica.
    */
   @Get("aguardando-peso")
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   aguardandoPeso(@CurrentUser() user: AuthMotorista) {
     return this.service.listarAguardandoPeso(user.id);
   }
@@ -151,6 +155,7 @@ export class ViagensMotoristaController {
    * na home do app. Mesma regra de rota do aguardando-peso: antes do @Get(":id").
    */
   @Get("aguardando-saida")
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   aguardandoSaida(@CurrentUser() user: AuthMotorista) {
     return this.service.listarAguardandoSaida(user.id);
   }
@@ -170,6 +175,7 @@ export class ViagensMotoristaController {
    * saiu no fim do dia). Transiciona pra ENVIADA e entra no fluxo normal.
    */
   @Post(":id/completar-peso")
+  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
   completarPeso(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,
@@ -184,6 +190,7 @@ export class ViagensMotoristaController {
    * calcula a duração e transiciona pra ENVIADA.
    */
   @Post(":id/encerrar-diaria")
+  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
   encerrarDiaria(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,
@@ -195,16 +202,19 @@ export class ViagensMotoristaController {
 
   @Delete(":id")
   @HttpCode(204)
+  @RequerCapacidade({ algum: ["app.viagem.lancar", "app.viagem.guiada", "app.viagem.gpsClassico"] })
   delete(@CurrentUser() user: AuthMotorista, @Param("id") id: string) {
     return this.service.delete(user.id, id);
   }
 
   @Get(":id")
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   detalhe(@CurrentUser() user: AuthMotorista, @Param("id") id: string) {
     return this.service.detalhe(user.id, id);
   }
 
   @Get(":id/fotos/:fotoId")
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   async foto(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,
@@ -227,6 +237,7 @@ export class ViagensMotoristaController {
    * compatível com o outbox offline.
    */
   @Post(":id/fotos")
+  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
   adicionarFoto(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,
@@ -242,6 +253,7 @@ export class ViagensMotoristaController {
    * revisar antes de aprovar.
    */
   @Post(":id/informar-valor-pedagio")
+  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
   informarValorPedagio(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,
@@ -258,6 +270,7 @@ export class ViagensMotoristaController {
    * no histórico.
    */
   @Post(":id/responder-foto-divergente")
+  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
   responderFotoDivergente(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,
@@ -273,6 +286,7 @@ export class ViagensMotoristaController {
    * observação da viagem; a viagem vira AJUSTADA pro admin revisar.
    */
   @Post(":id/responder-km-divergente")
+  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
   responderKmDivergente(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,
@@ -288,6 +302,7 @@ export class ViagensMotoristaController {
    * e o carimbo de duplicidade é refeito com o número que vale agora.
    */
   @Post(":id/responder-ticket-duplicado")
+  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
   responderTicketDuplicado(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,
@@ -304,6 +319,7 @@ export class ViagensMotoristaController {
    * a conta continua sendo gente.
    */
   @Post(":id/responder-material-divergente")
+  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
   responderMaterialDivergente(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,
@@ -315,12 +331,14 @@ export class ViagensMotoristaController {
 
   /** Chat da viagem: histórico de mensagens. */
   @Get(":id/mensagens")
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   listarMensagens(@CurrentUser() user: AuthMotorista, @Param("id") id: string) {
     return this.service.listarMensagens(user.id, id);
   }
 
   /** Motorista manda uma mensagem no chat da viagem. */
   @Post(":id/mensagens")
+  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
   enviarMensagem(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,

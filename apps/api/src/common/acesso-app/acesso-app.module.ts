@@ -1,6 +1,8 @@
 import { Global, Module } from "@nestjs/common";
+import { DiscoveryModule } from "@nestjs/core";
 import { PrismaModule } from "../../prisma/prisma.module";
 import { AcessoAppService } from "./acesso-app.service";
+import { CapacidadesBootCheck } from "./capacidades.boot-check";
 
 /**
  * O acesso do app calculado. Global porque, a partir da fase seguinte, todo
@@ -9,8 +11,9 @@ import { AcessoAppService } from "./acesso-app.service";
  */
 @Global()
 @Module({
-  imports: [PrismaModule],
-  providers: [AcessoAppService],
+  imports: [PrismaModule, DiscoveryModule],
+  // O boot-check mora aqui: é quem conhece o catálogo de capacidades.
+  providers: [AcessoAppService, CapacidadesBootCheck],
   exports: [AcessoAppService],
 })
 export class AcessoAppModule {}

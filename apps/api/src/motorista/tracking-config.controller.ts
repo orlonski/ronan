@@ -3,12 +3,14 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { TrackingConfigService } from "../admin/tracking-config/tracking-config.service";
+import { CapacidadeLivre } from "../common/acesso-app/capacidade.decorator";
 
 @ApiTags("motorista/tracking-config")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m/tracking-config")
+@CapacidadeLivre("Infra do app: sem isto nada abre.")
 export class TrackingConfigMotoristaController {
   constructor(private readonly service: TrackingConfigService) {}
 

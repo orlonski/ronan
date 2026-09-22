@@ -11,6 +11,7 @@ import {
   SalvarPerfilAppInput,
   SalvarRegrasAppInput,
   SimularAcessoAppInput,
+  TravasServidorAppInput,
 } from "@ronan/shared-types";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
@@ -184,6 +185,23 @@ export class AcessoAppAdminController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.service.revogarExcecao(id, body, user.id, user.escopo);
+  }
+
+  /** Só a plataforma: quem o servidor teria barrado (sombra), por capacidade. */
+  @Get("plataforma/sombra-servidor")
+  @UseGuards(PlataformaGuard)
+  sombraDoServidor() {
+    return this.service.sombraDoServidor();
+  }
+
+  /** Só a plataforma: o que o servidor já barra no app desta empresa. */
+  @Put("plataforma/travas-servidor")
+  @UseGuards(PlataformaGuard)
+  salvarTravasServidor(
+    @Body(new ZodValidationPipe(TravasServidorAppInput)) body: TravasServidorAppInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.salvarTravasServidor(body, user.id);
   }
 
   /** Só a plataforma: travas que cortam e rollouts, empresa por empresa. */

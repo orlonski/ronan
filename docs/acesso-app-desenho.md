@@ -64,6 +64,20 @@
   admissão, que a home do registrado mostra e o acesso não traz), e o
   `CAPACIDADE_DESLIGADA` no `sync.ts` entra junto da F4, que é quando o
   servidor passa a responder isso.
+- **F4**: `CapacidadeAppGuard` (APP_GUARD) cobra o acesso calculado em todo
+  `/m/*`, **em sombra**: grava `CAPACIDADE_SOMBRA` (quem, o quê, qual rota, uma
+  vez por dia) e deixa passar. Só barra o que está em
+  `ConfiguracaoAcessoApp.capacidadesTravadas`, que a plataforma liga
+  capacidade a capacidade na aba Plataforma, vendo antes a lista nominal da
+  sombra dos últimos 14 dias. Recusa = 403 `CAPACIDADE_DESLIGADA`, nunca 500;
+  no app o item fica no aparelho, a cópia vai pra vala e a mensagem diz que não
+  precisa editar. Boot-check (`capacidades.boot-check.ts`) exige declaração
+  nos 138 handlers de `/m/*`; a dívida (`endpoints-m-sem-capacidade.ts`)
+  nasceu vazia e cada linha futura tem dono e prazo. Regra da classificação:
+  ler o que é dele, continuar lançamento que já existe, a vala e a ciência de
+  correção de ponto são LIVRES; só criar coisa nova exige capacidade.
+  **Não mudou:** os `@AcessoMotorista` antigos e o WHERE do chat seguem nas
+  colunas `pode*`, que o resolvedor escreve (mesmo resultado nas regras).
 
 ---
 

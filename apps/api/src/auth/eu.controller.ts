@@ -31,6 +31,7 @@ import { RolesGuard } from "./guards/roles.guard";
 import { EuService } from "./eu.service";
 import { LancamentosPessoaisService } from "./lancamentos-pessoais.service";
 import type { AuthIdentidade } from "./types";
+import { CapacidadeLivre } from "../common/acesso-app/capacidade.decorator";
 
 /**
  * O que a PESSOA vê e faz sobre si mesma — vale com ou sem empresa.
@@ -45,6 +46,7 @@ import type { AuthIdentidade } from "./types";
 @UseGuards(RolesGuard)
 @Roles("IDENTIDADE")
 @Controller("m/eu")
+@CapacidadeLivre("O app da PESSOA: perfil, convites e o que ela registra por conta própria. Não é de empresa nenhuma.")
 export class EuController {
   constructor(
     private readonly service: EuService,

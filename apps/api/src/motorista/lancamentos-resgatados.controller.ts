@@ -8,6 +8,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import type { AuthMotorista } from "../auth/types";
 import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamentos-resgatados.service";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { CapacidadeLivre } from "../common/acesso-app/capacidade.decorator";
 
 /**
  * Onde o app deposita o lançamento que ele não conseguiu enviar.
@@ -23,6 +24,7 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe";
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m/lancamentos-travados")
+@CapacidadeLivre("A vala dos lançamentos travados nunca fecha: é pra onde vai o que o acesso recusou.")
 export class LancamentosResgatadosMotoristaController {
   constructor(private readonly service: LancamentosResgatadosService) {}
 

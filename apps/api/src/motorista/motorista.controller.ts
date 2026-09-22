@@ -8,6 +8,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { MotoristaService } from "./motorista.service";
+import { CapacidadeLivre } from "../common/acesso-app/capacidade.decorator";
 
 const PreferenciasNotificacaoInput = z
   .object({
@@ -29,6 +30,7 @@ type PreferenciasNotificacaoInput = z.infer<typeof PreferenciasNotificacaoInput>
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m")
+@CapacidadeLivre("Infra do app: sem isto nada abre.")
 export class MotoristaController {
   constructor(private readonly service: MotoristaService) {}
 

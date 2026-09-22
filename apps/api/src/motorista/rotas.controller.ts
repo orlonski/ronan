@@ -6,6 +6,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { RoteamentoService } from "../roteamento/roteamento.service";
 import { NavegacaoService } from "../roteamento/navegacao.service";
+import { CapacidadeLivre, RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 const CalcularQuery = z.object({
   origem: z.string().uuid(),
@@ -31,6 +32,7 @@ export class RotasMotoristaController {
   ) {}
 
   @Get("calcular")
+  @CapacidadeLivre("Cálculo de rota pro lançamento: quem lança já passou pela capacidade de lançar.")
   calcular(
     @Query(new ZodValidationPipe(CalcularQuery))
     query: z.infer<typeof CalcularQuery>,
@@ -39,6 +41,7 @@ export class RotasMotoristaController {
   }
 
   @Get("alternativas")
+  @CapacidadeLivre("Cálculo de rota pro lançamento: quem lança já passou pela capacidade de lançar.")
   alternativas(
     @Query(new ZodValidationPipe(CalcularQuery))
     query: z.infer<typeof CalcularQuery>,
@@ -52,6 +55,7 @@ export class RotasMotoristaController {
    * há retorno real (dedup) — aí o app não mostra escolha.
    */
   @Get("opcoes")
+  @CapacidadeLivre("Cálculo de rota pro lançamento: quem lança já passou pela capacidade de lançar.")
   opcoes(
     @Query(new ZodValidationPipe(CalcularQuery))
     query: z.infer<typeof CalcularQuery>,
@@ -65,6 +69,7 @@ export class RotasMotoristaController {
    * viagem com GPS" usa. É recalculado quando o motorista sai da rota (nova chamada).
    */
   @Post("navegar")
+  @RequerCapacidade("app.navegacao.aoVivo")
   navegar(
     @Body(new ZodValidationPipe(NavegarInput))
     body: z.infer<typeof NavegarInput>,

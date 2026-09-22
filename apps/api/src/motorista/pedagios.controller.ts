@@ -20,6 +20,7 @@ import { AcessoMotoristaGuard } from "../auth/guards/acesso-motorista.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { PedagiosMotoristaService } from "./pedagios.service";
+import { CapacidadeLivre, RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 const MesSchema = z
   .string()
@@ -40,6 +41,7 @@ export class PedagiosMotoristaController {
   constructor(private readonly service: PedagiosMotoristaService) {}
 
   @Get()
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   list(
     @CurrentUser() user: AuthMotorista,
     @Query(new ZodValidationPipe(ListarPedagiosQuery))
@@ -59,6 +61,7 @@ export class PedagiosMotoristaController {
 
   @Delete(":id")
   @HttpCode(204)
+  @RequerCapacidade("app.pedagio.lancar")
   delete(@CurrentUser() user: AuthMotorista, @Param("id") id: string) {
     return this.service.delete(user.id, id);
   }

@@ -6,12 +6,14 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { ForcaAtualizacaoService } from "../admin/forca-atualizacao/forca-atualizacao.service";
+import { CapacidadeLivre } from "../common/acesso-app/capacidade.decorator";
 
 @ApiTags("motorista/versao-app")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m/versao-app")
+@CapacidadeLivre("Infra do app: sem isto nada abre.")
 export class VersaoAppMotoristaController {
   constructor(private readonly service: ForcaAtualizacaoService) {}
 

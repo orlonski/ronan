@@ -2391,7 +2391,18 @@ function proximoEstadoFalha<T extends ComErro & { clientId?: string }>(
       errorPermanenteLocal: undefined,
     };
   }
-  const { msg, status, issues } = extractErrorDetails(err);
+  const detalhes = extractErrorDetails(err);
+  const { status, issues } = detalhes;
+  // ⚠️ A EMPRESA TIROU ESTE ACESSO enquanto o lançamento esperava sinal. Não é
+  // erro dele e editar não resolve: a cópia sobe pro escritório conferir (logo
+  // abaixo) e o item fica no aparelho, nunca some. A mensagem diz isso, em vez
+  // do "corrija e tente de novo" que ele leria de qualquer outro 4xx.
+  const acessoTirado =
+    err instanceof ApiError &&
+    (err.body as { code?: string } | null)?.code === "CAPACIDADE_DESLIGADA";
+  const msg = acessoTirado
+    ? "Isso não está mais no seu app nesta empresa. Uma cópia foi pro escritório conferir; não precisa editar."
+    : detalhes.msg;
   // Foto sumida é definitiva mesmo sem status HTTP: não há o que retentar.
   const fotoPerdida = err instanceof FotoPerdidaError;
   const attempts = permanente || fotoPerdida ? MAX_ATTEMPTS : item.attempts + 1;

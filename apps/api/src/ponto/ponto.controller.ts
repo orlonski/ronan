@@ -23,6 +23,7 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import type { AuthFuncionario, AuthMotorista } from "../auth/types";
 import { PontoAdminService } from "./ponto-admin.service";
 import { PontoService } from "./ponto.service";
+import { CapacidadeLivre, RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 const DIA = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const COMPETENCIA = z.string().regex(/^\d{4}-\d{2}$/);
@@ -96,6 +97,7 @@ export class PontoMotoristaController {
    */
   @PermiteSomenteLeitura()
   @Post("marcacoes")
+  @RequerCapacidade("app.ponto.bater")
   marcar(
     @CurrentUser() user: AuthFuncionario | AuthMotorista,
     @Body(new ZodValidationPipe(MarcacaoPontoInput)) body: MarcacaoPontoInput,
@@ -105,16 +107,19 @@ export class PontoMotoristaController {
   }
 
   @Get("hoje")
+  @RequerCapacidade({ algum: ["app.ponto.bater", "app.ponto.espelho"] })
   hoje(@CurrentUser() user: AuthFuncionario | AuthMotorista, @Query(new ZodValidationPipe(z.object({ dia: DIA }))) q: { dia: string }) {
     return this.service.hoje(funcionarioDe(user), q.dia);
   }
 
   @Get("catalogo")
+  @RequerCapacidade({ algum: ["app.ponto.bater", "app.ponto.espelho"] })
   catalogo() {
     return this.service.catalogo();
   }
 
   @Get("espelho")
+  @RequerCapacidade("app.ponto.espelho")
   espelho(
     @CurrentUser() user: AuthFuncionario | AuthMotorista,
     @Query("competencia", new ZodValidationPipe(COMPETENCIA)) competencia: string,
@@ -124,6 +129,7 @@ export class PontoMotoristaController {
 
   @PermiteSomenteLeitura()
   @Post("espelho/conferir")
+  @RequerCapacidade("app.ponto.espelho")
   conferir(
     @CurrentUser() user: AuthFuncionario | AuthMotorista,
     @Body(new ZodValidationPipe(ConferirEspelhoInput)) body: z.infer<typeof ConferirEspelhoInput>,
@@ -137,6 +143,7 @@ export class PontoMotoristaController {
 
   @PermiteSomenteLeitura()
   @Post("correcoes")
+  @RequerCapacidade("app.ponto.corrigir")
   pedirCorrecao(
     @CurrentUser() user: AuthFuncionario | AuthMotorista,
     @Body(new ZodValidationPipe(CorrecaoPontoInput)) body: CorrecaoPontoInput,
@@ -147,6 +154,7 @@ export class PontoMotoristaController {
   /** Cancelar o PRÓPRIO pedido, enquanto ninguém decidiu. */
   @PermiteSomenteLeitura()
   @Delete("correcoes/:id")
+  @RequerCapacidade("app.ponto.corrigir")
   cancelarCorrecao(
     @CurrentUser() user: AuthFuncionario | AuthMotorista,
     @Param("id") id: string,
@@ -156,6 +164,7 @@ export class PontoMotoristaController {
 
   @PermiteSomenteLeitura()
   @Post("correcoes/:id/ciencia")
+  @CapacidadeLivre("Ciência de correção feita pelo escritório: direito do trabalhador, não se desliga.")
   ciencia(@CurrentUser() user: AuthFuncionario | AuthMotorista, @Param("id") id: string) {
     return this.service.darCiencia(funcionarioDe(user), id);
   }

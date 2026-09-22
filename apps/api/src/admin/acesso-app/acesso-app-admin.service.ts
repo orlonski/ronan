@@ -16,6 +16,7 @@ import {
   type RevogarExcecaoAppInput,
   type SalvarPerfilAppInput,
   type SalvarRegrasAppInput,
+  type TravasServidorAppInput,
 } from "@ronan/shared-types";
 import { AcessoAppService, ondeExcecaoViva } from "../../common/acesso-app/acesso-app.service";
 import { contaIdAtual } from "../../common/conta/conta-context";
@@ -142,6 +143,7 @@ export class AcessoAppAdminService {
         .map(([capacidade, n]) => ({ capacidade, pessoas: n }))
         .sort((a, b) => b.pessoas - a.pessoas),
       rolloutsApp: conta.rolloutsApp,
+      capacidadesTravadas: cfg.capacidadesTravadas,
       opcoes: { modalidades, transportadoras },
       plataforma,
     };
@@ -491,6 +493,84 @@ export class AcessoAppAdminService {
   }
 
   // ─── plataforma ──────────────────────────────────────────────────────────
+
+  /**
+   * QUEM O SERVIDOR TERIA BARRADO nos últimos 14 dias, por capacidade: o que o
+   * `CapacidadeAppGuard` gravou em sombra. É a lista nominal que a plataforma
+   * olha antes de travar uma capacidade nesta empresa.
+   */
+  async sombraDoServidor() {
+    const desde = new Date(Date.now() - 14 * 86_400_000);
+    const logs = await this.prisma.logAcessoApp.findMany({
+      where: { tipo: "CAPACIDADE_SOMBRA", criadoEm: { gte: desde } },
+      select: { cpf: true, perdeu: true, causa: true, criadoEm: true },
+      orderBy: { criadoEm: "desc" },
+      take: 5000,
+    });
+    const cpfs = [...new Set(logs.map((l) => l.cpf).filter((c): c is string => !!c))];
+    const [motoristas, funcionarios] = await Promise.all([
+      this.prisma.motorista.findMany({ where: { cpf: { in: cpfs } }, select: { cpf: true, nome: true } }),
+      this.prisma.funcionario.findMany({ where: { cpf: { in: cpfs } }, select: { cpf: true, nome: true } }),
+    ]);
+    const nome = new Map<string, string>();
+    for (const f of funcionarios) nome.set(soDigitos(f.cpf), f.nome);
+    for (const m of motoristas) nome.set(soDigitos(m.cpf), m.nome);
+
+    type Pessoa = { cpf: string; nome: string; vezes: number; ultima: Date; rotas: Set<string> };
+    const porCap = new Map<string, Map<string, Pessoa>>();
+    for (const l of logs) {
+      if (!l.cpf) continue;
+      for (const cap of l.perdeu) {
+        const pessoas = porCap.get(cap) ?? new Map<string, Pessoa>();
+        const p = pessoas.get(l.cpf) ?? {
+          cpf: l.cpf,
+          nome: nome.get(l.cpf) ?? l.cpf,
+          vezes: 0,
+          ultima: l.criadoEm,
+          rotas: new Set<string>(),
+        };
+        p.vezes++;
+        if (l.causa) p.rotas.add(l.causa);
+        pessoas.set(l.cpf, p);
+        porCap.set(cap, pessoas);
+      }
+    }
+    return [...porCap.entries()].map(([capacidade, pessoas]) => ({
+      capacidade,
+      pessoas: [...pessoas.values()]
+        .map((p) => ({ ...p, rotas: [...p.rotas] }))
+        .sort((a, b) => a.nome.localeCompare(b.nome)),
+    }));
+  }
+
+  /**
+   * Trava (ou destrava) capacidades no servidor desta empresa. Travar é o
+   * momento em que alguém pode passar a ouvir "isso não está no seu app": a
+   * tela mostra antes a lista da sombra, e fica o rastro de quem travou.
+   */
+  async salvarTravasServidor(dados: TravasServidorAppInput, autorId: string) {
+    const contaId = contaIdAtual();
+    const cfg = await this.config();
+    const antes = new Set(cfg.capacidadesTravadas);
+    const depois = new Set<string>(dados.capacidadesTravadas);
+    await this.prisma.$transaction([
+      this.prisma.configuracaoAcessoApp.update({
+        where: { contaId },
+        data: { capacidadesTravadas: [...depois] },
+      }),
+      this.prisma.logAcessoApp.create({
+        data: {
+          tipo: "SERVIDOR_TRAVAS",
+          autorId,
+          // "perdeu" aqui é o que passou a ser barrado; "ganhou", o que foi solto.
+          perdeu: [...depois].filter((c) => !antes.has(c)),
+          ganhou: [...antes].filter((c) => !depois.has(c)),
+          causa: "A plataforma mudou o que o servidor barra no app desta empresa.",
+        },
+      }),
+    ]);
+    return { capacidadesTravadas: [...depois] };
+  }
 
   /**
    * As camadas que cortam e os rollouts — decisão da PLATAFORMA, empresa por

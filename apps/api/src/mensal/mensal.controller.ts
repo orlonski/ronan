@@ -37,6 +37,7 @@ import type { AuthAdminUser, AuthMotorista } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrismaService } from "../prisma/prisma.service";
 import { MensalService } from "./mensal.service";
+import { RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 const GradeQuery = z.object({
   clienteId: z.string().uuid().optional(),
@@ -234,6 +235,7 @@ export class MensalAdminController {
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m/obra")
+@RequerCapacidade("app.obra.presenca")
 export class ObraMotoristaController {
   constructor(
     private readonly service: MensalService,

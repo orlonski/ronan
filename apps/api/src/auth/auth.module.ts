@@ -18,6 +18,7 @@ import { SomenteLeituraGuard } from "./guards/somente-leitura.guard";
 import { EvolutionModule } from "../whatsapp/evolution.module";
 import { AdminInboxModule } from "../admin/inbox/inbox.module";
 import { UploadsModule } from "../uploads/uploads.module";
+import { CapacidadeAppGuard } from "./guards/capacidade-app.guard";
 
 @Module({
   imports: [
@@ -44,6 +45,9 @@ import { UploadsModule } from "../uploads/uploads.module";
     // Empresa em somente leitura não escreve. Global e por método HTTP, pra
     // não depender de alguém lembrar de anotar cada endpoint novo.
     { provide: APP_GUARD, useClass: SomenteLeituraGuard },
+    // O acesso calculado no `/m/*`: registra quem barraria (sombra) e só barra
+    // o que a plataforma travou na empresa. Depois do JWT, que é quem sabe quem é.
+    { provide: APP_GUARD, useClass: CapacidadeAppGuard },
   ],
   exports: [AuthService, IdentidadeService],
 })

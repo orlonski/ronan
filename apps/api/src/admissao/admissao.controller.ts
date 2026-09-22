@@ -36,6 +36,7 @@ import { ipDaRequisicao } from "../common/rate-limit/ip";
 import { criarRateLimitIpGuard } from "../common/rate-limit/rate-limit-ip.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { AdmissaoService } from "./admissao.service";
+import { RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 /** O escritório: o que se exige e pra quem se manda o link. */
 @ApiTags("admin/admissao")
@@ -198,6 +199,7 @@ export class ColetaPublicaController {
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m/admissao")
+@RequerCapacidade("app.documentos.enviar")
 export class AdmissaoMotoristaController {
   constructor(
     private readonly service: AdmissaoService,

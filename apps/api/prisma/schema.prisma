@@ -7052,6 +7052,12 @@ model ConfiguracaoAcessoApp {
   /// cadastro em análise ou inativo não usa o app.
   camadasEmSombra String[] @default(["DEPENDENCIA", "REGIME", "PLATAFORMA", "CONTRATO"])
 
+  /// Capacidades que o SERVIDOR já barra no `/m/*` nesta empresa (F4). Vazio
+  /// = o `CapacidadeAppGuard` só registra quem ele barraria (sombra) e deixa
+  /// passar. Travar é da plataforma, capacidade a capacidade, vendo antes a
+  /// lista de quem a sombra teria barrado.
+  capacidadesTravadas String[] @default([])
+
   /// Sobe a cada recálculo que muda alguém — o app compara pra saber se
   /// precisa buscar de novo.
   versao Int @default(1)

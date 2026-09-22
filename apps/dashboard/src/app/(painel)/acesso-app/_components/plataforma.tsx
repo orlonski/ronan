@@ -7,7 +7,14 @@ import { CAPACIDADES_APP, type CamadaCorte } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StatusToggle } from "@/components/status-toggle";
-import { fetchApi, useAuthToken } from "@/lib/client-api";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { ConfirmarMudanca } from "./simulacao";
 import { CHAVE_PAINEL, type PainelAcessoApp, type Simulacao } from "./tipos";
 
@@ -124,6 +131,8 @@ export function AbaPlataforma({ painel }: { painel: PainelAcessoApp }) {
         </div>
       </Card>
 
+      <TravasDoServidor painel={painel} />
+
       <div className="flex justify-end gap-2">
         {alterado && (
           <Button
@@ -178,5 +187,169 @@ export function AbaPlataforma({ painel }: { painel: PainelAcessoApp }) {
         />
       )}
     </div>
+  );
+}
+
+type SombraServidor = {
+  capacidade: string;
+  pessoas: { cpf: string; nome: string; vezes: number; ultima: string; rotas: string[] }[];
+}[];
+
+/**
+ * O QUE O SERVIDOR BARRA NO APP desta empresa (F4).
+ *
+ * Tudo nasce "só registra": o servidor anota quem ele barraria e deixa passar.
+ * Travar uma capacidade é o momento em que alguém passa a ouvir "isso não está
+ * no seu app" — por isso o botão abre, ANTES, a lista de quem a sombra pegou.
+ */
+function TravasDoServidor({ painel }: { painel: PainelAcessoApp }) {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const sombra = useApiQuery<SombraServidor>("/admin/acesso-app/plataforma/sombra-servidor");
+  const [aberta, setAberta] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const travadas = new Set(painel.capacidadesTravadas);
+  const porCap = new Map((sombra.data ?? []).map((s) => [s.capacidade, s.pessoas]));
+
+  async function salvar(novas: Set<string>, msg: string) {
+    setSalvando(true);
+    try {
+      await fetchApi("/admin/acesso-app/plataforma/travas-servidor", {
+        method: "PUT",
+        token,
+        body: JSON.stringify({ capacidadesTravadas: [...novas] }),
+      });
+      toast.success(msg);
+      setConfirmando(null);
+      void qc.invalidateQueries({ queryKey: CHAVE_PAINEL });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  const def = (chave: string) => CAPACIDADES_APP.find((c) => c.chave === chave);
+  const pessoasDe = (chave: string) => porCap.get(chave) ?? [];
+
+  return (
+    <Card className="p-5">
+      <h3 className="font-semibold">O servidor barra no app</h3>
+      <p className="mb-3 text-sm text-muted-foreground">
+        Hoje o servidor só <strong>registra</strong> quem ele barraria e deixa passar. Travar faz
+        ele recusar de verdade, só nesta empresa. O que alguém lançar sem sinal depois disso não se
+        perde: vai pro escritório conferir.
+      </p>
+      <div className="divide-y divide-border">
+        {CAPACIDADES_APP.filter((c) => c.tipo !== "PLATAFORMA").map((c) => {
+          const pessoas = pessoasDe(c.chave);
+          const travada = travadas.has(c.chave);
+          return (
+            <div key={c.chave} className="py-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    {c.label}
+                    {travada && (
+                      <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        barrando
+                      </span>
+                    )}
+                  </p>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:no-underline"
+                    disabled={pessoas.length === 0}
+                    onClick={() => setAberta(aberta === c.chave ? null : c.chave)}
+                  >
+                    {sombra.isLoading
+                      ? "…"
+                      : pessoas.length === 0
+                        ? "Ninguém teria sido barrado nos últimos 14 dias"
+                        : `${pessoas.length === 1 ? "1 pessoa teria sido barrada" : `${pessoas.length} pessoas teriam sido barradas`} nos últimos 14 dias`}
+                  </button>
+                </div>
+                {travada ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={salvando}
+                    onClick={() => {
+                      const n = new Set(travadas);
+                      n.delete(c.chave);
+                      void salvar(n, `O servidor parou de barrar "${c.label}".`);
+                    }}
+                  >
+                    Soltar
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="outline" disabled={salvando} onClick={() => setConfirmando(c.chave)}>
+                    Travar
+                  </Button>
+                )}
+              </div>
+              {aberta === c.chave && pessoas.length > 0 && (
+                <ul className="mt-2 space-y-0.5 pl-3 text-xs text-muted-foreground">
+                  {pessoas.map((p) => (
+                    <li key={p.cpf}>
+                      <span className="text-foreground">{p.nome}</span> · {p.vezes}x · última em{" "}
+                      {new Date(p.ultima).toLocaleDateString("pt-BR")}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {confirmando && (
+        <Dialog open onOpenChange={(o) => !o && setConfirmando(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Travar “{def(confirmando)?.label}” nesta empresa?</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2 text-sm">
+              <p className="text-muted-foreground">{def(confirmando)?.efeito}</p>
+              {pessoasDe(confirmando).length === 0 ? (
+                <p>Nos últimos 14 dias, ninguém sem esse acesso tentou usar isso.</p>
+              ) : (
+                <>
+                  <p>
+                    Nos últimos 14 dias, o servidor teria barrado{" "}
+                    <strong>{pessoasDe(confirmando).length}</strong> pessoa(s). Depois de travar, elas
+                    passam a ver “isso não está no seu app nesta empresa”:
+                  </p>
+                  <ul className="max-h-48 overflow-y-auto rounded border border-border p-2 text-xs">
+                    {pessoasDe(confirmando).map((p) => (
+                      <li key={p.cpf}>
+                        {p.nome} · {p.vezes}x
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmando(null)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="warning"
+                disabled={salvando}
+                onClick={() => {
+                  const n = new Set(travadas);
+                  n.add(confirmando);
+                  void salvar(n, `O servidor passou a barrar "${def(confirmando)?.label}" nesta empresa.`);
+                }}
+              >
+                Travar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </Card>
   );
 }

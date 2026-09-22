@@ -7,6 +7,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import type { AuthMotorista } from "../auth/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { totalizarAcerto } from "../common/acerto-motorista";
+import { RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 /**
  * O extrato do motorista: o que a empresa apurou que deve a ele.
@@ -28,6 +29,7 @@ import { totalizarAcerto } from "../common/acerto-motorista";
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m/acertos")
+@RequerCapacidade("app.acertos.ver")
 export class AcertosMotoristaController {
   constructor(private readonly prisma: PrismaService) {}
 

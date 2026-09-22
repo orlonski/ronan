@@ -18,6 +18,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import type { AuthMotorista } from "../auth/types";
 import { PrismaService } from "../prisma/prisma.service";
+import { RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 const ListQuery = z.object({
   /** "YYYY-MM-DD". Sem data, devolve de hoje em diante. */
@@ -41,6 +42,7 @@ type ListQuery = z.infer<typeof ListQuery>;
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m/programacao")
+@RequerCapacidade("app.programacao.ver")
 export class ProgramacaoMotoristaController {
   constructor(private readonly prisma: PrismaService) {}
 

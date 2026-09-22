@@ -26,6 +26,8 @@ export type PainelAcessoApp = {
   excecoesVencendo: number;
   sombra: { capacidade: string; pessoas: number }[];
   rolloutsApp: string[];
+  /** O que o servidor já barra no `/m/*` desta empresa (F4). */
+  capacidadesTravadas: string[];
   opcoes: {
     modalidades: { id: string; nome: string }[];
     transportadoras: { id: string; nome: string }[];

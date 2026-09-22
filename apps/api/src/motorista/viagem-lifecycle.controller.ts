@@ -16,6 +16,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { AppInfo, type AppInfoHeaders } from "../auth/decorators/app-info.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { ViagensMotoristaService } from "./viagens.service";
+import { CapacidadeLivre } from "../common/acesso-app/capacidade.decorator";
 
 // Payloads aceitam fotoKey (upload 2-step prévio via /m/uploads/ticket).
 const RegistrarEventoPayload = RegistrarEventoInput;
@@ -40,6 +41,7 @@ export class ViagemLifecycleController {
 
   /** Catálogo dinâmico da espinha da viagem (app renderiza os botões). */
   @Get("tipos-evento")
+  @CapacidadeLivre("Catálogo de consulta, sem dado de ninguém.")
   tiposEvento() {
     return this.service.catalogoTiposEvento();
   }
@@ -53,12 +55,14 @@ export class ViagemLifecycleController {
    * OTA.
    */
   @Get("tipos-ocorrencia")
+  @CapacidadeLivre("Catálogo de consulta, sem dado de ninguém.")
   tiposOcorrencia() {
     return this.service.catalogoOcorrencias();
   }
 
   /** Viagem em andamento do motorista (0 ou 1) + eventos + catálogo. */
   @Get("andamento")
+  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
   andamento(@CurrentUser() user: AuthMotorista) {
     return this.service.viagemAndamento(user.id);
   }

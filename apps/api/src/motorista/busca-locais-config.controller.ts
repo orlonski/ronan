@@ -3,12 +3,14 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { BuscaLocaisConfigService } from "../admin/busca-locais-config/busca-locais-config.service";
+import { CapacidadeLivre } from "../common/acesso-app/capacidade.decorator";
 
 @ApiTags("motorista/busca-locais-config")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m/busca-locais-config")
+@CapacidadeLivre("Infra do app: sem isto nada abre.")
 export class BuscaLocaisConfigMotoristaController {
   constructor(private readonly service: BuscaLocaisConfigService) {}
 

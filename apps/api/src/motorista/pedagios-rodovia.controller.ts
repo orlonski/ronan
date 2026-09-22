@@ -6,6 +6,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PedagiosRodoviaConsultaService } from "../admin/pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { PedagiosRodoviaService } from "../admin/pedagios-rodovia/pedagios-rodovia.service";
+import { CapacidadeLivre } from "../common/acesso-app/capacidade.decorator";
 
 const NaRotaQuery = z.object({
   origem: z.string().uuid(),
@@ -22,6 +23,7 @@ const NaRotaQuery = z.object({
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m/pedagios-rodovia")
+@CapacidadeLivre("Catálogo de consulta, sem dado de ninguém.")
 export class PedagiosRodoviaMotoristaController {
   constructor(
     private readonly service: PedagiosRodoviaConsultaService,

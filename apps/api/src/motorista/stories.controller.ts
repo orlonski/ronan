@@ -21,6 +21,7 @@ import { AcessoMotoristaGuard } from "../auth/guards/acesso-motorista.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { StoriesMotoristaService } from "./stories.service";
+import { RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 const CriarStoryPayload = CriarStoryBaseInput.extend({
   fotoKey: z.string().min(1),
@@ -40,6 +41,9 @@ export class StoriesMotoristaController {
     return this.service.feed(user.id);
   }
 
+  // Ver e publicar são capacidades separadas: a empresa pode querer que ele
+  // veja os avisos sem postar. A coluna antiga só tinha "ver".
+  @RequerCapacidade("app.stories.publicar")
   @Post()
   criar(
     @CurrentUser() user: AuthMotorista,

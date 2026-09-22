@@ -7,6 +7,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { KmAtipicoService } from "../km-atipico/km-atipico.service";
+import { RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 const ParQuery = z.object({
   carga: z.string().uuid(),
@@ -27,6 +28,7 @@ const MeusParesQuery = z.object({
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m/km-referencia")
+@RequerCapacidade("app.km.referencia")
 export class KmReferenciaMotoristaController {
   constructor(private readonly kmAtipico: KmAtipicoService) {}
 

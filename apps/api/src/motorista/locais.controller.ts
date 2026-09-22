@@ -9,6 +9,7 @@ import type { AuthMotorista } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { LocaisMotoristaService } from "./locais.service";
 import { LocaisImagemService } from "../locais-imagem/locais-imagem.service";
+import { CapacidadeLivre, RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 /** lat/lng do ponto cuja foto queremos (Street View / satélite). `mini` = versão
  *  pequena pra listas (bem mais leve no 4G). */
@@ -94,6 +95,7 @@ export class LocaisMotoristaController {
   ) {}
 
   @Post()
+  @RequerCapacidade({ algum: ["app.viagem.lancar", "app.viagem.guiada", "app.viagem.gpsClassico", "app.pedagio.lancar", "app.abastecimento.lancar"] })
   criar(
     @CurrentUser() user: AuthMotorista,
     @Body(new ZodValidationPipe(CriarLocalInput)) body: z.infer<typeof CriarLocalInput>,
@@ -107,6 +109,7 @@ export class LocaisMotoristaController {
    * cacheada por coordenada — a chave do Google nunca vai ao app.
    */
   @Get("imagem")
+  @CapacidadeLivre("Catálogo de consulta, sem dado de ninguém.")
   async imagem(
     @Query(new ZodValidationPipe(ImagemQuery)) query: z.infer<typeof ImagemQuery>,
     @Res() res: Response,
@@ -123,6 +126,7 @@ export class LocaisMotoristaController {
    * pelo app pra registrar geofences passivos (limite iOS = 20).
    */
   @Get("em-validacao")
+  @CapacidadeLivre("Catálogo de consulta, sem dado de ninguém.")
   emValidacao(@CurrentUser() user: AuthMotorista) {
     return this.service.emValidacao(user.id);
   }
@@ -132,6 +136,7 @@ export class LocaisMotoristaController {
    * "Estou no local de descarga" pra match automático.
    */
   @Get("proximos")
+  @CapacidadeLivre("Catálogo de consulta, sem dado de ninguém.")
   proximos(
     @CurrentUser() user: AuthMotorista,
     @Query(new ZodValidationPipe(ProximosQuery)) query: z.infer<typeof ProximosQuery>,
@@ -154,6 +159,7 @@ export class LocaisMotoristaController {
    * Retorna { locais, usouRaioAmpliado, raioInicialM, raioAmpliadoM }.
    */
   @Get("proximos-descarga")
+  @CapacidadeLivre("Catálogo de consulta, sem dado de ninguém.")
   proximosDescarga(
     @CurrentUser() user: AuthMotorista,
     @Query(new ZodValidationPipe(ProximosDescargaQuery))
@@ -172,6 +178,7 @@ export class LocaisMotoristaController {
    * no /proximos). Backend resolve endereço via reverse geocoding.
    */
   @Post("rapido")
+  @RequerCapacidade({ algum: ["app.viagem.lancar", "app.viagem.guiada", "app.viagem.gpsClassico", "app.pedagio.lancar", "app.abastecimento.lancar"] })
   criarRapido(
     @CurrentUser() user: AuthMotorista,
     @Body(new ZodValidationPipe(CriarRapidoInput)) body: z.infer<typeof CriarRapidoInput>,
@@ -184,6 +191,7 @@ export class LocaisMotoristaController {
    * permanência foi suficiente (≥10min), promove o local a DWELL_CONFIRMADO.
    */
   @Post(":id/eventos-presenca")
+  @CapacidadeLivre("Presença no local detectada pelo aparelho (geofence): infra do rastreio da viagem.")
   registrarEvento(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,

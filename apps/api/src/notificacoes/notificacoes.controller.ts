@@ -7,12 +7,14 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import type { AuthMotorista } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { NotificacoesService } from "./notificacoes.service";
+import { CapacidadeLivre } from "../common/acesso-app/capacidade.decorator";
 
 @ApiTags("motorista/notificacoes")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
 @Roles("MOTORISTA")
 @Controller("m/notificacoes")
+@CapacidadeLivre("Infra do app: sem isto nada abre.")
 export class NotificacoesController {
   constructor(private readonly service: NotificacoesService) {}
 

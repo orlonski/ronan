@@ -583,6 +583,12 @@ export function capacidadeNaConta(
   return daConta.capacidades.includes(chave);
 }
 
+/** Quais capacidades o SERVIDOR já barra no `/m/*` desta empresa (F4). */
+export const TravasServidorAppInput = z.object({
+  capacidadesTravadas: z.array(CapacidadeAppSchema).max(CAPACIDADES_APP_CHAVES.length),
+});
+export type TravasServidorAppInput = z.infer<typeof TravasServidorAppInput>;
+
 /** Uma pessoa que muda numa simulação. */
 export type MudancaAcessoApp = {
   cpf: string;

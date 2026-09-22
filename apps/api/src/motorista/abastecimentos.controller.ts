@@ -22,6 +22,7 @@ import { AcessoMotoristaGuard } from "../auth/guards/acesso-motorista.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { AbastecimentosMotoristaService } from "./abastecimentos.service";
+import { CapacidadeLivre, RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 
 const CriarAbastecimentoPayload = CriarAbastecimentoBaseInput.extend({
   // Legado: app sem o OTA manda uma foto avulsa, que sempre foi o cupom.
@@ -53,6 +54,7 @@ export class AbastecimentosMotoristaController {
   constructor(private readonly service: AbastecimentosMotoristaService) {}
 
   @Get()
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   list(
     @CurrentUser() user: AuthMotorista,
     @Query(new ZodValidationPipe(ListarQuery)) query: z.infer<typeof ListarQuery>,
@@ -61,6 +63,7 @@ export class AbastecimentosMotoristaController {
   }
 
   @Get("postos-recentes")
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   postosRecentes(@CurrentUser() user: AuthMotorista) {
     return this.service.ultimosPostos(user.id, 5);
   }
@@ -77,16 +80,19 @@ export class AbastecimentosMotoristaController {
 
   @Delete(":id")
   @HttpCode(204)
+  @RequerCapacidade("app.abastecimento.lancar")
   delete(@CurrentUser() user: AuthMotorista, @Param("id") id: string) {
     return this.service.delete(user.id, id);
   }
 
   @Get(":id")
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   detalhe(@CurrentUser() user: AuthMotorista, @Param("id") id: string) {
     return this.service.detalhe(user.id, id);
   }
 
   @Get(":id/fotos/:fotoId")
+  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
   async foto(
     @CurrentUser() user: AuthMotorista,
     @Param("id") id: string,
