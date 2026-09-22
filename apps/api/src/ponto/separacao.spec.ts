@@ -90,6 +90,25 @@ describe("ponto e mensal não se misturam", () => {
     expect(dominio.sort()).toEqual(["../common/regime-vigente"]);
   });
 
+  it("cadastrar motorista NÃO consulta a trava de regime", () => {
+    /**
+     * ⚠️ O caso que este teste protege é o MAIS COMUM de quem compra o ponto:
+     * o motorista CLT da própria transportadora, que lança viagem E bate
+     * ponto no mesmo dia. Ele precisa dos DOIS cadastros — `Motorista` e
+     * `Funcionario` — e `auth/types.ts` diz isso com todas as letras.
+     *
+     * A exclusividade do `RegimeVigente` é entre OBRA E DIÁRIA e PONTO, não
+     * entre os dois cadastros. Já recusei cadastro de motorista por existir
+     * vínculo de emprego no mesmo CPF: passou em todos os 1615 testes e
+     * teria trancado a porta do caso principal em produção. Ninguém
+     * descobriria pelo código — só pelo cliente não conseguindo cadastrar o
+     * próprio motorista.
+     */
+    const alvo = resolve(RAIZ, "admin/motoristas/motoristas.service.ts");
+    const imports = importsDe(alvo);
+    expect(imports.filter((i) => i.includes("regime-vigente"))).toEqual([]);
+  });
+
   it("o léxico do mensal continua limpo depois da trava entrar lá", () => {
     // A trava é chamada de dentro do mensal, e ela fala de "regime" e
     // "parceiro" — nunca de jornada, ponto, falta ou atraso.

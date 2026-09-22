@@ -22,7 +22,6 @@ import { PushService } from "../../push/push.service";
 import { EnvioWhatsappService } from "../../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../../whatsapp/sessao.service";
 import { contaIdAtual } from "../../common/conta/conta-context";
-import { temVinculoDeEmprego } from "../../common/regime-vigente";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
 import { ymdSaoPaulo } from "../../common/timezone";
 import { adotarLancamentosOrfaos } from "../../common/transportadora";
@@ -317,36 +316,9 @@ export class MotoristasService {
     };
   }
 
-  /**
-   * Recusa o vínculo de PARCEIRO pra quem já é empregado registrado aqui.
-   *
-   * ⚠️ O furo de entrada da trava de regime. `RegimeVigente` impede a mesma
-   * pessoa nos dois mundos, mas ela só dispara quando alguém ABRE um regime —
-   * e cadastrar motorista nunca abriu nenhum. Então dava pra contratar pelo
-   * ponto e, na tela ao lado, cadastrar a MESMA pessoa como parceiro
-   * autônomo: o desenho de elementos de vínculo dentro do produto, que é
-   * exatamente o que a trava existe pra impedir, entrando pela porta que ela
-   * não vigiava.
-   *
-   * Aqui só RECUSA, não abre regime: motorista parceiro comum não tem linha em
-   * `RegimeVigente` hoje, e criar uma pra cada cadastro é mudança de outra
-   * ordem — esta é a barreira, não a reforma.
-   */
-  private async recusarSeEmpregado(cpf: string | null | undefined) {
-    if (!cpf) return;
-    if (await temVinculoDeEmprego(this.prisma, cpf)) {
-      throw new ConflictException(
-        "Este CPF tem vínculo de emprego registrado ativo nesta empresa. " +
-          "A mesma pessoa não pode ser parceira autônoma e empregada no mesmo período — " +
-          "se ela saiu do quadro, registre o desligamento em Ponto › Quem bate ponto antes de cadastrar aqui.",
-      );
-    }
-  }
-
   async create(data: CriarMotoristaInput, usuarioId: string) {
     const exists = await this.prisma.motorista.findFirst({ where: { cpf: data.cpf } });
     if (exists) throw new ConflictException("CPF já cadastrado");
-    await this.recusarSeEmpregado(data.cpf);
 
     // Essa pessoa já existe na plataforma (roda pra outra empresa, ou se
     // cadastrou pelo app)? Então ela já tem senha — o cadastro se pendura na
@@ -480,8 +452,6 @@ export class MotoristasService {
           "Não encontramos ninguém com esse CPF na plataforma. Se ele ainda não usa o app, cadastre pelo botão “Novo motorista”.",
       });
     }
-
-    await this.recusarSeEmpregado(cpf);
 
     const existente = await this.prisma.motorista.findFirst({ where: { cpf } });
     if (existente && existente.aceite === "PENDENTE") {
@@ -652,9 +622,6 @@ export class MotoristasService {
     if (!atual) throw new NotFoundException("Motorista não encontrado");
 
     const { novaSenha, placas: placasInput, placaDefault, ...rest } = data;
-    // Trocar o CPF pro de um empregado registrado é a mesma porta do cadastro,
-    // só que pelo lado de dentro.
-    if (rest.cpf && rest.cpf !== atual.cpf) await this.recusarSeEmpregado(rest.cpf);
     const updateData: Record<string, unknown> = { ...rest };
     // Senha nova definida pelo admin vale em todas as empresas do motorista —
     // ele tem uma senha só. Vai por propagarSenha depois da transação; o
