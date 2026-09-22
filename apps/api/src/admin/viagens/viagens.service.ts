@@ -29,6 +29,7 @@ import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { mudouInsumoDePreco } from "../../common/viagem-preco";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
+import { distanciaMetros } from "../../common/geo";
 import { lerChaveFiscal } from "../../common/chave-fiscal";
 import { resolverDivergenciasSupridas } from "../../common/divergencias";
 import { checarAlteracaoKm, fmtKmBr } from "../../common/km-motorista";
@@ -129,7 +130,7 @@ export class ViagensAdminService {
 
       const distAtual =
         v.localDescarga?.lat != null && v.localDescarga.lng != null
-          ? distHaversine(v.lat, v.lng, v.localDescarga.lat, v.localDescarga.lng)
+          ? distanciaMetros(v.lat, v.lng, v.localDescarga.lat, v.localDescarga.lng)
           : Number.POSITIVE_INFINITY;
       // Dentro do raio inicial: a escolha está ok, não é suspeita.
       if (distAtual <= raioInicial) continue;
@@ -139,7 +140,7 @@ export class ViagensAdminService {
         null;
       for (const l of locais) {
         if (l.lat == null || l.lng == null) continue;
-        const d = distHaversine(v.lat, v.lng, l.lat, l.lng);
+        const d = distanciaMetros(v.lat, v.lng, l.lat, l.lng);
         if (melhor == null || d < melhor.dist) {
           melhor = { id: l.id, nome: l.nome, cidade: l.cidade, uf: l.uf, dist: d };
         }
@@ -1734,7 +1735,7 @@ export class ViagensAdminService {
     }
 
     await Promise.all(
-      viagem.fotos.map((f) => this.uploads.removeObject(f.storageKey)),
+      viagem.fotos.map((f) => this.uploads.removerObjeto(f.storageKey)),
     );
     await this.prisma.viagem.delete({ where: { id } });
     return { ok: true };
@@ -1748,7 +1749,7 @@ export class ViagensAdminService {
     });
     if (!foto) throw new NotFoundException("Foto não encontrada");
     // Best-effort: se MinIO falhar, ainda apaga DB pra UI consistir.
-    await this.uploads.removeObject(foto.storageKey).catch(() => {});
+    await this.uploads.removerObjeto(foto.storageKey).catch(() => {});
     await this.prisma.ticketFoto.delete({ where: { id: fotoId } });
     return { ok: true };
   }
@@ -1939,14 +1940,3 @@ function corpoDoDiff(diffs: DiffCampo[]): string {
   return corpo;
 }
 
-/** Distância em metros entre dois pontos (Haversine). */
-function distHaversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const toRad = (v: number) => (v * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}

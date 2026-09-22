@@ -251,7 +251,7 @@ export class StoriesMotoristaService {
     if (story.motoristaId !== motoristaId) {
       throw new ForbiddenException("Você só pode apagar seus próprios stories.");
     }
-    await this.uploads.removeObject(story.storageKey);
+    await this.uploads.removerObjeto(story.storageKey);
     await this.prisma.story.delete({ where: { id: storyId } });
   }
 }

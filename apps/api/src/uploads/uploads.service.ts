@@ -83,12 +83,23 @@ export class UploadsService implements OnModuleInit {
     return key;
   }
 
-  /** Remove um objeto; usado pra não acumular logo antiga no bucket. */
+  /**
+   * Apaga um objeto do bucket. UMA função.
+   *
+   * ⚠️ Existiam duas, `removerObjeto` e `removeObject`, com corpos quase
+   * iguais e uma diferença que importava: a primeira engolia a falha em
+   * silêncio. Arquivo que não apaga vira lixo pago no bucket, e sem log
+   * ninguém descobre — some da tabela e fica no storage pra sempre.
+   *
+   * Nunca lança: apagar o arquivo antigo é limpeza, e falhar nela não pode
+   * derrubar a operação que já deu certo (a troca da logo, a exclusão do
+   * documento). Por isso o aviso, que é o que sobra pra alguém ver.
+   */
   async removerObjeto(key: string): Promise<void> {
     try {
       await this.client.removeObject(this.bucket, key);
-    } catch {
-      // Logo antiga que não apaga não é motivo pra falhar a troca da nova.
+    } catch (err) {
+      this.log.warn(`Falha ao apagar ${key}: ${(err as Error).message}`);
     }
   }
 
@@ -337,15 +348,4 @@ export class UploadsService implements OnModuleInit {
     }
   }
 
-  async presignedUrl(key: string, expirySeconds = 3600): Promise<string> {
-    return this.client.presignedGetObject(this.bucket, key, expirySeconds);
-  }
-
-  async removeObject(key: string): Promise<void> {
-    try {
-      await this.client.removeObject(this.bucket, key);
-    } catch (err) {
-      this.log.warn(`Falha ao apagar ${key}: ${(err as Error).message}`);
-    }
-  }
 }

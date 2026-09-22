@@ -249,7 +249,7 @@ export class AbastecimentosMotoristaService {
       throw new ForbiddenException("Você não pode apagar este abastecimento.");
     }
     await Promise.all(
-      a.fotos.map((f) => this.uploads.removeObject(f.storageKey)),
+      a.fotos.map((f) => this.uploads.removerObjeto(f.storageKey)),
     );
     await this.prisma.abastecimento.delete({ where: { id } });
   }

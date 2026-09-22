@@ -155,7 +155,7 @@ export class AbastecimentosAdminService {
     }
 
     await Promise.all(
-      a.fotos.map((f) => this.uploads.removeObject(f.storageKey)),
+      a.fotos.map((f) => this.uploads.removerObjeto(f.storageKey)),
     );
     await this.prisma.abastecimento.delete({ where: { id } });
     return { ok: true };

@@ -13,8 +13,9 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { UploadsService } from "./uploads.service";
+import { checarArquivoEnviado, MIMES_IMAGEM } from "../common/arquivo-enviado";
 
-const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
+
 const MAX_BYTES = 10 * 1024 * 1024;
 
 // m4a/aac é o que expo-audio grava nas duas plataformas; o resto cobre
@@ -45,13 +46,11 @@ export class UploadsController {
     @CurrentUser() user: AuthMotorista,
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
-    if (!file) throw new BadRequestException("Foto não enviada");
-    if (!ALLOWED.includes(file.mimetype)) {
-      throw new BadRequestException(`Tipo não permitido: ${file.mimetype}`);
-    }
-    if (file.size > MAX_BYTES) {
-      throw new BadRequestException("Foto maior que 10MB");
-    }
+    checarArquivoEnviado(file, {
+      mimes: MIMES_IMAGEM,
+      maxBytes: MAX_BYTES,
+      comoDizer: "Isso não é uma foto. Mande uma imagem.",
+    });
     const key = await this.uploads.putTicketFoto(file.buffer, file.mimetype, user.id);
     return { storageKey: key };
   }
@@ -63,13 +62,11 @@ export class UploadsController {
     @CurrentUser() user: AuthMotorista,
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
-    if (!file) throw new BadRequestException("Foto não enviada");
-    if (!ALLOWED.includes(file.mimetype)) {
-      throw new BadRequestException(`Tipo não permitido: ${file.mimetype}`);
-    }
-    if (file.size > MAX_BYTES) {
-      throw new BadRequestException("Foto maior que 10MB");
-    }
+    checarArquivoEnviado(file, {
+      mimes: MIMES_IMAGEM,
+      maxBytes: MAX_BYTES,
+      comoDizer: "Isso não é uma foto. Mande uma imagem.",
+    });
     const key = await this.uploads.putAbastecimentoFoto(
       file.buffer,
       file.mimetype,
@@ -85,13 +82,11 @@ export class UploadsController {
     @CurrentUser() user: AuthMotorista,
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
-    if (!file) throw new BadRequestException("Foto não enviada");
-    if (!ALLOWED.includes(file.mimetype)) {
-      throw new BadRequestException(`Tipo não permitido: ${file.mimetype}`);
-    }
-    if (file.size > MAX_BYTES) {
-      throw new BadRequestException("Foto maior que 10MB");
-    }
+    checarArquivoEnviado(file, {
+      mimes: MIMES_IMAGEM,
+      maxBytes: MAX_BYTES,
+      comoDizer: "Isso não é uma foto. Mande uma imagem.",
+    });
     const key = await this.uploads.putStoryFoto(file.buffer, file.mimetype, user.id);
     return { storageKey: key };
   }

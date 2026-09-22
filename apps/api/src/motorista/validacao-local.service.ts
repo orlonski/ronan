@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { FonteEvidencia, NivelConfiancaLocal } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { distanciaMetros } from "../common/geo";
 
 const RAIO_VALIDACAO_M = 200;
 const DWELL_MIN_SEG = 600; // 10 min
@@ -42,7 +43,7 @@ export class ValidacaoLocalService {
 
     for (const local of [viagem.localCarga, viagem.localDescarga]) {
       if (!local || local.lat == null || local.lng == null) continue;
-      const dist = haversine(viagem.lat, viagem.lng, local.lat, local.lng);
+      const dist = distanciaMetros(viagem.lat, viagem.lng, local.lat, local.lng);
       if (dist > RAIO_VALIDACAO_M) continue;
       await this.registrarEvidencia({
         localId: local.id,
@@ -181,20 +182,6 @@ export class ValidacaoLocalService {
 }
 
 /**
- * Distância haversine em metros entre dois pontos lat/lng.
- */
-function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const toRad = (v: number) => (v * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
-
-/**
  * Pega a maior janela contígua (gap ≤ gapMaxSeg) de pontos dentro de raioM
  * do centro. Retorna duração em segundos (0 se nenhum cluster).
  */
@@ -210,7 +197,7 @@ function maiorClusterDentro(
   let ultimoDentro: Date | null = null;
 
   for (const p of pontos) {
-    const dentro = haversine(p.lat, p.lng, centroLat, centroLng) <= raioM;
+    const dentro = distanciaMetros(p.lat, p.lng, centroLat, centroLng) <= raioM;
     const t = p.capturadoEm;
     if (dentro) {
       if (inicio == null) {

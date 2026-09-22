@@ -841,7 +841,7 @@ export class MotoristasService {
     // Cascade já apagou os rows de motorista_documento — só sobrou limpar
     // os objetos no MinIO. Off-transaction: se falhar fica lixo, não bloqueia.
     for (const key of docKeys) {
-      await this.uploads.removeObject(key);
+      await this.uploads.removerObjeto(key);
     }
     return { ok: true };
   }

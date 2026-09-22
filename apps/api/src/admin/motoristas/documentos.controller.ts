@@ -34,14 +34,8 @@ import type { AuthAdminUser } from "../../auth/types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { MotoristasDocumentosService } from "./documentos.service";
+import { checarArquivoEnviado, MIMES_DOCUMENTO } from "../../common/arquivo-enviado";
 
-const MIMES_PERMITIDOS = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-]);
 const MAX_BYTES = 25 * 1024 * 1024;
 
 function assertTipo(tipo: string): TipoDocumentoMotorista {
@@ -250,15 +244,14 @@ export class MotoristasDocumentosController {
     @Body("exigenciaId") exigenciaId: string | undefined,
   ) {
     const tipo = assertTipo(tipoRaw);
-    if (!file) throw new BadRequestException("Arquivo não enviado");
-    if (!MIMES_PERMITIDOS.has(file.mimetype)) {
-      throw new BadRequestException(
-        `Tipo não permitido: ${file.mimetype}. Use PDF, JPG, PNG ou WebP.`,
-      );
-    }
-    if (file.size > MAX_BYTES) {
-      throw new BadRequestException("Arquivo maior que 25MB");
-    }
+    // Mesma lista e mesmo teto do que o motorista manda pelo app: as duas
+    // portas gravam no MESMO documento, e listas diferentes fariam o painel
+    // aceitar o que o app recusa (ou o contrário).
+    checarArquivoEnviado(file, {
+      mimes: MIMES_DOCUMENTO,
+      maxBytes: MAX_BYTES,
+      comoDizer: "Tipo não permitido. Use PDF, JPG, PNG ou WebP.",
+    });
     const doc = await this.service.upload(
       motoristaId,
       tipo,

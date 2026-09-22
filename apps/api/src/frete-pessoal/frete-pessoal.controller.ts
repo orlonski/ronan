@@ -27,6 +27,7 @@ import { Public } from "../auth/decorators/public.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import type { AuthIdentidade } from "../auth/types";
+import { checarArquivoEnviado, MIMES_DOCUMENTO } from "../common/arquivo-enviado";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { FretePessoalService } from "./frete-pessoal.service";
 import { DocumentosPessoaisService } from "./documentos-pessoais.service";
@@ -152,7 +153,19 @@ export class FretePessoalController {
     @Param("id") id: string,
     @UploadedFile() arquivo?: Express.Multer.File,
   ) {
-    if (!arquivo) throw new BadRequestException("Nenhum arquivo enviado.");
+    /**
+     * ⚠️ Este caminho não conferia TIPO nenhum — só o teto do Multer.
+     *
+     * Não foi decisão: foi a cópia que ninguém fez. O `mimetype` que chega é
+     * gravado junto do arquivo e volta como `Content-Type` quando a API serve
+     * de novo, então aceitar qualquer coisa era aceitar servir qualquer coisa
+     * do nosso domínio.
+     */
+    checarArquivoEnviado(arquivo, {
+      mimes: MIMES_DOCUMENTO,
+      maxBytes: TAMANHO_MAX,
+      comoDizer: "Mande uma foto ou um PDF do documento.",
+    });
     return this.documentos.anexarArquivo(user.id, id, arquivo);
   }
 

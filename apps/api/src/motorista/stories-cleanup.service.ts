@@ -39,7 +39,7 @@ export class StoriesCleanupService {
     await Promise.all(
       expirados
         .filter((s) => !s.oficial)
-        .map((s) => this.uploads.removeObject(s.storageKey)),
+        .map((s) => this.uploads.removerObjeto(s.storageKey)),
     );
     await this.prisma.story.deleteMany({
       where: { id: { in: expirados.map((s) => s.id) } },

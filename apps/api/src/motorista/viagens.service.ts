@@ -1036,7 +1036,7 @@ export class ViagensMotoristaService {
 
     // Apaga fotos do MinIO em paralelo (best-effort, se falhar nao bloqueia)
     await Promise.all(
-      viagem.fotos.map((f) => this.uploads.removeObject(f.storageKey)),
+      viagem.fotos.map((f) => this.uploads.removerObjeto(f.storageKey)),
     );
 
     // Cascade no schema apaga TicketFoto/Pedagio relacionados

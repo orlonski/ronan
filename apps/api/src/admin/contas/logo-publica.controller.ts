@@ -26,6 +26,25 @@ export class LogoPublicaController {
     const logo = await this.service.logoBuffer(id);
     if (!logo) throw new NotFoundException("Sem logo.");
     res.set("Content-Type", logo.contentType);
+    /**
+     * ⚠️ DESARMA A LOGO. `validarLogo` aceita `image/svg+xml`, e SVG é XML com
+     * `<script>` dentro — servido aqui, de um endereço NOSSO e SEM login, abrir
+     * a URL da logo executaria esse script na origem da API.
+     *
+     * Quem sobe a logo é admin da própria empresa, então não é porta aberta pra
+     * qualquer um; mas "só um admin consegue" não é controle, é estatística.
+     * Estes dois headers custam nada e valem pra todo formato:
+     *
+     * - `default-src 'none'` proíbe script, fetch e recurso externo dentro do
+     *   arquivo servido.
+     * - `nosniff` impede o navegador de "adivinhar" que aquilo é HTML quando o
+     *   Content-Type não bate com o conteúdo.
+     *
+     * Escolhido em vez de recusar SVG porque recusar quebraria logo já enviada,
+     * e SVG é o formato certo pra marca: escala sem borrar.
+     */
+    res.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    res.set("X-Content-Type-Options", "nosniff");
     // Cache longo é seguro: a URL carrega um `v` que muda a cada troca de logo.
     res.set("Cache-Control", "public, max-age=86400");
     res.send(logo.buffer);

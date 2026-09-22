@@ -9,6 +9,7 @@ import {
 } from "@prisma/client";
 import type { CriarLocalInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { distanciaMetros } from "../../common/geo";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO, filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
@@ -31,18 +32,6 @@ const METROS_POR_GRAU_LAT = 111_320; // ~constante; longitude encolhe com cos(la
 
 /** Raio (m) pra tarja "provável duplicata" na LISTA (fixo; o mapa tem raio ajustável). */
 const RAIO_DUPLICATA_M = 150;
-
-/** Distância em metros entre dois pontos (haversine). */
-function haversineMetros(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6_371_000;
-  const toRad = (g: number) => (g * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
-}
 
 /**
  * Extrai um "marco" (estaca N ou KM N) do nome. Serve pra distinguir pontos de
@@ -170,7 +159,7 @@ export class LocaisService {
     let melhor: { id: string; nome: string; cidade: string; uf: string; dist: number } | null = null;
     for (const c of candidatos) {
       if (c.lat == null || c.lng == null) continue;
-      const dist = haversineMetros(params.lat, params.lng, c.lat, c.lng);
+      const dist = distanciaMetros(params.lat, params.lng, c.lat, c.lng);
       if (dist > raio) continue;
       if (!melhor || dist < melhor.dist) {
         melhor = { id: c.id, nome: c.nome, cidade: c.cidade, uf: c.uf, dist };
@@ -398,7 +387,7 @@ export class LocaisService {
             tipo: o.tipo,
             distanciaM:
               m.lat != null && m.lng != null && o.lat != null && o.lng != null
-                ? Math.round(haversineMetros(m.lat, m.lng, o.lat, o.lng))
+                ? Math.round(distanciaMetros(m.lat, m.lng, o.lat, o.lng))
                 : null,
           }))
           .sort((a, b) => (a.distanciaM ?? Infinity) - (b.distanciaM ?? Infinity));
@@ -523,22 +512,6 @@ export class LocaisService {
       select: { raioInicialM: true },
     });
     return cfg?.raioInicialM ?? 50;
-  }
-
-  private static haversineM(
-    latA: number,
-    lngA: number,
-    latB: number,
-    lngB: number,
-  ): number {
-    const R = 6_371_000;
-    const toRad = (d: number) => (d * Math.PI) / 180;
-    const dLat = toRad(latB - latA);
-    const dLng = toRad(lngB - lngA);
-    const s =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(latA)) * Math.cos(toRad(latB)) * Math.sin(dLng / 2) ** 2;
-    return 2 * R * Math.asin(Math.sqrt(s));
   }
 
   private static readonly NIVEL_RANK: Record<NivelConfiancaLocal, number> = {
@@ -738,7 +711,7 @@ export class LocaisService {
         ...m,
         distanciaDoPrincipalM:
           m.lat != null && m.lng != null && principal.lat != null && principal.lng != null
-            ? Math.round(LocaisService.haversineM(principal.lat, principal.lng, m.lat, m.lng))
+            ? Math.round(distanciaMetros(principal.lat, principal.lng, m.lat, m.lng))
             : 0,
       });
       const candidatos = membros

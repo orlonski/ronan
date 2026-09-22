@@ -756,7 +756,7 @@ export class ChatService {
     // Tira o arquivo do MinIO junto: zerar só a coluna deixaria o áudio órfão
     // no bucket pra sempre, sem nenhuma linha apontando pra ele.
     if (m.audioKey) {
-      await this.uploads.removeObject(m.audioKey).catch(() => {
+      await this.uploads.removerObjeto(m.audioKey).catch(() => {
         /* já pode ter sumido — não trava o apagar */
       });
     }

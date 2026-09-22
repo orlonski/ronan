@@ -1,4 +1,5 @@
 import { Logger } from "@nestjs/common";
+import { checarArquivoEnviado, MIMES_IMAGEM } from "../../common/arquivo-enviado";
 import { createHash, randomUUID } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { MotoristaService } from "../../motorista/motorista.service";
@@ -787,6 +788,26 @@ async function executarToolInterno(
 
       const midia = await ctx.evolution.baixarMidia(payload);
       if (!midia) throw new Error("Não consegui baixar a foto do WhatsApp.");
+
+      /**
+       * ⚠️ Este caminho não conferia NADA — nem tipo, nem tamanho.
+       *
+       * O que chega aqui veio de fora: é a mídia que a pessoa mandou na
+       * conversa, e o `mimetype` é o que o WhatsApp disse que era. Ia direto
+       * pro MinIO e volta como `Content-Type` quando a API serve o ticket.
+       * Aqui só entra FOTO: é foto de ticket que o motorista manda, e PDF por
+       * WhatsApp não é o caminho dessa feature.
+       *
+       * O tamanho sai do buffer porque não existe `size` nesta origem.
+       */
+      checarArquivoEnviado(
+        { mimetype: midia.mimetype, size: midia.buffer.length },
+        {
+          mimes: MIMES_IMAGEM,
+          maxBytes: 10 * 1024 * 1024,
+          comoDizer: "Só consigo anexar foto. Manda a imagem do ticket, não um arquivo.",
+        },
+      );
 
       const storageKey = await ctx.uploads.putTicketFoto(
         midia.buffer,

@@ -412,11 +412,11 @@ export class FechamentosService {
     }
     // Apaga arquivos dos envios em GERADO
     await Promise.all(
-      f.envios.map((e) => this.uploads.removeObject(e.arquivoGeradoKey)),
+      f.envios.map((e) => this.uploads.removerObjeto(e.arquivoGeradoKey)),
     );
     // Apaga arquivo original do fechamento
     if (f.arquivoOriginalKey) {
-      await this.uploads.removeObject(f.arquivoOriginalKey);
+      await this.uploads.removerObjeto(f.arquivoOriginalKey);
     }
     // FechamentoLinha + EnvioFechamento saem cascade
     await this.prisma.fechamento.delete({ where: { id: fechamentoId } });

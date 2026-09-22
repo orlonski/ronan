@@ -9,6 +9,7 @@ import {
 import type { OrigemDocumento } from "@prisma/client";
 import { TIPOS_DOCUMENTO_MOTORISTA, type TipoDocumentoMotorista } from "@ronan/shared-types";
 import { chaveDaExigencia, chaveDocumento } from "../common/chave-documento";
+import { checarArquivoEnviado, MIMES_DOCUMENTO } from "../common/arquivo-enviado";
 import { regimeVivo } from "../common/regime-vigente";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
@@ -16,14 +17,6 @@ import { PushService } from "../push/push.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { detectarAssinaturaEmbutida, hashDoArquivo } from "./assinatura-arquivo";
 
-/** Mesmo teto e mesma lista do upload pelo painel: um caminho só de verdade. */
-const MIMES_PERMITIDOS = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-]);
 const MAX_BYTES = 25 * 1024 * 1024;
 
 /**
@@ -35,9 +28,11 @@ const MAX_BYTES = 25 * 1024 * 1024;
  * arquivo só é aceito se o conteúdo carregar mesmo o OID de PKCS#7, então um
  * JPEG renomeado pra `.p7s` continua sendo recusado.
  */
+const ASSINATURA_DESTACADA = [".p7s", ".p7m"] as const;
+
 function ehExtensaoAssinada(nome: string): boolean {
   const n = nome.toLowerCase();
-  return n.endsWith(".p7s") || n.endsWith(".p7m");
+  return ASSINATURA_DESTACADA.some((e) => n.endsWith(e));
 }
 
 /**
@@ -712,12 +707,14 @@ export class AdmissaoService {
     exigenciaId: string,
     arquivo: { buffer: Buffer; mimetype: string; size: number; originalname: string },
   ) {
-    if (!MIMES_PERMITIDOS.has(arquivo.mimetype) && !ehExtensaoAssinada(arquivo.originalname)) {
-      throw new BadRequestException("Mande uma foto ou um PDF.");
-    }
-    if (arquivo.size > MAX_BYTES) {
-      throw new BadRequestException("O arquivo é grande demais. O limite é 25 MB.");
-    }
+    checarArquivoEnviado(arquivo, {
+      mimes: MIMES_DOCUMENTO,
+      maxBytes: MAX_BYTES,
+      // `.p7s`/`.p7m` do gov.br chegam como octet-stream: recusar pelo mime
+      // jogaria fora justamente o documento ASSINADO.
+      extensoesTambem: ASSINATURA_DESTACADA,
+      comoDizer: "Mande uma foto ou um PDF.",
+    });
 
     const exigidos = await this.exigidosPara(motoristaId, { soDoPublicoDele: true });
     const exigencia = exigidos.find((e) => e.id === exigenciaId);
@@ -932,7 +929,7 @@ export class AdmissaoService {
       arquivo.originalname,
     );
     if (anterior && anterior.storageKey !== storageKey) {
-      await this.uploads.removeObject(anterior.storageKey).catch(() => {
+      await this.uploads.removerObjeto(anterior.storageKey).catch(() => {
         // Objeto órfão no bucket não pode derrubar o envio do motorista: o que
         // importa é o arquivo novo ter entrado.
       });
@@ -1042,12 +1039,14 @@ export class AdmissaoService {
     if (c.enviosFeitos >= MAX_ENVIOS_POR_CONVITE) {
       throw new ForbiddenException("Este link já recebeu arquivos demais. Peça um novo.");
     }
-    if (!MIMES_PERMITIDOS.has(arquivo.mimetype) && !ehExtensaoAssinada(arquivo.originalname)) {
-      throw new BadRequestException("Mande uma foto, um PDF ou o arquivo assinado (.p7s).");
-    }
-    if (arquivo.size > MAX_BYTES) {
-      throw new BadRequestException("O arquivo é grande demais. O limite é 25 MB.");
-    }
+    checarArquivoEnviado(arquivo, {
+      mimes: MIMES_DOCUMENTO,
+      maxBytes: MAX_BYTES,
+      // `.p7s`/`.p7m` do gov.br chegam como octet-stream: recusar pelo mime
+      // jogaria fora justamente o documento ASSINADO.
+      extensoesTambem: ASSINATURA_DESTACADA,
+      comoDizer: "Mande uma foto, um PDF ou o arquivo assinado (.p7s).",
+    });
 
     return comConta(c.contaId, async () => {
       // Só aceita o que ESTE motorista precisa mandar. Sem isto, um link

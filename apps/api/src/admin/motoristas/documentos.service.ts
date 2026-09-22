@@ -147,7 +147,7 @@ export class MotoristasDocumentosService {
 
   async remove(motoristaId: string, chaveOuTipo: string): Promise<void> {
     const doc = await this.findOne(motoristaId, chaveOuTipo);
-    await this.uploads.removeObject(doc.storageKey);
+    await this.uploads.removerObjeto(doc.storageKey);
     // A assinatura vai junto: sem o arquivo ela não prova nada, e deixá-la
     // órfã é a mesma mentira que o reenvio produzia.
     await this.prisma.assinaturaDocumento.deleteMany({

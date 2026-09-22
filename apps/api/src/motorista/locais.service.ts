@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable } from "@nestjs/comm
 import { type FonteGps, NivelConfiancaLocal, OrigemCadastroLocal, type TipoLocal } from "@prisma/client";
 import { ItemInexistenteException } from "../common/item-inexistente";
 import { PrismaService } from "../prisma/prisma.service";
+import { distanciaMetros } from "../common/geo";
 import { inicioDiasAtras } from "../common/timezone";
 import { GeocodingService } from "../geocoding/geocoding.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
@@ -300,7 +301,7 @@ export class LocaisMotoristaService {
         ...c,
         distanciaMetros:
           c.lat != null && c.lng != null
-            ? haversine(input.lat, input.lng, c.lat, c.lng)
+            ? distanciaMetros(input.lat, input.lng, c.lat, c.lng)
             : Number.POSITIVE_INFINITY,
       }))
       .filter((c) => (todos ? Number.isFinite(c.distanciaMetros) : c.distanciaMetros <= raio))
@@ -480,18 +481,8 @@ export class LocaisMotoristaService {
       (c) =>
         c.lat != null &&
         c.lng != null &&
-        haversine(lat, lng, c.lat, c.lng) <= raioM,
+        distanciaMetros(lat, lng, c.lat, c.lng) <= raioM,
     );
   }
 }
 
-function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const toRad = (v: number) => (v * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}

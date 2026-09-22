@@ -269,7 +269,7 @@ export class ChatAdminService {
       },
     });
     if (aviso.fotoKey) {
-      await this.uploads.removeObject(aviso.fotoKey).catch(() => {
+      await this.uploads.removerObjeto(aviso.fotoKey).catch(() => {
         this.log.warn(`Foto do aviso ${avisoId} não saiu do storage.`);
       });
     }
@@ -371,7 +371,7 @@ export class ChatAdminService {
         select: { audioKey: true },
       });
       if (alvo?.audioKey) {
-        await this.uploads.removeObject(alvo.audioKey).catch(() => {
+        await this.uploads.removerObjeto(alvo.audioKey).catch(() => {
           /* já pode ter sumido */
         });
       }

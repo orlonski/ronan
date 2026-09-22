@@ -310,7 +310,7 @@ export class ExportFechamentoService {
   async excluir(envioId: string) {
     const envio = await this.prisma.envioFechamento.findUnique({ where: { id: envioId } });
     if (!envio) throw new NotFoundException("Envio não encontrado");
-    await this.uploads.removeObject(envio.arquivoGeradoKey);
+    await this.uploads.removerObjeto(envio.arquivoGeradoKey);
     await this.prisma.envioFechamento.delete({ where: { id: envioId } });
     return { ok: true };
   }

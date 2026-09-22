@@ -165,7 +165,7 @@ function servico(over: {
   };
   const uploads = {
     putMotoristaDocumento: async () => "chave/no/minio",
-    removeObject: async () => undefined,
+    removerObjeto: async () => undefined,
     getObjectBuffer: async () => over.arquivoGuardado ?? Buffer.from("conteudo do papel"),
   };
   // Push de mentira: o teste checa QUE avisou, não como.

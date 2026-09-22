@@ -48,7 +48,7 @@ export class ChatAudioCleanupService {
     this.log.log(`expirando ${antigos.length} áudio(s) do chat com mais de ${DIAS_RETENCAO} dias`);
     await Promise.all(
       antigos.map((m) =>
-        this.uploads.removeObject(m.audioKey!).catch(() => {
+        this.uploads.removerObjeto(m.audioKey!).catch(() => {
           /* objeto já pode ter sumido — o update abaixo é o que importa */
         }),
       ),

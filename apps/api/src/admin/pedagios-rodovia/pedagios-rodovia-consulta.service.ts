@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PedagiosRodoviaService } from "./pedagios-rodovia.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RoteamentoService } from "../../roteamento/roteamento.service";
+import { distanciaMetros } from "../../common/geo";
 
 const DISTANCIA_MAX_METROS = 150; // raio em volta da polyline pra considerar "na rota"
 const ENVELOPE_PADDING_GRAUS = 0.05; // ~5.5km de folga no bbox pré-filtro
@@ -238,17 +239,6 @@ function bboxComFolga(pontos: Array<[number, number]>): {
   };
 }
 
-const R_TERRA_M = 6_371_000;
-const toRad = (g: number): number => (g * Math.PI) / 180;
-
-function haversineMetros(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R_TERRA_M * Math.asin(Math.sqrt(a));
-}
 
 function menorDistanciaAteRota(
   lat: number,
@@ -285,11 +275,11 @@ function distanciaPontoSegmento(
   const dx = bx - ax;
   const dy = by - ay;
   if (dx === 0 && dy === 0) {
-    return haversineMetros(lat, lng, a[0], a[1]);
+    return distanciaMetros(lat, lng, a[0], a[1]);
   }
   const t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
   const tc = Math.max(0, Math.min(1, t));
   const projX = ax + tc * dx;
   const projY = ay + tc * dy;
-  return haversineMetros(lat, lng, projY, projX);
+  return distanciaMetros(lat, lng, projY, projX);
 }
