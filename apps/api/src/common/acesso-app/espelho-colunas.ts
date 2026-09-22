@@ -19,9 +19,21 @@ import {
 
 export type ColunasAcesso = Partial<Record<AcessoAppChave, boolean>>;
 
-/** Nomes dos perfis que o espelho cria. Editáveis depois como qualquer outro. */
-export const PERFIL_HERDADO_MOTORISTA = "Padrão da empresa (herdado)";
-export const PERFIL_HERDADO_FUNCIONARIO = "Registrado (herdado)";
+/**
+ * Nomes dos grupos que o espelho cria. Editáveis depois como qualquer outro.
+ *
+ * ⚠️ São o que o escritório LÊ na tela, então são nomes de gente, não de
+ * mecanismo. Até 22/09/2026 eram "Padrão da empresa (herdado)" e "Registrado
+ * (herdado)" — e o dono, vendo a tela, disse que não entendeu nada. Os nomes
+ * antigos continuam reconhecidos (`NOMES_ANTIGOS_HERDADOS`) pra renomear o
+ * que já existe sem criar um grupo duplicado.
+ */
+export const PERFIL_HERDADO_MOTORISTA = "Motoristas";
+export const PERFIL_HERDADO_FUNCIONARIO = "Registrados (CLT)";
+export const NOMES_ANTIGOS_HERDADOS: Record<string, string> = {
+  [PERFIL_HERDADO_MOTORISTA]: "Padrão da empresa (herdado)",
+  [PERFIL_HERDADO_FUNCIONARIO]: "Registrado (herdado)",
+};
 
 /**
  * ⚠️ Os perfis herdados NÃO aparecem na tela antiga de perfis (a das 13
@@ -29,9 +41,13 @@ export const PERFIL_HERDADO_FUNCIONARIO = "Registrado (herdado)";
  * herdado é — e "aplicar" o Registrado num motorista desligaria tudo dele.
  * Ficam invisíveis até a tela nova, que lê `capacidades`.
  */
-export const PERFIS_HERDADOS = [PERFIL_HERDADO_MOTORISTA, PERFIL_HERDADO_FUNCIONARIO];
+export const PERFIS_HERDADOS = [
+  PERFIL_HERDADO_MOTORISTA,
+  PERFIL_HERDADO_FUNCIONARIO,
+  ...Object.values(NOMES_ANTIGOS_HERDADOS),
+];
 
-export const MOTIVO_ESPELHO = "Era assim na ficha dele antes das regras de acesso.";
+export const MOTIVO_ESPELHO = "Já era assim na ficha dele.";
 
 /**
  * O que um conjunto de colunas significa em capacidades.

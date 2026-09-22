@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { RegraAcessoAppInput } from "@ronan/shared-types";
+import { CAPACIDADES_APP, type RegraAcessoAppInput } from "@ronan/shared-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,36 +20,88 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { StatusToggle } from "@/components/status-toggle";
 import { usePermissoes } from "@/lib/permissoes";
+import Link from "next/link";
+import { Permitido } from "@/components/requer-tela";
+import { fraseDaRegra } from "./frases";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { ConfirmarMudanca } from "./simulacao";
 import { CHAVE_PAINEL, type PainelAcessoApp, type Simulacao } from "./tipos";
 
 type Regra = RegraAcessoAppInput;
 
-const VINCULO: Record<Regra["vinculo"], string> = {
-  QUALQUER: "qualquer pessoa",
-  MOTORISTA: "quem tem cadastro de motorista",
-  FUNCIONARIO: "quem é registrado (bate ponto)",
-};
-const REGIME: Record<Regra["regime"], string> = {
-  QUALQUER: "",
-  PARCEIRO: "é parceiro",
-  EMPREGADO: "é registrado em carteira (CLT)",
-  NAO_DECLARADO: "não tem regime declarado",
-};
-
 /**
- * QUEM RECEBE QUAL PERFIL — em frases, na ordem em que são avaliadas.
+ * 2. QUEM ENTRA EM CADA GRUPO — primeiro em frases, só leitura; o editor abre
+ * no "Mudar".
  *
- * ⚠️ Frases e setas, não arrastar: "a primeira que casa vence" é o ponto em
- * que o escritório erra, e ver a lista como texto lido de cima pra baixo é o
- * que torna isso óbvio. A última linha é fixa: todo o resto cai no padrão.
+ * ⚠️ Frases e setas, não arrastar: "a primeira regra que vale ganha" é o
+ * ponto em que o escritório erra, e ler a lista de cima pra baixo é o que
+ * torna isso óbvio. As duas últimas linhas são fixas: todo motorista e todo
+ * registrado caem num grupo, mesmo sem regra nenhuma.
  */
-export function AbaQuemRecebe({ painel }: { painel: PainelAcessoApp }) {
+export function QuemEntra({ painel }: { painel: PainelAcessoApp }) {
+  const [aberto, setAberto] = useState(false);
+  const nome = (id: string | null | undefined) => painel.perfis.find((p) => p.id === id)?.nome ?? "nenhum grupo";
+  const ativas = painel.regras.filter((r) => r.ativo);
+  const podeEditar = painel.fonte === "REGRAS";
+
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Quem entra em cada grupo</h2>
+          <p className="text-sm text-muted-foreground">
+            Motorista novo já entra no grupo certo, sem ninguém precisar lembrar.
+          </p>
+        </div>
+        {podeEditar && !aberto && (
+          <Permitido chave="perfis-acesso.editar">
+            <Button variant="outline" onClick={() => setAberto(true)}>
+              Mudar
+            </Button>
+          </Permitido>
+        )}
+      </div>
+      {!aberto ? (
+        <Card className="divide-y divide-border">
+          {ativas.map((r) => (
+            <p key={r.id} className="p-3 text-sm">
+              {fraseDaRegra(painel, r)} → <strong>{nome(r.perfilId)}</strong>
+            </p>
+          ))}
+          <p className="p-3 text-sm">
+            {ativas.length ? "Os outros motoristas" : "Todo motorista"} →{" "}
+            <strong>{nome(painel.perfilPadraoMotoristaId)}</strong>
+          </p>
+          <p className="p-3 text-sm">
+            Quem é registrado em carteira (CLT) → <strong>{nome(painel.perfilPadraoFuncionarioId)}</strong>
+          </p>
+        </Card>
+      ) : (
+        <EditorQuemEntra painel={painel} onFechar={() => setAberto(false)} />
+      )}
+      {!aberto && podeEditar && <SugestaoClt painel={painel} />}
+      {/* ⚠️ A pergunta que o dono fez olhando esta tela: "como eu diferencio o
+          CLT de quem não é?". A resposta tem que estar AQUI, não num manual. */}
+      {!aberto && (
+        <p className="text-sm text-muted-foreground">
+          <strong className="text-foreground">Quem é CLT?</strong> Quem a empresa cadastrou em{" "}
+          <Link href="/ponto/funcionarios" className="underline">
+            Quem bate ponto
+          </Link>{" "}
+          (“Registrar contratação”). Todo o resto é motorista parceiro. Quem é as duas coisas (o CLT
+          que também dirige) recebe os dois grupos somados.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function EditorQuemEntra({ painel, onFechar }: { painel: PainelAcessoApp; onFechar: () => void }) {
   const token = useAuthToken();
   const qc = useQueryClient();
   const { temPermissao } = usePermissoes();
   const podeEditar = painel.fonte === "REGRAS" && temPermissao("perfis-acesso.editar");
+  void onFechar;
   const [regras, setRegras] = useState<Regra[]>(() =>
     painel.regras.map(({ ordem: _o, ...r }) => r),
   );
@@ -60,23 +112,13 @@ export function AbaQuemRecebe({ painel }: { painel: PainelAcessoApp }) {
 
   const perfisAtivos = painel.perfis.filter((p) => p.ativo);
   const nomePerfil = (id: string | null | undefined) => painel.perfis.find((p) => p.id === id)?.nome ?? "—";
-  const nomeModalidade = (id?: string | null) => painel.opcoes.modalidades.find((m) => m.id === id)?.nome;
-  const nomeTransp = (id?: string | null) => painel.opcoes.transportadoras.find((t) => t.id === id)?.nome;
 
   const alterado =
     JSON.stringify(regras) !== JSON.stringify(painel.regras.map(({ ordem: _o, ...r }) => r)) ||
     padraoM !== (painel.perfilPadraoMotoristaId ?? "") ||
     padraoF !== (painel.perfilPadraoFuncionarioId ?? "");
 
-  function frase(r: Regra) {
-    const partes = [VINCULO[r.vinculo]];
-    if (r.regime !== "QUALQUER") partes.push(`que ${REGIME[r.regime]}`);
-    const mod = nomeModalidade(r.modalidadeId);
-    if (mod) partes.push(`com modalidade ${mod}`);
-    const tr = nomeTransp(r.transportadoraId);
-    if (tr) partes.push(`da transportadora ${tr}`);
-    return partes.join(", ");
-  }
+  const frase = (r: Regra) => fraseDaRegra(painel, r);
 
   function mover(i: number, d: -1 | 1) {
     setRegras((prev) => {
@@ -109,15 +151,14 @@ export function AbaQuemRecebe({ painel }: { painel: PainelAcessoApp }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Lido de cima pra baixo: cada pessoa recebe o perfil da <strong>primeira</strong> frase que
-        vale pra ela. Quem nenhuma alcança cai no padrão, lá embaixo. Exceções por pessoa ficam na
-        ficha dela.
+        As regras especiais são lidas de cima pra baixo, e vale a <strong>primeira</strong> que
+        servir pra pessoa. Quem nenhuma alcança cai nas duas linhas de baixo.
       </p>
 
       <Card className="divide-y divide-border">
         {regras.length === 0 && (
           <p className="p-4 text-sm text-muted-foreground">
-            Nenhuma regra: todo mundo cai no padrão.
+            Nenhuma regra especial. É o normal: a maioria das empresas não precisa.
           </p>
         )}
         {regras.map((r, i) => (
@@ -125,7 +166,7 @@ export function AbaQuemRecebe({ painel }: { painel: PainelAcessoApp }) {
             <span className="w-6 text-center text-xs font-semibold text-muted-foreground">{i + 1}</span>
             <div className="min-w-0 flex-1">
               <p className="text-sm">
-                Se é <strong>{frase(r)}</strong> → <strong>{nomePerfil(r.perfilId)}</strong>
+                <strong>{frase(r)}</strong> → <strong>{nomePerfil(r.perfilId)}</strong>
               </p>
               <p className="text-xs text-muted-foreground">
                 {r.nome}
@@ -162,8 +203,7 @@ export function AbaQuemRecebe({ painel }: { painel: PainelAcessoApp }) {
           </div>
         ))}
         <div className="flex flex-wrap items-center gap-3 bg-muted/30 p-3">
-          <Badge className="border-border text-muted-foreground">Todo o resto</Badge>
-          <span className="text-sm">Quem dirige →</span>
+          <span className="text-sm">Todo motorista →</span>
           <Select
             className="w-56"
             value={padraoM}
@@ -177,7 +217,7 @@ export function AbaQuemRecebe({ painel }: { painel: PainelAcessoApp }) {
               </option>
             ))}
           </Select>
-          <span className="text-sm">Quem é só registrado →</span>
+          <span className="text-sm">Quem é registrado (CLT) →</span>
           <Select
             className="w-56"
             value={padraoF}
@@ -214,23 +254,14 @@ export function AbaQuemRecebe({ painel }: { painel: PainelAcessoApp }) {
             }
           >
             <Plus className="mr-2 h-4 w-4" />
-            Adicionar regra
+            Adicionar regra especial
           </Button>
           <div className="flex gap-2">
-            {alterado && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setRegras(painel.regras.map(({ ordem: _o, ...r }) => r));
-                  setPadraoM(painel.perfilPadraoMotoristaId ?? "");
-                  setPadraoF(painel.perfilPadraoFuncionarioId ?? "");
-                }}
-              >
-                Desfazer
-              </Button>
-            )}
+            <Button variant="outline" onClick={onFechar}>
+              {alterado ? "Cancelar" : "Fechar"}
+            </Button>
             <Button disabled={!alterado} onClick={simular}>
-              Ver quem muda
+              Salvar
             </Button>
           </div>
         </div>
@@ -252,7 +283,7 @@ export function AbaQuemRecebe({ painel }: { painel: PainelAcessoApp }) {
 
       {simulacao && (
         <ConfirmarMudanca
-          titulo="Salvar quem recebe o quê"
+          titulo="Salvar quem entra em cada grupo"
           simulacao={simulacao}
           onCancelar={() => setSimulacao(null)}
           onConfirmar={async () => {
@@ -269,6 +300,7 @@ export function AbaQuemRecebe({ painel }: { painel: PainelAcessoApp }) {
               });
               toast.success("Salvo.");
               setSimulacao(null);
+              onFechar();
               void qc.invalidateQueries({ queryKey: CHAVE_PAINEL });
             } catch (e) {
               toast.error((e as Error).message);
@@ -299,7 +331,7 @@ function EditorRegra({
     <Dialog open onOpenChange={(o) => !o && onFechar()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{regra.nome ? `Regra: ${regra.nome}` : "Nova regra"}</DialogTitle>
+          <DialogTitle>{regra.nome ? `Regra: ${regra.nome}` : "Nova regra especial"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div>
@@ -362,7 +394,7 @@ function EditorRegra({
             </p>
           )}
           <div>
-            <Label>Recebe o perfil</Label>
+            <Label>Entra no grupo</Label>
             <Select value={r.perfilId} onChange={(e) => set("perfilId", e.target.value)}>
               {painel.perfis
                 .filter((p) => p.ativo)
@@ -388,5 +420,109 @@ function EditorRegra({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * O MENU TEM QUE FAZER SENTIDO PRO CLT (pedido do dono).
+ *
+ * O CLT que também dirige cai no grupo dos motoristas, e ali estão diária,
+ * presença na obra e acertos: pagamento de PARCEIRO, que não existe pra quem
+ * recebe pela folha. A trava de regime que cortaria isso nasce desligada
+ * (ninguém perde nada sem o dono ver), então a tela SUGERE o grupo certo, com
+ * a lista de quem muda antes de aplicar.
+ *
+ * Some sozinha quando já existe regra pro CLT, ou quando o grupo dos
+ * motoristas não tem nada que seja só de parceiro.
+ */
+function SugestaoClt({ painel }: { painel: PainelAcessoApp }) {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const [simulacao, setSimulacao] = useState<Simulacao | null>(null);
+  const [rascunho, setRascunho] = useState<{ id: string; regras: Regra[] } | null>(null);
+  const { temPermissao } = usePermissoes();
+
+  const padrao = painel.perfis.find((p) => p.id === painel.perfilPadraoMotoristaId);
+  const soDeParceiro = CAPACIDADES_APP.filter((c) => c.regimesProibidos?.includes("EMPREGADO"));
+  const tira = soDeParceiro.filter((c) => padrao?.capacidades.includes(c.chave));
+  const jaTemRegra = painel.regras.some((r) => r.ativo && r.regime === "EMPREGADO");
+  if (!padrao || !tira.length || jaTemRegra || !temPermissao("perfis-acesso.criar")) return null;
+
+  const capacidades = padrao.capacidades.filter((c) => !tira.some((t) => t.chave === c));
+  const NOME = `${padrao.nome} CLT`;
+  const regraDoClt = (perfilId: string): Regra => ({
+    nome: "CLT que dirige",
+    ativo: true,
+    vinculo: "MOTORISTA",
+    regime: "EMPREGADO",
+    modalidadeId: null,
+    transportadoraId: null,
+    perfilId,
+  });
+  const regrasAtuais = painel.regras.map(({ ordem: _o, ...r }) => r);
+
+  async function ver() {
+    const id = crypto.randomUUID();
+    // A regra nova vai PRIMEIRO: ela é mais específica que qualquer outra.
+    const regras = [regraDoClt(id), ...regrasAtuais];
+    try {
+      setSimulacao(
+        await fetchApi<Simulacao>("/admin/acesso-app/simular", {
+          method: "POST",
+          token,
+          body: JSON.stringify({ perfil: { id, capacidades, ativo: true }, regras }),
+        }),
+      );
+      setRascunho({ id, regras });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <Card className="border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
+      <p className="text-sm">
+        <strong>O CLT que dirige</strong> entra hoje em <strong>{padrao.nome}</strong>, e ali tem{" "}
+        {tira.map((c) => c.label.toLowerCase()).join(", ")}. Isso é pagamento de parceiro: não faz
+        sentido pra quem recebe pela folha.
+      </p>
+      <Button className="mt-3" variant="outline" size="sm" onClick={ver}>
+        Criar o grupo “{NOME}” sem esses itens
+      </Button>
+      {simulacao && rascunho && (
+        <ConfirmarMudanca
+          titulo={`Criar “${NOME}” pro CLT que dirige`}
+          simulacao={simulacao}
+          onCancelar={() => {
+            setSimulacao(null);
+            setRascunho(null);
+          }}
+          onConfirmar={async () => {
+            try {
+              const criado = await fetchApi<{ id: string }>("/admin/acesso-app/perfis", {
+                method: "POST",
+                token,
+                body: JSON.stringify({
+                  nome: NOME,
+                  descricao: "O motorista registrado em carteira: dirige e lança, sem o que é pagamento de parceiro.",
+                  capacidades,
+                }),
+              });
+              await fetchApi("/admin/acesso-app/regras", {
+                method: "PUT",
+                token,
+                body: JSON.stringify({ regras: [regraDoClt(criado.id), ...regrasAtuais] }),
+              });
+              toast.success(`Pronto: o CLT que dirige agora entra em “${NOME}”.`);
+              setSimulacao(null);
+              setRascunho(null);
+              void qc.invalidateQueries({ queryKey: CHAVE_PAINEL });
+            } catch (e) {
+              toast.error((e as Error).message);
+            }
+          }}
+        />
+      )}
+    </Card>
   );
 }

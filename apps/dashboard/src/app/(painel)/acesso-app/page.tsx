@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
+import { ChevronDown, ChevronRight, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { CAPACIDADE_POR_CHAVE, type CapacidadeApp } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
@@ -18,22 +18,27 @@ import { LoadingCard } from "@/components/loading";
 import { ErroCard } from "@/components/erro-estado";
 import { Permitido, RequerTela } from "@/components/requer-tela";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
-import { AbaExcecoes, type FiltroExcecoes } from "./_components/excecoes";
-import { AbaPerfis } from "./_components/perfis";
+import { PessoasDiferentes } from "./_components/excecoes";
+import { Grupos } from "./_components/perfis";
 import { AbaPlataforma } from "./_components/plataforma";
-import { AbaQuemRecebe } from "./_components/quem-recebe";
+import { QuemEntra } from "./_components/quem-recebe";
 import { CHAVE_PAINEL, type PainelAcessoApp } from "./_components/tipos";
 
-type Aba = "perfis" | "quem-recebe" | "excecoes" | "plataforma";
-
 /**
- * ACESSO AO APP — quem vê o quê no celular, configurado aqui e não mais
- * pessoa por pessoa.
+ * ACESSO AO APP — o que aparece no celular de cada pessoa.
  *
- * O desenho está em `docs/acesso-app-desenho.md`. A frase que resume: a
- * empresa diz quem recebe o quê; o sistema calcula o acesso de cada pessoa
- * pelo que já sabe dela; o contrato e a lei cortam por cima; e quando precisa
- * de exceção, ela tem motivo e autor.
+ * ⚠️ Lida de cima pra baixo, na ordem da pergunta de quem abre a tela:
+ * 1. Quais GRUPOS existem e o que cada um vê.
+ * 2. QUEM ENTRA em cada grupo (em frase; as regras especiais ficam ali dentro).
+ * 3. Quem tem ALGO DIFERENTE do grupo, e por quê.
+ *
+ * A versão anterior (abas "Perfis / Quem recebe / Exceções / Plataforma", faixas
+ * de "sombra" e "diferenças herdadas") era o motor à mostra, e o dono, vendo em
+ * produção, disse que não entendeu nada. O mecanismo segue igual por baixo; a
+ * tela fala a língua de quem configura. O que é da PLATAFORMA (travas, sombra,
+ * liberações) fica num bloco recolhido no fim, que só a plataforma vê.
+ *
+ * Desenho do motor: `docs/acesso-app-desenho.md`.
  */
 export default function AcessoAppPage() {
   return (
@@ -45,130 +50,66 @@ export default function AcessoAppPage() {
 
 function Conteudo() {
   const painel = useApiQuery<PainelAcessoApp>("/admin/acesso-app");
-  const [aba, setAba] = useState<Aba>("perfis");
-  // Os avisos abrem a aba de exceções já filtrada; a `key` recria a aba com o filtro.
-  const [filtroExcecoes, setFiltroExcecoes] = useState<FiltroExcecoes & { n: number }>({ n: 0 });
-  const verExcecoes = (f: FiltroExcecoes) => {
-    setFiltroExcecoes((x) => ({ ...f, n: x.n + 1 }));
-    setAba("excecoes");
-  };
 
   if (painel.isLoading) return <LoadingCard />;
   if (painel.error || !painel.data) {
     return <ErroCard erro={painel.error} onRetry={() => painel.refetch()} />;
   }
   const p = painel.data;
-  const herdadas = p.excecoes.MIGRACAO ?? 0;
-
-  const abas: { id: Aba; label: string }[] = [
-    { id: "perfis", label: "Perfis" },
-    { id: "quem-recebe", label: "Quem recebe" },
-    { id: "excecoes", label: `Exceções${herdadas + (p.excecoes.MANUAL ?? 0) ? ` (${herdadas + (p.excecoes.MANUAL ?? 0)})` : ""}` },
-    ...(p.plataforma ? [{ id: "plataforma" as const, label: "Plataforma" }] : []),
-  ];
+  const porGrupos = p.fonte === "REGRAS";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Acesso ao app</h1>
-        <p className="text-sm text-muted-foreground">
-          O que cada pessoa vê no celular. Você diz quem recebe qual perfil; o sistema aplica pra
-          todo mundo, e a exceção de uma pessoa só fica na ficha dela, com motivo.
-        </p>
+        <p className="text-sm text-muted-foreground">O que aparece no celular de cada pessoa.</p>
       </div>
 
-      {p.fonte === "COLUNAS" && <BannerEspelho painel={p} />}
+      {!porGrupos && <PassarParaGrupos />}
 
       {!!p.espelho.divergencias && (
         <Card className="flex items-start gap-3 border-destructive/40 bg-destructive/5 p-4">
           <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
           <p className="text-sm">
-            O cálculo não conseguiu reproduzir a ficha de {p.espelho.divergencias} pessoa(s) e{" "}
-            <strong>nada foi alterado</strong>. É defeito nosso — avise o suporte.
+            Não conseguimos montar os grupos a partir das fichas de {p.espelho.divergencias} pessoa(s),
+            e <strong>nada foi alterado</strong>. É defeito nosso: avise o suporte.
           </p>
         </Card>
       )}
 
-      {p.sombra.length > 0 && <BannerSombra painel={p} />}
+      <Grupos painel={p} />
+      <QuemEntra key={`q${p.versao}`} painel={p} />
+      <PessoasDiferentes painel={p} />
 
-      {p.fonte === "REGRAS" && (herdadas > 0 || p.excecoesVencendo > 0) && (
-        <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4 text-sm">
-          {/* ⚠️ As herdadas NÃO vencem (decisão do dono): o aviso é pra revisar
-              quando quiser, não uma contagem regressiva. */}
-          {herdadas > 0 && (
-            <span>
-              <strong>{herdadas}</strong> diferença(s) herdada(s) da ficha antiga, pra revisar quando
-              quiser.{" "}
-              <button type="button" className="underline" onClick={() => verExcecoes({ origem: "MIGRACAO" })}>
-                Ver
-              </button>
-            </span>
-          )}
-          {p.excecoesVencendo > 0 && (
-            <span>
-              <strong>{p.excecoesVencendo}</strong> exceção(ões) vencem nos próximos 7 dias: no
-              vencimento a pessoa volta ao perfil sozinha.{" "}
-              <button type="button" className="underline" onClick={() => verExcecoes({ prazo: "vencendo" })}>
-                Ver
-              </button>
-            </span>
-          )}
-        </Card>
-      )}
-
-      <div className="flex flex-wrap gap-1 border-b border-border">
-        {abas.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            onClick={() => setAba(a.id)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-              aba === a.id
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {a.label}
-          </button>
-        ))}
-      </div>
-
-      {aba === "perfis" && <AbaPerfis painel={p} />}
-      {aba === "quem-recebe" && <AbaQuemRecebe key={p.versao} painel={p} />}
-      {aba === "excecoes" && (
-        <AbaExcecoes key={filtroExcecoes.n} painel={p} inicial={filtroExcecoes} />
-      )}
-      {aba === "plataforma" && p.plataforma && <AbaPlataforma key={p.versao} painel={p} />}
+      {p.plataforma && <ControlesDaPlataforma painel={p} />}
     </div>
   );
 }
 
 /**
- * Enquanto a empresa segue a ficha: o que se vê aqui é o ESPELHO dela, e o
- * caminho é passar pras regras — conferido pessoa por pessoa, sem mudar nada.
+ * Enquanto a empresa liga os acessos na ficha de cada motorista, a tela
+ * mostra os grupos que essas fichas formam — e oferece passar a configurar
+ * por aqui. Conferido pessoa por pessoa; ninguém perde nada.
  */
-function BannerEspelho({ painel }: { painel: PainelAcessoApp }) {
+function PassarParaGrupos() {
   const token = useAuthToken();
   const qc = useQueryClient();
   const [confirmando, setConfirmando] = useState(false);
   const [passando, setPassando] = useState(false);
-  const herdadas = painel.excecoes.MIGRACAO ?? 0;
 
   return (
-    <Card className="border-blue-300 bg-blue-50/60 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <Card className="border-blue-300 bg-blue-50/60 p-5 dark:border-blue-900 dark:bg-blue-950/30">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="max-w-2xl space-y-1 text-sm">
-          <p className="font-semibold">Hoje, quem manda é a ficha de cada motorista.</p>
+          <p className="font-semibold">Hoje você liga os acessos motorista por motorista, na ficha de cada um.</p>
           <p className="text-muted-foreground">
-            O que você vê abaixo é o espelho dela: o perfil que a maioria tem, mais{" "}
-            <strong>{herdadas}</strong> diferença(s) de quem tem algo a mais ou a menos. Pra
-            configurar por aqui, passe a empresa pras regras. <strong>Não muda nada pra
-            ninguém</strong>: conferimos pessoa por pessoa antes de virar, e as diferenças de hoje
-            ficam guardadas, sem prazo pra vencer.
+            Abaixo estão os grupos que essas fichas já formam. Organizando por aqui, motorista novo
+            já entra no grupo certo e você muda todo mundo de uma vez.{" "}
+            <strong className="text-foreground">Ninguém perde nada na troca.</strong>
           </p>
         </div>
         <Permitido chave="perfis-acesso.editar">
-          <Button onClick={() => setConfirmando(true)}>Configurar por aqui</Button>
+          <Button onClick={() => setConfirmando(true)}>Organizar por grupos</Button>
         </Permitido>
       </div>
 
@@ -176,22 +117,13 @@ function BannerEspelho({ painel }: { painel: PainelAcessoApp }) {
         <Dialog open onOpenChange={(o) => !o && setConfirmando(false)}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Passar a configurar o acesso por aqui</DialogTitle>
+              <DialogTitle>Organizar o acesso por grupos</DialogTitle>
             </DialogHeader>
             <div className="space-y-2 text-sm">
-              <p className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                Ninguém ganha nem perde nada agora — o sistema confere antes e, se não bater, não
-                vira.
-              </p>
-              <p className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                As {herdadas} diferença(s) de hoje viram exceções com motivo, sem prazo.
-              </p>
-              <p className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                Depois disso, os interruptores da ficha do motorista saem: mudar pra uma pessoa só
-                passa a ser uma exceção com motivo.
+              <p>Cada pessoa continua vendo exatamente o que vê hoje. A gente confere antes; se algo não bater, não muda nada.</p>
+              <p>
+                Depois disso, as chavinhas de acesso saem da ficha do motorista. Pra mudar uma pessoa
+                só, você usa “Dar ou tirar algo só dele”, na ficha dela.
               </p>
             </div>
             <DialogFooter>
@@ -205,7 +137,7 @@ function BannerEspelho({ painel }: { painel: PainelAcessoApp }) {
                   setPassando(true);
                   try {
                     await fetchApi("/admin/acesso-app/passar-para-regras", { method: "POST", token });
-                    toast.success("Pronto. A empresa agora configura o acesso por aqui.");
+                    toast.success("Pronto. O acesso agora é organizado por grupos.");
                     setConfirmando(false);
                     void qc.invalidateQueries({ queryKey: CHAVE_PAINEL });
                   } catch (e) {
@@ -215,7 +147,7 @@ function BannerEspelho({ painel }: { painel: PainelAcessoApp }) {
                   }
                 }}
               >
-                {passando ? "Conferindo…" : "Passar a configurar por aqui"}
+                {passando ? "Conferindo…" : "Organizar por grupos"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -225,34 +157,44 @@ function BannerEspelho({ painel }: { painel: PainelAcessoApp }) {
   );
 }
 
-/** "Se as travas valessem, N pessoas perderiam X" — informa, não impede. */
-function BannerSombra({ painel }: { painel: PainelAcessoApp }) {
+/**
+ * SÓ A PLATAFORMA VÊ: as travas, o que ainda não corta ("sombra") e as
+ * liberações. Recolhido de propósito: não é o que se configura no dia a dia,
+ * e é justamente o que deixava a tela incompreensível.
+ */
+function ControlesDaPlataforma({ painel }: { painel: PainelAcessoApp }) {
   const [aberto, setAberto] = useState(false);
   const total = painel.sombra.reduce((s, x) => s + x.pessoas, 0);
   return (
-    <Card className="p-4">
-      <button type="button" className="flex w-full items-start gap-3 text-left" onClick={() => setAberto((v) => !v)}>
-        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-        <div className="text-sm">
-          <p className="font-medium">
-            Há {total} acesso(s) que hoje valem só porque algumas travas estão em aviso.
-          </p>
-          <p className="text-muted-foreground">
-            Nada é tirado de ninguém enquanto a plataforma não ligar a trava.{" "}
-            {aberto ? "Esconder" : "Ver quais"}
-          </p>
-        </div>
+    <section className="border-t border-border pt-6">
+      <button
+        type="button"
+        className="flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+        onClick={() => setAberto((v) => !v)}
+      >
+        {aberto ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        Controles da plataforma (só você vê)
       </button>
       {aberto && (
-        <ul className="mt-3 space-y-1 pl-8 text-sm">
-          {painel.sombra.map((s) => (
-            <li key={s.capacidade}>
-              {CAPACIDADE_POR_CHAVE[s.capacidade as CapacidadeApp]?.label ?? s.capacidade}:{" "}
-              <strong>{s.pessoas}</strong> pessoa(s)
-            </li>
-          ))}
-        </ul>
+        <div className="mt-4 space-y-4">
+          {total > 0 && (
+            <Card className="p-4 text-sm">
+              <p className="font-medium">
+                {total} acesso(s) que cortariam se as travas desta empresa fossem ligadas:
+              </p>
+              <ul className="mt-2 space-y-0.5 pl-4 text-muted-foreground">
+                {painel.sombra.map((s) => (
+                  <li key={s.capacidade}>
+                    {CAPACIDADE_POR_CHAVE[s.capacidade as CapacidadeApp]?.label ?? s.capacidade}:{" "}
+                    {s.pessoas} pessoa(s)
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+          <AbaPlataforma key={painel.versao} painel={painel} />
+        </div>
       )}
-    </Card>
+    </section>
   );
 }

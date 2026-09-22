@@ -22,6 +22,8 @@ import { comLockDeCron } from "../cron-exclusivo";
 import { soDigitos } from "../regime-vigente";
 import {
   MOTIVO_ESPELHO,
+  NOMES_ANTIGOS_HERDADOS,
+  PERFIS_HERDADOS,
   PERFIL_HERDADO_FUNCIONARIO,
   PERFIL_HERDADO_MOTORISTA,
   capacidadesDoRegistradoHerdado,
@@ -663,7 +665,7 @@ export class AcessoAppService {
               colunas: colunasDe(m),
             })),
             perfisAntes
-              .filter((p) => p.nome !== PERFIL_HERDADO_MOTORISTA && p.nome !== PERFIL_HERDADO_FUNCIONARIO)
+              .filter((p) => !PERFIS_HERDADOS.includes(p.nome))
               .map((p) => ({ id: p.id, colunas: colunasDe(p) })),
             PADRAO_DO_BANCO,
           );
@@ -672,12 +674,19 @@ export class AcessoAppService {
           for (const [id, caps] of plano.perfis) {
             await tx.perfilAcessoApp.update({ where: { id }, data: { capacidades: caps } });
           }
-          // Os dois perfis herdados.
+          // Os dois grupos herdados. Reconhecidos primeiro pelo que a empresa
+          // já usa como padrão (o id), pra nunca tomar conta de um perfil que
+          // ela mesma criou com o mesmo nome.
+          const cfgAntes = await tx.configuracaoAcessoApp.findUnique({
+            where: { contaId },
+            select: { perfilPadraoMotoristaId: true, perfilPadraoFuncionarioId: true },
+          });
           const herdadoM = await this.perfilHerdado(tx, PERFIL_HERDADO_MOTORISTA, plano.padrao,
-            "O que a maioria dos motoristas tinha na ficha. Editável como qualquer perfil.");
+            "O que o motorista vê no celular.", cfgAntes?.perfilPadraoMotoristaId ?? null);
           const herdadoF = await this.perfilHerdado(tx, PERFIL_HERDADO_FUNCIONARIO,
             capacidadesDoRegistradoHerdado(),
-            "O que todo registrado em carteira tem no app: o ponto e os documentos que a empresa pedir.");
+            "O que quem é registrado em carteira vê no celular: o ponto e os documentos.",
+            cfgAntes?.perfilPadraoFuncionarioId ?? null);
           await tx.configuracaoAcessoApp.update({
             where: { contaId },
             data: { perfilPadraoMotoristaId: herdadoM, perfilPadraoFuncionarioId: herdadoF },
@@ -743,25 +752,58 @@ export class AcessoAppService {
     }
   }
 
+  /**
+   * O grupo herdado (Motoristas / Registrados), criado ou atualizado.
+   *
+   * Reconhecido, nesta ordem: pelo id que a empresa já usa como padrão; pelo
+   * nome antigo ("... (herdado)"); pelo nome atual. Só renomeia pro nome atual
+   * se ninguém mais o usa: um perfil que a EMPRESA criou chamado "Motoristas"
+   * nunca é tomado nem sobrescrito — nesse caso o do sistema fica com
+   * "(padrão)" no fim.
+   */
   private async perfilHerdado(
     tx: Tx,
     nome: string,
     capacidades: CapacidadeApp[],
     descricao: string,
+    idAtual: string | null,
   ): Promise<string> {
-    const existe = await tx.perfilAcessoApp.findFirst({ where: { nome }, select: { id: true } });
-    if (existe) {
-      // A descrição vai junto: enquanto a empresa segue a ficha, este perfil é
+    const antigo = NOMES_ANTIGOS_HERDADOS[nome];
+    const ocupadoPorOutro = async (id: string | null) =>
+      (await tx.perfilAcessoApp.findFirst({
+        where: { nome, ...(id ? { id: { not: id } } : {}) },
+        select: { id: true },
+      })) !== null;
+
+    let existente: { id: string; nome: string } | null = null;
+    if (idAtual) {
+      existente = await tx.perfilAcessoApp.findFirst({ where: { id: idAtual }, select: { id: true, nome: true } });
+      // Padrão que a empresa trocou por um perfil DELA não é o herdado.
+      if (existente && existente.nome !== nome && existente.nome !== antigo && !existente.nome.startsWith(`${nome} (`)) {
+        existente = null;
+      }
+    }
+    if (!existente && antigo) {
+      existente = await tx.perfilAcessoApp.findFirst({ where: { nome: antigo }, select: { id: true, nome: true } });
+    }
+    if (!existente && !(await ocupadoPorOutro(null))) {
+      existente = await tx.perfilAcessoApp.findFirst({ where: { nome }, select: { id: true, nome: true } });
+    }
+
+    if (existente) {
+      const nomeFinal = (await ocupadoPorOutro(existente.id)) ? existente.nome : nome;
+      // A descrição vai junto: enquanto a empresa segue a ficha, este grupo é
       // do sistema, e o texto tem que dizer o que ele dá HOJE. Nas regras o
       // espelho não roda, e o que alguém escreveu à mão fica.
       await tx.perfilAcessoApp.update({
-        where: { id: existe.id },
-        data: { capacidades, descricao, ativo: true },
+        where: { id: existente.id },
+        data: { nome: nomeFinal, capacidades, descricao, ativo: true },
       });
-      return existe.id;
+      return existente.id;
     }
+    const nomeNovo = (await ocupadoPorOutro(null)) ? `${nome} (padrão)` : nome;
     const p = await tx.perfilAcessoApp.create({
-      data: { nome, descricao, capacidades },
+      data: { nome: nomeNovo, descricao, capacidades },
       select: { id: true },
     });
     return p.id;

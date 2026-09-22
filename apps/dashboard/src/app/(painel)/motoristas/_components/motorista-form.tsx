@@ -906,21 +906,17 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
         <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
           {previaAcesso.base ? (
             <>
-              Vai entrar no app como{" "}
-              <strong className="text-foreground">{previaAcesso.base.perfilNome}</strong>
-              {previaAcesso.base.via === "REGRA"
-                ? ` (pela regra "${previaAcesso.base.regraNome}")`
-                : " (o padrão da empresa)"}
-              .
+              No app, ele entra no grupo{" "}
+              <strong className="text-foreground">{previaAcesso.base.perfilNome}</strong>.
             </>
           ) : (
-            <>Nenhuma regra alcança este cadastro e a empresa não tem padrão: ele entra sem acesso nenhum no app.</>
+            <>Ele entra sem nenhum grupo: só o básico do app.</>
           )}{" "}
-          Quem decide isso são as regras em{" "}
+          Os grupos ficam em{" "}
           <Link href="/acesso-app" className="underline">
             Acesso ao app
           </Link>
-          ; depois de salvar, a diferença só dele vira exceção na ficha.
+          .
         </p>
       )}
 

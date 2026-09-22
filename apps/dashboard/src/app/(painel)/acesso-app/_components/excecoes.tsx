@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CAPACIDADE_POR_CHAVE, type CapacidadeApp } from "@ronan/shared-types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -17,8 +16,6 @@ import {
 } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { LoadingCard } from "@/components/loading";
-import { ErroCard } from "@/components/erro-estado";
 import { usePermissoes } from "@/lib/permissoes";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { CHAVE_PAINEL, type PainelAcessoApp } from "./tipos";
@@ -36,119 +33,123 @@ export type ExcecaoApp = {
 };
 
 const fmt = (d: string) => new Date(d).toLocaleDateString("pt-BR");
+export const rotuloCapacidade = (c: string) => CAPACIDADE_POR_CHAVE[c as CapacidadeApp]?.label ?? c;
+
+/** "também vê Iniciar viagem com GPS" / "não vê Ver os acertos". */
+export function fraseDaDiferenca(e: Pick<ExcecaoApp, "efeito" | "capacidade">) {
+  return `${e.efeito === "CONCEDER" ? "também vê" : "não vê"} ${rotuloCapacidade(e.capacidade)}`;
+}
 
 /**
- * AS EXCEÇÕES VIVAS — quem tem algo diferente do perfil, e por quê.
+ * 3. QUEM TEM ALGO DIFERENTE DO GRUPO, e por quê.
  *
- * ⚠️ As herdadas (origem MIGRACAO) são o presente congelado: o que cada ficha
- * dizia quando a empresa passou pras regras. Por decisão do dono elas NÃO
- * vencem. Ficam aqui, filtráveis, pra alguém revisar quando quiser.
+ * Só aparece quando há alguém: lista vazia não precisa de seção. Pra dar ou
+ * tirar algo de uma pessoa, o caminho é a ficha dela; aqui é a visão de todas.
+ *
+ * As que vieram da ficha antiga não vencem (decisão do dono): ficam aqui pra
+ * alguém revisar quando quiser, com o motivo "Já era assim na ficha dele".
  */
-export type FiltroExcecoes = { origem?: string; prazo?: string };
+export function PessoasDiferentes({ painel }: { painel: PainelAcessoApp }) {
+  const total = Object.values(painel.excecoes).reduce((s, n) => s + n, 0);
+  const [prazo, setPrazo] = useState("");
+  const lista = useApiQuery<ExcecaoApp[]>(
+    total > 0 ? `/admin/acesso-app/excecoes${prazo ? `?prazo=${prazo}` : ""}` : undefined,
+  );
+  const [todas, setTodas] = useState(false);
 
-export function AbaExcecoes({ painel, inicial }: { painel: PainelAcessoApp; inicial?: FiltroExcecoes }) {
-  const [origem, setOrigem] = useState(inicial?.origem ?? "");
-  const [prazo, setPrazo] = useState(inicial?.prazo ?? "");
-  const qs = new URLSearchParams({ ...(origem ? { origem } : {}), ...(prazo ? { prazo } : {}) }).toString();
-  const lista = useApiQuery<ExcecaoApp[]>(`/admin/acesso-app/excecoes${qs ? `?${qs}` : ""}`);
-  const [revogando, setRevogando] = useState<ExcecaoApp | null>(null);
-  const { temPermissao } = usePermissoes();
-  const podeRevogar = painel.fonte === "REGRAS" && temPermissao("perfis-acesso.aplicar");
+  if (total === 0) return null;
+
+  // UMA LINHA POR PESSOA, não por item: "Adilson também vê GPS, pedágio e
+  // ticket" se lê de relance; nove linhas do mesmo Adilson, não.
+  const porPessoa = new Map<string, { cpf: string; nome: string; motoristaId?: string; tem: string[]; naoTem: string[]; motivos: Set<string> }>();
+  for (const e of lista.data ?? []) {
+    const p = porPessoa.get(e.cpf) ?? {
+      cpf: e.cpf,
+      nome: e.pessoa?.nome ?? e.cpf,
+      motoristaId: e.pessoa?.motoristaId,
+      tem: [],
+      naoTem: [],
+      motivos: new Set<string>(),
+    };
+    (e.efeito === "CONCEDER" ? p.tem : p.naoTem).push(
+      rotuloCapacidade(e.capacidade) + (e.expiraEm ? ` (até ${fmt(e.expiraEm)})` : ""),
+    );
+    p.motivos.add(e.motivo);
+    porPessoa.set(e.cpf, p);
+  }
+  const linhas = [...porPessoa.values()].sort((a, b) => a.nome.localeCompare(b.nome));
+  const visiveis = todas ? linhas : linhas.slice(0, 8);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Pra dar ou tirar algo de uma pessoa só, abra a ficha dela. Aqui fica a lista de todas.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Select className="w-56" value={origem} onChange={(e) => setOrigem(e.target.value)}>
-            <option value="">De qualquer origem</option>
-            <option value="MIGRACAO">Herdadas da ficha antiga</option>
-            <option value="MANUAL">Abertas à mão</option>
-          </Select>
-          <Select className="w-56" value={prazo} onChange={(e) => setPrazo(e.target.value)}>
-            <option value="">Com ou sem prazo</option>
-            <option value="vencendo">Vencem em 7 dias</option>
-            <option value="sem">Sem prazo</option>
-          </Select>
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Quem tem algo diferente do grupo</h2>
+          <p className="text-sm text-muted-foreground">
+            Pra dar ou tirar algo de uma pessoa só, abra a ficha dela.
+          </p>
         </div>
+        {(painel.excecoesVencendo > 0 || total > 8) && (
+          <Select className="w-48" value={prazo} onChange={(e) => setPrazo(e.target.value)}>
+            <option value="">Todas</option>
+            <option value="vencendo">Acabam em 7 dias</option>
+          </Select>
+        )}
       </div>
 
-      {lista.isLoading && <LoadingCard />}
-      {lista.error && <ErroCard erro={lista.error} onRetry={() => lista.refetch()} />}
-      {lista.data?.length === 0 && (
-        <Card className="p-6 text-center text-sm text-muted-foreground">
-          {origem || prazo
-            ? "Nenhuma exceção com esse filtro."
-            : "Nenhuma exceção: todo mundo tem exatamente o que o perfil dá."}
-        </Card>
-      )}
-      {!!lista.data?.length && (
-        <Card className="divide-y divide-border">
-          {lista.data.map((e) => (
-            <div key={e.id} className="flex flex-wrap items-start justify-between gap-3 p-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm">
-                  {e.pessoa?.motoristaId ? (
-                    <Link href={`/motoristas/${e.pessoa.motoristaId}`} className="font-medium hover:underline">
-                      {e.pessoa.nome}
-                    </Link>
-                  ) : (
-                    <span className="font-medium">{e.pessoa?.nome ?? e.cpf}</span>
-                  )}{" "}
-                  {e.efeito === "CONCEDER" ? (
-                    <Badge className="border-emerald-300 bg-emerald-50 text-emerald-700">ganha</Badge>
-                  ) : (
-                    <Badge className="border-amber-300 bg-amber-50 text-amber-800">não tem</Badge>
-                  )}{" "}
-                  <strong>{CAPACIDADE_POR_CHAVE[e.capacidade as CapacidadeApp]?.label ?? e.capacidade}</strong>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  “{e.motivo}” · desde {fmt(e.criadoEm)}
-                  {e.expiraEm ? ` · até ${fmt(e.expiraEm)}` : " · sem prazo"}
-                  {e.origem === "MIGRACAO" && " · herdada"}
-                </p>
-              </div>
-              {podeRevogar && (
-                <Button variant="outline" size="sm" onClick={() => setRevogando(e)}>
-                  Voltar ao perfil
-                </Button>
-              )}
+      <Card className="divide-y divide-border">
+        {lista.data?.length === 0 && (
+          <p className="p-3 text-sm text-muted-foreground">Ninguém com esse filtro.</p>
+        )}
+        {visiveis.map((p) => (
+          <div key={p.cpf} className="flex flex-wrap items-center justify-between gap-3 p-3">
+            <div className="min-w-0 flex-1 text-sm">
+              <p className="font-medium">{p.nome}</p>
+              {p.tem.length > 0 && <p className="text-emerald-800 dark:text-emerald-300">Também vê: {p.tem.join(", ")}</p>}
+              {p.naoTem.length > 0 && <p className="text-amber-800 dark:text-amber-300">Não vê: {p.naoTem.join(", ")}</p>}
+              <p className="text-xs text-muted-foreground">“{[...p.motivos].join("” · “")}”</p>
             </div>
-          ))}
-        </Card>
+            <Link href={p.motoristaId ? `/motoristas/${p.motoristaId}` : "/ponto/funcionarios"}>
+              <Button variant="outline" size="sm">
+                Abrir ficha
+              </Button>
+            </Link>
+          </div>
+        ))}
+      </Card>
+      {linhas.length > visiveis.length && (
+        <Button variant="ghost" size="sm" onClick={() => setTodas(true)}>
+          Ver todas as {linhas.length} pessoas
+        </Button>
       )}
-
-      {revogando && <RevogarExcecao excecao={revogando} onFechar={() => setRevogando(null)} />}
-    </div>
+    </section>
   );
 }
 
+/** Desfaz a diferença: a pessoa volta a ter exatamente o que o grupo dela dá. */
 export function RevogarExcecao({ excecao, onFechar }: { excecao: ExcecaoApp; onFechar: () => void }) {
   const token = useAuthToken();
   const qc = useQueryClient();
   const [motivo, setMotivo] = useState("");
   const [salvando, setSalvando] = useState(false);
-  const cap = CAPACIDADE_POR_CHAVE[excecao.capacidade as CapacidadeApp]?.label ?? excecao.capacidade;
+  const cap = rotuloCapacidade(excecao.capacidade);
   const perde = excecao.efeito === "CONCEDER";
 
   return (
     <Dialog open onOpenChange={(o) => !o && onFechar()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Voltar ao perfil</DialogTitle>
+          <DialogTitle>Desfazer: {cap}</DialogTitle>
         </DialogHeader>
         <p className="text-sm">
-          {excecao.pessoa?.nome ?? "A pessoa"} passa a ter o que o perfil dela dá em{" "}
-          <strong>{cap}</strong>
-          {perde ? " — se o perfil não dá, ela perde isso no celular." : "."}
+          {excecao.pessoa?.nome ?? "A pessoa"} volta a ter o que o grupo dela dá.
+          {perde && ` Se o grupo não tem “${cap}”, isso some do celular dela.`}
         </p>
         <Textarea
-          rows={3}
+          rows={2}
           value={motivo}
           onChange={(e) => setMotivo(e.target.value)}
-          placeholder="Por que a exceção acabou (quem ler daqui a seis meses precisa entender)"
+          placeholder="Por quê? (fica registrado)"
         />
         <DialogFooter>
           <Button variant="outline" onClick={onFechar}>
@@ -165,7 +166,7 @@ export function RevogarExcecao({ excecao, onFechar }: { excecao: ExcecaoApp; onF
                   token,
                   body: JSON.stringify({ motivo }),
                 });
-                toast.success("Pronto: voltou ao perfil.");
+                toast.success("Pronto: voltou a ser igual ao grupo.");
                 void qc.invalidateQueries();
                 onFechar();
               } catch (e) {
@@ -175,7 +176,7 @@ export function RevogarExcecao({ excecao, onFechar }: { excecao: ExcecaoApp; onF
               }
             }}
           >
-            Voltar ao perfil
+            Desfazer
           </Button>
         </DialogFooter>
       </DialogContent>

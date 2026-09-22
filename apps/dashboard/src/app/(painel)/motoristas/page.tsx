@@ -106,7 +106,7 @@ function AcessoAppCell({ acesso }: { acesso: NonNullable<Motorista["acessoApp"]>
           className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300"
           title="Tem acesso diferente do perfil, com motivo — veja na ficha"
         >
-          {acesso.excecoes === 1 ? "1 exceção" : `${acesso.excecoes} exceções`}
+          {acesso.excecoes === 1 ? "1 item diferente" : `${acesso.excecoes} itens diferentes`}
         </span>
       )}
     </span>
@@ -595,7 +595,7 @@ export default function MotoristasPage() {
                   <Combobox
                     value={tableState.filters.acessoPerfilId}
                     onChange={(v) => tableState.setFilter("acessoPerfilId", v)}
-                    placeholder="Perfil do app"
+                    placeholder="Grupo do app"
                     options={painelAcesso.data.perfis.map((p) => ({ value: p.id, label: p.nome }))}
                   />
                 )}
@@ -603,9 +603,9 @@ export default function MotoristasPage() {
                   <Combobox
                     value={tableState.filters.acessoExcecao}
                     onChange={(v) => tableState.setFilter("acessoExcecao", v)}
-                    placeholder="Exceção no app"
+                    placeholder="Diferente do grupo"
                     showSearch={false}
-                    options={[{ value: "true", label: "Com exceção" }]}
+                    options={[{ value: "true", label: "Tem algo só dele" }]}
                   />
                 )}
               </>

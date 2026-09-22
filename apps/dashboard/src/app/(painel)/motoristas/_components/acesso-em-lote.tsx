@@ -53,7 +53,7 @@ export function AcessoEmLote({
         Dar ou tirar um acesso
       </Button>
       <Button size="sm" variant="outline" onClick={() => setAbrindo("fixar")}>
-        Fixar perfil
+        Mudar o grupo
       </Button>
       <Button size="sm" variant="ghost" className="ml-auto" onClick={onLimpar}>
         Desmarcar
@@ -144,7 +144,7 @@ function DialogExcecao({ ids, onFechar, onFeito }: { ids: string[]; onFechar: ()
             <Label>Vale até (opcional)</Label>
             <Input type="date" value={ate} onChange={(e) => setAte(e.target.value)} />
             <p className="mt-1 text-xs text-muted-foreground">
-              Sem data, vale até alguém tirar. Quem já tinha exceção nesse item fica com esta no lugar.
+              Sem data, vale até alguém desfazer.
             </p>
           </div>
         </div>
@@ -201,15 +201,15 @@ export function DialogFixar({
     <Dialog open onOpenChange={(o) => !o && onFechar()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{titulo ?? `Perfil de ${ids.length === 1 ? "1 motorista" : `${ids.length} motoristas`}`}</DialogTitle>
+          <DialogTitle>{titulo ?? `Grupo de ${ids.length === 1 ? "1 motorista" : `${ids.length} motoristas`}`}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Perfil fixado vence as regras: se amanhã a regra mudar, quem está fixado não muda junto.
-            Use pra quem as regras não descrevem bem.
+            Normalmente cada pessoa entra no grupo sozinha. Aqui você escolhe o grupo na mão, e ela
+            fica nele mesmo que isso mude depois.
           </p>
           <div>
-            <Label>Perfil</Label>
+            <Label>Grupo</Label>
             <Select value={perfilId} onChange={(e) => setPerfilId(e.target.value)}>
               <option value="">Escolha…</option>
               {perfis
@@ -219,7 +219,7 @@ export function DialogFixar({
                     {p.nome}
                   </option>
                 ))}
-              <option value={SOLTAR}>Nenhum: voltar a seguir as regras</option>
+              <option value={SOLTAR}>Voltar ao grupo automático</option>
             </Select>
           </div>
           <div>
@@ -228,7 +228,7 @@ export function DialogFixar({
               rows={3}
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Por que as regras não servem pra eles"
+              placeholder="Por quê? (fica registrado)"
             />
           </div>
         </div>
@@ -243,17 +243,17 @@ export function DialogFixar({
               aplicar(
                 "/admin/acesso-app/fixar",
                 { motoristaIds: ids, perfilId: soltar ? null : perfilId, motivo },
-                (n) => (soltar ? `${n} pessoa(s) voltaram a seguir as regras.` : `Perfil fixado em ${n} pessoa(s).`),
+                (n) => (soltar ? `${n} pessoa(s) voltaram ao grupo automático.` : `Grupo mudado pra ${n} pessoa(s).`),
               )
             }
           >
             {ids.length === 1
               ? soltar
-                ? "Voltar às regras"
-                : "Fixar perfil"
+                ? "Voltar ao automático"
+                : "Mudar o grupo"
               : soltar
-                ? `Devolver ${ids.length} às regras`
-                : `Fixar em ${ids.length}`}
+                ? `Voltar ${ids.length} ao automático`
+                : `Mudar ${ids.length}`}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -27,11 +27,16 @@ import { StatusToggle } from "@/components/status-toggle";
 import { Permitido } from "@/components/requer-tela";
 import { AppPreview } from "@/components/app-preview";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { pessoas, quemEntraNoGrupo } from "./frases";
 import { ConfirmarMudanca } from "./simulacao";
 import { CHAVE_PAINEL, type PainelAcessoApp, type PerfilApp, type Simulacao } from "./tipos";
 
-/** Os selos que dizem o que uma capacidade É, antes de alguém ligá-la. */
-export function SelosCapacidade({ def, contratado }: { def: CapacidadeAppDef; contratado?: boolean }) {
+/**
+ * Os selos de um item: só os que mudam a decisão de quem liga. "Custa" (cada
+ * uso entra na conta) e "só CLT" (ponto). O resto ("só muda a tela", "em
+ * liberação", "da plataforma") era mecanismo à mostra e confundia.
+ */
+export function SelosCapacidade({ def }: { def: CapacidadeAppDef }) {
   return (
     <>
       {def.custa && (
@@ -44,82 +49,60 @@ export function SelosCapacidade({ def, contratado }: { def: CapacidadeAppDef; co
         </span>
       )}
       {def.vinculo === "FUNCIONARIO" && (
-        <span className="rounded bg-blue-50 px-1 text-[10px] font-semibold text-blue-700">só registrado</span>
-      )}
-      {def.regimesProibidos?.includes("EMPREGADO") && (
-        <span
-          title="Quem é registrado em carteira não recebe isto: é de quem é parceiro"
-          className="rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-700"
-        >
-          só parceiro
-        </span>
-      )}
-      {def.gate === "SO_TELA" && (
-        <span
-          title="O servidor não barra: só aparece ou some da tela dele"
-          className="rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-600"
-        >
-          só muda a tela
-        </span>
-      )}
-      {def.tipo !== "EMPRESA" && (
-        <span
-          title="Liberado pela plataforma, empresa por empresa"
-          className="rounded bg-violet-50 px-1 text-[10px] font-semibold text-violet-700"
-        >
-          {def.tipo === "ROLLOUT" ? "em liberação" : "da plataforma"}
-        </span>
-      )}
-      {contratado === false && (
-        <span className="rounded bg-muted px-1 text-[10px] font-semibold text-muted-foreground">
-          módulo não contratado
-        </span>
+        <span className="rounded bg-blue-50 px-1 text-[10px] font-semibold text-blue-700">só CLT</span>
       )}
     </>
   );
 }
 
-export function AbaPerfis({ painel }: { painel: PainelAcessoApp }) {
+/** 1. OS GRUPOS: cada um diz quem entra, quantas pessoas tem e o que elas veem. */
+export function Grupos({ painel }: { painel: PainelAcessoApp }) {
   const [editando, setEditando] = useState<PerfilApp | "novo" | null>(null);
   const [vendo, setVendo] = useState<PerfilApp | null>(null);
   const regras = painel.fonte === "REGRAS";
 
-  const papelDo = (id: string) =>
-    id === painel.perfilPadraoMotoristaId
-      ? "Padrão de quem dirige"
-      : id === painel.perfilPadraoFuncionarioId
-        ? "Padrão de quem é só registrado"
-        : null;
+  // O grupo que é o destino padrão não pode ser desligado: "todo o resto"
+  // ficaria sem nada.
+  const ehPadrao = (id: string) =>
+    id === painel.perfilPadraoMotoristaId || id === painel.perfilPadraoFuncionarioId;
 
   return (
-    <div className="space-y-4">
-      {regras && (
-        <Permitido chave="perfis-acesso.criar">
-          <div className="flex justify-end">
-            <Button onClick={() => setEditando("novo")}>
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Grupos</h2>
+          <p className="text-sm text-muted-foreground">
+            Cada pessoa está num grupo, e o grupo decide o que aparece no celular dela.
+          </p>
+        </div>
+        {regras && (
+          <Permitido chave="perfis-acesso.criar">
+            <Button variant="outline" onClick={() => setEditando("novo")}>
               <Plus className="mr-2 h-4 w-4" />
-              Novo perfil
+              Novo grupo
             </Button>
-          </div>
-        </Permitido>
-      )}
+          </Permitido>
+        )}
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {painel.perfis.map((p) => {
-          const papel = papelDo(p.id);
+          const quem = quemEntraNoGrupo(painel, p.id);
           return (
             <Card key={p.id} className={`p-5 ${p.ativo ? "" : "opacity-60"}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="font-semibold">{p.nome}</h2>
+                    <h3 className="text-base font-semibold">{p.nome}</h3>
                     {!p.ativo && <Badge className="border-border text-muted-foreground">Desligado</Badge>}
-                    {papel && <Badge className="border-blue-300 bg-blue-50 text-blue-700">{papel}</Badge>}
                   </div>
-                  {p.descricao && <p className="mt-1 text-sm text-muted-foreground">{p.descricao}</p>}
-                  <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
                     <Users className="h-3.5 w-3.5" />
-                    {p.pessoas === 0 ? "Ninguém neste perfil" : p.pessoas === 1 ? "1 pessoa" : `${p.pessoas} pessoas`}
+                    {pessoas(p.pessoas)}
+                    {quem.length > 0 && <> · Quem entra: {quem.join("; ")}</>}
+                    {quem.length === 0 && p.ativo && (
+                      <> · {p.pessoas > 0 ? "Colocadas aqui na mão" : "Ninguém é mandado pra cá ainda"}</>
+                    )}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1">
@@ -133,14 +116,15 @@ export function AbaPerfis({ painel }: { painel: PainelAcessoApp }) {
                       </Button>
                     </Permitido>
                   )}
-                  {regras && !papel && (
+                  {regras && !ehPadrao(p.id) && (
                     <Permitido chave="perfis-acesso.excluir">
                       <DesligarPerfil perfil={p} />
                     </Permitido>
                   )}
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
+              <p className="mt-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Vê no app</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {CAPACIDADES_APP.filter((c) => p.capacidades.includes(c.chave)).map((c) => (
                   <Badge key={c.chave} className="border-border text-muted-foreground">
                     {c.label}
@@ -148,7 +132,7 @@ export function AbaPerfis({ painel }: { painel: PainelAcessoApp }) {
                 ))}
                 {p.capacidades.length === 0 && (
                   <span className="text-sm text-muted-foreground">
-                    Nenhum acesso — só entra no app e vê o que é dele.
+                    Só o básico: entra no app e vê o que é dele.
                   </span>
                 )}
               </div>
@@ -165,8 +149,7 @@ export function AbaPerfis({ painel }: { painel: PainelAcessoApp }) {
             </DialogHeader>
             <AppPreview capacidades={vendo.capacidades} />
             <p className="text-center text-xs text-muted-foreground">
-              Sem contar exceções e travas de cada pessoa. Pra ver uma pessoa de verdade, abra a
-              ficha dela.
+              É o celular de quem está neste grupo. Quem tem algo só dele aparece na própria ficha.
             </p>
           </DialogContent>
         </Dialog>
@@ -178,7 +161,7 @@ export function AbaPerfis({ painel }: { painel: PainelAcessoApp }) {
           onFechar={() => setEditando(null)}
         />
       )}
-    </div>
+    </section>
   );
 }
 
@@ -206,12 +189,12 @@ function DesligarPerfil({ perfil }: { perfil: PerfilApp }) {
 
   return (
     <>
-      <Button variant="ghost" size="sm" title={perfil.ativo ? "Desligar" : "Religar"} onClick={simular}>
+      <Button variant="ghost" size="sm" title={perfil.ativo ? "Desligar o grupo" : "Religar o grupo"} onClick={simular}>
         <Power className="h-4 w-4" />
       </Button>
       {simulacao && (
         <ConfirmarMudanca
-          titulo={`${alvo === "desligar" ? "Desligar" : "Religar"} ${perfil.nome}`}
+          titulo={`${alvo === "desligar" ? "Desligar o grupo" : "Religar o grupo"} ${perfil.nome}`}
           simulacao={simulacao}
           onCancelar={() => setSimulacao(null)}
           onConfirmar={async () => {
@@ -220,7 +203,7 @@ function DesligarPerfil({ perfil }: { perfil: PerfilApp }) {
                 perfil.ativo ? `/admin/acesso-app/perfis/${perfil.id}` : `/admin/acesso-app/perfis/${perfil.id}/religar`,
                 { method: perfil.ativo ? "DELETE" : "POST", token },
               );
-              toast.success(perfil.ativo ? "Perfil desligado." : "Perfil religado.");
+              toast.success(perfil.ativo ? "Grupo desligado." : "Grupo religado.");
               setSimulacao(null);
               void qc.invalidateQueries({ queryKey: CHAVE_PAINEL });
             } catch (e) {
@@ -253,7 +236,7 @@ function EditorPerfil({ perfil, onFechar }: { perfil: PerfilApp | null; onFechar
       token,
       body: JSON.stringify({ nome, descricao: descricao.trim() || null, capacidades }),
     });
-    toast.success("Perfil salvo.");
+    toast.success("Grupo salvo.");
     void qc.invalidateQueries({ queryKey: CHAVE_PAINEL });
     onFechar();
   }
@@ -301,23 +284,24 @@ function EditorPerfil({ perfil, onFechar }: { perfil: PerfilApp | null; onFechar
     <Dialog open onOpenChange={(o) => !o && onFechar()}>
       <DialogContent className="max-h-[88vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{perfil ? `Editar ${perfil.nome}` : "Novo perfil"}</DialogTitle>
+          <DialogTitle>{perfil ? `Grupo ${perfil.nome}` : "Novo grupo"}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-6 md:grid-cols-[1fr_280px]">
           <div className="space-y-4">
             <div>
               <Label>Nome</Label>
-              <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Motorista de frete" />
+              <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Agregados" />
             </div>
             <div>
-              <Label>Pra que serve (opcional)</Label>
+              <Label>Observação (opcional)</Label>
               <Textarea
                 value={descricao}
                 onChange={(e) => setDescricao(e.target.value)}
                 rows={2}
-                placeholder="Quem roda frete pra empresa e lança viagem pelo app."
+                placeholder="Pra que serve este grupo."
               />
             </div>
+            <p className="text-sm font-medium">O que este grupo vê no celular</p>
             {GRUPOS_CAPACIDADE_APP.map((grupo) => {
               const doGrupo = CAPACIDADES_APP.filter((c) => c.grupo === grupo);
               if (!doGrupo.length) return null;
@@ -355,8 +339,7 @@ function EditorPerfil({ perfil, onFechar }: { perfil: PerfilApp | null; onFechar
             {custaLigado && (
               <p className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                 <Coins className="mt-0.5 h-4 w-4 shrink-0" />
-                Este perfil liga um recurso que é cobrado por uso. Todo mundo que cair nele passa a
-                consumir.
+                Este grupo liga um recurso cobrado por uso: todo mundo do grupo passa a consumir.
               </p>
             )}
           </div>
@@ -372,7 +355,7 @@ function EditorPerfil({ perfil, onFechar }: { perfil: PerfilApp | null; onFechar
             Cancelar
           </Button>
           <Button onClick={continuar} disabled={ocupado || nome.trim().length < 2}>
-            {ocupado ? "Calculando…" : perfil ? "Ver quem muda" : "Criar perfil"}
+            {ocupado ? "Um instante…" : perfil ? "Salvar" : "Criar grupo"}
           </Button>
         </DialogFooter>
       </DialogContent>

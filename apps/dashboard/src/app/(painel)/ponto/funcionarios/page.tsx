@@ -91,7 +91,9 @@ function Conteudo() {
           </h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Funcionário registrado em carteira. Se ele também dirige, tem cadastro na tela
-            de Motoristas — o que não pode é ser registrado e parceiro ao mesmo tempo.
+            de Motoristas — o que não pode é ser registrado e parceiro ao mesmo tempo.{" "}
+            <strong className="text-foreground">Quem está aqui é CLT pro app:</strong> bate ponto e
+            manda documentos.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
