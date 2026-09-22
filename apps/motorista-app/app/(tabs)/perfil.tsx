@@ -39,7 +39,8 @@ import { clearCadastroStatus } from "@/lib/cadastro-status";
 import { setAuthState } from "@/lib/auth-state";
 import { useMe, useSalvarPreferenciasNotificacao } from "@/lib/queries";
 import { PerfilPessoal } from "@/components/perfil-pessoal";
-import { useSemEmpresa } from "@/lib/visao";
+import { useVisao } from "@/lib/visao";
+import { useEhFuncionario } from "@/hooks/use-eh-funcionario";
 import { replayHomeTutorial } from "@/lib/home-tutorial";
 import {
   obterEEnviarPushToken,
@@ -49,14 +50,22 @@ import {
 } from "@/lib/notifications";
 
 export default function Perfil() {
+  const visao = useVisao();
   // Sem empresa, o perfil é o DELE: dados, placas, documentos e senha. O perfil
   // da empresa mostra o que ELA liberou — não faz sentido pra quem não tem uma.
-  if (useSemEmpresa()) return <PerfilPessoal />;
+  //
+  // ⚠️ Quem é REGISTRADO e não dirige cai aqui também, e é o certo: o perfil da
+  // empresa inteiro depende do `/m/me`, que é rota de MOTORISTA e responde 403
+  // pra ele. Antes desta linha a tela dele carregava pra sempre.
+  if (visao === "pessoal" || visao === "registrado") return <PerfilPessoal />;
   return <PerfilDaEmpresa />;
 }
 
 function PerfilDaEmpresa() {
   const me = useMe();
+  // Motorista CLT da própria transportadora: dirige (por isso está nesta casa)
+  // e é registrado (por isso não tem acerto de parceiro).
+  const ehRegistrado = useEhFuncionario();
   const salvarPrefs = useSalvarPreferenciasNotificacao();
   const [showChange, setShowChange] = useState(false);
   const [senhaAtual, setSenhaAtual] = useState("");
@@ -270,12 +279,24 @@ function PerfilDaEmpresa() {
                 title="Minha programação"
                 onPress={() => router.push("/programacao")}
               />
-              <View className="h-px bg-border" />
-              <ActionRow
-                icon={<HandCoins size={20} color="#13316b" />}
-                title="Meus acertos"
-                onPress={() => router.push("/meus-acertos")}
-              />
+              {/* ⚠️ SOME pra quem é registrado em carteira nesta empresa.
+                  O acerto é o extrato do PARCEIRO — percentual, por viagem, por
+                  tonelada, por diária. Quem tem carteira assinada recebe por
+                  folha, e o servidor recusa gerar acerto pro período dele: a
+                  tela abriria vazia na melhor hipótese e, na pior, mostraria
+                  léxico de pagamento por produção pra quem tem salário. É o
+                  mesmo desenho de vínculo que a trava de regime existe pra
+                  impedir, só que na tela dele. */}
+              {ehRegistrado ? null : (
+                <>
+                  <View className="h-px bg-border" />
+                  <ActionRow
+                    icon={<HandCoins size={20} color="#13316b" />}
+                    title="Meus acertos"
+                    onPress={() => router.push("/meus-acertos")}
+                  />
+                </>
+              )}
               <View className="h-px bg-border" />
               {/* A porta fixa dos documentos, pelo MESMO motivo dos convites
                   logo abaixo: o bloco da home some quando não falta nada, e

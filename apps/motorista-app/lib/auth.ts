@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { esquecerVinculoRegistrado } from "./vinculo-registrado";
 import * as SecureStore from "expo-secure-store";
 import {
   KEYCHAIN_OPTS,
@@ -57,6 +58,9 @@ export async function loadTokens(): Promise<Tokens | null> {
 export async function clearTokens() {
   await esquecerTudo();
   await esquecerIdentidade();
+  // Sem isto, quem entrasse depois neste aparelho herdava o vínculo do
+  // anterior — e veria o nome da empresa de outra pessoa na tela dele.
+  await esquecerVinculoRegistrado();
   await SecureStore.deleteItemAsync(KEY_LEGADA, KEYCHAIN_OPTS).catch(() => {});
 }
 

@@ -42,6 +42,8 @@ import {
   garantirSessaoDaPessoa,
   temIdentidadeSync,
 } from "@/lib/identidade";
+import { carregarVinculoRegistrado } from "@/lib/vinculo-registrado";
+import { api } from "@/lib/api";
 import { AtualizacaoObrigatoria } from "@/components/atualizacao-obrigatoria";
 import {
   checarVersaoApp,
@@ -158,6 +160,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           loadCadastroStatus(),
           temAlgumaSessaoComToken(),
           carregarIdentidade(),
+          // Lê do disco QUAL empresa o registrou. Entra aqui, junto das outras
+          // três, porque é uma das fontes que decidem em qual app ele entra —
+          // e decidir antes de ler faz a tela do autônomo piscar na frente de
+          // quem é empregado.
+          carregarVinculoRegistrado(),
         ]),
       )
       .then(([t, , temSessao, identidade]) => {
@@ -259,6 +266,16 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (!escolhendoEmpresa) void prefetchDadosBase(queryClient);
     // Repõe a sessão da PESSOA pra quem já estava logado antes dela existir.
     void garantirSessaoDaPessoa();
+    /**
+     * Atualiza, de fundo, se ele é registrado em carteira e onde.
+     *
+     * ⚠️ Uma vez por abertura, e best-effort: o app já decidiu a tela com o
+     * que tinha no disco. Isto é o que faz a contratação de ontem aparecer
+     * hoje — e o desligamento também. Sem sinal, fica com o que já sabia, que
+     * é o comportamento certo: parar de reconhecer o empregado porque a rede
+     * caiu foi exatamente o defeito que a gente acabou de tirar.
+     */
+    void api.meuPerfil().catch(() => {});
     // Repõe o token da empresa ativa se ele faltar (slot descartado por guardar
     // o de outro cadastro) e só depois alinha as empresas com o servidor: nome
     // da empresa, aprovação que saiu do "em análise" e cadastro novo numa

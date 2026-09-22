@@ -33,6 +33,7 @@ import { motoristaAtivoId, salvarTokensDe, tokensDe } from "./sessoes";
 import { esquecerIdentidade, salvarIdentidade, tokensIdentidade } from "./identidade";
 import { setAuthState } from "./auth-state";
 import { clearCadastroStatus, setCadastroStatus } from "./cadastro-status";
+import { guardarVinculoRegistrado } from "./vinculo-registrado";
 import { humanizeZodIssues, type ZodIssueLite } from "./validation";
 import { marcarInternetFalha, marcarInternetOk } from "./connectivity";
 
@@ -86,6 +87,18 @@ export type MeuPerfil = {
   eixos: number | null;
   empresas: CadastroEmpresa[];
   convites: ConviteEmpresa[];
+  /**
+   * A empresa onde ele é REGISTRADO EM CARTEIRA, quando é.
+   *
+   * ⚠️ É o que tira o app do chute. Antes ele descobria isso levando 403 em
+   * `/m/ponto/hoje`: no primeiro boot sem sinal a resposta era "não é", e a
+   * aba de registro de jornada sumia justamente de quem precisa dela. Erro de
+   * rede não pode responder pergunta de negócio.
+   *
+   * Opcional porque cache gravado antes desta versão não tem o campo — compat
+   * on-read, como todo rename em app offline-first.
+   */
+  vinculoRegistrado?: { contaId: string; contaNome: string; desde: string } | null;
 };
 
 /**
@@ -619,7 +632,18 @@ export const api = {
     return res;
   },
   // ---- A pessoa (vale com ou sem empresa) ----
-  meuPerfil: () => request<MeuPerfil>("GET", "/m/eu", { comoIdentidade: true }),
+  /**
+   * O perfil da pessoa — e a ÚNICA porta que grava se ela é registrada.
+   *
+   * ⚠️ A gravação mora aqui, não em cada tela que pede o perfil. Deixar cada
+   * chamador lembrar é exatamente como o conserto da miniatura acabou valendo
+   * pra uma das duas portas de envio e não pra outra.
+   */
+  meuPerfil: async () => {
+    const p = await request<MeuPerfil>("GET", "/m/eu", { comoIdentidade: true });
+    await guardarVinculoRegistrado(p.vinculoRegistrado ?? null);
+    return p;
+  },
   /** As placas que ele diz rodar. O endpoint existia e nenhuma tela chamava —
    *  quem pulou a placa no cadastro nunca mais conseguia adicionar. */
   salvarMinhasPlacas: (placas: { placa: string; modelo?: string }[], placaDefault?: string | null) =>

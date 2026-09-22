@@ -3,12 +3,12 @@ import { Calendar, Clock, House, MessageCircle, User } from "lucide-react-native
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBadgeChat } from "@/lib/chat";
 import { useMe } from "@/lib/queries";
-import { useSemEmpresa } from "@/lib/visao";
+import { useVisao } from "@/lib/visao";
 import { useEhFuncionario } from "@/hooks/use-eh-funcionario";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
-  const semEmpresa = useSemEmpresa();
+  const visao = useVisao();
   // Rollout gradual: sem a flag, a aba nem existe (e a API responde 403).
   //
   // Quem não está em empresa nenhuma não tem com quem conversar: `/m/me` é
@@ -16,7 +16,7 @@ export default function TabsLayout() {
   // cache quando não há sessão ativa — um `me` velho podia reacender a aba
   // "Conversas" pra quem saiu da última empresa.
   const me = useMe();
-  const podeChat = !semEmpresa && (me.data?.podeChat ?? false);
+  const podeChat = visao === "empresa" && (me.data?.podeChat ?? false);
   const naoLidas = useBadgeChat(podeChat).data ?? 0;
   const ehFuncionario = useEhFuncionario();
 
@@ -47,10 +47,15 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => <House color={color} size={size} />,
         }}
       />
+      {/* ⚠️ Some pra quem é REGISTRADO e não dirige: o histórico daqui é de
+          frete, e ele não tem nenhum. Uma aba "Histórico" permanentemente
+          vazia é o app dizendo que a pessoa não trabalhou — o histórico dela
+          é o espelho da jornada, que mora na aba ao lado. */}
       <Tabs.Screen
         name="historico"
         options={{
           title: "Histórico",
+          href: visao === "registrado" ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Calendar color={color} size={size} />
           ),

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { HistoricoPessoal } from "@/components/historico-pessoal";
-import { useSemEmpresa } from "@/lib/visao";
+import { useVisao } from "@/lib/visao";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
@@ -84,10 +84,16 @@ const FILTROS: { key: "TODAS" | GrupoStatus; label: string }[] = [
 ];
 
 export default function HistoricoScreen() {
+  const visao = useVisao();
   // Sem empresa, o histórico DELE: fretes e gastos numa linha do tempo só.
   // Sem botão de criar e sem documento no meio — criar é no Início, documento é
   // no Perfil.
-  if (useSemEmpresa()) return <HistoricoPessoal />;
+  //
+  // ⚠️ Pra quem é REGISTRADO esta aba nem aparece (ver `(tabs)/_layout.tsx`):
+  // o histórico dele é o espelho da jornada, que mora na aba própria. Uma aba
+  // "Histórico" mostrando frete nenhum seria uma aba dizendo que ele não
+  // trabalhou. Este ramo é só o cinto de segurança de quem chegar por rota.
+  if (visao === "pessoal" || visao === "registrado") return <HistoricoPessoal />;
   return <HistoricoDaEmpresa />;
 }
 

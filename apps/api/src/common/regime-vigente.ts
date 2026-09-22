@@ -149,6 +149,39 @@ export async function encerrarRegime(
 }
 
 /**
+ * A PERGUNTA ÚNICA: como esta pessoa é paga nesta empresa?
+ *
+ * ⚠️ Existe porque três critérios diferentes respondiam isso: esta tabela, a
+ * existência de cadastro de funcionário ativo (o que o token olha) e a cópia
+ * congelada em `AlocacaoObra.regime`. Três respostas pra uma pergunta é como
+ * quatro furos conviveram sem ninguém ver — cada ponto perguntava pra um
+ * lugar diferente e todos pareciam certos isolados.
+ *
+ * ⚠️ E o que ela NÃO responde: qual cadastro a pessoa tem. Motorista CLT da
+ * própria transportadora tem os DOIS cadastros de propósito (lança viagem e
+ * bate ponto no mesmo dia) — a exclusividade daqui é sobre PAGAMENTO, entre
+ * obra/diária e folha. Confundir as duas coisas já trancou a porta do caso
+ * mais comum de quem compra o módulo.
+ *
+ * `null` é resposta legítima e é a mais comum: motorista de frete comum nunca
+ * teve regime declarado, porque a linha só nasce com alocação de obra ou
+ * contratação. "Não sei" é melhor que chutar "parceiro" — o painel mostra a
+ * diferença, e é ela que faz alguém declarar.
+ */
+export async function regimeDe(
+  tx: Tx,
+  cpf: string,
+): Promise<{ regime: RegimeTrabalho; desde: Date } | null> {
+  const chave = soDigitos(cpf);
+  if (chave.length !== 11) return null;
+  const r = await tx.regimeVigente.findFirst({
+    where: { chaveViva: chave },
+    select: { regime: true, iniciouEm: true },
+  });
+  return r ? { regime: r.regime, desde: r.iniciouEm } : null;
+}
+
+/**
  * Este CPF tem vínculo de emprego registrado vivo nesta empresa?
  *
  * ⚠️ Existe pra quem precisa RECUSAR antes de criar, e não tem regime próprio

@@ -41,7 +41,7 @@ import {
   type PedagioCadastrado,
 } from "./pedagios-offline";
 import { getRotaCache, setRotaCache } from "./rota-cache";
-import { useSemEmpresa } from "./visao";
+import { useVisao } from "./visao";
 import { getKmReferenciaCache, setKmReferenciaCache } from "./km-referencia-cache";
 import {
   drainLocais,
@@ -494,10 +494,18 @@ function meQuery() {
 }
 
 export function useMe() {
-  // `enabled` desligado pra quem não está em empresa nenhuma: `/m/me` é rota de
-  // MOTORISTA e, pra ele, só pode falhar — a cada foco do app.
-  const semEmpresa = useSemEmpresa();
-  return useQuery({ ...meQuery(), enabled: !semEmpresa });
+  /**
+   * Só quem tem cadastro de MOTORISTA. `/m/me` é rota do vínculo de parceiro e,
+   * pra qualquer outro, só pode falhar — a cada foco do app.
+   *
+   * ⚠️ Perguntar `!semEmpresa` deixou de bastar quando o app passou a conhecer
+   * o funcionário REGISTRADO: ele tem empresa (a que o contratou) e não tem
+   * cadastro de motorista, então a pergunta antiga o mandava direto pro 403 em
+   * loop. A condição é "é a casa da empresa", que é o único lugar onde este
+   * dado tem dono.
+   */
+  const visao = useVisao();
+  return useQuery({ ...meQuery(), enabled: visao === "empresa" });
 }
 
 /**

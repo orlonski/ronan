@@ -22,6 +22,8 @@ import { PushService } from "../../push/push.service";
 import { EnvioWhatsappService } from "../../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../../whatsapp/sessao.service";
 import { contaIdAtual } from "../../common/conta/conta-context";
+// Só LEITURA da trava: a ficha mostra o regime, nunca decide com ele.
+import { regimeDe } from "../../common/regime-vigente";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
 import { ymdSaoPaulo } from "../../common/timezone";
 import { adotarLancamentosOrfaos } from "../../common/transportadora";
@@ -275,7 +277,30 @@ export class MotoristasService {
       select: SAFE_SELECT,
     });
     if (!m) throw new NotFoundException("Motorista não encontrado");
-    return this.flatten(m);
+    return { ...this.flatten(m), regime: await this.regimeDaPessoa(m.cpf) };
+  }
+
+  /**
+   * Como esta pessoa é paga nesta empresa. A ficha não respondia isso.
+   *
+   * ⚠️ Não existia UM lugar no painel que dissesse "parceiro ou registrado", e
+   * é por isso que quatro regras divergiram sem ninguém perceber: quem opera
+   * não tinha como ver o que o sistema achava. Quando o operador não enxerga o
+   * estado, ele não corrige o estado errado — ele contorna.
+   *
+   * `null` é resposta de verdade e a mais comum: motorista de frete comum
+   * nunca teve regime declarado. A tela diz "não declarado" em vez de chutar
+   * "parceiro" — chutar aqui seria afirmar vínculo, que é o assunto mais caro
+   * do sistema.
+   *
+   * ⚠️ NÃO gateia nada. É informação pra quem opera; as regras de pagamento já
+   * perguntam por conta própria, e duplicar a decisão aqui recriaria o defeito
+   * que este trabalho está desfazendo.
+   */
+  private async regimeDaPessoa(cpf: string | null) {
+    if (!cpf) return null;
+    const r = await regimeDe(this.prisma, cpf);
+    return r ? { tipo: r.regime, desde: r.desde } : null;
   }
 
   /**

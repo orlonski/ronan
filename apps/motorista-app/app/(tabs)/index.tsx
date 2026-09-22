@@ -25,9 +25,10 @@ import {
 } from "lucide-react-native";
 import { fmtHoraBR } from "@/lib/datetime";
 import { HomePessoal } from "@/components/home-pessoal";
+import { HomeRegistrado } from "@/components/home-registrado";
 import { BlocoDocumentos } from "@/components/bloco-documentos";
 import { BlocoObra } from "@/components/home-obra";
-import { useSemEmpresa } from "@/lib/visao";
+import { useVisao } from "@/lib/visao";
 import {
   ActivityIndicator,
   FlatList,
@@ -97,10 +98,22 @@ const statusLabel: Record<string, string> = {
 };
 
 export default function Home() {
+  const visao = useVisao();
+
+  /**
+   * ⚠️ TRÊS CASAS, e a terceira existia caindo na errada.
+   *
+   * `registrado` é quem a empresa contratou em carteira e NÃO dirige pra ela —
+   * mecânico, escritório, ajudante. Ele não tem cadastro de motorista, então a
+   * pergunta antiga ("tem empresa?") respondia não e o app entregava a home do
+   * autônomo: calculadora de frete e "a receber" pra quem tem salário.
+   */
+  if (visao === "registrado") return <HomeRegistrado />;
+
   // Sem empresa, a home é a DELE: frete guiado, "vale a pena?", gastos e
   // documentos. A da empresa não faz sentido pra quem não tem uma — ela fica
   // vazia, porque tudo ali depende do `/m/me` que ele não alcança.
-  if (useSemEmpresa()) return <HomePessoal />;
+  if (visao === "pessoal") return <HomePessoal />;
 
   // Quem está numa obra vê a conta de diárias DENTRO desta mesma home, não
   // uma tela no lugar dela: ver `BlocoObra`. Substituir a home custou o acesso

@@ -10,6 +10,7 @@ import {
 import { MotoristaForm, type Motorista } from "../_components/motorista-form";
 import { HistoricoNotificacoes } from "./historico-notificacoes";
 import { PedirDocumentos } from "./pedir-documentos";
+import { RegimeCard, type RegimeDaPessoa } from "./regime-card";
 
 type ResumoVersoes = {
   latestUpdateId: string | null;
@@ -23,7 +24,10 @@ export default function EditarMotoristaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const item = useResourceItem<Motorista & AppVersaoInfo>("/admin/motoristas", id);
+  const item = useResourceItem<Motorista & AppVersaoInfo & { regime?: RegimeDaPessoa }>(
+    "/admin/motoristas",
+    id,
+  );
   const resumo = useApiQuery<ResumoVersoes>("/admin/motoristas/versoes/resumo", {
     staleTime: 60_000,
   });
@@ -47,6 +51,10 @@ export default function EditarMotoristaPage({
               degradado: resumo.data?.fonte === "motoristas",
             }}
           />
+          {/* Vem ANTES dos documentos e do formulário: quem abre a ficha
+              precisa saber por onde essa pessoa recebe antes de mexer em
+              qualquer coisa que envolva dinheiro. */}
+          <RegimeCard regime={item.data.regime ?? null} />
           <PedirDocumentos motoristaId={id} />
           <MotoristaForm initial={item.data} />
           <HistoricoNotificacoes motoristaId={id} />

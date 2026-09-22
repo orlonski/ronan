@@ -90,7 +90,7 @@ describe("ponto e mensal não se misturam", () => {
     expect(dominio.sort()).toEqual(["../common/regime-vigente"]);
   });
 
-  it("cadastrar motorista NÃO consulta a trava de regime", () => {
+  it("cadastrar motorista pode MOSTRAR o regime, nunca decidir com ele", () => {
     /**
      * ⚠️ O caso que este teste protege é o MAIS COMUM de quem compra o ponto:
      * o motorista CLT da própria transportadora, que lança viagem E bate
@@ -105,8 +105,16 @@ describe("ponto e mensal não se misturam", () => {
      * próprio motorista.
      */
     const alvo = resolve(RAIZ, "admin/motoristas/motoristas.service.ts");
-    const imports = importsDe(alvo);
-    expect(imports.filter((i) => i.includes("regime-vigente"))).toEqual([]);
+    const codigo = readFileSync(alvo, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+
+    // `regimeDe` é consulta: devolve o regime e não sabe recusar nada. As
+    // outras três ABREM, ENCERRAM ou RESPONDEM SIM/NÃO pra barrar — é com
+    // elas que se tranca uma porta, e nenhuma tem o que fazer aqui.
+    for (const proibida of ["temVinculoDeEmprego", "abrirRegime", "encerrarRegime"]) {
+      expect(codigo.includes(proibida), `cadastro de motorista usa ${proibida}`).toBe(false);
+    }
   });
 
   it("o léxico do mensal continua limpo depois da trava entrar lá", () => {

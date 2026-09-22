@@ -57,6 +57,49 @@ export class EuService {
       placaDefault,
       empresas: await this.auth.cadastrosDaIdentidade(identidadeId),
       convites: await this.convites(identidadeId),
+      vinculoRegistrado: await this.vinculoRegistrado(eu.cpf),
+    };
+  }
+
+  /**
+   * A empresa onde esta pessoa é REGISTRADA EM CARTEIRA, se houver.
+   *
+   * ⚠️ É o que tira o app do chute. Hoje ele descobre que a pessoa é
+   * registrada levando 403 em `/m/ponto/hoje` — o que tem três defeitos: o
+   * primeiro boot sem sinal responde "não é" e a aba de registro de jornada
+   * some justamente de quem precisa dela; um erro de rede vira resposta de
+   * negócio; e a pergunta "quem é você" fica dependendo de um endpoint de
+   * outro assunto.
+   *
+   * Vem junto do perfil de propósito: é uma requisição que o app já faz, e
+   * cache-first ela responde offline.
+   *
+   * ⚠️ `comoSistema` porque token de pessoa não tem empresa no contexto — é
+   * justamente o caso do funcionário que não tem cadastro de motorista em
+   * lugar nenhum. E a busca é por CPF, a chave que atravessa as empresas.
+   */
+  private async vinculoRegistrado(cpf: string) {
+    const chave = (cpf ?? "").replace(/\D/g, "");
+    if (chave.length !== 11) return null;
+    const f = await comoSistema(() =>
+      this.prisma.funcionario.findFirst({
+        where: { cpf: chave, ativo: true },
+        select: {
+          id: true,
+          admitidoEm: true,
+          contaId: true,
+          conta: { select: { nome: true } },
+        },
+        // Mesmo desempate do token: vínculo mais recente. Empregador não se
+        // descobre por sorteio, e as duas respostas têm que ser a MESMA.
+        orderBy: [{ admitidoEm: "desc" }, { criadoEm: "desc" }, { id: "asc" }],
+      }),
+    );
+    if (!f) return null;
+    return {
+      contaId: f.contaId,
+      contaNome: f.conta.nome,
+      desde: f.admitidoEm,
     };
   }
 

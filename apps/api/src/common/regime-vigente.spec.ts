@@ -5,6 +5,7 @@ import {
   encerrarRegime,
   erroRegimeConflitante,
   periodosDeEmprego,
+  regimeDe,
   regimeVivo,
   soDigitos,
   temVinculoDeEmprego,
@@ -130,6 +131,30 @@ describe("encerrar regime", () => {
       chaveViva: "11122233344",
       regime: "EMPREGADO",
     });
+  });
+});
+
+describe("a pergunta única: como esta pessoa é paga", () => {
+  it("devolve o regime e DESDE QUANDO — a data é metade da resposta", async () => {
+    // "Desde quando" é o que um booleano nunca respondeu, e é a primeira
+    // pergunta de quem discute vínculo.
+    const t = tx({ id: "r1", regime: "EMPREGADO" });
+    (t.client as { regimeVigente: { findFirst: () => unknown } }).regimeVigente.findFirst =
+      async () => ({ regime: "EMPREGADO", iniciouEm: new Date("2026-04-01T00:00:00.000Z") });
+    const r = await regimeDe(t.client, CPF);
+    expect(r?.regime).toBe("EMPREGADO");
+    expect(r?.desde.toISOString()).toBe("2026-04-01T00:00:00.000Z");
+  });
+
+  it("sem linha nenhuma responde null, e isso é resposta — não é parceiro", async () => {
+    // ⚠️ Motorista de frete comum nunca teve regime declarado: a linha só
+    // nasce com alocação de obra ou contratação. Devolver "PARCEIRO" aqui
+    // seria o sistema AFIRMAR vínculo que ninguém declarou.
+    expect(await regimeDe(tx(null).client, CPF)).toBeNull();
+  });
+
+  it("CPF malformado não vira consulta", async () => {
+    expect(await regimeDe(tx({ id: "r1", regime: "PARCEIRO" }).client, "123")).toBeNull();
   });
 });
 
