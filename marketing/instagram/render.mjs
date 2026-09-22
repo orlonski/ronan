@@ -84,6 +84,20 @@ const defeitos = [];
 const PROPORCAO_MIN = 1.9;
 const PROPORCAO_MAX = 2.4;
 
+// Slide não pode ter buraco.
+//
+// O primeiro carrossel que o agente produziu tinha o conteúdo todo empilhado no
+// topo e a metade de baixo no vácuo: os seis slides com buracos de 407 a 727px.
+// O limite saiu de medir as 24 peças já publicadas — a mais vazia delas tem
+// 344px, e a maioria fica abaixo de 264. Entre 344 e 407 há um vão limpo, e é
+// nele que a régua mora: reprova o que o agente fez sem derrubar nada que já
+// existe.
+//
+// Mede o maior BURACO, não a ocupação: peça boa varia de 52% a 104% de tinta
+// conforme o assunto, então ocupação sozinha reprovaria coisa boa. O que todo
+// slide ruim tem em comum é um vão grande num lugar só.
+const BURACO_MAX = 380;
+
 // Um arquivo pode ser um post de imagem única (uma `.peca`) ou um carrossel
 // (várias). O nome do arquivo de saída é o que diz qual é: `11-conferindo.png`
 // pra peça única, `11-conferindo-1.png`, `-2.png`… pro carrossel. É por esse
@@ -167,6 +181,59 @@ for (const arquivo of arquivos) {
     defeitos.push(`${arquivo}: texto cortado na borda de baixo${qual} — "${texto}" passa ${excesso}px do limite.
     Corte texto — não diminua a fonte.`);
   });
+
+  // Buraco: o maior vão vertical entre blocos de conteúdo, contando também a
+  // sobra acima do primeiro e abaixo do último.
+  const buracos = await pagina.evaluate(() => {
+    const visivel = (el) => {
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      return r.width > 4 && r.height > 4 && s.visibility !== "hidden" && s.display !== "none";
+    };
+    const temConteudo = (el) =>
+      [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) ||
+      el.tagName === "IMG" ||
+      el.tagName === "SVG";
+
+    return [...document.querySelectorAll(".peca")].map((peca, i) => {
+      const estilo = getComputedStyle(peca);
+      const r = peca.getBoundingClientRect();
+      const topo = r.top + parseFloat(estilo.paddingTop);
+      const base = r.bottom - parseFloat(estilo.paddingBottom);
+
+      const blocos = [...peca.querySelectorAll("*")]
+        .filter((el) => visivel(el) && temConteudo(el))
+        .map((el) => el.getBoundingClientRect())
+        .map((b) => ({ topo: b.top, base: b.bottom }))
+        .sort((a, b) => a.topo - b.topo);
+      if (blocos.length === 0) return { slide: i, buraco: Math.round(base - topo) };
+
+      // Pai e filho ocupam a mesma faixa: funde o que se sobrepõe, senão o vão
+      // entre eles conta como buraco e nunca haveria buraco nenhum.
+      const faixas = [];
+      for (const b of blocos) {
+        const ultima = faixas[faixas.length - 1];
+        if (ultima && b.topo <= ultima.base + 1) ultima.base = Math.max(ultima.base, b.base);
+        else faixas.push({ ...b });
+      }
+
+      let buraco = faixas[0].topo - topo;
+      for (let k = 1; k < faixas.length; k++) {
+        buraco = Math.max(buraco, faixas[k].topo - faixas[k - 1].base);
+      }
+      return { slide: i, buraco: Math.round(Math.max(buraco, base - faixas[faixas.length - 1].base)) };
+    });
+  });
+  buracos
+    .filter((b) => b.buraco > BURACO_MAX)
+    .forEach(({ slide, buraco }) => {
+      const qual = pecas.length > 1 ? ` (slide ${slide + 1} de ${pecas.length})` : "";
+      defeitos.push(
+        `${arquivo}: buraco de ${buraco}px${qual} — o slide está pela metade (limite ${BURACO_MAX}px).
+    Slide não é folha de papel com um título: encha a tela. Traga o exemplo concreto,
+    o número, o antes-e-depois. Se não tem o que dizer, o assunto cabia em menos slides.`,
+      );
+    });
 
   const celulares = await pagina.evaluate(() =>
     [...document.querySelectorAll(".peca")].flatMap((peca, slide) =>

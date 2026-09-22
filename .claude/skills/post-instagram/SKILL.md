@@ -8,6 +8,20 @@ description: Produzir posts do Instagram do Movatruck (@movatruck) — do ângul
 Receita usada nos 10 primeiros posts do perfil, publicados em 11/09/2026.
 A arte é **HTML renderizado em PNG** — não existe arquivo de editor gráfico.
 
+## Antes de tudo: a dor
+
+**O post nasce numa dor do seguidor, nunca numa funcionalidade nossa.** Quem rola o feed
+não quer saber o que o nosso app faz — está com um problema. Abra com o problema dele.
+A funcionalidade entra depois, como resposta, e é alívio, não anúncio.
+
+O estoque está em `marketing/instagram/dores.md`, cada dor com a frase na boca da pessoa.
+Escolha UMA. Se nenhuma servir, o `ig-estrategista` tem `WebSearch` pra ir atrás de uma
+de verdade — e acrescenta lá com a fonte.
+
+Isto foi escrito depois do primeiro carrossel: a squad só tinha `Read`/`Grep`/`Glob`, a
+única janela dela pro mundo era o código-fonte, e ela escreveu sobre o código-fonte.
+Saiu catálogo de funcionalidade.
+
 ## A regra que manda em tudo
 
 **Nada é publicado sem existir no código.** Publicidade de software é contrato: o que
@@ -30,6 +44,7 @@ marketing/instagram/
   assets/             marca + `telas/` (symlink pros prints em apps/site/public/telas)
   fontes/             Archivo + Public Sans em woff2, pro render não depender de rede
   saida/              PNGs prontos (gitignorado — o que vale é o HTML)
+  dores.md            AS DORES — de onde sai o assunto. Comece por aqui
   legendas.md         texto de cada post, pronto pra colar
   perfil.md           bio, nome, destaques e as regras do perfil
 marketing/capturas/   telas do painel tiradas do build de produção (sem badge de dev)
@@ -55,7 +70,9 @@ não diminua a fonte.
 
 ## O fluxo
 
-1. **Ângulo** (`ig-estrategista`) — público, pilar, o que a arte mostra, qual print usar.
+1. **Dor e ângulo** (`ig-estrategista`) — qual dor, a frase na boca dela, público, o que a
+   arte mostra, qual print usar. Ele tem `WebSearch` pra pesquisar dor que não está no
+   `dores.md`.
 2. **Texto** (`ig-copywriter`) — headline de no máximo 7 palavras + legenda com gancho
    na primeira linha (é o que aparece antes do "mais").
 3. **Arte** (`ig-designer`, padrão do `ig-diretor-arte`) — HTML usando as variáveis do
@@ -83,7 +100,8 @@ aparecem no HTML. De 2 a 10 — é o teto da API, e o app aceitar 20 na mão nã
 
 Carrossel não é post único fatiado. A forma que funciona:
 
-- **Slide 1 — a promessa, e só ela.** É a capa e é o que decide se alguém desliza.
+- **Slide 1 — a DOR, na boca dele.** É a capa e é o que decide se alguém desliza. Não é a
+  promessa do produto, não é índice do que vem: é o problema que ele vive.
 - **Slides do meio — um passo do mecanismo por tela**, na ordem em que acontece. Se
   dois passos cabem numa tela, eram um passo só.
 - **Último slide — o que fazer agora.** Um CTA, não três.
@@ -95,6 +113,11 @@ O que merece carrossel é o que não cabe numa frase — regra de negócio com e
 antes-e-depois de um fluxo, um mecanismo que ninguém acredita sem ver o passo a passo.
 Ângulo que cabe numa headline continua sendo post único: carrossel de 5 telas pra dizer
 uma coisa só é 4 telas de enchimento.
+
+**Encha a tela.** O render reprova buraco vertical acima de 380px — o limite saiu de medir
+as 24 peças publicadas (a mais vazia tem 344px) contra o primeiro carrossel do agente, que
+tinha de 407 a 727px e reprovou nos seis slides. Título no topo e metade de baixo no vácuo
+não é minimalismo, é slide pela metade. Traga o exemplo, o número, o antes-e-depois.
 
 Custa mais: mais copy, mais arte, mais QA. Aqui o QA **não é opcional** — carrossel erra
 em sete lugares em vez de um.

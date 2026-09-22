@@ -19,13 +19,21 @@ Toda afirmação do post precisa existir no código (`/Users/orlonski/dev/ronan`
 - Trata motorista como subordinado ("sua frota", "controle", "fiscalize")? Reprova — é parceiro autônomo.
 - Corporativês, superlativo vazio, emoji demais?
 
-**3. Texto**
+**3. A dor está lá?** (bloqueia)
+- O post abre com um problema do seguidor, ou com uma funcionalidade nossa? Se a
+  headline do slide 1 e a primeira linha da legenda falam do que o app faz antes de
+  falar do que dói, **bloqueia**: é catálogo, não conteúdo.
+- A dor é reconhecível em 3 segundos, ou precisa ler tudo pra entender qual é?
+- É dor de gente ou abstração de consultor? "Baixa visibilidade operacional" não é dor.
+- O nome "Movatruck" aparece antes da dor estar na mesa? Bloqueia.
+
+**4. Texto**
 - Ortografia e acentuação PT-BR.
 - Gancho na primeira linha da legenda.
 - Legenda ≤ 2.200 caracteres (limite do Instagram); hashtags ≤ 30.
 - CTA único e claro.
 
-**4. Arte**
+**5. Arte**
 - PNG existe, 1080×1350 (ou 2160×2700 @2x).
 - **O JPEG também existe**, em `saida/jpeg/`, e está abaixo de 8 MB. Confira este,
   não só o PNG: é o JPEG que a API publica, e a Meta recusa PNG. Peça com PNG
@@ -38,13 +46,16 @@ Toda afirmação do post precisa existir no código (`/Users/orlonski/dev/ronan`
   devtools; os `2N-app-*.webp` de lá são do **PWA removido em 18/09/2026** — post
   que promove o app nativo mostrando o PWA morto **bloqueia**.
 
-**5. Carrossel** (quando houver mais de uma `.peca`)
+**6. Carrossel** (quando houver mais de uma `.peca`)
 - Todos os slides renderizaram (`NN-slug-1.png` … `-N.png`) e todos têm JPEG irmão.
 - Entre 2 e 10 slides — é o teto da API, não do app.
 - O slide 1 é promessa, não índice: "veja 5 dicas" é capa desperdiçada.
 - Cada slide se sustenta sozinho. Quem entra pelo slide 4 entende o que está vendo?
 - Um passo por slide. Dois passos na mesma tela eram um passo só; slide sem passo
   nenhum é enchimento e **sai**.
+- **Slide cheio.** O render reprova buraco acima de 380px, mas ele só mede o vão — quem
+  vê se a tela tem o que dizer é você. Slide com um título e nada embaixo vira post
+  que ninguém termina de deslizar.
 - Um CTA, no último. CTA repetido no meio some do último.
 - A ordem faz sentido lida em sequência — o render garante que cabem, não que
   contam uma história.
