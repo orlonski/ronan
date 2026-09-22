@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { ChevronRight, FileText } from "lucide-react-native";
 import { useDocumentosDaObra } from "@/lib/queries";
 import { usePendingDocumentos } from "@/hooks/use-pending-documentos";
+import { usePermite } from "@/lib/acessos-app";
 
 /**
  * A porta pros documentos, na home.
@@ -32,6 +33,7 @@ const ALTURA = 96;
 export function BlocoDocumentos() {
   const router = useRouter();
   const { data } = useDocumentosDaObra();
+  const verDocumentos = usePermite("app.documentos.enviar");
   /**
    * ⚠️ A fila do aparelho entra na conta, pelo mesmo motivo da tela de dentro:
    * `faltamDele` vem da API, e a API só sabe do arquivo depois que ele SUBIU.
@@ -46,7 +48,7 @@ export function BlocoDocumentos() {
   // Sem exigência nenhuma, ou tudo entregue: a home não fala do assunto.
   // `data` nulo (primeira abertura, ainda sem cache) também não mostra nada —
   // piscar um bloco e sumir é pior do que não mostrar.
-  if (!data || data.total === 0) return null;
+  if (!verDocumentos || !data || data.total === 0) return null;
   const faltam = data.documentos.filter((d) => {
     if (subindo.has(d.id)) return false;
     if (!d.recebido) return true;

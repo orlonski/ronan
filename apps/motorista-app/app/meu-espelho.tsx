@@ -16,6 +16,8 @@ import { api } from "@/lib/api";
 import { showAlert } from "@/lib/alert";
 import { useMeuEspelhoPonto } from "@/lib/queries";
 import { hojeISO } from "@/lib/datetime";
+import { usePermite } from "@/lib/acessos-app";
+import { RequerCapacidade } from "@/components/requer-capacidade";
 
 /**
  * O ESPELHO DE PONTO do mês, pra ELE conferir.
@@ -61,11 +63,12 @@ function mesVizinho(ym: string, passos: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-export default function MeuEspelhoScreen() {
+function MeuEspelhoScreenTela() {
   const router = useRouter();
   const qc = useQueryClient();
   const mesAtual = hojeISO().slice(0, 7);
   const [mes, setMes] = useState(mesAtual);
+  const podeCorrigir = usePermite("app.ponto.corrigir");
   const { data } = useMeuEspelhoPonto(mes);
   const [observacao, setObservacao] = useState("");
   const [naoConfere, setNaoConfere] = useState(false);
@@ -200,6 +203,7 @@ export default function MeuEspelhoScreen() {
                   Se algum dia está errado, peça correção — o escritório decide e fica registrado
                   quem pediu e por quê.
                 </Text>
+                {podeCorrigir && (
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => router.push("/corrigir-ponto")}
@@ -207,6 +211,7 @@ export default function MeuEspelhoScreen() {
                 >
                   <Text className="text-base font-semibold text-foreground">Pedir correção</Text>
                 </Pressable>
+                )}
               </View>
             )}
 
@@ -575,5 +580,14 @@ export default function MeuEspelhoScreen() {
         </View>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+/** A tela também se abre por notificação e por link: a guarda fica nela, não só no botão. */
+export default function MeuEspelhoScreen() {
+  return (
+    <RequerCapacidade chave="app.ponto.espelho" titulo="Meu espelho">
+      <MeuEspelhoScreenTela />
+    </RequerCapacidade>
   );
 }

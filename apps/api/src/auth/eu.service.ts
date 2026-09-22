@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { AcaoAuditoria } from "@prisma/client";
-import type { SessaoEmpresa } from "@ronan/shared-types";
+import { ehCapacidadeApp, type AcessoAppDaConta, type SessaoEmpresa } from "@ronan/shared-types";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { lerPlacasJson, vincularPlacas } from "../common/placas";
 import { VINCULO_CONVITE_PENDENTE, VINCULO_VIVO } from "../common/vinculo";
@@ -58,7 +58,53 @@ export class EuService {
       empresas: await this.auth.cadastrosDaIdentidade(identidadeId),
       convites: await this.convites(identidadeId),
       vinculoRegistrado: await this.vinculoRegistrado(eu.cpf),
+      acessos: await this.acessos(identidadeId, eu.cpf),
     };
+  }
+
+  /**
+   * O ACESSO AO APP CALCULADO, uma entrada por empresa onde a pessoa tem
+   * vínculo vivo (cadastro de motorista aceito, ou funcionário ativo).
+   *
+   * ⚠️ `comoSistema` porque o token é da pessoa, sem empresa — e por isso a
+   * saída é montada campo a campo e só pras empresas DELA: o efetivo de
+   * outra empresa com o mesmo CPF não pode vazar por aqui.
+   *
+   * Empresa sem linha calculada (cadastro de minutos atrás, antes do
+   * recálculo) simplesmente não vem: o app lê a ausência como "não sei" e
+   * segue com o que já decidia antes. Nunca como "não pode".
+   */
+  async acessos(identidadeId: string, cpfBruto: string): Promise<AcessoAppDaConta[]> {
+    const cpf = (cpfBruto ?? "").replace(/\D/g, "");
+    if (cpf.length !== 11) return [];
+    const [cadastros, funcionarios] = await comoSistema(() =>
+      Promise.all([
+        this.prisma.motorista.findMany({
+          where: { identidadeId, ...VINCULO_VIVO },
+          select: { contaId: true },
+        }),
+        this.prisma.funcionario.findMany({ where: { cpf, ativo: true }, select: { contaId: true } }),
+      ]),
+    );
+    const contas = [...new Set([...cadastros, ...funcionarios].map((c) => c.contaId))];
+    if (!contas.length) return [];
+    const efetivos = await comoSistema(() =>
+      this.prisma.acessoEfetivoApp.findMany({
+        where: { cpf, contaId: { in: contas } },
+        select: {
+          contaId: true,
+          capacidades: true,
+          calculadoEm: true,
+          conta: { select: { nome: true } },
+        },
+      }),
+    );
+    return efetivos.map((e) => ({
+      contaId: e.contaId,
+      contaNome: e.conta.nome,
+      capacidades: e.capacidades.filter(ehCapacidadeApp),
+      calculadoEm: e.calculadoEm.toISOString(),
+    }));
   }
 
   /**

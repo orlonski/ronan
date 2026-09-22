@@ -27,10 +27,11 @@ import {
   useSalvarPosicaoConfig,
   type PosicaoConfig,
 } from "@/lib/queries";
+import { RequerCapacidade } from "@/components/requer-capacidade";
 
 const HORAS = Array.from({ length: 24 }, (_, i) => i);
 
-export default function PerfilPosicaoScreen() {
+function PerfilPosicaoScreenTela() {
   const cfg = usePosicaoConfig();
   const salvar = useSalvarPosicaoConfig();
 
@@ -365,3 +366,12 @@ function HoraSelector({
 }
 // Suppress unused HORAS warning
 void HORAS;
+
+/** A tela também se abre por notificação e por link: a guarda fica nela, não só no botão. */
+export default function PerfilPosicaoScreen() {
+  return (
+    <RequerCapacidade chave="app.posicao.compartilhar" titulo="Compartilhar posição">
+      <PerfilPosicaoScreenTela />
+    </RequerCapacidade>
+  );
+}

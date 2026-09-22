@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
 import { api } from "@/lib/api";
 import { hojeISO, somarDiasISO } from "@/lib/datetime";
+import { RequerCapacidade } from "@/components/requer-capacidade";
 
 /**
  * A programação: o que o escritório combinou que ele vai levar.
@@ -19,7 +20,7 @@ import { hojeISO, somarDiasISO } from "@/lib/datetime";
  * o que já tinha feito. Só chega o que foi publicado; o quadro em rascunho é do
  * escritório, e ver uma viagem que some depois seria pior que não ver nada.
  */
-export default function Programacao() {
+function ProgramacaoTela() {
   const queryClient = useQueryClient();
   const [atualizando, setAtualizando] = useState(false);
 
@@ -249,5 +250,14 @@ function ItemProgramado({ p, onRespondeu }: { p: ViagemProgramada; onRespondeu: 
         </Text>
       )}
     </Card>
+  );
+}
+
+/** A tela também se abre por notificação e por link: a guarda fica nela, não só no botão. */
+export default function Programacao() {
+  return (
+    <RequerCapacidade chave="app.programacao.ver" titulo="Minha programação">
+      <ProgramacaoTela />
+    </RequerCapacidade>
   );
 }

@@ -29,6 +29,7 @@ import { useCatalogoPonto, usePontoHoje } from "@/lib/queries";
 import { enqueuePonto } from "@/lib/sync";
 import { useConnectivity } from "@/lib/connectivity";
 import { hojeISO } from "@/lib/datetime";
+import { usePermite } from "@/lib/acessos-app";
 
 /**
  * A ABA DO PONTO.
@@ -71,6 +72,7 @@ export default function PontoTab() {
    * query e na lista. Turno da noite é o público desta tela.
    */
   const { data: catalogo } = useCatalogoPonto();
+  const verEspelho = usePermite("app.ponto.espelho");
   // `?? false`: sem catálogo em mãos, não coleta. Ver CatalogoPonto.
   const capturaLocalizacao = catalogo?.capturaLocalizacao ?? false;
   const [dia, setDia] = useState(hojeISO);
@@ -348,6 +350,7 @@ export default function PontoTab() {
           onResolver={() => router.push("/pendentes")}
         />
 
+        {verEspelho && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Meu espelho do mês"
@@ -364,6 +367,7 @@ export default function PontoTab() {
           </View>
           <ChevronRight size={20} color="#64748b" />
         </Pressable>
+        )}
 
         <View className="flex-row items-baseline justify-between">
           <Text className="text-base font-bold text-foreground">Hoje</Text>

@@ -48,6 +48,7 @@ import {
   statusPermissaoNotificacao,
   type StatusPermissaoNotificacao,
 } from "@/lib/notifications";
+import { usePermite } from "@/lib/acessos-app";
 
 export default function Perfil() {
   const visao = useVisao();
@@ -66,6 +67,12 @@ function PerfilDaEmpresa() {
   // Motorista CLT da própria transportadora: dirige (por isso está nesta casa)
   // e é registrado (por isso não tem acerto de parceiro).
   const ehRegistrado = useEhFuncionario();
+  // O que a empresa configurou em "Acesso ao app". Só tira: sem resposta do
+  // servidor, cada item aparece como sempre apareceu.
+  const verPosicao = usePermite("app.posicao.compartilhar");
+  const verProgramacao = usePermite("app.programacao.ver");
+  const verAcertos = usePermite("app.acertos.ver", !ehRegistrado);
+  const verDocumentos = usePermite("app.documentos.enviar");
   const salvarPrefs = useSalvarPreferenciasNotificacao();
   const [showChange, setShowChange] = useState(false);
   const [senhaAtual, setSenhaAtual] = useState("");
@@ -265,20 +272,28 @@ function PerfilDaEmpresa() {
                 title="Trocar senha"
                 onPress={() => setShowChange((s) => !s)}
               />
-              <View className="h-px bg-border" />
-              <ActionRow
-                icon={<MapPin size={20} color="#13316b" />}
-                title="Compartilhar posição"
-                onPress={() => router.push("/perfil-posicao")}
-              />
-              <View className="h-px bg-border" />
+              {verPosicao && (
+                <>
+                  <View className="h-px bg-border" />
+                  <ActionRow
+                    icon={<MapPin size={20} color="#13316b" />}
+                    title="Compartilhar posição"
+                    onPress={() => router.push("/perfil-posicao")}
+                  />
+                </>
+              )}
               {/* O extrato do que a empresa apurou que deve a ele. Fica em Conta
                   e não numa aba: é consulta de fim de período, não uso diário. */}
-              <ActionRow
-                icon={<CalendarDays size={20} color="#13316b" />}
-                title="Minha programação"
-                onPress={() => router.push("/programacao")}
-              />
+              {verProgramacao && (
+                <>
+                  <View className="h-px bg-border" />
+                  <ActionRow
+                    icon={<CalendarDays size={20} color="#13316b" />}
+                    title="Minha programação"
+                    onPress={() => router.push("/programacao")}
+                  />
+                </>
+              )}
               {/* ⚠️ SOME pra quem é registrado em carteira nesta empresa.
                   O acerto é o extrato do PARCEIRO — percentual, por viagem, por
                   tonelada, por diária. Quem tem carteira assinada recebe por
@@ -287,7 +302,7 @@ function PerfilDaEmpresa() {
                   léxico de pagamento por produção pra quem tem salário. É o
                   mesmo desenho de vínculo que a trava de regime existe pra
                   impedir, só que na tela dele. */}
-              {ehRegistrado ? null : (
+              {!verAcertos ? null : (
                 <>
                   <View className="h-px bg-border" />
                   <ActionRow
@@ -297,18 +312,22 @@ function PerfilDaEmpresa() {
                   />
                 </>
               )}
-              <View className="h-px bg-border" />
               {/* A porta fixa dos documentos, pelo MESMO motivo dos convites
                   logo abaixo: o bloco da home some quando não falta nada, e
                   aí a tela existiria sem porta — ele não teria como rever o
                   que mandou nem o que assinou. Sem contador aqui: o número
                   é assunto da home, e um selo vermelho permanente no perfil
                   vira cobrança de fundo. */}
-              <ActionRow
-                icon={<FileText size={20} color="#13316b" />}
-                title="Meus documentos"
-                onPress={() => router.push("/documentos-da-obra")}
-              />
+              {verDocumentos && (
+                <>
+                  <View className="h-px bg-border" />
+                  <ActionRow
+                    icon={<FileText size={20} color="#13316b" />}
+                    title="Meus documentos"
+                    onPress={() => router.push("/documentos-da-obra")}
+                  />
+                </>
+              )}
               <View className="h-px bg-border" />
               {/* Convites só tinham entrada na home de quem NÃO tem empresa
                   nenhuma. Quem já roda pra uma e é convidado por outra recebia

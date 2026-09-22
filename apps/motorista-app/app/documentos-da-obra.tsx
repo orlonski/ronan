@@ -10,6 +10,7 @@ import { escolherArquivo, podeEscolherArquivo } from "@/lib/escolher-arquivo";
 import { usePendingDocumentos } from "@/hooks/use-pending-documentos";
 import { MiniaturaDocumento } from "@/components/miniatura-documento";
 import { useDocumentosDaObra, type DocumentoDaObra } from "@/lib/queries";
+import { RequerCapacidade } from "@/components/requer-capacidade";
 
 /**
  * O que falta pra ficha dele fechar.
@@ -79,7 +80,7 @@ function peso(d: DocumentoDaObra): number {
   return 6;
 }
 
-export default function DocumentosDaObraScreen() {
+function DocumentosDaObraScreenTela() {
   const router = useRouter();
   const { data, isLoading, refetch } = useDocumentosDaObra();
   // RefreshControl só no gesto: recarga automática prende o spinner no iOS.
@@ -784,4 +785,13 @@ function Situacao({
     return <>Conferido{quando ? `, mandado em ${quando}` : ""}.</>;
   }
   return <>Ainda não chegou.</>;
+}
+
+/** A tela também se abre por notificação e por link: a guarda fica nela, não só no botão. */
+export default function DocumentosDaObraScreen() {
+  return (
+    <RequerCapacidade chave="app.documentos.enviar" titulo="Meus documentos">
+      <DocumentosDaObraScreenTela />
+    </RequerCapacidade>
+  );
 }

@@ -5,6 +5,7 @@ import { useBadgeChat } from "@/lib/chat";
 import { useMe } from "@/lib/queries";
 import { useVisao } from "@/lib/visao";
 import { useEhFuncionario } from "@/hooks/use-eh-funcionario";
+import { usePermite } from "@/lib/acessos-app";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -16,9 +17,10 @@ export default function TabsLayout() {
   // cache quando não há sessão ativa — um `me` velho podia reacender a aba
   // "Conversas" pra quem saiu da última empresa.
   const me = useMe();
-  const podeChat = visao === "empresa" && (me.data?.podeChat ?? false);
+  // A capacidade só TIRA o que já aparecia (ver lib/acessos-app.ts).
+  const podeChat = usePermite("app.chat.usar", visao === "empresa" && (me.data?.podeChat ?? false));
   const naoLidas = useBadgeChat(podeChat).data ?? 0;
-  const ehFuncionario = useEhFuncionario();
+  const ehFuncionario = usePermite("app.ponto.bater", useEhFuncionario());
 
   return (
     <Tabs

@@ -7,6 +7,7 @@ import { usePontoHoje } from "@/lib/queries";
 import { hojeISO } from "@/lib/datetime";
 import { usePendingPonto } from "@/hooks/use-pending-ponto";
 import { assinarVinculoRegistrado, vinculoRegistradoSync } from "@/lib/vinculo-registrado";
+import { usePermite } from "@/lib/acessos-app";
 
 /**
  * A HOME DE QUEM É REGISTRADO EM CARTEIRA e não dirige pra empresa.
@@ -37,6 +38,8 @@ export function HomeRegistrado() {
     () => undefined,
   );
   const hoje = usePontoHoje(hojeISO());
+  const baterPonto = usePermite("app.ponto.bater");
+  const verEspelho = usePermite("app.ponto.espelho");
   const [puxando, setPuxando] = useState(false);
   const naFila = usePendingPonto();
   const esperando = naFila.filter((p) => p.status !== "error").length;
@@ -84,6 +87,7 @@ export function HomeRegistrado() {
 
         {/* O HERÓI é a resposta, não a ação: "já bati hoje?" é o que ele abre o
             app pra saber. O verbo fica na aba, que é onde se bate. */}
+        {baterPonto && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Abrir a jornada de hoje"
@@ -117,13 +121,16 @@ export function HomeRegistrado() {
             <ArrowRight size={26} color="white" strokeWidth={2.5} />
           </View>
         </Pressable>
+        )}
 
-        <Atalho
-          icone={<CalendarDays size={22} color="#13316b" />}
-          titulo="Meu espelho"
-          descricao="Seus registros do mês, dia a dia"
-          onPress={() => router.push("/meu-espelho")}
-        />
+        {verEspelho && (
+          <Atalho
+            icone={<CalendarDays size={22} color="#13316b" />}
+            titulo="Meu espelho"
+            descricao="Seus registros do mês, dia a dia"
+            onPress={() => router.push("/meu-espelho")}
+          />
+        )}
 
         {/* O caderno é DELE, não da empresa: gasto do próprio bolso não deixa
             de existir porque a pessoa tem carteira assinada. */}

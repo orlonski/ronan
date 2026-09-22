@@ -5,6 +5,7 @@ import { API_URL } from "@/lib/api-url";
 import { loadTokens } from "@/lib/auth";
 import { useMe, usePendingStories, useStoriesFeed } from "@/lib/queries";
 import { StoryAvatar } from "./story-avatar";
+import { usePermite } from "@/lib/acessos-app";
 
 /**
  * Barra de stories no topo da Home (estilo Instagram): 1º item "Seu story" (+)
@@ -18,6 +19,7 @@ export function StoriesBar() {
   const feed = useStoriesFeed();
   const pendentes = usePendingStories();
   const [token, setToken] = useState<string | null>(null);
+  const verStories = usePermite("app.stories.ver", me.data?.podeVerStories ?? false);
   const grupos = feed.data?.grupos ?? [];
   const primeiroNome = me.data?.nome?.split(/\s+/)[0] ?? "Você";
 
@@ -26,7 +28,7 @@ export function StoriesBar() {
   }, []);
 
   // Rollout por flag: sem liberação, a barra nem aparece.
-  if (!me.data?.podeVerStories) return null;
+  if (!verStories) return null;
 
   const enviando = pendentes[0]; // mostra o mais recente em upload
   // Prévia da rodinha = foto do story mais recente do grupo. Auth por query param

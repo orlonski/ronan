@@ -56,6 +56,15 @@ export class EuController {
     return this.service.perfil(user.id);
   }
 
+  /**
+   * Só o acesso ao app, sem o perfil inteiro: é o que o app revalida quando
+   * volta pro primeiro plano. O mesmo bloco vem dentro do `GET /m/eu`.
+   */
+  @Get("acessos")
+  acessos(@CurrentUser() user: AuthIdentidade) {
+    return this.service.acessos(user.id, user.cpf);
+  }
+
   @Patch()
   atualizar(
     @CurrentUser() user: AuthIdentidade,

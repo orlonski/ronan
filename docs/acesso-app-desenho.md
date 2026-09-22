@@ -43,6 +43,19 @@
   "N herdadas pra revisar · N vencem em 7 dias". **D4 não entrou de
   propósito:** a decisão 2 do dono (acima) diz que exceção herdada não vence;
   o prazo de 90 dias era só a recomendação da squad.
+- **F3 (parte 1)**: o app recebe o acesso calculado. Sem `/m/acessos` novo: o
+  bloco vem dentro do `GET /m/eu` (que o app já busca no boot e guarda
+  offline) e em `GET /m/eu/acessos` (revalida ao voltar pro primeiro plano),
+  uma entrada por empresa. **No app, a capacidade só TIRA**: cada item aparece
+  se aparecia antes E a capacidade não é `false`; sem resposta pra empresa,
+  tudo como antes. Aba Ponto, Conversas, stories, posição, programação,
+  acertos, documentos, espelho e correção de ponto passam pela capacidade, e
+  as 6 telas correspondentes têm guarda ("Isso não está no seu app nesta
+  empresa"). A decisão (`capacidadeNaConta`) é pura e testada; o ponto se
+  decide na empresa onde a pessoa é registrada.
+  **Ainda não:** header `x-acessos-versao`, `x-conta-id` no ponto, o fim do
+  `use-eh-funcionario`/`vinculo-registrado` e o `CAPACIDADE_DESLIGADA` no
+  `sync.ts` (só existe quando o servidor barrar, F4).
 
 ---
 

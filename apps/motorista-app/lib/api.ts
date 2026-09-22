@@ -3,6 +3,7 @@ import * as Updates from "expo-updates";
 import { router } from "expo-router";
 import { Platform } from "react-native";
 import type {
+  AcessoAppDaConta,
   AcertoDoMotorista,
   ViagemProgramada,
   CadastroEmpresa,
@@ -34,6 +35,7 @@ import { esquecerIdentidade, salvarIdentidade, tokensIdentidade } from "./identi
 import { setAuthState } from "./auth-state";
 import { clearCadastroStatus, setCadastroStatus } from "./cadastro-status";
 import { guardarVinculoRegistrado } from "./vinculo-registrado";
+import { guardarAcessosApp } from "./acessos-app";
 import { humanizeZodIssues, type ZodIssueLite } from "./validation";
 import { marcarInternetFalha, marcarInternetOk } from "./connectivity";
 
@@ -99,6 +101,11 @@ export type MeuPerfil = {
    * on-read, como todo rename em app offline-first.
    */
   vinculoRegistrado?: { contaId: string; contaNome: string; desde: string } | null;
+  /**
+   * O acesso ao app calculado, por empresa. Opcional pelo mesmo motivo: cache
+   * e servidor anteriores a esta versão não têm o campo.
+   */
+  acessos?: AcessoAppDaConta[];
 };
 
 /**
@@ -660,7 +667,14 @@ export const api = {
   meuPerfil: async () => {
     const p = await request<MeuPerfil>("GET", "/m/eu", { comoIdentidade: true });
     await guardarVinculoRegistrado(p.vinculoRegistrado ?? null);
+    await guardarAcessosApp(p.acessos);
     return p;
+  },
+  /** Só o acesso ao app — o que se revalida ao voltar pro primeiro plano. */
+  revalidarAcessos: async () => {
+    const a = await request<AcessoAppDaConta[]>("GET", "/m/eu/acessos", { comoIdentidade: true });
+    await guardarAcessosApp(a);
+    return a;
   },
   /** As placas que ele diz rodar. O endpoint existia e nenhuma tela chamava —
    *  quem pulou a placa no cadastro nunca mais conseguia adicionar. */

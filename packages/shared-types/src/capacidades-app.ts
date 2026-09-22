@@ -544,6 +544,45 @@ export const PreviaCadastroAppInput = z.object({
 });
 export type PreviaCadastroAppInput = z.infer<typeof PreviaCadastroAppInput>;
 
+/**
+ * O que o APP recebe: as capacidades calculadas da pessoa em cada empresa
+ * onde ela tem vínculo vivo. Uma entrada por empresa — a mesma pessoa pode ser
+ * registrada numa e parceira noutra, e cada uma decide o dela.
+ */
+export type AcessoAppDaConta = {
+  contaId: string;
+  contaNome: string;
+  capacidades: CapacidadeApp[];
+  /** Quando o resolvedor gravou este resultado. */
+  calculadoEm: string;
+};
+
+/**
+ * O que o APP decide com o acesso calculado: esta capacidade vale, não vale,
+ * ou ainda não se sabe (`undefined`). Função pura, pra ser testada fora do app.
+ *
+ * - O que mora no cadastro de FUNCIONÁRIO (o ponto) se decide na empresa onde
+ *   a pessoa é registrada, que pode não ser a da sessão (parceira na A,
+ *   registrada na B). O resto, na empresa da sessão; sem sessão, na do vínculo
+ *   de registrado.
+ * - Sem resposta pra essa empresa → `undefined`. O app lê como "não sei" e
+ *   segue como antes; nunca como "não pode".
+ */
+export function capacidadeNaConta(
+  acessos: readonly AcessoAppDaConta[] | null | undefined,
+  contas: { sessao: string | null; registrado: string | null },
+  chave: CapacidadeApp,
+): boolean | undefined {
+  const conta =
+    CAPACIDADE_POR_CHAVE[chave]?.vinculo === "FUNCIONARIO"
+      ? (contas.registrado ?? contas.sessao)
+      : (contas.sessao ?? contas.registrado);
+  if (!conta || !acessos) return undefined;
+  const daConta = acessos.find((a) => a.contaId === conta);
+  if (!daConta) return undefined;
+  return daConta.capacidades.includes(chave);
+}
+
 /** Uma pessoa que muda numa simulação. */
 export type MudancaAcessoApp = {
   cpf: string;

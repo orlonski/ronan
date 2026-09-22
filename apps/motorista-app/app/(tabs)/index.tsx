@@ -71,6 +71,7 @@ import { iniciarTracking, isTrackingAtivo, useViagemAndamento } from "@/lib/trac
 import { getNavDestino } from "@/lib/nav-destino-storage";
 import { autoLimparCascaOrfa, getLifecycleLocal, hidratarViagemDoServidor } from "@/lib/lifecycle";
 import { startHomeTutorialIfNeeded } from "@/lib/home-tutorial";
+import { usePermite } from "@/lib/acessos-app";
 
 const statusVariant: Record<
   string,
@@ -147,6 +148,7 @@ function HomeDaEmpresa() {
   const [temLifecycle, setTemLifecycle] = useState<boolean | null>(null);
   const podeLifecycle = me.data?.podeViagemLifecycle ?? false;
   const podeChat = me.data?.podeChat ?? false;
+  const verPosicao = usePermite("app.posicao.compartilhar");
   useFocusEffect(
     useCallback(() => {
       let alive = true;
@@ -439,7 +441,7 @@ function HomeDaEmpresa() {
             {/* Banner: convite pra ativar compartilhamento de posição.
                 Aparece enquanto config.ativada=false. Some assim que
                 motorista ativa em /perfil-posicao. */}
-            {posicaoConfig.data && !posicaoConfig.data.ativada && (
+            {verPosicao && posicaoConfig.data && !posicaoConfig.data.ativada && (
               <Pressable
                 onPress={() => router.push("/perfil-posicao")}
                 className="flex-row items-center gap-3 rounded-2xl border-2 border-brand/30 bg-brand/10 p-4 active:opacity-75"

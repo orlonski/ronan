@@ -43,6 +43,7 @@ import {
   temIdentidadeSync,
 } from "@/lib/identidade";
 import { carregarVinculoRegistrado } from "@/lib/vinculo-registrado";
+import { carregarAcessosApp } from "@/lib/acessos-app";
 import { api } from "@/lib/api";
 import { AtualizacaoObrigatoria } from "@/components/atualizacao-obrigatoria";
 import {
@@ -165,6 +166,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           // e decidir antes de ler faz a tela do autônomo piscar na frente de
           // quem é empregado.
           carregarVinculoRegistrado(),
+          // O acesso calculado também decide o que aparece; lido junto pra
+          // tela não nascer com o menu de antes e trocar um instante depois.
+          carregarAcessosApp(),
         ]),
       )
       .then(([t, , temSessao, identidade]) => {
@@ -362,6 +366,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       // ligado o bloqueio) e aplica OTA nova calada (sem depender do banner).
       void checarVersaoApp();
       void aplicarOtaAoVoltar();
+      // O escritório pode ter mudado o acesso dele enquanto o app dormia.
+      // Sem sinal, fica com o que já sabia.
+      void api.revalidarAcessos().catch(() => {});
     });
 
     void (async () => {

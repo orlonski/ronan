@@ -9,6 +9,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { api } from "@/lib/api";
+import { RequerCapacidade } from "@/components/requer-capacidade";
 
 /**
  * O extrato: o que a empresa apurou que deve a ele.
@@ -20,7 +21,7 @@ import { api } from "@/lib/api";
  * Abrir a tela carimba que ele viu. É o que separa um acerto combinado de um
  * acerto imposto: se ele nunca abriu, ninguém pode dizer que ele concordou.
  */
-export default function MeusAcertos() {
+function MeusAcertosTela() {
   const [atualizando, setAtualizando] = useState(false);
 
   const acertos = useQuery({
@@ -194,5 +195,14 @@ function Linhas({
         );
       })}
     </View>
+  );
+}
+
+/** A tela também se abre por notificação e por link: a guarda fica nela, não só no botão. */
+export default function MeusAcertos() {
+  return (
+    <RequerCapacidade chave="app.acertos.ver" titulo="Meus acertos">
+      <MeusAcertosTela />
+    </RequerCapacidade>
   );
 }

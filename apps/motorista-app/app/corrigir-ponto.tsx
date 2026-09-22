@@ -10,6 +10,7 @@ import { DateField } from "@/components/ui/date-field";
 import { HoraField } from "@/components/ui/hora-field";
 import { useCatalogoPonto } from "@/lib/queries";
 import { hojeISO } from "@/lib/datetime";
+import { RequerCapacidade } from "@/components/requer-capacidade";
 
 /**
  * PEDIR CORREÇÃO de um dia.
@@ -31,7 +32,7 @@ function nomeDoMes(ymd: string): string {
   return MESES[(m || 1) - 1] ?? "";
 }
 
-export default function CorrigirPontoScreen() {
+function CorrigirPontoScreenTela() {
   const router = useRouter();
   const qc = useQueryClient();
   const { data: catalogo } = useCatalogoPonto();
@@ -206,5 +207,14 @@ export default function CorrigirPontoScreen() {
       </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+/** A tela também se abre por notificação e por link: a guarda fica nela, não só no botão. */
+export default function CorrigirPontoScreen() {
+  return (
+    <RequerCapacidade chave="app.ponto.corrigir" titulo="Pedir correção">
+      <CorrigirPontoScreenTela />
+    </RequerCapacidade>
   );
 }
