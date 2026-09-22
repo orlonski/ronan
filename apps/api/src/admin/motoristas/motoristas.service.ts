@@ -104,6 +104,9 @@ const SAFE_SELECT = {
   expoPushToken: true,
   podeLancarViagem: true,
   podeIniciarViagem: true,
+  // Sem isto a ficha lia `undefined` e o form caía no `?? false`: a "Viagem
+  // guiada" aparecia DESLIGADA pra todo mundo, inclusive pra quem usa.
+  podeViagemLifecycle: true,
   podeLancarPedagio: true,
   podeLancarAbastecimento: true,
   podeUsarOcrTicket: true,
@@ -115,6 +118,7 @@ const SAFE_SELECT = {
   podeDiaria: true,
   podeVerValorDiaria: true,
   receberResumoDiario: true,
+  perfilAcessoId: true,
   criadoEm: true,
   criadoPor: { select: { id: true, nome: true } },
 } as const;
@@ -782,11 +786,15 @@ export class MotoristasService {
       receberResumoDiario?: boolean;
     },
     escopo: EscopoAdmin,
+    usuarioId: string,
   ) {
     await this.ensureNoEscopo(id, escopo);
-    const exists = await this.prisma.motorista.findUnique({ where: { id }, select: { id: true } });
-    if (!exists) throw new NotFoundException("Motorista não encontrado");
-    return this.prisma.motorista.update({
+    const antes = await this.prisma.motorista.findUnique({
+      where: { id },
+      select: Object.fromEntries(Object.keys(input).map((k) => [k, true])) as Record<string, true>,
+    });
+    if (!antes) throw new NotFoundException("Motorista não encontrado");
+    const depois = await this.prisma.motorista.update({
       where: { id },
       data: input,
       select: {
@@ -807,6 +815,14 @@ export class MotoristasService {
         receberResumoDiario: true,
       },
     });
+    // Quem ligou o quê em quem. Até aqui um interruptor desses mudava o
+    // celular de alguém sem deixar rastro nenhum.
+    await this.auditoria.logDiff(
+      { usuarioId, entidade: "Motorista", entidadeId: id, acao: AcaoAuditoria.UPDATE },
+      antes as Record<string, unknown>,
+      Object.fromEntries(Object.keys(input).map((k) => [k, (depois as Record<string, unknown>)[k]])),
+    );
+    return depois;
   }
 
   /**

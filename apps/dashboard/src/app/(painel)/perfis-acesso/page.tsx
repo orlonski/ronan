@@ -272,7 +272,7 @@ function FormPerfil({
                 motorista CLT da própria transportadora dirige e lança. */}
             <p className="mt-1 text-xs text-muted-foreground">
               Só aparece como sugestão no cadastro. Não impede nada: motorista registrado
-              em carteira também dirige e lança viagem.
+              em carteira também pode dirigir e lançar viagem, se o perfil dele permitir.
             </p>
           </div>
 

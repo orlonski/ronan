@@ -2,9 +2,12 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@n
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { SalvarPerfilAcessoInput } from "@ronan/shared-types";
 import { z } from "zod";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
+import type { AuthAdminUser } from "../../auth/types";
+import { EscopoPor } from "../../common/escopo/escopo.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { PerfisAcessoService } from "./perfis-acesso.service";
 
@@ -37,8 +40,11 @@ export class PerfisAcessoController {
 
   @Post()
   @RequerPermissao("perfis-acesso.criar")
-  criar(@Body(new ZodValidationPipe(SalvarPerfilAcessoInput)) body: SalvarPerfilAcessoInput) {
-    return this.service.criar(body);
+  criar(
+    @Body(new ZodValidationPipe(SalvarPerfilAcessoInput)) body: SalvarPerfilAcessoInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.criar(body, user.id, user.escopo);
   }
 
   @Patch(":id")
@@ -46,22 +52,25 @@ export class PerfisAcessoController {
   editar(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(SalvarPerfilAcessoInput)) body: SalvarPerfilAcessoInput,
+    @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.editar(id, body);
+    return this.service.editar(id, body, user.id, user.escopo);
   }
 
   @Post(":id/aplicar")
   @RequerPermissao("perfis-acesso.aplicar")
+  @EscopoPor("motorista")
   aplicar(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(AplicarInput)) body: AplicarInput,
+    @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.aplicar(id, body.motoristaIds);
+    return this.service.aplicar(id, body.motoristaIds, user.id, user.escopo);
   }
 
   @Delete(":id")
   @RequerPermissao("perfis-acesso.excluir")
-  desligar(@Param("id") id: string) {
-    return this.service.desligar(id);
+  desligar(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.desligar(id, user.id, user.escopo);
   }
 }

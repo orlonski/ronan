@@ -41,10 +41,15 @@ type Modelo = { id: string; nome: string };
 /**
  * QUEM BATE PONTO — o cadastro de funcionário registrado.
  *
- * ⚠️ NÃO é a tela de Motoristas, e a diferença não é de organização: aquele
- * é o cadastro de PARCEIRO AUTÔNOMO. A mesma pessoa não pode estar nos dois,
- * e quem impede é o banco: contratar alguém que já tem contrato de parceiro
- * ativo devolve 409 dizendo o que encerrar antes.
+ * ⚠️ NÃO é a tela de Motoristas: aquele é o cadastro de quem DIRIGE. O
+ * motorista CLT da própria transportadora está nos dois de propósito — dirige
+ * pelo cadastro de motorista e bate ponto por este.
+ *
+ * O que não pode é outra coisa: a mesma pessoa ser REGISTRADA e PARCEIRA ao
+ * mesmo tempo (paga por diária de obra e por folha). Quem impede é o banco,
+ * pelo `RegimeVigente`: contratar alguém com regime de parceiro vivo devolve
+ * 409 dizendo o que encerrar antes. Esta frase dizia "não pode estar nos
+ * dois cadastros", e contradizia a ficha do motorista e a tela de perfis.
  */
 export default function FuncionariosPage() {
   return (
@@ -81,8 +86,8 @@ function Conteudo() {
             Quem bate ponto
           </h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Funcionário registrado em carteira. Quem é parceiro autônomo fica na tela de
-            Motoristas — a mesma pessoa não pode estar nos dois.
+            Funcionário registrado em carteira. Se ele também dirige, tem cadastro na tela
+            de Motoristas — o que não pode é ser registrado e parceiro ao mesmo tempo.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

@@ -1,9 +1,17 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { AcaoAuditoria } from "@prisma/client";
 import {
   ACESSOS_APP_CHAVES,
   type AcessosApp,
   type SalvarPerfilAcessoInput,
 } from "@ronan/shared-types";
+import { AuditoriaService } from "../../auditoria/auditoria.service";
+import { type EscopoAdmin, filtroEscopo } from "../../common/escopo/escopo";
 import { PrismaService } from "../../prisma/prisma.service";
 
 /**
@@ -22,10 +30,27 @@ import { PrismaService } from "../../prisma/prisma.service";
  * A consequência boa: NADA no app nem nos guards precisou mudar. A
  * consequência a assumir: editar um perfil é uma escrita em massa, e ela
  * carimba auditoria.
+ *
+ * ⚠️ ESCOPO DE FROTA. O perfil vale pra conta inteira: editar reescreve TODO
+ * mundo que está nele, de qualquer transportadora. Por isso criar, editar e
+ * desligar exigem acesso global — um gestor de frota terceira que editasse o
+ * perfil mexeria no celular de motorista que ele nem enxerga. Aplicar é por
+ * pessoa, então aí o escopo FILTRA: ele aplica nos dele, e só nos dele.
  */
 @Injectable()
 export class PerfisAcessoService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditoria: AuditoriaService,
+  ) {}
+
+  private exigirGlobal(escopo: EscopoAdmin) {
+    if (escopo) {
+      throw new ForbiddenException(
+        "O perfil vale pra empresa inteira, e o seu acesso é restrito a algumas transportadoras. Peça pra quem tem acesso a todas.",
+      );
+    }
+  }
 
   private acessosDe(o: Record<string, unknown>): AcessosApp {
     return Object.fromEntries(
@@ -49,7 +74,8 @@ export class PerfisAcessoService {
     }));
   }
 
-  async criar(dados: SalvarPerfilAcessoInput) {
+  async criar(dados: SalvarPerfilAcessoInput, usuarioId: string, escopo: EscopoAdmin) {
+    this.exigirGlobal(escopo);
     await this.recusarNomeRepetido(dados.nome, null);
     const p = await this.prisma.perfilAcessoApp.create({
       data: {
@@ -58,6 +84,14 @@ export class PerfisAcessoService {
         sugeridoPara: dados.sugeridoPara ?? null,
         ...dados.acessos,
       },
+    });
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "PerfilAcessoApp",
+      entidadeId: p.id,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "criado",
+      valorDepois: { nome: dados.nome, acessos: dados.acessos },
     });
     return { id: p.id };
   }
@@ -74,12 +108,19 @@ export class PerfisAcessoService {
    * pessoas serão reescritas antes de salvar — sem o aviso, alguém tira uma
    * exceção que outra pessoa pôs semana passada sem nunca saber.
    */
-  async editar(id: string, dados: SalvarPerfilAcessoInput) {
+  async editar(id: string, dados: SalvarPerfilAcessoInput, usuarioId: string, escopo: EscopoAdmin) {
+    this.exigirGlobal(escopo);
     const atual = await this.prisma.perfilAcessoApp.findFirst({ where: { id } });
     if (!atual) throw new NotFoundException("Perfil não encontrado.");
     await this.recusarNomeRepetido(dados.nome, id);
 
-    return this.prisma.$transaction(async (tx) => {
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      // Quem vai ser reescrito, ANTES de reescrever: é o que a auditoria
+      // precisa pra alguém reconstituir "por que o João perdeu o chat".
+      const afetados = await tx.motorista.findMany({
+        where: { perfilAcessoId: id },
+        select: { id: true },
+      });
       const p = await tx.perfilAcessoApp.update({
         where: { id },
         data: {
@@ -93,8 +134,19 @@ export class PerfisAcessoService {
         where: { perfilAcessoId: id },
         data: { ...dados.acessos },
       });
-      return { id: p.id, motoristasAtualizados: count };
+      return { id: p.id, motoristasAtualizados: count, afetados: afetados.map((m) => m.id) };
     });
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "PerfilAcessoApp",
+      entidadeId: id,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "acessos",
+      valorAntes: { nome: atual.nome, acessos: this.acessosDe(atual as unknown as Record<string, unknown>) },
+      valorDepois: { nome: dados.nome, acessos: dados.acessos },
+      metadata: { motoristasReescritos: resultado.afetados },
+    });
+    return { id: resultado.id, motoristasAtualizados: resultado.motoristasAtualizados };
   }
 
   /**
@@ -104,16 +156,35 @@ export class PerfisAcessoService {
    * frete", e fazer isso um a um é exatamente o trabalho que o perfil veio
    * eliminar.
    */
-  async aplicar(perfilId: string, motoristaIds: string[]) {
+  async aplicar(perfilId: string, motoristaIds: string[], usuarioId: string, escopo: EscopoAdmin) {
     const perfil = await this.prisma.perfilAcessoApp.findFirst({ where: { id: perfilId } });
     if (!perfil) throw new NotFoundException("Perfil não encontrado.");
     if (!perfil.ativo) throw new BadRequestException("Este perfil está desligado.");
     if (motoristaIds.length === 0) return { atualizados: 0 };
 
+    // Só os que ele enxerga. Recusar o lote inteiro se um estiver fora seria
+    // mais barulhento, mas também diria "esse id existe em outra frota" — e
+    // é o que o escopo existe pra não dizer.
+    const alcancaveis = await this.prisma.motorista.findMany({
+      where: { id: { in: motoristaIds }, ...filtroEscopo(escopo) },
+      select: { id: true },
+    });
+    const ids = alcancaveis.map((m) => m.id);
+    if (ids.length === 0) return { atualizados: 0 };
+
     const acessos = this.acessosDe(perfil as unknown as Record<string, unknown>);
     const { count } = await this.prisma.motorista.updateMany({
-      where: { id: { in: motoristaIds } },
+      where: { id: { in: ids } },
       data: { perfilAcessoId: perfilId, ...acessos },
+    });
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "PerfilAcessoApp",
+      entidadeId: perfilId,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "aplicado",
+      valorDepois: acessos,
+      metadata: { motoristas: ids },
     });
     return { atualizados: count };
   }
@@ -126,10 +197,11 @@ export class PerfisAcessoService {
    * volta a null) e cada um segue com o que tinha — que é o estado de antes
    * de existir perfil nenhum.
    */
-  async desligar(id: string) {
+  async desligar(id: string, usuarioId: string, escopo: EscopoAdmin) {
+    this.exigirGlobal(escopo);
     const perfil = await this.prisma.perfilAcessoApp.findFirst({ where: { id } });
     if (!perfil) throw new NotFoundException("Perfil não encontrado.");
-    return this.prisma.$transaction(async (tx) => {
+    const r = await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.motorista.updateMany({
         where: { perfilAcessoId: id },
         data: { perfilAcessoId: null },
@@ -137,6 +209,17 @@ export class PerfisAcessoService {
       await tx.perfilAcessoApp.update({ where: { id }, data: { ativo: false } });
       return { soltos: count };
     });
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "PerfilAcessoApp",
+      entidadeId: id,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "ativo",
+      valorAntes: true,
+      valorDepois: false,
+      metadata: { soltos: r.soltos },
+    });
+    return r;
   }
 
   private async recusarNomeRepetido(nome: string, ignorarId: string | null) {

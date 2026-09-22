@@ -548,7 +548,7 @@ function HomeDaEmpresa() {
                   router.push(
                     diariaUnica
                       ? `/encerrar-diaria?viagemId=${diariaUnica.id}`
-                      : "/viagens",
+                      : "/historico",
                   )
                 }
                 className="flex-row items-center gap-3 rounded-2xl border-2 border-violet-500/40 bg-violet-500/15 p-4 active:opacity-75"
@@ -741,10 +741,10 @@ function HomeDaEmpresa() {
               !me.data.podeLancarAbastecimento && (
                 <View className="items-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card p-6">
                   <Text className="text-center text-base font-semibold text-foreground">
-                    Nenhuma funcionalidade liberada agora
+                    Nada pra lançar por aqui ainda
                   </Text>
                   <Text className="text-center text-sm text-muted-foreground">
-                    Fale com o escritório pra liberar lançamentos no app.
+                    Os lançamentos pelo app ainda não estão ligados pra você nesta empresa. É só pedir pra quem cuida do seu cadastro lá.
                   </Text>
                 </View>
               )}

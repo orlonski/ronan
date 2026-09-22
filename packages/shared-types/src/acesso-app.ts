@@ -65,8 +65,11 @@ const DEFS = [
   },
   {
     chave: "podeIniciarViagem",
-    label: "Navegação ao vivo",
-    efeito: "Mapa e voz guiando até o destino durante a viagem.",
+    // ⚠️ Chamava "Navegação ao vivo", e não é: no app este acesso liga o botão
+    // "Iniciar viagem com GPS" (o acompanhamento clássico). A navegação por
+    // voz não depende dele. O escritório ligava achando que dava mapa e voz.
+    label: "Iniciar viagem com GPS",
+    efeito: "Botão pra começar a viagem com o GPS acompanhando o trajeto até o fim.",
     grupo: "Viagem guiada",
   },
   {

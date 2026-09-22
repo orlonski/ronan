@@ -1408,7 +1408,7 @@ model Motorista {
   /// perfil é EXCEÇÃO, e a ficha mostra quantas são — exceção invisível vira
   /// regra por acidente.
   perfilAcessoId          String?
-  perfilAcesso            PerfilAcessoApp?     @relation(fields: [perfilAcessoId], references: [id])
+  perfilAcesso            PerfilAcessoApp?     @relation(fields: [perfilAcessoId], references: [id], onDelete: SetNull)
   // Acessos por funcionalidade (controle de feature flag por motorista).
   // Default false nos campos sensíveis = novo motorista nasce travado e o admin
   // libera caso a caso pelo dashboard. podeLancarViagem/podeLancarAbastecimento
@@ -1547,6 +1547,7 @@ model Motorista {
   @@index([identidadeId])
   /// A lista do painel e a aba de convites filtram por aceite.
   @@index([contaId, aceite])
+  @@index([perfilAcessoId])
   @@map("motoristas")
 }
 

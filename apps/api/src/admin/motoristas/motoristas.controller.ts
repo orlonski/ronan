@@ -186,7 +186,7 @@ export class MotoristasController {
     @Body(new ZodValidationPipe(AcessosInput)) body: AcessosInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.atualizarAcessos(id, body, user.escopo);
+    return this.service.atualizarAcessos(id, body, user.escopo, user.id);
   }
 
   @RequerPermissao("motoristas.aprovar")

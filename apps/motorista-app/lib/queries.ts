@@ -357,7 +357,11 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   if (typeof anyM.podeViagemLifecycle !== "boolean") anyM.podeViagemLifecycle = false;
   if (typeof anyM.podeLancarPedagio !== "boolean") anyM.podeLancarPedagio = true;
   if (typeof anyM.podeLancarAbastecimento !== "boolean") anyM.podeLancarAbastecimento = true;
-  if (typeof anyM.podeUsarOcrTicket !== "boolean") anyM.podeUsarOcrTicket = true;
+  // ⚠️ FALSE, igual ao banco. A leitura por foto custa por uso e o servidor já
+  // recusa quem não tem (`/m/ia/ticket` exige a flag): ligar por omissão aqui
+  // só mostrava um botão que ia dar erro — e era o terceiro valor padrão
+  // divergente pro mesmo acesso.
+  if (typeof anyM.podeUsarOcrTicket !== "boolean") anyM.podeUsarOcrTicket = false;
   // Opt-in: cache antigo / motorista sem o flag NÃO vê o "buscar todos os locais".
   if (typeof anyM.podeVerTodosLocais !== "boolean") anyM.podeVerTodosLocais = false;
   // Opt-in: cache antigo / motorista sem o flag NÃO vê a sugestão de km.
@@ -368,6 +372,10 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   // um modo só, o app não renderiza o campo. Cache antigo sem a chave não pode
   // travar o motorista fora de uma feature que a conta já habilitou.
   if (typeof anyM.podeDiaria !== "boolean") anyM.podeDiaria = true;
+  // Chat e stories nascem LIGADOS no banco. Sem normalizar, cache antigo sem a
+  // chave escondia a aba Conversas até a próxima resposta do servidor.
+  if (typeof anyM.podeChat !== "boolean") anyM.podeChat = true;
+  if (typeof anyM.podeVerStories !== "boolean") anyM.podeVerStories = true;
   // Backend antigo/cache sem as prefs: assume que recebe tudo (default true).
   if (typeof anyM.aceitaPush !== "boolean") anyM.aceitaPush = true;
   if (typeof anyM.aceitaWhatsapp !== "boolean") anyM.aceitaWhatsapp = true;

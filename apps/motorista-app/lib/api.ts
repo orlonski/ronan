@@ -428,6 +428,11 @@ async function guardarIdentidade(res: AuthResposta): Promise<void> {
   if (res.identidade?.accessToken) await salvarIdentidade(res.identidade);
 }
 
+/** Rotas do ponto: aceitam o token da pessoa (ver `request`). */
+export function ehRotaDoPonto(path: string): boolean {
+  return path === "/m/ponto" || path.startsWith("/m/ponto/") || path.startsWith("/m/ponto?");
+}
+
 export async function request<T>(
   method: string,
   path: string,
@@ -462,8 +467,21 @@ export async function request<T>(
     outbox = false,
     timeoutMs: tetoProprio,
     comoCadastro,
-    comoIdentidade = false,
+    comoIdentidade: comoIdentidadePedido = false,
   } = init;
+  // ⚠️ O PONTO DE QUEM SÓ É REGISTRADO. O CLT sem cadastro de motorista
+  // (mecânico, escritório, o motorista registrado que a empresa não cadastrou
+  // como parceiro) não tem sessão de empresa nenhuma — só a da pessoa. Sem
+  // este desvio, toda chamada de `/m/ponto/*` caía no "sem token", que é
+  // tratado como falta de sinal: a batida ficava "esperando sinal" pra sempre
+  // e a jornada nunca carregava. O servidor já aceitava o token da pessoa
+  // (promove a FUNCIONARIO na leitura); faltava o app mandá-lo.
+  //
+  // Só quando NÃO há empresa ativa: quem tem cadastro de motorista e é CLT na
+  // mesma empresa segue batendo com o token do cadastro, como sempre.
+  const comoIdentidade =
+    comoIdentidadePedido ||
+    (auth && !comoCadastro && ehRotaDoPonto(path) && !(await motoristaAtivoId()));
   const headers: Record<string, string> = { ...appVersionHeaders() };
   if (body !== undefined && !isFormData) headers["content-type"] = "application/json";
   // Aceita gzip — backend agora tem compression() middleware
