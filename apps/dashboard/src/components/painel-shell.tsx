@@ -11,6 +11,7 @@ import { GlobalLoadingBar } from "@/components/loading";
 import { LogoConta } from "@/components/logo-conta";
 import { Topbar } from "@/components/topbar";
 import { TelaGuard } from "@/components/requer-tela";
+import { SobreATela } from "@/components/sobre-a-tela";
 import { TourHost } from "@/components/tour-host";
 import { useInboxStream } from "@/lib/inbox";
 
@@ -86,7 +87,17 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
           tabIndex={-1}
           className="flex-1 overflow-y-auto overflow-x-hidden bg-background p-4 pb-24 md:p-8 md:pb-8"
         >
-          <TelaGuard>{children}</TelaGuard>
+          {/* "Para que serve esta tela", escolhida pela rota.
+              
+              ⚠️ DENTRO do guard, não acima dele. Fora, ela aparecia por cima
+              de "Você não tem acesso a esta tela" e de "sua empresa não
+              contratou" — explicar em detalhe o que alguém não pode abrir não
+              é ajudar, é provocar. Só vi isso abrindo a tela; no código as
+              duas versões são a mesma linha. */}
+          <TelaGuard>
+            <SobreATela />
+            {children}
+          </TelaGuard>
         </main>
       </div>
 

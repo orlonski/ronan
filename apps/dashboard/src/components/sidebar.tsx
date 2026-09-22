@@ -340,6 +340,17 @@ const GRUPOS: Grupo[] = [
     coach: "grupo-movatruck",
     soPlataforma: true,
     itens: [
+      /**
+       * ⚠️ Vivia SOLTO acima dos grupos, como caso especial escrito à mão —
+       * uma ferramenta da plataforma no meio do menu do cliente.
+       *
+       * Não tem chave de permissão nenhuma de propósito (o gate é a flag
+       * `plataforma`), e é justamente por isso que aqui é seguro: este grupo
+       * tem o MESMO gate. Os outros recursos de plataforma continuam fora
+       * daqui porque a chave deles pode ser concedida a um cliente caso a
+       * caso — a deste não pode.
+       */
+      { href: "/contas", label: "Assinantes", icon: Briefcase },
       { href: "/demandas", label: "Pedidos de melhoria", icon: Lightbulb, perm: "demandas.ver" },
       { href: "/prospeccao", label: "Captação de clientes", icon: Target, perm: "prospeccao.ver" },
       { href: "/marketing", label: "Instagram da Movatruck", icon: Instagram, perm: "marketing.ver" },
@@ -535,27 +546,6 @@ export function Sidebar({
             >
               <RELATORIOS_ITEM.icon className="h-4 w-4" />
               {RELATORIOS_ITEM.label}
-            </Link>
-          )}
-
-          {/* Assinantes: só a equipe da plataforma. Não passa pela matriz de
-              papéis de propósito — não é permissão que um administrador de
-              empresa possa ganhar por engano. O rótulo era "Empresas
-              (plataforma)", vizinho de um "Empresas" que abria outra coisa. */}
-          {plataforma && (
-            <Link
-              href={"/contas" as any}
-              aria-current={isRotaAtiva(pathname, "/contas") ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-                isRotaAtiva(pathname, "/contas")
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
-                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              )}
-            >
-              <Briefcase className="h-4 w-4" />
-              Assinantes
             </Link>
           )}
 
