@@ -114,6 +114,15 @@ motivo escrito, e fica registrado.
 **O que custa:** ele para de usar o app, e aí o escritório perde o dado.
 **O que mata:** pendência do escritório nunca aparece como erro dele.
 
+### 14. O valor caiu na conta, mas nada mostra de onde ele veio
+**Como ele diz:** "caiu um valor lá. De onde saiu esse número, ninguém explica."
+**O que custa:** ele não tem como conferir — só confiar. É terreno fértil pra
+desconfiança mesmo quando a conta está certa, porque "está certa" sem mostrar o
+cálculo é indistinguível de "não sei se está certa".
+**O que mata:** cada real do acerto nasce de uma linha nomeada — frete da viagem,
+pedágio devolvido, abastecimento devolvido, desconto com motivo escrito — nunca de
+um total solto (`common/acerto-motorista.ts`, `apps/motorista-app/app/meus-acertos.tsx`).
+
 ---
 
 ## De onde vem isto, e o que falta
