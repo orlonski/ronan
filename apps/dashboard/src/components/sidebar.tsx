@@ -99,6 +99,12 @@ type Item = {
    * O defeito é catorze linhas sem nenhuma pista de onde parar de ler. A seção
    * só aparece se sobrar item nela depois do filtro de permissão: rótulo de
    * seção vazia é pior que rótulo nenhum.
+   *
+   * ⚠️ TODO item da seção declara o rótulo, não só o primeiro. Declarar só no
+   * primeiro parece economia e é defeito: quando é justamente ele que o filtro
+   * de permissão remove, os outros ficam órfãos e o cabeçalho some — que é o
+   * contrário do que este comentário promete. Repetir é o que faz o rótulo
+   * nascer no primeiro item que SOBREVIVER.
    */
   secao?: string;
 };
@@ -303,17 +309,17 @@ const GRUPOS: Grupo[] = [
       // ficaria preso nele pra sempre. Se a pessoa é obrigada a aceitar, ela
       // tem que conseguir reler o que aceitou; esconder isso seria obrigar a
       // assinar e negar a cópia.
-      { href: "/configuracoes/contrato", label: "Contrato", icon: FileText },
-      { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver" },
-      { href: "/configuracoes/permissoes", label: "Papéis e permissões", icon: ShieldCheck, perm: "permissoes.gerenciar" },
-      { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver" },
+      { href: "/configuracoes/contrato", label: "Contrato", icon: FileText, secao: "Sua conta" },
+      { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver", secao: "Sua conta" },
+      { href: "/configuracoes/permissoes", label: "Papéis e permissões", icon: ShieldCheck, perm: "permissoes.gerenciar", secao: "Sua conta" },
+      { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver", secao: "Sua conta" },
 
       { href: "/configuracoes/campos-layout", label: "Colunas da planilha do cliente", icon: Columns3, perm: "config-campos-layout.ver", secao: "Como o sistema se comporta" },
-      { href: "/configuracoes/cte", label: "Configurar emissor de CT-e", icon: Settings, perm: "cte.ver" },
-      { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Satellite, perm: "config-tracking.ver" },
-      { href: "/configuracoes/busca-locais", label: "Busca de locais", icon: Search, perm: "config-busca-locais.ver" },
-      { href: "/configuracoes/km-atipico", label: "Alerta de km fora do padrão", icon: Gauge, perm: "config-km-atipico.ver" },
-      { href: "/configuracoes/torre", label: "Alertas da torre", icon: SignalHigh, perm: "programacao.ver" },
+      { href: "/configuracoes/cte", label: "Configurar emissor de CT-e", icon: Settings, perm: "cte.ver", secao: "Como o sistema se comporta" },
+      { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Satellite, perm: "config-tracking.ver", secao: "Como o sistema se comporta" },
+      { href: "/configuracoes/busca-locais", label: "Busca de locais", icon: Search, perm: "config-busca-locais.ver", secao: "Como o sistema se comporta" },
+      { href: "/configuracoes/km-atipico", label: "Alerta de km fora do padrão", icon: Gauge, perm: "config-km-atipico.ver", secao: "Como o sistema se comporta" },
+      { href: "/configuracoes/torre", label: "Alertas da torre", icon: SignalHigh, perm: "programacao.ver", secao: "Como o sistema se comporta" },
 
       /**
        * Chaves de `RECURSOS_PLATAFORMA`: a empresa não as recebe, então na
@@ -325,8 +331,8 @@ const GRUPOS: Grupo[] = [
        * menu. A seção rotula sem esconder.
        */
       { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, perm: "whatsapp.ver", secao: "Ferramentas da Movatruck" },
-      { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, perm: "config-ia.ver" },
-      { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: Bot, perm: "config-agente.ver" },
+      { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, perm: "config-ia.ver", secao: "Ferramentas da Movatruck" },
+      { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: Bot, perm: "config-agente.ver", secao: "Ferramentas da Movatruck" },
     ],
   },
   {
