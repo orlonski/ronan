@@ -12,6 +12,7 @@ import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, SEM_ESCOPO, type EscopoAdmin } from "../../common/escopo/escopo";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
+import { dentroDeEmprego, periodosDeEmprego } from "../../common/regime-vigente";
 import {
   calcularAcerto,
   resolverRemuneracao,
@@ -135,6 +136,37 @@ export class AcertosService {
 
     const regra = resolverRemuneracao(motorista, motorista.modalidade);
 
+    /**
+     * ⚠️ DIA EM QUE ELE ERA EMPREGADO NÃO ENTRA NO ACERTO. Nenhuma linha.
+     *
+     * O acerto É o documento de pagamento do PARCEIRO. O filtro de regime
+     * existia só nos dias de obra (o `regime: PARCEIRO` logo abaixo), e a
+     * busca de viagens não olhava regime nenhum — então quem fosse registrado
+     * em carteira e continuasse lançando viagem seguia gerando item de acerto
+     * por produção. Isso é pagamento por fora pra empregado (art. 457 §1º da
+     * CLT), e vinha com carimbo da nossa régua.
+     *
+     * A pergunta certa é por DATA, não "o que ele é hoje": quem foi parceiro
+     * até março e foi registrado em abril tem direito ao acerto de março.
+     */
+    const periodosEmprego = await periodosDeEmprego(this.prisma, motorista.cpf ?? "");
+    const foraDoEmprego = (data: Date | null) =>
+      data != null && !dentroDeEmprego(periodosEmprego, data);
+    // Período inteiro dentro do vínculo: não é acerto vazio, é acerto que não
+    // existe. Vazio o operador leria como "ele não rodou".
+    if (
+      periodosEmprego.some(
+        (pe) =>
+          inicio.getTime() >= pe.inicio.getTime() &&
+          (pe.fim === null || fim.getTime() <= pe.fim.getTime()),
+      )
+    ) {
+      throw new ConflictException(
+        "Neste período o motorista era empregado registrado desta empresa. " +
+          "O que ele recebe vai por folha de pagamento — acerto de parceiro não se aplica.",
+      );
+    }
+
     const [viagens, abastecimentos, pedagiosAvulsos, diasDeObra] = await Promise.all([
       this.prisma.viagem.findMany({
         where: {
@@ -205,6 +237,8 @@ export class AcertosService {
       // de status já tira as incompletas, mas o tipo não sabe disso — e uma
       // viagem sem data não tem como entrar num acerto POR PERÍODO.
       .filter((v): v is typeof v & { data: Date } => v.data != null)
+      // Dia de vínculo fora — ver `periodosEmprego`.
+      .filter((v) => foraDoEmprego(v.data))
       .map((v) => ({
       id: v.id,
       data: v.data,
@@ -218,31 +252,40 @@ export class AcertosService {
       pedagios: v.pedagios.map((p) => ({ id: p.id, valor: p.valor, praca: p.pracaPedagio })),
     }));
 
-    const abastecimentosParaAcerto: AbastecimentoParaAcerto[] = abastecimentos.map((a) => ({
-      id: a.id,
-      data: a.data,
-      valorTotal: a.valorTotal,
-      postoNome: a.postoNome,
-      emComboio: a.emComboio,
-    }));
+    const abastecimentosParaAcerto: AbastecimentoParaAcerto[] = abastecimentos
+      .filter((a) => foraDoEmprego(a.data))
+      .map((a) => ({
+        id: a.id,
+        data: a.data,
+        valorTotal: a.valorTotal,
+        postoNome: a.postoNome,
+        emComboio: a.emComboio,
+      }));
 
-    const diariasObra: DiariaObraParaAcerto[] = diasDeObra.map((d) => ({
-      registroId: d.id,
-      data: d.data,
-      obraNome: d.alocacao.cliente.nome,
-      valorDiaria: d.alocacao.valorDiaria,
-    }));
+    // O `regime: PARCEIRO` da consulta já cobre o caso normal; o filtro por
+    // data pega o que ela não vê — alocação aberta como parceiro e a pessoa
+    // registrada depois, com a alocação viva.
+    const diariasObra: DiariaObraParaAcerto[] = diasDeObra
+      .filter((d) => foraDoEmprego(d.data))
+      .map((d) => ({
+        registroId: d.id,
+        data: d.data,
+        obraNome: d.alocacao.cliente.nome,
+        valorDiaria: d.alocacao.valorDiaria,
+      }));
 
     const calculado = calcularAcerto({
       viagens: viagensParaAcerto,
       abastecimentos: abastecimentosParaAcerto,
       diariasObra,
-      pedagiosAvulsos: pedagiosAvulsos.map((p) => ({
-        id: p.id,
-        data: p.data,
-        valor: p.valor,
-        praca: p.pracaPedagio,
-      })),
+      pedagiosAvulsos: pedagiosAvulsos
+        .filter((p) => foraDoEmprego(p.data))
+        .map((p) => ({
+          id: p.id,
+          data: p.data,
+          valor: p.valor,
+          praca: p.pracaPedagio,
+        })),
       regra,
     });
 

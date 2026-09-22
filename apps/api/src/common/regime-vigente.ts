@@ -121,12 +121,76 @@ export async function abrirRegime(
  */
 export async function encerrarRegime(
   tx: Tx,
-  e: { cpf: string; motivo: string },
+  e: {
+    cpf: string;
+    motivo: string;
+    /**
+     * ⚠️ QUAL regime quem chama acha que está encerrando.
+     *
+     * Sem isto, encerrar é cego: quem desliga um funcionário solta a chave de
+     * QUALQUER regime vivo daquele CPF — inclusive um contrato de PARCEIRO que
+     * outro módulo abriu. Acontecia com funcionário legado (sem regime) que
+     * depois ganhou alocação de obra: desligar o funcionário apagava o regime
+     * de parceiro em silêncio, e ninguém tinha como descobrir, porque o
+     * histórico fica carimbado com o motivo do desligamento.
+     *
+     * Vai no WHERE, não num `if` antes: o banco decide, então duas chamadas
+     * simultâneas não conseguem encerrar o regime uma da outra.
+     */
+    regime?: RegimeTrabalho;
+  },
 ): Promise<void> {
   const chave = soDigitos(e.cpf);
   if (chave.length !== 11) return;
   await tx.regimeVigente.updateMany({
-    where: { chaveViva: chave },
+    where: { chaveViva: chave, ...(e.regime ? { regime: e.regime } : {}) },
     data: { chaveViva: null, encerradoEm: new Date(), motivo: e.motivo },
   });
+}
+
+/**
+ * Este CPF tem vínculo de emprego registrado vivo nesta empresa?
+ *
+ * ⚠️ Existe pra quem precisa RECUSAR antes de criar, e não tem regime próprio
+ * pra abrir. O caso que a motivou: cadastrar um motorista parceiro com o CPF
+ * de um funcionário registrado não passava por checagem nenhuma — a trava só
+ * dispara quando alguém ABRE um regime, e o cadastro de motorista nunca abriu.
+ */
+export async function temVinculoDeEmprego(tx: Tx, cpf: string): Promise<boolean> {
+  const vivo = await regimeVivo(tx, cpf);
+  return vivo?.regime === "EMPREGADO";
+}
+
+/**
+ * Os períodos em que este CPF esteve (ou está) registrado como empregado.
+ *
+ * ⚠️ Serve a quem paga: pagamento por produção — viagem, tonelada, km — não
+ * pode alcançar dia em que a pessoa era empregada, e a pergunta certa é por
+ * DATA, não "o que ela é hoje". Quem foi parceiro até março e foi registrado
+ * em abril tem direito ao acerto de março, e não pode ter o de maio.
+ *
+ * `encerradoEm` nulo = ainda vigente, janela aberta à direita.
+ */
+export async function periodosDeEmprego(
+  tx: Tx,
+  cpf: string,
+): Promise<{ inicio: Date; fim: Date | null }[]> {
+  const chave = soDigitos(cpf);
+  if (chave.length !== 11) return [];
+  const linhas = await tx.regimeVigente.findMany({
+    where: { cpf: chave, regime: "EMPREGADO" },
+    select: { iniciouEm: true, encerradoEm: true },
+  });
+  return linhas.map((l) => ({ inicio: l.iniciouEm, fim: l.encerradoEm }));
+}
+
+/** A data cai dentro de algum período de emprego? */
+export function dentroDeEmprego(
+  periodos: { inicio: Date; fim: Date | null }[],
+  data: Date,
+): boolean {
+  const t = data.getTime();
+  return periodos.some(
+    (p) => t >= p.inicio.getTime() && (p.fim === null || t <= p.fim.getTime()),
+  );
 }

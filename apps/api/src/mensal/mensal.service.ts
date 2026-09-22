@@ -281,10 +281,9 @@ export class MensalService {
       // de trabalho vivo, que é exatamente o desenho que a trava existe pra
       // impedir.
       if (motorista?.cpf) {
-        const vivo = await regimeVivo(tx, motorista.cpf);
-        if (vivo?.regime === "PARCEIRO") {
-          await encerrarRegime(tx, { cpf: motorista.cpf, motivo });
-        }
+        // O alvo vai no WHERE do encerramento: decidir aqui fora com um
+        // `findFirst` antes deixava uma fresta entre ler e escrever.
+        await encerrarRegime(tx, { cpf: motorista.cpf, motivo, regime: "PARCEIRO" });
       }
       return atualizada;
     });
@@ -437,9 +436,15 @@ export class MensalService {
   async desmarcarPresenca(motoristaId: string, dataYmd: string) {
     const a = await this.prisma.alocacaoObra.findFirst({
       where: { motoristaId, ativa: true },
-      select: { id: true },
+      select: { id: true, regime: true },
     });
     if (!a) throw new BadRequestException("Você não está alocado em nenhuma obra.");
+    // Mesma trava de `registrarPresenca`, e a assimetria era o defeito: marcar
+    // era recusado pra quem é registrado, desmarcar passava. Um caminho aberto
+    // sobre o registro de diária é um caminho sobre o mesmo assunto.
+    if (a.regime === "EMPREGADO") {
+      throw new BadRequestException("Nesta obra o seu dia não é contado por diária.");
+    }
 
     const r = await this.prisma.registroPresenca.findFirst({
       where: { alocacaoId: a.id, data: dia(dataYmd) },
@@ -482,6 +487,12 @@ export class MensalService {
     const alocacoes = await this.prisma.alocacaoObra.findMany({
       where: {
         motoristaId,
+        // ⚠️ Mesmo filtro de `obraDeHoje`, e faltar aqui era um buraco com
+        // dinheiro dentro: a home escondia o bloco pra quem é registrado, mas
+        // esta rota seguia aberta e a tela dela diz "cada dia na obra é uma
+        // diária" — com valor, quando ele pode ver valor. O léxico de parceiro
+        // autônomo inteiro, pra um empregado, na mesma empresa.
+        regime: "PARCEIRO",
         inicio: { lte: ultimo },
         OR: [{ fim: null }, { fim: { gte: primeiro } }],
       },

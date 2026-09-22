@@ -59,7 +59,25 @@ function servico(estado: {
         escritas.push({ tabela: "regime", op: "create", data });
         return data;
       },
-      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+      /**
+       * ⚠️ O duplê HONRA o `where`, e isso não é capricho de mock.
+       *
+       * Enquanto ele só registrava a escrita, "encerrar não mexe no regime do
+       * registrado" só podia ser testado contando chamadas — e contar chamadas
+       * confunde "não escreveu" com "escreveu e não pegou ninguém". São coisas
+       * diferentes: a segunda é a correta, porque pôr o alvo no WHERE é o que
+       * fecha a fresta entre ler e escrever.
+       */
+      updateMany: async ({
+        data,
+        where,
+      }: {
+        data: Record<string, unknown>;
+        where: { regime?: string };
+      }) => {
+        const vivo = estado.regimeAtual;
+        if (!vivo) return { count: 0 };
+        if (where.regime && where.regime !== vivo.regime) return { count: 0 };
         escritas.push({ tabela: "regime", op: "update", data });
         return { count: 1 };
       },

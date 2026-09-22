@@ -335,7 +335,15 @@ export class PontoAdminService {
         where: { funcionarioId: id, chaveViva: { not: null } },
         data: { chaveViva: null, vigenteAte: atualizado.desligadoEm },
       });
-      await encerrarRegime(tx, { cpf: f.cpf, motivo: `desligamento: ${dados.motivo}` });
+      // ⚠️ `regime: EMPREGADO` não é redundância: desligar um funcionário não
+      // pode soltar a chave de um contrato de PARCEIRO. Funcionário legado
+      // (importado antes da trava, sem regime) que depois ganhou alocação de
+      // obra tem regime de PARCEIRO vivo — e o desligamento apagava ele.
+      await encerrarRegime(tx, {
+        cpf: f.cpf,
+        motivo: `desligamento: ${dados.motivo}`,
+        regime: "EMPREGADO",
+      });
       return atualizado;
     });
   }
