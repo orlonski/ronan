@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AcaoAuditoria, type Prisma, type RegimeTrabalho } from "@prisma/client";
+import { AcaoAuditoria, type Prisma, type RegimeTrabalho, type TipoRemuneracao } from "@prisma/client";
 import type {
   CriarMotoristaInput,
   AtualizarMotoristaInput,
@@ -13,7 +13,7 @@ import type {
   EnviarPushResultado,
   StatusMotorista,
 } from "@ronan/shared-types";
-import { NOME_PLATAFORMA } from "@ronan/shared-types";
+import { NOME_PLATAFORMA, TIPOS_REMUNERACAO } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
 import { IdentidadeService } from "../../auth/identidade.service";
@@ -30,6 +30,7 @@ import { adotarLancamentosOrfaos } from "../../common/transportadora";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { nasceComoConvite } from "../../common/vinculo";
 import { AcessoAppService, ondeExcecaoViva } from "../../common/acesso-app/acesso-app.service";
+import { resolverRemuneracao } from "../../common/acerto-motorista";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { EasUpdateService } from "./eas-update.service";
 
@@ -429,9 +430,12 @@ export class MotoristasService {
     };
   }
 
-  async create(data: CriarMotoristaInput, usuarioId: string) {
+  async create(dadosBrutos: CriarMotoristaInput, usuarioId: string) {
+    const { motivoPagamentoRegistrado, ...data } = dadosBrutos;
     const exists = await this.prisma.motorista.findFirst({ where: { cpf: data.cpf } });
     if (exists) throw new ConflictException("CPF já cadastrado");
+    const pagoComoParceiro = await this.registradoPagoPorProducao(data.cpf, data);
+    this.exigirMotivoDoRegistrado(pagoComoParceiro, motivoPagamentoRegistrado);
 
     // Essa pessoa já existe na plataforma (roda pra outra empresa, ou se
     // cadastrou pelo app)? Então ela já tem senha — o cadastro se pendura na
@@ -519,6 +523,9 @@ export class MotoristasService {
       void this.avisarConvite(identidade.id, identidade.telefone, contaIdAtual());
     }
     this.acessoApp.agendarRecalculo("MOTORISTA_CRIADO");
+    if (pagoComoParceiro && motivoPagamentoRegistrado) {
+      await this.auditarRegistradoPago(created.id, usuarioId, pagoComoParceiro, motivoPagamentoRegistrado);
+    }
     return this.flatten(created);
   }
 
@@ -728,7 +735,7 @@ export class MotoristasService {
     if (!achou) throw new NotFoundException("Motorista não encontrado");
   }
 
-  async update(id: string, data: AtualizarMotoristaInput, escopo: EscopoAdmin) {
+  async update(id: string, data: AtualizarMotoristaInput, escopo: EscopoAdmin, usuarioId?: string) {
     await this.ensureNoEscopo(id, escopo);
     const atual = await this.prisma.motorista.findUnique({
       where: { id },
@@ -736,7 +743,16 @@ export class MotoristasService {
     });
     if (!atual) throw new NotFoundException("Motorista não encontrado");
 
-    const { novaSenha, placas: placasInput, placaDefault, ...rest } = data;
+    const { novaSenha, placas: placasInput, placaDefault, motivoPagamentoRegistrado, ...rest } = data;
+    // O que VALE depois de salvar: o que veio no corpo por cima do que já era.
+    const pagoComoParceiro = await this.registradoPagoPorProducao(rest.cpf ?? atual.cpf, {
+      modalidadeId: rest.modalidadeId !== undefined ? rest.modalidadeId : atual.modalidadeId,
+      tipoRemuneracao: rest.tipoRemuneracao !== undefined ? rest.tipoRemuneracao : atual.tipoRemuneracao,
+    });
+    // Só cobra quando o cadastro PASSA a ser assim: quem já estava assim antes
+    // desta regra não é barrado ao corrigir o telefone.
+    const jaEra = pagoComoParceiro ? await this.registradoPagoPorProducao(atual.cpf, atual) : null;
+    if (!jaEra) this.exigirMotivoDoRegistrado(pagoComoParceiro, motivoPagamentoRegistrado);
     const updateData: Record<string, unknown> = { ...rest };
     // Senha nova definida pelo admin vale em todas as empresas do motorista —
     // ele tem uma senha só. Vai por propagarSenha depois da transação; o
@@ -820,7 +836,92 @@ export class MotoristasService {
       );
     }
     this.acessoApp.agendarRecalculo("MOTORISTA_EDITADO");
+    if (pagoComoParceiro && motivoPagamentoRegistrado) {
+      await this.auditarRegistradoPago(id, usuarioId ?? null, pagoComoParceiro, motivoPagamentoRegistrado);
+    }
     return this.flatten(updated);
+  }
+
+  /**
+   * D5: a pessoa é REGISTRADA EM CARTEIRA nesta empresa e este cadastro de
+   * motorista a paga POR PRODUÇÃO (percentual, viagem, tonelada, km)?
+   *
+   * ⚠️ Não é "CLT com cadastro de motorista": esse é o caso mais comum de quem
+   * compra o ponto, o motorista da própria transportadora que dirige e lança
+   * viagem (D2), e pagar ele pela folha não pede explicação nenhuma. O que pede
+   * é a mesma pessoa receber como parceiro por fora da carteira: aí o painel
+   * mostra o aviso e exige o porquê, que fica na auditoria. Nunca trava: há
+   * casos legítimos (registrado de meio período que também agrega), e quem
+   * decide é a empresa, por escrito.
+   */
+  private async registradoPagoPorProducao(
+    cpf: string,
+    fonte: { modalidadeId?: string | null; tipoRemuneracao?: TipoRemuneracao | null },
+  ): Promise<{ admitidoEm: Date; tipo: TipoRemuneracao } | null> {
+    const chave = soDigitos(cpf ?? "");
+    if (chave.length !== 11) return null;
+    const funcionario = await this.prisma.funcionario.findFirst({
+      where: { cpf: chave, ativo: true },
+      select: { admitidoEm: true },
+    });
+    if (!funcionario) return null;
+    const modalidade = fonte.modalidadeId
+      ? await this.prisma.modalidadeMotorista.findFirst({
+          where: { id: fonte.modalidadeId },
+          select: { tipoRemuneracao: true },
+        })
+      : null;
+    const tipo = resolverRemuneracao({ tipoRemuneracao: fonte.tipoRemuneracao ?? null }, modalidade).tipo;
+    return tipo === "SEM_REMUNERACAO" ? null : { admitidoEm: funcionario.admitidoEm, tipo };
+  }
+
+  /** Pro formulário: é registrado aqui, e seria pago por produção? */
+  async vinculoEmprego(cpf: string, modalidadeId: string | null, tipoRemuneracao: string | null) {
+    const chave = soDigitos(cpf);
+    if (chave.length !== 11) return { registradoDesde: null, pagoPorProducao: false };
+    const funcionario = await this.prisma.funcionario.findFirst({
+      where: { cpf: chave, ativo: true },
+      select: { admitidoEm: true },
+    });
+    if (!funcionario) return { registradoDesde: null, pagoPorProducao: false };
+    const valido = (TIPOS_REMUNERACAO as readonly string[]).includes(tipoRemuneracao ?? "");
+    const r = await this.registradoPagoPorProducao(chave, {
+      modalidadeId,
+      tipoRemuneracao: valido ? (tipoRemuneracao as TipoRemuneracao) : null,
+    });
+    return { registradoDesde: funcionario.admitidoEm, pagoPorProducao: !!r };
+  }
+
+  private exigirMotivoDoRegistrado(
+    pagoComoParceiro: { admitidoEm: Date; tipo: TipoRemuneracao } | null,
+    motivo: string | undefined,
+  ) {
+    if (!pagoComoParceiro || motivo) return;
+    throw new BadRequestException({
+      statusCode: 400,
+      code: "REGISTRADO_PAGO_POR_PRODUCAO",
+      message:
+        "Esta pessoa é registrada em carteira nesta empresa, e este cadastro a paga por produção. " +
+        "Escreva o motivo: ele fica registrado.",
+    });
+  }
+
+  private async auditarRegistradoPago(
+    motoristaId: string,
+    usuarioId: string | null,
+    pagoComoParceiro: { admitidoEm: Date; tipo: TipoRemuneracao },
+    motivo: string,
+  ) {
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "Motorista",
+      entidadeId: motoristaId,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "tipoRemuneracao",
+      valorDepois: pagoComoParceiro.tipo,
+      motivo,
+      metadata: { registradoDesde: pagoComoParceiro.admitidoEm.toISOString(), regra: "D5" },
+    });
   }
 
   async atualizarAcessos(

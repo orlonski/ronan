@@ -121,6 +121,9 @@ export const CriarMotoristaInput = z
     // Pra onde o acerto é pago. Sem normalizar: chave PIX pode ser CPF,
     // telefone, e-mail ou aleatória, e "consertar" a digitação é errar.
     chavePix: z.string().trim().max(140).nullish(),
+    // Registrado em carteira aqui E pago por produção neste cadastro: o painel
+    // pede o porquê (D5). Aviso com motivo, nunca trava — ver motoristas.service.
+    motivoPagamentoRegistrado: z.string().trim().min(10, "Escreva o motivo em pelo menos 10 caracteres.").max(300).optional(),
   })
   .superRefine((v, ctx) => {
     placasSemDuplicatas(v.placas, ctx);
@@ -164,6 +167,9 @@ export const AtualizarMotoristaInput = z
     // Pra onde o acerto é pago. Sem normalizar: chave PIX pode ser CPF,
     // telefone, e-mail ou aleatória, e "consertar" a digitação é errar.
     chavePix: z.string().trim().max(140).nullish(),
+    // Registrado em carteira aqui E pago por produção neste cadastro: o painel
+    // pede o porquê (D5). Aviso com motivo, nunca trava — ver motoristas.service.
+    motivoPagamentoRegistrado: z.string().trim().min(10, "Escreva o motivo em pelo menos 10 caracteres.").max(300).optional(),
   })
   .superRefine((v, ctx) => {
     if (v.placas) placasSemDuplicatas(v.placas, ctx);

@@ -132,6 +132,21 @@ export class MotoristasController {
   }
 
   /**
+   * D5: esta pessoa é registrada em carteira aqui, e o cadastro como está
+   * preenchido a pagaria por produção? O formulário pergunta enquanto a pessoa
+   * digita, pra pedir o motivo ANTES de salvar, e não num erro depois.
+   */
+  @RequerPermissao("motoristas.criar", "motoristas.editar")
+  @Get("vinculo-emprego")
+  vinculoEmprego(
+    @Query("cpf") cpf: string | undefined,
+    @Query("modalidadeId") modalidadeId: string | undefined,
+    @Query("tipoRemuneracao") tipoRemuneracao: string | undefined,
+  ) {
+    return this.service.vinculoEmprego(cpf ?? "", modalidadeId || null, tipoRemuneracao || null);
+  }
+
+  /**
    * Procura uma pessoa pelo CPF pra convidar. CPF inteiro, busca exata — ver
    * `procurarPorCpf`.
    */
@@ -178,7 +193,7 @@ export class MotoristasController {
     @Body(new ZodValidationPipe(AtualizarMotoristaInput)) body: AtualizarMotoristaInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.update(id, body, user.escopo);
+    return this.service.update(id, body, user.escopo, user.id);
   }
 
   @RequerPermissao("motoristas.editar")

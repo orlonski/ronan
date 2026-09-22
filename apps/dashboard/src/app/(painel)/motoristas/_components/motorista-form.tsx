@@ -28,6 +28,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useCreateResource, useUpdateResource, useAuthToken, fetchApi } from "@/lib/client-api";
 import { StatusToggle } from "@/components/status-toggle";
 import { useSujo } from "@/hooks/use-sujo";
@@ -326,6 +327,41 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
     };
   }, [initial, token, cpfDigitado, form.modalidadeId, form.transportadoraId]);
 
+  /**
+   * D5: registrado em carteira aqui? E este cadastro o pagaria por produção?
+   * Perguntado enquanto se preenche, pra pedir o motivo ANTES de salvar.
+   */
+  const [vinculoEmprego, setVinculoEmprego] = useState<{
+    registradoDesde: string | null;
+    pagoPorProducao: boolean;
+  } | null>(null);
+  const [motivoRegistrado, setMotivoRegistrado] = useState("");
+  useEffect(() => {
+    if (!token || cpfDigitado.length !== 11) {
+      setVinculoEmprego(null);
+      return;
+    }
+    let vivo = true;
+    const t = setTimeout(() => {
+      const qs = new URLSearchParams({
+        cpf: cpfDigitado,
+        ...(form.modalidadeId ? { modalidadeId: form.modalidadeId } : {}),
+        ...(form.tipoRemuneracao ? { tipoRemuneracao: form.tipoRemuneracao } : {}),
+      });
+      void fetchApi<{ registradoDesde: string | null; pagoPorProducao: boolean }>(
+        `${PATH}/vinculo-emprego?${qs}`,
+        { token },
+      )
+        .then((r) => vivo && setVinculoEmprego(r))
+        // Sem a resposta, o cadastro segue: o servidor confere de novo no salvar.
+        .catch(() => vivo && setVinculoEmprego(null));
+    }, 400);
+    return () => {
+      vivo = false;
+      clearTimeout(t);
+    };
+  }, [token, cpfDigitado, form.modalidadeId, form.tipoRemuneracao]);
+
   function addPlaca() {
     setForm((f) => ({ ...f, placas: [...f.placas, { placa: "", modelo: "" }] }));
   }
@@ -413,6 +449,7 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
       valorPorKm: form.tipoRemuneracao === "VALOR_POR_KM" ? valorRem : null,
       valorDiaria: parseValorBR(form.valorDiaria),
       chavePix: form.chavePix.trim() || null,
+      ...(motivoRegistrado.trim() ? { motivoPagamentoRegistrado: motivoRegistrado.trim() } : {}),
     };
 
     if (initial) {
@@ -587,6 +624,31 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
             </p>
           </div>
         </div>
+
+        {vinculoEmprego?.registradoDesde && !vinculoEmprego.pagoPorProducao && (
+          <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+            Registrado em carteira aqui desde{" "}
+            {new Date(vinculoEmprego.registradoDesde).toLocaleDateString("pt-BR", { timeZone: "UTC" })}. O
+            cadastro de motorista serve pra ele dirigir e lançar viagem; o pagamento dele segue pela
+            folha.
+          </p>
+        )}
+        {vinculoEmprego?.pagoPorProducao && (
+          <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <p>
+              <strong>Esta pessoa é registrada em carteira aqui</strong>, e este cadastro a paga por
+              produção, como parceiro. Pode ser o caso (quem agrega fora do horário, por exemplo),
+              mas precisa estar escrito: o motivo fica registrado.
+            </p>
+            <Textarea
+              rows={2}
+              value={motivoRegistrado}
+              onChange={(e) => setMotivoRegistrado(e.target.value)}
+              placeholder="Por que ele recebe por produção além da carteira"
+              className="bg-background text-foreground"
+            />
+          </div>
+        )}
 
         <div className="space-y-3 rounded-lg border p-3">
           <div>
