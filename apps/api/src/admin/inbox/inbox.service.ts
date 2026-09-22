@@ -22,6 +22,10 @@ export type TipoNotificacaoAdmin =
   | "conta-auto-cadastro"
   // Alguém pediu contato pelo formulário do site. Também é da plataforma.
   | "lead-novo"
+  // Uma empresa chegou ao fim do teste e pediu pra continuar. Vai pro sininho
+  // da PLATAFORMA — é o momento mais quente do funil, e esperar o cliente
+  // insistir é como se perde uma venda que já estava dada.
+  | "onboarding-quer-continuar"
   // Torre de controle: viagem em curso que precisa de alguém. Tipo PRÓPRIO — a
   // torre mandava isto como "nova-viagem" (o primeiro da lista, escolhido só
   // pra passar no typecheck), e o sininho anunciava "Nova viagem" pra um

@@ -75,6 +75,8 @@ describe("cancelar apaga tudo no gateway", () => {
       { log: async () => {} } as never,
       { avisarAgora: async () => ({ enviado: true }) } as never,
       { garantirLink: async () => "https://app.movatruck.com.br/pagar/tok", urlDoToken: (t: string) => `https://app.movatruck.com.br/pagar/${t}` } as never,
+      // Destravar a conta é efeito do gateway, que aqui está desligado.
+      { virouCliente: async () => {} } as never,
     );
     return { s, assinaturas, cobrancasApagadas, filtro: () => filtroDasCobrancas };
   }

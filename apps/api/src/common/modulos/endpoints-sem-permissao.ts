@@ -32,6 +32,12 @@ export const ENDPOINTS_SEM_PERMISSAO: ReadonlySet<string> = new Set([
   // antes de ter papel nenhum configurado; exigir permissão aqui deixaria a
   // primeira tela do produto em branco justamente pra quem mais precisa dela.
   "PrimeirosPassosController.listar",
+
+  // "Quero continuar": o cliente cujo teste acabou pedindo pra voltar a ser
+  // cliente. Fica de fora por desenho, não por dívida — é o próprio usuário
+  // falando da própria conta, como a caixa pessoal acima, e exigir chave aqui
+  // calaria justamente quem ainda não tem papel configurado.
+  "OnboardingController.querorContinuar",
 ]);
 
 /** Nome estável de um handler pro registro acima. */

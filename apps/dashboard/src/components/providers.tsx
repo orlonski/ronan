@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 import { Toaster, toast } from "sonner";
 import { ApiError } from "@/lib/client-api";
+import { CODIGO_CONTA_SOMENTE_LEITURA } from "@/lib/erro-api";
 
 export const THEMES = [
   "light",
@@ -37,6 +38,25 @@ export function Providers({ children }: { children: React.ReactNode }) {
          */
         mutationCache: new MutationCache({
           onError: (erro, _vars, _ctx, mutation) => {
+            /**
+             * Teste acabado vem ANTES dos escapes de quem trata o próprio erro.
+             *
+             * Não é falha de formulário, é estado da empresa: acontece em
+             * qualquer escrita do painel, e quem trata o erro do próprio form
+             * não tem como saber disso. Sem este ramo, a pessoa preenchia a
+             * tela inteira e recebia uma frase que não oferece saída nenhuma.
+             */
+            if (erro instanceof ApiError && erro.code === CODIGO_CONTA_SOMENTE_LEITURA) {
+              toast.error("Seu teste terminou", {
+                description:
+                  "Tudo que você lançou continua aqui pra ver e exportar. Pra voltar a lançar, fale com a gente.",
+                action: {
+                  label: "Quero continuar",
+                  onClick: () => window.dispatchEvent(new Event("movatruck:quero-continuar")),
+                },
+              });
+              return;
+            }
             if (mutation.options.onError) return;
             if (mutation.meta?.erroTratado) return;
             // 401 já é resolvido dentro do fetchApi (renova a sessão ou

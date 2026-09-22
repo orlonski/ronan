@@ -15,6 +15,7 @@ import {
   type FormaCobranca,
 } from "@ronan/shared-types";
 import { AuditoriaService } from "../auditoria/auditoria.service";
+import { ContasService } from "../admin/contas/contas.service";
 import { PrecosService } from "../admin/precos/precos.service";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import {
@@ -65,6 +66,7 @@ export class AssinaturasService {
     private readonly auditoria: AuditoriaService,
     private readonly aviso: AvisoCobrancaService,
     private readonly link: PagamentoLinkService,
+    private readonly contas: ContasService,
   ) {}
 
   /**
@@ -328,6 +330,22 @@ export class AssinaturasService {
       this.log.log(
         `Assinatura ${assinatura.id} (${assinatura.conta.nome}) criada no gateway como ${criada.id}.`,
       );
+
+      // A empresa deixa de ser teste AQUI, e não quando o dinheiro cai.
+      //
+      // Esperar o pagamento pareceria mais certo e seria o erro: entre fechar o
+      // contrato e autorizar o Pix passam dias, e nesses dias a conta cujo teste
+      // já venceu continuaria sem poder lançar — cobrando de quem acabou de
+      // dizer sim. Quem não pagar é assunto da régua, que avisa e nunca corta;
+      // suspender segue sendo ato humano na tela de Empresas.
+      //
+      // Best-effort: a assinatura já existe no gateway, e não pode falhar
+      // porque o destravamento falhou. Idempotente do outro lado.
+      await this.contas
+        .virouCliente(assinatura.contaId, assinatura.criadoPorId)
+        .catch((e: unknown) =>
+          this.log.warn(`Não consegui destravar a conta ${assinatura.contaId}: ${String(e)}`),
+        );
 
       // O link de pagamento nasce junto, e não só quando o WhatsApp sai: é ele
       // que a tela mostra pra quem precisa mandar a cobrança por outro canal

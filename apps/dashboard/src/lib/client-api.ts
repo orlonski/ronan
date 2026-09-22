@@ -3,7 +3,7 @@
 import { getSession, signOut, useSession } from "next-auth/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { DataTableParams } from "@/hooks/use-data-table-state";
-import { type ApiIssue, extrairIssues, mensagemDeErro } from "./erro-api";
+import { type ApiIssue, extrairCodigo, extrairIssues, mensagemDeErro } from "./erro-api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
@@ -31,9 +31,17 @@ export class ApiError extends Error {
    */
   readonly issues: ApiIssue[];
 
+  /**
+   * Código estável do erro, quando a API manda um (ex.:
+   * `CONTA_SOMENTE_LEITURA`). Serve pra tela oferecer a SAÍDA, e não só repetir
+   * a frase: sem ele, "não dá pra lançar nada novo" é um beco.
+   */
+  readonly code: string | null;
+
   constructor(public status: number, public body: unknown) {
     super(mensagemDeErro(status, body));
     this.issues = extrairIssues(body);
+    this.code = extrairCodigo(body);
   }
 }
 

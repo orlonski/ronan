@@ -14,6 +14,24 @@
 export type ApiIssue = { path: string; code?: string; message: string };
 
 /**
+ * Códigos estáveis que a API manda no corpo do erro, quando a resposta precisa
+ * de mais do que uma frase — a tela decide o que OFERECER a partir daqui.
+ *
+ * Espelham `apps/api/src/common/conta/estado-da-conta.ts`. São strings de
+ * contrato: o backend promete não mudá-las justamente pra que o cliente escolha
+ * a mensagem por elas, e não pelo texto.
+ */
+export const CODIGO_CONTA_SOMENTE_LEITURA = "CONTA_SOMENTE_LEITURA";
+export const CODIGO_CONTA_SUSPENSA = "CONTA_SUSPENSA";
+
+/** O `code` do corpo do erro, quando vier. */
+export function extrairCodigo(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const c = (body as { code?: unknown }).code;
+  return typeof c === "string" && c.trim() ? c : null;
+}
+
+/**
  * Frase por status HTTP. Sem isso o construtor do ApiError caía em
  * `API ${status}` — e "API 500" chegava literalmente ao usuário.
  */

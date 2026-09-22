@@ -45,8 +45,34 @@ function ModuloNaoContratado({ chave }: { chave: string }) {
  * Mostra os filhos só se o papel tiver a permissão. Usado pra esconder botões
  * de ação (Novo, Editar, Excluir, etc.) que o usuário não pode usar.
  */
+/**
+ * Ações que continuam valendo com a empresa em somente leitura.
+ *
+ * A régua é "isso muda o dado da empresa?" — a mesma de
+ * `@PermiteSomenteLeitura` no backend. Ver e exportar não mudam, e são
+ * justamente o que a gente promete que continua funcionando quando o teste
+ * acaba; esconder o botão de exportar seria desmentir a própria faixa.
+ *
+ * `baixar` NÃO entra: no painel é dar baixa em cobrança, que é escrita.
+ */
+const ACOES_DE_LEITURA = new Set(["ver", "exportar", "documentos"]);
+
 export function Permitido({ chave, children }: { chave: string; children: ReactNode }) {
-  const { temPermissao, temModulo } = usePermissoes();
+  const { temPermissao, temModulo, estadoConta } = usePermissoes();
+
+  /**
+   * Empresa em somente leitura não mostra botão de escrever.
+   *
+   * Antes daqui só a faixa do topo sabia disso: a tela de Materiais dizia "pra
+   * voltar a lançar, fale com a gente" no estado vazio e mantinha um "Novo
+   * material" logo acima — a pessoa clicava, preenchia o formulário inteiro e
+   * só descobria no Salvar. Aqui é o lugar certo de resolver porque é por onde
+   * passam os 120 e poucos botões de ação do painel; resolver tela a tela
+   * deixaria metade para trás e a outra metade envelheceria.
+   */
+  const acao = chave.split(".")[1] ?? "";
+  if (estadoConta?.podeEscrever === false && !ACOES_DE_LEITURA.has(acao)) return null;
+
   // Botão de módulo não contratado some igual a botão sem permissão: botão
   // morto é pior que ausência, e o upsell mora na tela, não no botão.
   return temPermissao(chave) && temModulo(chave) ? <>{children}</> : null;

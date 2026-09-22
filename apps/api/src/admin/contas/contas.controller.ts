@@ -46,6 +46,12 @@ const CriarContaBody = z.object({
 
 const AtivaBody = z.object({ ativa: z.boolean() });
 
+/**
+ * Dias contados a partir de HOJE. `0` encerra o teste na hora; o teto de 90 é o
+ * mesmo de `diasTesteGratis` — acima disso não é teste, é uso, e uso se cobra.
+ */
+const TesteBody = z.object({ dias: z.number().int().min(0).max(90) });
+
 const ConfiguracaoPlataformaBody = z
   .object({
     autoCadastroAberto: z.boolean().optional(),
@@ -160,6 +166,19 @@ export class ContasController {
     @Body(new ZodValidationPipe(AtivaBody)) body: z.infer<typeof AtivaBody>,
   ) {
     return this.service.definirAtiva(id, body.ativa);
+  }
+
+  /**
+   * Prorroga ou encerra o teste. Fica aqui porque é decisão comercial da casa,
+   * não do cliente — e porque antes disto só existia UPDATE no banco à mão.
+   */
+  @Patch(":id/teste")
+  definirTeste(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(TesteBody)) body: z.infer<typeof TesteBody>,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.definirTeste(id, body.dias, user.id);
   }
 
   @Patch(":id/auto-cadastro")

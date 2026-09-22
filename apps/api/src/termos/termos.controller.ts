@@ -5,6 +5,7 @@ import { AceitarTermoInput, TipoTermoSchema } from "@ronan/shared-types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Public } from "../auth/decorators/public.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
+import { PermiteSomenteLeitura } from "../auth/decorators/permite-somente-leitura.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import type { AuthAdminUser } from "../auth/types";
 import { ipDaRequisicao } from "../common/rate-limit/ip";
@@ -65,6 +66,19 @@ export class TermosController {
    * token e da conexão, porque prova que a parte interessada preenche não é
    * prova.
    */
+  /**
+   * `@PermiteSomenteLeitura` porque o modal de aceite é BLOQUEANTE.
+   *
+   * Sem isto, a empresa cujo teste venceu e que tem termo pendente fica presa:
+   * o modal cobre o painel inteiro, o aceite responde 403, e ela não consegue
+   * nem VER o que lançou — exatamente o contrário do que a faixa de somente
+   * leitura promete. Pior no caso que mais importa: quem está prestes a assinar
+   * precisa aceitar o contrato, e o bloqueio impedia a conversão.
+   *
+   * Cabe na régua do decorator: aceitar um termo é ato de sessão e de contrato,
+   * não operação da empresa — não cria viagem, não mexe em dado de ninguém.
+   */
+  @PermiteSomenteLeitura()
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
   @Post("aceitar")

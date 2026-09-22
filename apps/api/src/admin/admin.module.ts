@@ -42,6 +42,7 @@ import { ResumoModule } from "./resumo/resumo.module";
 import { PermissoesModule } from "./permissoes/permissoes.module";
 import { PapeisModule } from "./papeis/papeis.module";
 import { PrimeirosPassosModule } from "./primeiros-passos/primeiros-passos.module";
+import { OnboardingModule } from "./onboarding/onboarding.module";
 import { PrecosModule } from "./precos/precos.module";
 import { PapeisModeloModule } from "./papeis-modelo/papeis-modelo.module";
 import { ContasModule } from "./contas/contas.module";
@@ -90,6 +91,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     PermissoesModule,
     PapeisModule,
     PrimeirosPassosModule,
+    OnboardingModule,
     PrecosModule,
     PapeisModeloModule,
     ContasModule,

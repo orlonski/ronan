@@ -1,5 +1,6 @@
 import { Module, type OnModuleInit } from "@nestjs/common";
 import { AuditoriaModule } from "../auditoria/auditoria.module";
+import { ContasModule } from "../admin/contas/contas.module";
 import { PrecosModule } from "../admin/precos/precos.module";
 import { WhatsappModule } from "../whatsapp/whatsapp.module";
 import { AsaasConfig } from "./asaas.config";
@@ -21,7 +22,7 @@ import { PagamentosWebhookController } from "./webhook.controller";
  * manda nada; o resto da API (painel, app do motorista) segue igual.
  */
 @Module({
-  imports: [PrecosModule, AuditoriaModule, WhatsappModule],
+  imports: [PrecosModule, AuditoriaModule, WhatsappModule, ContasModule],
   controllers: [AssinaturasController, PagamentosWebhookController, PagamentoPublicoController],
   providers: [
     AsaasConfig,

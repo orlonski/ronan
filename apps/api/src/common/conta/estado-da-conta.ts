@@ -17,6 +17,22 @@
 export const CODIGO_CONTA_SUSPENSA = "CONTA_SUSPENSA";
 export const CODIGO_CONTA_SOMENTE_LEITURA = "CONTA_SOMENTE_LEITURA";
 
+/**
+ * O que a empresa lê quando o teste acaba.
+ *
+ * Mora aqui, e não solto no cron, porque agora são três os caminhos que
+ * encerram um teste (o cron da madrugada, o encerramento pela tela de Empresas
+ * e o vencimento que `estadoDaConta` reconhece na hora) e um deles dizendo
+ * outra coisa faria a mesma situação ter duas explicações.
+ *
+ * Lidera pelo que CONTINUA funcionando, de propósito: o fim do teste não é
+ * punição, é o fim de uma cortesia — e quem lê precisa saber, na primeira
+ * linha, que o trabalho dele não sumiu.
+ */
+export const MOTIVO_TESTE_TERMINOU =
+  "Seu período de teste terminou. Tudo que você lançou continua aqui: dá pra ver, " +
+  "filtrar e exportar. Pra voltar a lançar, é só falar com a Movatruck.";
+
 export type ContaParaEstado = {
   ativa: boolean;
   somenteLeitura: boolean;

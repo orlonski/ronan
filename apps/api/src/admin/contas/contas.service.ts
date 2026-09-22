@@ -9,9 +9,11 @@ import * as bcrypt from "bcrypt";
 import { Prisma } from "@prisma/client";
 import { CODIGO_UF_IBGE, motivoMunicipioNaoBate, TODAS_AS_CHAVES } from "@ronan/shared-types";
 import { comConta, comoSistema } from "../../common/conta/conta-context";
+import { MOTIVO_TESTE_TERMINOU } from "../../common/conta/estado-da-conta";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
+import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { CamposLayoutService } from "../campos-layout/campos-layout.service";
 import { PermissoesService, PAPEL_ADMIN } from "../permissoes/permissoes.service";
@@ -90,6 +92,7 @@ export class ContasService implements OnModuleInit {
     private readonly camposLayout: CamposLayoutService,
     private readonly uploads: UploadsService,
     private readonly config: ConfigService,
+    private readonly auditoria: AuditoriaService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -583,6 +586,120 @@ export class ContasService implements OnModuleInit {
         select: { id: true, nome: true, ativa: true },
       }),
     );
+  }
+
+  /**
+   * A empresa virou cliente: acabou o teste, mas para cima.
+   *
+   * A assimetria é de propósito, e é a razão deste método existir:
+   * **religar é automático, cortar é humano.** `AssinaturasService` não encosta
+   * em `Conta` (decisão do dono em 14/09/2026 — a régua avisa e NUNCA corta), e
+   * isso estava certo para um lado só. Sem isto, a empresa cujo teste venceu na
+   * sexta e que assina na segunda continuava em somente leitura **para sempre**:
+   * o cron liga o flag e ninguém desliga, e `estadoDaConta` recalcula a cada
+   * requisição a partir de um `trialExpiraEm` que ninguém limpa.
+   *
+   * `trialExpiraEm: null` é o que o schema já documenta como "não é teste, é
+   * cliente".
+   *
+   * Destrava mesmo quando o bloqueio não veio do teste: quem manda assinar é
+   * gente da plataforma, olhando a conta, e a alternativa (adivinhar o motivo
+   * pelo texto de `motivoBloqueio`) erraria em silêncio. O que estava lá fica
+   * na auditoria.
+   *
+   * Idempotente: conta que já é cliente sai daqui sem UPDATE e sem auditoria.
+   */
+  async virouCliente(contaId: string, usuarioId?: string | null): Promise<void> {
+    const antes = await comoSistema(() =>
+      this.prisma.conta.findUnique({
+        where: { id: contaId },
+        select: { nome: true, trialExpiraEm: true, somenteLeitura: true, motivoBloqueio: true },
+      }),
+    );
+    if (!antes) return;
+    if (antes.trialExpiraEm === null && !antes.somenteLeitura) return;
+
+    await comoSistema(() =>
+      this.prisma.conta.update({
+        where: { id: contaId },
+        data: { trialExpiraEm: null, somenteLeitura: false, motivoBloqueio: null },
+      }),
+    );
+
+    // Dentro da conta: `AuditLog` é escopado, e gravar em `comoSistema` deixaria
+    // a linha com o contaId de ninguém.
+    await comConta(contaId, () =>
+      this.auditoria.log({
+        usuarioId: usuarioId ?? null,
+        entidade: "Conta",
+        entidadeId: contaId,
+        acao: "UPDATE",
+        campo: "somenteLeitura",
+        valorAntes: {
+          trialExpiraEm: antes.trialExpiraEm,
+          somenteLeitura: antes.somenteLeitura,
+          motivoBloqueio: antes.motivoBloqueio,
+        },
+        valorDepois: { trialExpiraEm: null, somenteLeitura: false, motivoBloqueio: null },
+        motivo: "Virou cliente: assinatura ativa",
+      }),
+    ).catch((e: unknown) => this.log.warn(`Auditoria de virouCliente falhou: ${String(e)}`));
+
+    this.log.log(`${antes.nome} virou cliente — teste encerrado e escrita liberada.`);
+  }
+
+  /**
+   * Prorroga (ou encerra) o período de teste de uma empresa.
+   *
+   * Não existia: `trialExpiraEm` só era escrito na criação da conta, e nada
+   * limpava `somenteLeitura` — prorrogar um teste era UPDATE no banco à mão.
+   *
+   * `dias` conta a partir de HOJE, não da data antiga: prorrogar uma conta que
+   * já venceu há uma semana somando na data velha devolveria um teste que já
+   * nasce vencido. `dias = 0` encerra agora (e a conta cai em somente leitura
+   * na hora, porque `estadoDaConta` não espera o cron).
+   */
+  async definirTeste(id: string, dias: number, usuarioId?: string | null) {
+    const antes = await comoSistema(() =>
+      this.prisma.conta.findUnique({
+        where: { id },
+        select: { nome: true, trialExpiraEm: true, somenteLeitura: true },
+      }),
+    );
+    if (!antes) throw new BadRequestException("Empresa não encontrada.");
+
+    const expira = new Date(Date.now() + dias * 86_400_000);
+    const atualizada = await comoSistema(() =>
+      this.prisma.conta.update({
+        where: { id },
+        data: {
+          trialExpiraEm: expira,
+          // Prorrogar sem destravar seria prorrogar no papel: a conta seguiria
+          // sem poder escrever até o cron da madrugada seguinte.
+          somenteLeitura: dias <= 0,
+          motivoBloqueio: dias <= 0 ? MOTIVO_TESTE_TERMINOU : null,
+        },
+        select: { id: true, nome: true, trialExpiraEm: true, somenteLeitura: true },
+      }),
+    );
+
+    await comConta(id, () =>
+      this.auditoria.log({
+        usuarioId: usuarioId ?? null,
+        entidade: "Conta",
+        entidadeId: id,
+        acao: "UPDATE",
+        campo: "trialExpiraEm",
+        valorAntes: { trialExpiraEm: antes.trialExpiraEm, somenteLeitura: antes.somenteLeitura },
+        valorDepois: {
+          trialExpiraEm: atualizada.trialExpiraEm,
+          somenteLeitura: atualizada.somenteLeitura,
+        },
+        motivo: dias <= 0 ? "Teste encerrado pela plataforma" : `Teste ajustado para ${dias} dias`,
+      }),
+    ).catch((e: unknown) => this.log.warn(`Auditoria de definirTeste falhou: ${String(e)}`));
+
+    return atualizada;
   }
 
   /**

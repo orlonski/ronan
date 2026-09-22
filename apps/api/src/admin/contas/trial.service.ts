@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { comoSistema } from "../../common/conta/conta-context";
+import { MOTIVO_TESTE_TERMINOU } from "../../common/conta/estado-da-conta";
 import { PrismaService } from "../../prisma/prisma.service";
 
 /**
@@ -33,8 +34,7 @@ export class TrialService {
           },
           data: {
             somenteLeitura: true,
-            motivoBloqueio:
-              "Seu período de teste terminou. Você continua vendo e exportando tudo que já lançou — pra voltar a lançar, fale com a Movatruck.",
+            motivoBloqueio: MOTIVO_TESTE_TERMINOU,
           },
         }),
       );
