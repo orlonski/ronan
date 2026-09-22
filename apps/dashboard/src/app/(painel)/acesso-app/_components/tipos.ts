@@ -22,6 +22,8 @@ export type PainelAcessoApp = {
   regras: RegraApp[];
   pessoas: number;
   excecoes: Record<string, number>;
+  /** Exceções abertas com data que vencem nos próximos 7 dias. */
+  excecoesVencendo: number;
   sombra: { capacidade: string; pessoas: number }[];
   rolloutsApp: string[];
   opcoes: {

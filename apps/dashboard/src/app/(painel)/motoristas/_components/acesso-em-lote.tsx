@@ -179,14 +179,16 @@ function DialogExcecao({ ids, onFechar, onFeito }: { ids: string[]; onFechar: ()
 
 const SOLTAR = "__regras__";
 
-function DialogFixar({
+export function DialogFixar({
   ids,
   perfis,
+  titulo,
   onFechar,
   onFeito,
 }: {
   ids: string[];
   perfis: PerfilOpcao[];
+  titulo?: string;
   onFechar: () => void;
   onFeito: () => void;
 }) {
@@ -199,12 +201,12 @@ function DialogFixar({
     <Dialog open onOpenChange={(o) => !o && onFechar()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Perfil de {ids.length === 1 ? "1 motorista" : `${ids.length} motoristas`}</DialogTitle>
+          <DialogTitle>{titulo ?? `Perfil de ${ids.length === 1 ? "1 motorista" : `${ids.length} motoristas`}`}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Perfil fixado vence as regras: se amanhã a regra mudar, eles não mudam junto. Use pra quem
-            as regras não descrevem bem.
+            Perfil fixado vence as regras: se amanhã a regra mudar, quem está fixado não muda junto.
+            Use pra quem as regras não descrevem bem.
           </p>
           <div>
             <Label>Perfil</Label>
@@ -245,7 +247,13 @@ function DialogFixar({
               )
             }
           >
-            {soltar ? `Devolver ${ids.length} às regras` : `Fixar em ${ids.length}`}
+            {ids.length === 1
+              ? soltar
+                ? "Voltar às regras"
+                : "Fixar perfil"
+              : soltar
+                ? `Devolver ${ids.length} às regras`
+                : `Fixar em ${ids.length}`}
           </Button>
         </DialogFooter>
       </DialogContent>

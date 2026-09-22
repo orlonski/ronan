@@ -44,9 +44,13 @@ const fmt = (d: string) => new Date(d).toLocaleDateString("pt-BR");
  * dizia quando a empresa passou pras regras. Por decisão do dono elas NÃO
  * vencem. Ficam aqui, filtráveis, pra alguém revisar quando quiser.
  */
-export function AbaExcecoes({ painel }: { painel: PainelAcessoApp }) {
-  const [origem, setOrigem] = useState("");
-  const lista = useApiQuery<ExcecaoApp[]>(`/admin/acesso-app/excecoes${origem ? `?origem=${origem}` : ""}`);
+export type FiltroExcecoes = { origem?: string; prazo?: string };
+
+export function AbaExcecoes({ painel, inicial }: { painel: PainelAcessoApp; inicial?: FiltroExcecoes }) {
+  const [origem, setOrigem] = useState(inicial?.origem ?? "");
+  const [prazo, setPrazo] = useState(inicial?.prazo ?? "");
+  const qs = new URLSearchParams({ ...(origem ? { origem } : {}), ...(prazo ? { prazo } : {}) }).toString();
+  const lista = useApiQuery<ExcecaoApp[]>(`/admin/acesso-app/excecoes${qs ? `?${qs}` : ""}`);
   const [revogando, setRevogando] = useState<ExcecaoApp | null>(null);
   const { temPermissao } = usePermissoes();
   const podeRevogar = painel.fonte === "REGRAS" && temPermissao("perfis-acesso.aplicar");
@@ -57,18 +61,27 @@ export function AbaExcecoes({ painel }: { painel: PainelAcessoApp }) {
         <p className="text-sm text-muted-foreground">
           Pra dar ou tirar algo de uma pessoa só, abra a ficha dela. Aqui fica a lista de todas.
         </p>
-        <Select className="w-64" value={origem} onChange={(e) => setOrigem(e.target.value)}>
-          <option value="">Todas</option>
-          <option value="MIGRACAO">Herdadas da ficha antiga</option>
-          <option value="MANUAL">Abertas à mão</option>
-        </Select>
+        <div className="flex flex-wrap gap-2">
+          <Select className="w-56" value={origem} onChange={(e) => setOrigem(e.target.value)}>
+            <option value="">De qualquer origem</option>
+            <option value="MIGRACAO">Herdadas da ficha antiga</option>
+            <option value="MANUAL">Abertas à mão</option>
+          </Select>
+          <Select className="w-56" value={prazo} onChange={(e) => setPrazo(e.target.value)}>
+            <option value="">Com ou sem prazo</option>
+            <option value="vencendo">Vencem em 7 dias</option>
+            <option value="sem">Sem prazo</option>
+          </Select>
+        </div>
       </div>
 
       {lista.isLoading && <LoadingCard />}
       {lista.error && <ErroCard erro={lista.error} onRetry={() => lista.refetch()} />}
       {lista.data?.length === 0 && (
         <Card className="p-6 text-center text-sm text-muted-foreground">
-          Nenhuma exceção: todo mundo tem exatamente o que o perfil dá.
+          {origem || prazo
+            ? "Nenhuma exceção com esse filtro."
+            : "Nenhuma exceção: todo mundo tem exatamente o que o perfil dá."}
         </Card>
       )}
       {!!lista.data?.length && (

@@ -18,7 +18,7 @@ import { LoadingCard } from "@/components/loading";
 import { ErroCard } from "@/components/erro-estado";
 import { Permitido, RequerTela } from "@/components/requer-tela";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
-import { AbaExcecoes } from "./_components/excecoes";
+import { AbaExcecoes, type FiltroExcecoes } from "./_components/excecoes";
 import { AbaPerfis } from "./_components/perfis";
 import { AbaPlataforma } from "./_components/plataforma";
 import { AbaQuemRecebe } from "./_components/quem-recebe";
@@ -46,6 +46,12 @@ export default function AcessoAppPage() {
 function Conteudo() {
   const painel = useApiQuery<PainelAcessoApp>("/admin/acesso-app");
   const [aba, setAba] = useState<Aba>("perfis");
+  // Os avisos abrem a aba de exceções já filtrada; a `key` recria a aba com o filtro.
+  const [filtroExcecoes, setFiltroExcecoes] = useState<FiltroExcecoes & { n: number }>({ n: 0 });
+  const verExcecoes = (f: FiltroExcecoes) => {
+    setFiltroExcecoes((x) => ({ ...f, n: x.n + 1 }));
+    setAba("excecoes");
+  };
 
   if (painel.isLoading) return <LoadingCard />;
   if (painel.error || !painel.data) {
@@ -85,6 +91,31 @@ function Conteudo() {
 
       {p.sombra.length > 0 && <BannerSombra painel={p} />}
 
+      {p.fonte === "REGRAS" && (herdadas > 0 || p.excecoesVencendo > 0) && (
+        <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4 text-sm">
+          {/* ⚠️ As herdadas NÃO vencem (decisão do dono): o aviso é pra revisar
+              quando quiser, não uma contagem regressiva. */}
+          {herdadas > 0 && (
+            <span>
+              <strong>{herdadas}</strong> diferença(s) herdada(s) da ficha antiga, pra revisar quando
+              quiser.{" "}
+              <button type="button" className="underline" onClick={() => verExcecoes({ origem: "MIGRACAO" })}>
+                Ver
+              </button>
+            </span>
+          )}
+          {p.excecoesVencendo > 0 && (
+            <span>
+              <strong>{p.excecoesVencendo}</strong> exceção(ões) vencem nos próximos 7 dias: no
+              vencimento a pessoa volta ao perfil sozinha.{" "}
+              <button type="button" className="underline" onClick={() => verExcecoes({ prazo: "vencendo" })}>
+                Ver
+              </button>
+            </span>
+          )}
+        </Card>
+      )}
+
       <div className="flex flex-wrap gap-1 border-b border-border">
         {abas.map((a) => (
           <button
@@ -104,7 +135,9 @@ function Conteudo() {
 
       {aba === "perfis" && <AbaPerfis painel={p} />}
       {aba === "quem-recebe" && <AbaQuemRecebe key={p.versao} painel={p} />}
-      {aba === "excecoes" && <AbaExcecoes painel={p} />}
+      {aba === "excecoes" && (
+        <AbaExcecoes key={filtroExcecoes.n} painel={p} inicial={filtroExcecoes} />
+      )}
       {aba === "plataforma" && p.plataforma && <AbaPlataforma key={p.versao} painel={p} />}
     </div>
   );

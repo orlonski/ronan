@@ -590,6 +590,24 @@ export default function MotoristasPage() {
                   placeholder="Versão app"
                   options={versaoOptions}
                 />
+                {/* O perfil que VALE hoje (regra, padrão ou fixado), não só o fixado. */}
+                {!!painelAcesso.data?.perfis.length && (
+                  <Combobox
+                    value={tableState.filters.acessoPerfilId}
+                    onChange={(v) => tableState.setFilter("acessoPerfilId", v)}
+                    placeholder="Perfil do app"
+                    options={painelAcesso.data.perfis.map((p) => ({ value: p.id, label: p.nome }))}
+                  />
+                )}
+                {!!painelAcesso.data && (
+                  <Combobox
+                    value={tableState.filters.acessoExcecao}
+                    onChange={(v) => tableState.setFilter("acessoExcecao", v)}
+                    placeholder="Exceção no app"
+                    showSearch={false}
+                    options={[{ value: "true", label: "Com exceção" }]}
+                  />
+                )}
               </>
             }
           />

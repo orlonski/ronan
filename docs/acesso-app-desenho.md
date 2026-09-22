@@ -38,9 +38,11 @@
   contratar/desligar funcionário e abrir/encerrar alocação na obra; cron de 2
   min cobre o resto. Nas regras, o PATCH antigo de acessos e a tela antiga de
   perfis recusam com 409 (o caminho é a exceção com motivo).
-  **Ainda não entrou:** "Fixar perfil" pela ficha de uma pessoa (hoje só pelo
-  lote), filtros por perfil/exceção na lista, prazo de 90 dias das exceções
-  herdadas (D4) e o banner "vencendo".
+  Depois: fixar perfil (ou voltar às regras) pela ficha, filtros "perfil do
+  app" e "com exceção" na lista, filtros de prazo na aba Exceções e o aviso
+  "N herdadas pra revisar · N vencem em 7 dias". **D4 não entrou de
+  propósito:** a decisão 2 do dono (acima) diz que exceção herdada não vence;
+  o prazo de 90 dias era só a recomendação da squad.
 
 ---
 

@@ -29,7 +29,7 @@ import { ymdSaoPaulo } from "../../common/timezone";
 import { adotarLancamentosOrfaos } from "../../common/transportadora";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { nasceComoConvite } from "../../common/vinculo";
-import { AcessoAppService } from "../../common/acesso-app/acesso-app.service";
+import { AcessoAppService, ondeExcecaoViva } from "../../common/acesso-app/acesso-app.service";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { EasUpdateService } from "./eas-update.service";
 
@@ -51,6 +51,8 @@ type ListMotoristasParams = PaginationQuery & {
   appVersion?: string;
   transportadoraId?: string;
   semTransportadora?: "true";
+  acessoPerfilId?: string;
+  acessoExcecao?: "true";
 };
 
 const SAFE_SELECT = {
@@ -187,6 +189,21 @@ export class MotoristasService {
     else if (params.appVersion) where.appVersion = params.appVersion;
     if (params.transportadoraId) where.transportadoraId = params.transportadoraId;
     if (params.semTransportadora === "true") where.transportadoraId = null;
+    // O perfil que VALE (gravado pelo resolvedor), não o que alguém fixou:
+    // quem cai por regra ou pelo padrão também aparece.
+    if (params.acessoPerfilId) {
+      where.acessoEfetivoApp = {
+        explicacao: { path: ["base", "motorista", "perfilId"], equals: params.acessoPerfilId },
+      };
+    }
+    if (params.acessoExcecao === "true") {
+      const comExcecao = await this.prisma.excecaoAcessoApp.findMany({
+        where: ondeExcecaoViva(),
+        select: { cpf: true },
+        distinct: ["cpf"],
+      });
+      where.cpf = { in: comExcecao.map((e) => e.cpf) };
+    }
 
     const result = await paginate<Record<string, unknown>, ListMotoristasParams>(
       this.prisma.motorista,
@@ -271,7 +288,7 @@ export class MotoristasService {
       }),
       this.prisma.excecaoAcessoApp.groupBy({
         by: ["cpf"],
-        where: { cpf: { in: chaves }, revogadaEm: null },
+        where: { cpf: { in: chaves }, ...ondeExcecaoViva() },
         _count: { _all: true },
       }),
     ]);

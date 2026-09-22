@@ -27,6 +27,7 @@ import { AppPreview } from "@/components/app-preview";
 import { usePermissoes } from "@/lib/permissoes";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { RevogarExcecao, type ExcecaoApp } from "../../acesso-app/_components/excecoes";
+import { DialogFixar, type PerfilOpcao } from "../_components/acesso-em-lote";
 
 type Corte = { camada: string; sombra: boolean; detalhe: string };
 type Explicacao = {
@@ -87,6 +88,9 @@ export function AcessoAppCard(alvo: AlvoAcesso) {
   const [vendo, setVendo] = useState(false);
   const [abrindo, setAbrindo] = useState<CapacidadeAppDef | null>(null);
   const [revogando, setRevogando] = useState<ExcecaoApp | null>(null);
+  const [fixando, setFixando] = useState(false);
+  // Só carrega os perfis quando alguém vai fixar: a ficha não precisa deles.
+  const painel = useApiQuery<{ perfis: PerfilOpcao[] }>(fixando ? "/admin/acesso-app" : undefined);
 
   const a = acesso.data;
   if (!a) return null;
@@ -212,6 +216,37 @@ export function AcessoAppCard(alvo: AlvoAcesso) {
         })}
       </div>
 
+      {/* Avançado, e de propósito lá embaixo: fixar tira a pessoa das regras —
+          se amanhã a regra mudar, ela não muda junto. */}
+      {podeExcecao && "motoristaId" in alvo && (
+        <div className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
+          {a.base.motorista?.via === "FIXADO" ? (
+            <>
+              Perfil fixado à mão: as regras não valem pra ele.{" "}
+              <button type="button" className="underline" onClick={() => setFixando(true)}>
+                Trocar ou voltar às regras
+              </button>
+            </>
+          ) : (
+            <>
+              Avançado: se as regras não descrevem bem esta pessoa,{" "}
+              <button type="button" className="underline" onClick={() => setFixando(true)}>
+                fixe um perfil só pra ela
+              </button>
+              .
+            </>
+          )}
+        </div>
+      )}
+      {fixando && "motoristaId" in alvo && (
+        <DialogFixar
+          ids={[alvo.motoristaId]}
+          perfis={painel.data?.perfis ?? []}
+          titulo={`Perfil de ${a.nome}`}
+          onFechar={() => setFixando(false)}
+          onFeito={() => undefined}
+        />
+      )}
       {vendo && (
         <Dialog open onOpenChange={(o) => !o && setVendo(false)}>
           <DialogContent className="max-w-sm">

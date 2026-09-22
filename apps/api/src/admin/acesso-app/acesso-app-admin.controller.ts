@@ -139,9 +139,10 @@ export class AcessoAppAdminController {
   listarExcecoes(
     @Query("origem") origem: string | undefined,
     @Query("cpf") cpf: string | undefined,
+    @Query("prazo") prazo: string | undefined,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.listarExcecoes({ origem, cpf }, user.escopo);
+    return this.service.listarExcecoes({ origem, cpf, prazo }, user.escopo);
   }
 
   @Post("excecoes")

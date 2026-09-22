@@ -17,7 +17,7 @@ import {
   type SalvarPerfilAppInput,
   type SalvarRegrasAppInput,
 } from "@ronan/shared-types";
-import { AcessoAppService } from "../../common/acesso-app/acesso-app.service";
+import { AcessoAppService, ondeExcecaoViva } from "../../common/acesso-app/acesso-app.service";
 import { contaIdAtual } from "../../common/conta/conta-context";
 import { type EscopoAdmin, filtroEscopo } from "../../common/escopo/escopo";
 import { soDigitos } from "../../common/regime-vigente";
@@ -36,6 +36,8 @@ import { PrismaService } from "../../prisma/prisma.service";
  * ⚠️ Perfil, regra e padrão valem pra EMPRESA INTEIRA: exigem acesso global.
  * Exceção é por pessoa, então respeita o escopo de frota.
  */
+const SETE_DIAS = 7 * 86_400_000;
+
 @Injectable()
 export class AcessoAppAdminService {
   constructor(
@@ -75,7 +77,7 @@ export class AcessoAppAdminService {
   async painel(plataforma: boolean) {
     const cfg = await this.config();
     const contaId = contaIdAtual();
-    const [conta, perfis, regras, efetivos, excecoes, modalidades, transportadoras] =
+    const [conta, perfis, regras, efetivos, excecoes, vencendo, modalidades, transportadoras] =
       await Promise.all([
         this.prisma.conta.findUniqueOrThrow({ where: { id: contaId }, select: { rolloutsApp: true } }),
         this.prisma.perfilAcessoApp.findMany({
@@ -88,8 +90,14 @@ export class AcessoAppAdminService {
         }),
         this.prisma.excecaoAcessoApp.groupBy({
           by: ["origem"],
-          where: { revogadaEm: null },
+          where: ondeExcecaoViva(),
           _count: { _all: true },
+        }),
+        this.prisma.excecaoAcessoApp.count({
+          where: {
+            revogadaEm: null,
+            expiraEm: { gt: new Date(), lte: new Date(Date.now() + SETE_DIAS) },
+          },
         }),
         this.prisma.modalidadeMotorista.findMany({ select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
         this.prisma.transportadora.findMany({ select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
@@ -127,6 +135,9 @@ export class AcessoAppAdminService {
       regras,
       pessoas: efetivos.length,
       excecoes: Object.fromEntries(excecoes.map((e) => [e.origem, e._count._all])),
+      // Aviso, não prazo imposto: só a exceção que alguém abriu com data vence.
+      // As herdadas da ficha não vencem (decisão do dono).
+      excecoesVencendo: vencendo,
       sombra: [...perderiam.entries()]
         .map(([capacidade, n]) => ({ capacidade, pessoas: n }))
         .sort((a, b) => b.pessoas - a.pessoas),
@@ -151,10 +162,20 @@ export class AcessoAppAdminService {
     return this.acesso.explicar(f.cpf);
   }
 
-  async listarExcecoes(filtro: { origem?: string; cpf?: string }, escopo: EscopoAdmin) {
+  async listarExcecoes(
+    filtro: { origem?: string; cpf?: string; prazo?: string },
+    escopo: EscopoAdmin,
+  ) {
+    const agora = new Date();
+    const prazo =
+      filtro.prazo === "vencendo"
+        ? { expiraEm: { gt: agora, lte: new Date(agora.getTime() + SETE_DIAS) } }
+        : filtro.prazo === "sem"
+          ? { expiraEm: null }
+          : {};
     const excecoes = await this.prisma.excecaoAcessoApp.findMany({
       where: {
-        revogadaEm: null,
+        AND: [ondeExcecaoViva(agora), prazo],
         ...(filtro.origem ? { origem: filtro.origem } : {}),
         ...(filtro.cpf ? { cpf: soDigitos(filtro.cpf) } : {}),
       },

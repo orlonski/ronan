@@ -40,6 +40,9 @@ const ListMotoristasQuery = paginationQuerySchema.extend({
   appVersion: z.string().min(1).optional(),
   transportadoraId: z.string().uuid().optional(),
   semTransportadora: z.enum(["true"]).optional(),
+  // Acesso ao app: quem cai num perfil, e quem tem exceção viva.
+  acessoPerfilId: z.string().uuid().optional(),
+  acessoExcecao: z.enum(["true"]).optional(),
 });
 type ListMotoristasQuery = z.infer<typeof ListMotoristasQuery>;
 

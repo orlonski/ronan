@@ -70,6 +70,15 @@ function colunasDe(o: Record<string, unknown>): ColunasAcesso {
   return Object.fromEntries(ACESSOS_APP_CHAVES.map((c) => [c, o[c] === true])) as ColunasAcesso;
 }
 
+/**
+ * Exceção VIVA no banco: não revogada e dentro do prazo. A que venceu não é
+ * revogada por ninguém (o resolvedor só para de contá-la), então filtrar só
+ * por `revogadaEm` contaria gente que já voltou ao perfil.
+ */
+export function ondeExcecaoViva(agora = new Date()) {
+  return { revogadaEm: null, OR: [{ expiraEm: null }, { expiraEm: { gt: agora } }] };
+}
+
 /** A divergência que o portão achou: o cálculo não reproduziu a ficha. */
 export type DivergenciaEspelho = {
   motoristaId: string;
