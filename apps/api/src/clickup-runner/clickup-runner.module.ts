@@ -23,7 +23,12 @@ import { RateLimitIpGuard } from "./rate-limit-ip.guard";
   // A fila sai do módulo porque o marketing também abre demanda: a pauta
   // semanal do Instagram escreve na MESMA fila que o webhook, pra o agente não
   // precisar saber de onde o pedido veio.
-  exports: [FilaExecucoesService],
+  //
+  // `RunnerConfig` sai junto pelo mesmo motivo: quem enfileira precisa saber
+  // quanto tempo de execução pedir, e o teto é do runner, não de quem chama.
+  // Sem exportar, `PautaService` não resolve a dependência e a API NÃO SOBE —
+  // o boot morre em "Nest can't resolve dependencies of the PautaService".
+  exports: [FilaExecucoesService, RunnerConfig],
 })
 export class ClickupRunnerModule implements OnModuleInit {
   constructor(private readonly config: RunnerConfig) {}
