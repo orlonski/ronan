@@ -290,6 +290,9 @@ const GRUPOS: Grupo[] = [
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },
       { href: "/tipos-servico", label: "Como a viagem é cobrada", icon: Timer, perm: "tipos-servico.ver" },
       { href: "/modalidades", label: "Vínculos do motorista", icon: IdCard, perm: "modalidades.ver" },
+      // Fica em Cadastros, não em Frota e pessoas: é tabela que se preenche uma
+      // vez e vale pra todo mundo, como as outras deste grupo.
+      { href: "/perfis-acesso", label: "Perfis de acesso do app", icon: SlidersHorizontal, perm: "perfis-acesso.ver" },
       { href: "/tipos-evento-viagem", label: "Paradas e ocorrências", icon: ListChecks, perm: "tipos-evento-viagem.ver" },
     ],
   },

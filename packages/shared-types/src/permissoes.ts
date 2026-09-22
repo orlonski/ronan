@@ -47,6 +47,7 @@ const ACAO_TITULO: Record<string, string> = {
   publicar: "Publicar (avisa o motorista)",
   moderar: "Moderar denúncias",
   gerenciar: "Gerenciar",
+  aplicar: "Aplicar a vários motoristas",
   gerar: "Gerar / lançar item",
   faturar: "Faturar / lançar conta",
   baixar: "Dar baixa (dinheiro entrou/saiu)",
@@ -211,6 +212,10 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "materiais", label: "Materiais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "tipos-servico", label: "Como a viagem é cobrada", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "modalidades", label: "Vínculos do motorista", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  // O molde de acessos do app. `aplicar` é chave à parte de `editar` porque
+  // aplicar reescreve TRINTA pessoas de uma vez: é poder de outra ordem que
+  // corrigir o nome do perfil.
+  { recurso: "perfis-acesso", label: "Perfis de acesso do app", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "aplicar", "excluir"] },
   { recurso: "regras-minimo", label: "Mínimo faturado por km", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // Quanto cada empresa paga por tonelada/km/viagem. Chave própria e separada de
   // `regras-minimo` porque são decisões diferentes: mínimo é quanto se CONTA

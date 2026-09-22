@@ -79,6 +79,9 @@ export const MODULOS: ModuloDef[] = [
     recursos: [
       "viagens",
       "abastecimentos",
+      // O molde de acessos do app é do núcleo: quem tem motorista tem app, e
+      // quem tem app precisa dizer o que cada tipo de pessoa faz nele.
+      "perfis-acesso",
       // ⚠️ Estava em "Comunicação", junto de chat e WhatsApp. Não é
       // comunicação nenhuma: é o raio que o app usa pra achar o local de
       // descarga. Uma empresa que não comprasse o módulo de conversa ficava

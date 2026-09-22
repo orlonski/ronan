@@ -20,6 +20,7 @@ import { EmpresasModule } from "./empresas/empresas.module";
 import { TransportadorasModule } from "./transportadoras/transportadoras.module";
 import { ClientesModule } from "./clientes/clientes.module";
 import { MotoristasModule } from "./motoristas/motoristas.module";
+import { PerfisAcessoModule } from "./perfis-acesso/perfis-acesso.module";
 import { UsersModule } from "./users/users.module";
 import { LocaisModule } from "./locais/locais.module";
 import { ViagensAdminModule } from "./viagens/viagens.module";
@@ -69,6 +70,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     TransportadorasModule,
     ClientesModule,
     MotoristasModule,
+    PerfisAcessoModule,
     UsersModule,
     LocaisModule,
     ViagensAdminModule,

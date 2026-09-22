@@ -611,25 +611,26 @@ model Conta {
   assinaturaDocumentos AssinaturaDocumento[]
 
   // --- Ponto eletrônico (funcionário CLT). Módulo à parte do mensal. ---
-  regimesVigentes  RegimeVigente[]
-  funcionarios     Funcionario[]
-  marcacoes        Marcacao[]
-  marcacaoLocais   MarcacaoLocalizacao[]
-  pontoSequencia   PontoSequencia?
-  correcoesPonto   CorrecaoPonto[]
-  motivosCorrecao  MotivoCorrecaoPonto[]
-  modelosJornada   ModeloJornada[]
-  jornadaDias      JornadaDiaModelo[]
-  vinculosJornada  VinculoJornada[]
-  feriadosPonto    FeriadoPonto[]
-  configPonto      ConfigPonto?
-  fechamentosPonto FechamentoPonto[]
-  apuracoesPonto   ApuracaoDiaPonto[]
-  cienciasEspelho  CienciaEspelho[]
+  regimesVigentes    RegimeVigente[]
+  funcionarios       Funcionario[]
+  marcacoes          Marcacao[]
+  marcacaoLocais     MarcacaoLocalizacao[]
+  pontoSequencia     PontoSequencia?
+  correcoesPonto     CorrecaoPonto[]
+  motivosCorrecao    MotivoCorrecaoPonto[]
+  modelosJornada     ModeloJornada[]
+  jornadaDias        JornadaDiaModelo[]
+  vinculosJornada    VinculoJornada[]
+  feriadosPonto      FeriadoPonto[]
+  configPonto        ConfigPonto?
+  fechamentosPonto   FechamentoPonto[]
+  apuracoesPonto     ApuracaoDiaPonto[]
+  cienciasEspelho    CienciaEspelho[]
+  onboardingUsuarios OnboardingUsuario[]
+  perfisAcessoApp    PerfilAcessoApp[]
 
   @@index([ativa])
   @@map("contas")
-  onboardingUsuarios OnboardingUsuario[]
 }
 
 model User {
@@ -1400,6 +1401,14 @@ model Motorista {
   // Quando o aviso "fulano entrou no app" foi postado no grupo do WhatsApp.
   // Trava de envio único: uma vez setado, nunca reanuncia esse motorista.
   avisoGrupoEnviadoEm     DateTime?
+  /// O molde de acessos que esta pessoa segue. `null` = ninguém aplicou perfil
+  /// nenhum, e aí valem as colunas abaixo como sempre valeram.
+  ///
+  /// ⚠️ Atribuir um perfil ESCREVE as colunas. Coluna que depois diverge do
+  /// perfil é EXCEÇÃO, e a ficha mostra quantas são — exceção invisível vira
+  /// regra por acidente.
+  perfilAcessoId          String?
+  perfilAcesso            PerfilAcessoApp?     @relation(fields: [perfilAcessoId], references: [id])
   // Acessos por funcionalidade (controle de feature flag por motorista).
   // Default false nos campos sensíveis = novo motorista nasce travado e o admin
   // libera caso a caso pelo dashboard. podeLancarViagem/podeLancarAbastecimento
@@ -1788,23 +1797,23 @@ enum OrigemDocumento {
 /// validações de service. Quem escreve usa `chaveDocumento()` em
 /// `common/chave-documento.ts` — nunca monta a string na mão.
 model MotoristaDocumento {
-  contaId     String                 @default("__SEM_CONTA__")
-  conta       Conta                  @relation(fields: [contaId], references: [id])
-  id          String                 @id @default(uuid())
+  contaId     String    @default("__SEM_CONTA__")
+  conta       Conta     @relation(fields: [contaId], references: [id])
+  id          String    @id @default(uuid())
   motoristaId String
-  motorista   Motorista              @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motorista   Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
 
   /// A gaveta onde o arquivo mora. Continua existindo porque é ela que o
   /// painel lista, o ZIP nomeia e a conta sem módulo de admissão usa. O que
   /// ela deixou de ser é a IDENTIDADE do arquivo.
-  tipo        TipoDocumentoMotorista
+  tipo TipoDocumentoMotorista
 
   /// Qual exigência este arquivo atende. Nulo = anexo avulso do painel.
   exigenciaId String?
-  exigencia   DocumentoExigido?      @relation(fields: [exigenciaId], references: [id], onDelete: SetNull)
+  exigencia   DocumentoExigido? @relation(fields: [exigenciaId], references: [id], onDelete: SetNull)
 
   /// `exig:<id>` ou `gaveta:<TIPO>`. Ver o comentário do model.
-  chave       String                 @default("")
+  chave String @default("")
 
   nomeArquivo String
   storageKey  String
@@ -1820,7 +1829,7 @@ model MotoristaDocumento {
   /// conferir", nunca "confere".
   hashArquivo String?
 
-  origem      OrigemDocumento        @default(PAINEL)
+  origem OrigemDocumento @default(PAINEL)
 
   /// A CONFERÊNCIA HUMANA deste arquivo.
   ///
@@ -1850,11 +1859,11 @@ model MotoristaDocumento {
   /// É o que transforma "ele clicou em assinar" em "ele abriu o papel e depois
   /// assinou". Carimbado pelo servidor no download, não declarado pelo app —
   /// declaração do cliente não prova nada contra quem a escreveu.
-  vistoEm     DateTime?
+  vistoEm DateTime?
 
-  validade    DateTime?              @db.Date
-  criadoEm    DateTime               @default(now())
-  alteradoEm  DateTime               @updatedAt
+  validade   DateTime? @db.Date
+  criadoEm   DateTime  @default(now())
+  alteradoEm DateTime  @updatedAt
 
   @@unique([motoristaId, chave])
   @@index([motoristaId])
@@ -3360,35 +3369,35 @@ enum TipoAlertaOperacional {
  * ficou 3h parado ontem é o dado que explica o atraso de hoje.
  */
 model AlertaOperacional {
-  contaId        String                @default("__SEM_CONTA__")
-  conta          Conta                 @relation(fields: [contaId], references: [id])
-  id             String                @id @default(uuid())
-  tipo           TipoAlertaOperacional
+  contaId              String                @default("__SEM_CONTA__")
+  conta                Conta                 @relation(fields: [contaId], references: [id])
+  id                   String                @id @default(uuid())
+  tipo                 TipoAlertaOperacional
   /// "BAIXA" | "MEDIA" | "ALTA".
-  severidade     String                @default("MEDIA")
-  viagem         Viagem?               @relation(fields: [viagemId], references: [id], onDelete: Cascade)
-  viagemId       String?
-  motorista      Motorista?            @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
-  motoristaId    String?
+  severidade           String                @default("MEDIA")
+  viagem               Viagem?               @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId             String?
+  motorista            Motorista?            @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId          String?
   /// O que dizer ao supervisor, pronto. "Jorge · 47 min parado na Pedreira Norte".
-  titulo         String
-  detalhe        String?
+  titulo               String
+  detalhe              String?
   /// Números que geraram o alerta, pra tela poder explicar sem recalcular.
-  dados          Json?
-  detectadoEm    DateTime              @default(now())
+  dados                Json?
+  detectadoEm          DateTime              @default(now())
   /// Quando este alerta virou sininho, e com que severidade. Existe pra que o
   /// mesmo problema notifique UMA vez: a varredura seguinte atualiza a linha e
   /// só volta a incomodar alguém se a situação PIOROU (MEDIA → ALTA).
-  notificadoEm   DateTime?
+  notificadoEm         DateTime?
   severidadeNotificada String?
-  resolvidoEm    DateTime?
+  resolvidoEm          DateTime?
   /// Resolvido sozinho pela varredura (viagem fechou, ou a condição passou),
   /// em vez de alguém ter clicado. Separa "o supervisor tratou" de "deixou de
   /// existir" — que é a diferença entre a torre ter servido e a torre ter feito
   /// barulho à toa.
-  resolvidoAuto  Boolean               @default(false)
-  resolvidoPor   User?                 @relation("ResolveuAlerta", fields: [resolvidoPorId], references: [id], onDelete: SetNull)
-  resolvidoPorId String?
+  resolvidoAuto        Boolean               @default(false)
+  resolvidoPor         User?                 @relation("ResolveuAlerta", fields: [resolvidoPorId], references: [id], onDelete: SetNull)
+  resolvidoPorId       String?
 
   /// O dedup de verdade é um índice PARCIAL (`WHERE "resolvidoEm" IS NULL`),
   /// criado por SQL na migration `torre_alerta_dedupe` — o Prisma 6 não modela
@@ -4645,30 +4654,30 @@ model GeocodingCache {
 /// Fica sob `programacao.*` (é a mesma pessoa que monta o dia e acompanha o
 /// dia) e dentro do módulo `torre`, junto com a tela que ela configura.
 model ConfiguracaoTorre {
-  contaId             String   @default("__SEM_CONTA__")
-  conta               Conta    @relation(fields: [contaId], references: [id])
-  id                  String   @id @default(uuid())
+  contaId               String   @default("__SEM_CONTA__")
+  conta                 Conta    @relation(fields: [contaId], references: [id])
+  id                    String   @id @default(uuid())
   /// Sem evento por N minutos → alerta de "sem novidade" (na tela, sem sininho).
-  paradaLongaMin      Int      @default(120)
+  paradaLongaMin        Int      @default(120)
   /// Sem evento por N minutos → o alerta vira ALTA. Só ALTA notifica.
-  paradaLongaAltaMin  Int      @default(240)
+  paradaLongaAltaMin    Int      @default(240)
   /// Teto de idade: acima disso não é mais operação, é casca aberta pra fechar.
-  viagemEsquecidaMin  Int      @default(720)
+  viagemEsquecidaMin    Int      @default(720)
   /// Sem posição de GPS por N minutos (só vale pra conta com tracking ligado).
-  semSinalMin         Int      @default(180)
+  semSinalMin           Int      @default(180)
   /// Janela em que a notificação pode sair (hora de Brasília). O alerta em si
   /// nasce em qualquer hora — a janela segura só o sininho.
-  horaInicio          Int      @default(6)
-  horaFim             Int      @default(20)
-  notificaDomingo     Boolean  @default(true)
+  horaInicio            Int      @default(6)
+  horaFim               Int      @default(20)
+  notificaDomingo       Boolean  @default(true)
   /// Fecha sozinha (EM_ANDAMENTO → INCOMPLETA) a viagem abandonada há N horas.
   /// 0 = desligado, e é o default: fechar viagem de gente é decisão da empresa,
   /// não padrão de fábrica.
-  fecharAbandonadaHoras Int    @default(0)
+  fecharAbandonadaHoras Int      @default(0)
   // Audit
-  alteradoEm          DateTime @updatedAt
-  alteradoPor         User?    @relation(fields: [alteradoPorId], references: [id])
-  alteradoPorId       String?
+  alteradoEm            DateTime @updatedAt
+  alteradoPor           User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId         String?
 
   @@unique([contaId])
   @@map("configuracao_torre")
@@ -6886,6 +6895,63 @@ enum RegimeTrabalho {
 /// perito usa. Unique não cruza tabelas, então a exclusão mútua precisa de uma
 /// linha só — e ela mora em `common/`, com vocabulário neutro, pra passar nos
 /// filtros de léxico dos dois módulos.
+/// O QUE ESSE TIPO DE PESSOA FAZ NO APP — um conjunto nomeado de acessos.
+///
+/// ⚠️ Nasceu de um incômodo do dono: "a liberação de acessos do app é somente
+/// em cada motorista, talvez isso não esteja certo". Estava errado mesmo — o
+/// escritório respondia TREZE perguntas de sim/não por pessoa, e ninguém
+/// responde treze perguntas com atenção. A auditoria mostrou o resultado: três
+/// tabelas de padrão discordando entre si, um interruptor que não gateia nada,
+/// e o único que custa dinheiro (a leitura de ticket por IA) entregue ligado
+/// por omissão.
+///
+/// ⚠️ O PERFIL É MOLDE, NÃO FONTE. Atribuir ou editar um perfil ESCREVE as
+/// colunas `pode*` do motorista; ninguém lê "o perfil" na hora de decidir. Foi
+/// decisão, e o motivo é concreto: `podeChat` entra em cláusula WHERE do
+/// Prisma (a lista de contatos do chat), e valor calculado em tempo de leitura
+/// não vai pra dentro de um WHERE. Resolver no read obrigaria a filtrar em
+/// memória em todo lugar — muito risco pra ganhar elegância. Materializar é o
+/// mesmo desenho do `ViagemValor`, e pelo mesmo motivo.
+///
+/// ⚠️ `sugeridoPara` SUGERE e nunca decide. Regime é sobre PAGAMENTO; o
+/// motorista CLT da própria transportadora dirige e lança viagem — amarrar
+/// "empregado logo não lança" trancaria a porta do caso mais comum de quem
+/// compra o módulo de ponto.
+model PerfilAcessoApp {
+  id      String @id @default(uuid())
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  nome      String
+  descricao String?
+  ativo     Boolean @default(true)
+
+  /// Regime que este perfil costuma servir, pro cadastro sugerir. Nunca decide.
+  sugeridoPara RegimeTrabalho?
+
+  podeLancarViagem        Boolean @default(false)
+  podeLancarAbastecimento Boolean @default(false)
+  podeLancarPedagio       Boolean @default(false)
+  podeViagemLifecycle     Boolean @default(false)
+  podeIniciarViagem       Boolean @default(false)
+  podeUsarOcrTicket       Boolean @default(false)
+  podeReferenciaKm        Boolean @default(false)
+  podeVerTodosLocais      Boolean @default(false)
+  podeTelemetria          Boolean @default(false)
+  podeChat                Boolean @default(false)
+  podeVerStories          Boolean @default(false)
+  podeDiaria              Boolean @default(false)
+  podeVerValorDiaria      Boolean @default(false)
+
+  motoristas Motorista[]
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@unique([contaId, nome])
+  @@map("perfis_acesso_app")
+}
+
 model RegimeVigente {
   id      String @id @default(uuid())
   contaId String @default("__SEM_CONTA__")
