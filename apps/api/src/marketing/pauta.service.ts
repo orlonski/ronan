@@ -204,8 +204,13 @@ export class PautaService {
       carrossel ? "6. Entregue:" : "",
       "",
       "```bash",
-      "cd marketing/instagram",
-      `MARKETING_API_URL=${base} node enfileirar.mjs <peca> <arquivo-da-legenda> ${dia}T09:00:00-03:00`,
+      // UM comando, começando com `node`, da raiz do repositório.
+      //
+      // Não é estilo: a allowlist do agente é `Bash(node *)`, e comando com `cd`
+      // antes ou `VAR=x` na frente para pedindo aprovação que ninguém está lá
+      // pra dar. Foi assim que um carrossel ficou pronto, revisado e commitado
+      // sem nunca chegar na fila.
+      `node marketing/instagram/enfileirar.mjs <peca> marketing/instagram/posts/<peca>.txt ${dia}T09:00:00-03:00 --api=${base}`,
       "```",
       carrossel
         ? [
