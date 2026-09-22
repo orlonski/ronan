@@ -47,10 +47,18 @@ function montarWorker(
     concorrencia: 1,
     tentativasMax: 3,
     timeoutExecucaoMs: 60_000,
+    timeoutMaxExecucaoMs: 45 * 60_000,
     orcamentoUsd: 5,
     intervaloWorkerMs: 5_000,
     ...overConfig,
   } as RunnerConfig;
+  // A régua de verdade, não um dublê: é ela que o worker usa pra decidir o
+  // relógio de cada demanda, e um dublê que sempre devolve o padrão esconderia
+  // justamente o caso que motivou tudo isto.
+  config.tempoConcedido = (pedidoMs?: number) =>
+    typeof pedidoMs === "number" && Number.isFinite(pedidoMs)
+      ? Math.max(config.timeoutExecucaoMs, Math.min(config.timeoutMaxExecucaoMs, Math.trunc(pedidoMs)))
+      : config.timeoutExecucaoMs;
 
   const executor: ExecutorAgente = { nome: "fake", executar };
   const worker = new WorkerExecucoesService(fila, config, fonte, executor);

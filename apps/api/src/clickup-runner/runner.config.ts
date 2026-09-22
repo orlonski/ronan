@@ -47,6 +47,8 @@ export class RunnerConfig {
   readonly branchBase: string;
   /** Ferramentas liberadas pro agente (vira --allowedTools). */
   readonly ferramentas: string[];
+  /** Teto máximo que uma demanda pode pedir pra si, acima do padrão. */
+  readonly timeoutMaxExecucaoMs: number;
   /** Modelo, quando quiser fixar. Vazio = default do CLI. */
   readonly modelo: string;
   /**
@@ -82,6 +84,18 @@ export class RunnerConfig {
     this.timeoutExecucaoMs = this.numero(
       "CLICKUP_RUNNER_TIMEOUT_MS",
       15 * 60_000,
+      60_000,
+      4 * 60 * 60_000,
+    );
+    // Teto de quanto uma demanda pode PEDIR pra si.
+    //
+    // Existe porque trabalho não tem todo o mesmo tamanho: um carrossel de 6
+    // telas não cabe nos 15 minutos que bastam pra um post único. Quem pede diz
+    // quanto precisa, e isto limita o pedido — demanda que vem de webhook
+    // externo não escolhe ficar 4 horas de pé.
+    this.timeoutMaxExecucaoMs = this.numero(
+      "CLICKUP_RUNNER_TIMEOUT_MAX_MS",
+      45 * 60_000,
       60_000,
       4 * 60 * 60_000,
     );
@@ -165,6 +179,29 @@ export class RunnerConfig {
         (this.fonte === "clickup"
           ? `, comentário=${this.clickupToken ? "configurado" : "SEM TOKEN (não vai comentar)"})`
           : ")"),
+    );
+  }
+
+  /**
+   * Quanto tempo uma demanda recebe, dado o que ela pediu.
+   *
+   * Uma régua só, consultada pelo worker (que aplica) e por quem abre a demanda
+   * (que precisa DIZER o número ao agente). Foram dois lugares por um dia, e o
+   * resultado foi um briefing prometendo 40 minutos com o relógio cortando aos
+   * 15: o agente planejou pro número errado, produziu tudo e não entregou nada.
+   *
+   * Pedir não é mandar: nunca abaixo do padrão, nunca acima do teto.
+   */
+  tempoConcedido(pedidoMs?: number): number {
+    if (typeof pedidoMs !== "number" || !Number.isFinite(pedidoMs)) {
+      return this.timeoutExecucaoMs;
+    }
+    // Teto no pedido primeiro, piso por último: assim o padrão vence uma config
+    // incoerente (teto menor que ele) em vez de encurtar o relógio de quem
+    // pediu mais tempo.
+    return Math.max(
+      this.timeoutExecucaoMs,
+      Math.min(this.timeoutMaxExecucaoMs, Math.trunc(pedidoMs)),
     );
   }
 

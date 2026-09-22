@@ -5,11 +5,26 @@ import { randomUUID } from "node:crypto";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { FilaExecucoesService } from "../clickup-runner/fila.service";
+import { RunnerConfig } from "../clickup-runner/runner.config";
 import { comoSistema } from "../common/conta/conta-context";
 import { InstagramConfig } from "./instagram.config";
 
 /** Peça única ou carrossel. O cron só pede a primeira; carrossel vem de clique. */
 export type FormatoPedido = "UNICO" | "CARROSSEL";
+
+/**
+ * Quanto tempo um carrossel pede pra si.
+ *
+ * Post único cabe no padrão do runner (15 min). Carrossel são 5 a 7 telas, cada
+ * uma com copy, arte e QA próprio, e a primeira tentativa morreu em
+ * EXCEDEU_LIMITE aos 15 — com o briefing prometendo 40, porque o número estava
+ * escrito no texto do prompt e não no relógio.
+ *
+ * O worker limita isto ao `CLICKUP_RUNNER_TIMEOUT_MAX_MS`, então pedir não é
+ * mandar: se o teto do servidor for menor, vale o dele — e é por isso que o
+ * briefing imprime o número que o worker devolve, nunca este.
+ */
+const TEMPO_CARROSSEL_MS = 40 * 60_000;
 
 /**
  * A pauta: manda o `ronan_agente` produzir a próxima leva de posts.
@@ -31,6 +46,7 @@ export class PautaService {
     private readonly config: InstagramConfig,
     private readonly prisma: PrismaService,
     private readonly fila: FilaExecucoesService,
+    private readonly runner: RunnerConfig,
     private readonly appConfig: ConfigService,
   ) {}
 
@@ -88,14 +104,22 @@ export class PautaService {
       // pauta vê o post novo na fila e o agente seguinte escolhe outro assunto.
       // Mais lento, e é o preço de não repetir post no feed.
       const carrossel = formato === "CARROSSEL";
+      // Pede o tempo e pergunta quanto foi concedido: o briefing tem que dizer
+      // ao agente o minuto que o relógio realmente vai contar. Prometer 40 e
+      // cortar aos 15 é pior que dar 15 — ele planeja pro número errado e morre
+      // no meio, com tudo pronto e nada entregue.
+      const timeoutMs = carrossel
+        ? this.runner.tempoConcedido(TEMPO_CARROSSEL_MS)
+        : this.runner.tempoConcedido();
       const taskId = `ig-${randomUUID().replace(/-/g, "").slice(0, 6)}`;
       const r = await this.fila.enfileirar({
         taskId,
         payload: {
           titulo: carrossel ? "Instagram: produzir 1 carrossel" : "Instagram: produzir 1 post",
-          descricao: await this.briefing(formato),
+          descricao: await this.briefing(formato, Math.round(timeoutMs / 60_000)),
           origem: "painel",
           criadoPorNome: opcoes.forcar ? "Pedido pelo painel" : "Pauta automática",
+          timeoutMs,
         },
       });
       if (!r.aceito) {
@@ -122,7 +146,7 @@ export class PautaService {
    * repetir as regras, e leva junto a lista do que JÁ existe — sem isso o
    * agente reescreve um assunto que já está na fila, que foi o que aconteceu.
    */
-  private async briefing(formato: FormatoPedido = "UNICO"): Promise<string> {
+  private async briefing(formato: FormatoPedido = "UNICO", minutos = 15): Promise<string> {
     const base = (this.appConfig.get<string>("MARKETING_API_URL") ?? "http://ronan-api:3000").trim();
 
     // O que já foi feito ou está esperando. É a única forma do agente não
@@ -162,10 +186,15 @@ export class PautaService {
       "",
       carrossel
         ? [
-            "Você tem 40 minutos de execução. É mais que o post único porque são 5 a 7 telas,",
-            "e porque o QA aqui NÃO é opcional: carrossel erra em sete lugares em vez de um.",
+            `Você tem ${minutos} minutos de execução — é o teto real do worker, não uma estimativa.`,
+            "Passou disso, a execução é interrompida e NADA do que você fez é entregue.",
+            "É mais que o post único porque são 5 a 7 telas, e porque o QA aqui NÃO é opcional:",
+            "carrossel erra em sete lugares em vez de um.",
+            "",
+            "Entregue ANTES de refinar. Um carrossel na fila vale mais que um perfeito que",
+            "morreu no relógio — dá pra melhorar depois, com a peça já salva.",
           ].join("\n")
-        : "Você tem 15 minutos de execução. Vá direto ao ponto: um post só, bem feito.",
+        : `Você tem ${minutos} minutos de execução. Vá direto ao ponto: um post só, bem feito.`,
       "",
       "Leia primeiro `.claude/skills/post-instagram/SKILL.md` — ela tem o fluxo, a voz e as",
       "armadilhas já pagas. A regra que manda em tudo: **nada vai pro ar sem existir no código**.",

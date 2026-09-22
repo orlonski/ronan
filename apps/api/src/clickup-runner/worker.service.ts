@@ -194,6 +194,22 @@ export class WorkerExecucoesService implements OnModuleInit, OnModuleDestroy {
     if (relatou) await this.fila.marcarComentado(job.id);
   }
 
+  /**
+   * Quanto tempo ESTA demanda tem.
+   *
+   * O padrão serve pra maioria; quem precisa de mais pede no payload. É o caso
+   * do carrossel do Instagram, que não cabe nos 15 minutos de um post único —
+   * e que morreu em EXCEDEU_LIMITE com o briefing prometendo 40 porque o número
+   * estava escrito no texto do prompt e não aqui.
+   *
+   * Nunca abaixo do padrão e nunca acima do teto: o pedido vem de payload, e
+   * payload de webhook externo não manda no relógio do servidor.
+   */
+  private tempoDaDemanda(payload: unknown): number {
+    const pedido = (payload as { timeoutMs?: unknown } | null)?.timeoutMs;
+    return this.config.tempoConcedido(typeof pedido === "number" ? pedido : undefined);
+  }
+
   /** Teto duro de tempo. Estourar vira EXCEDEU_LIMITE (não retenta). */
   private async comTimeout(
     job: ExecucaoAgente,
@@ -206,7 +222,7 @@ export class WorkerExecucoesService implements OnModuleInit, OnModuleDestroy {
       payload: job.payload,
       demanda,
       branch,
-      timeoutMs: this.config.timeoutExecucaoMs,
+      timeoutMs: this.tempoDaDemanda(job.payload),
       orcamentoUsd: this.config.orcamentoUsd,
       tentativa: job.tentativas + 1,
     };
