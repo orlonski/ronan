@@ -40,7 +40,7 @@ const ACAO_TITULO: Record<string, string> = {
   documentos: "Documentos",
   layouts: "Layouts (envio/import)",
   homologar: "Homologar / mesclar",
-  importar: "Importar (OSM)",
+  importar: "Importar",
   resolver: "Resolver",
   reprocessar: "Mandar reler (gasta leitura paga)",
   avisar: "Publicar aviso",
@@ -57,6 +57,32 @@ const ACAO_TITULO: Record<string, string> = {
   lancar: "Lançar correção (com motivo)",
   decidir: "Aprovar ou recusar correção",
   reabrir: "Reabrir competência fechada (com motivo)",
+  // ⚠️ Estas seis apareciam na matriz como a CHAVE CRUA ("ver-localizacao",
+  // "executar"), porque o fallback é `ACAO_TITULO[acao] ?? acao`. A pior era
+  // `ver-localizacao`: a permissão mais sensível de privacidade do sistema era
+  // justamente a que aparecia sem tradução, num lugar onde alguém decide se
+  // libera ou não.
+  encerrar: "Encerrar alocação",
+  configurar: "Configurar o espelho",
+  "ver-localizacao": "Ver onde a pessoa bateu o ponto",
+  executar: "Rodar a importação",
+  emitir: "Emitir CT-e",
+  cancelar: "Cancelar CT-e",
+};
+
+/**
+ * Rótulo de ação que muda de sentido conforme o RECURSO.
+ *
+ * ⚠️ `ACAO_TITULO` é uma tabela plana por nome de ação, então o texto escrito
+ * pensando num recurso vazava pros outros: `importar` estava descrito como
+ * "Importar (OSM)" — verdade pra praça de pedágio, e mentira na linha de
+ * funcionários, onde importar planilha de gente aparecia como importar do
+ * OpenStreetMap.
+ */
+const ACAO_TITULO_POR_RECURSO: Record<string, string> = {
+  "pedagios.importar": "Importar praças de base pública (OSM)",
+  "funcionarios.importar": "Importar funcionários por planilha",
+  "prospeccao.importar": "Importar a base da ANTT",
 };
 
 type ResourceDef = { recurso: string; label: string; modulo: string; acoes: string[] };
@@ -71,11 +97,11 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // "compartilhar" gera link público do comprovante pro cliente. Exige TAMBÉM
   // "ver-comercial" no endpoint: o comprovante mostra km/toneladas faturados,
   // então quem não enxerga isso no painel não pode gerar link que mostre.
-  { recurso: "viagens", label: "Viagens", modulo: "Operação", acoes: ["ver", "ver-comercial", "editar", "excluir", "validar", "compartilhar", "alterar-valor"] },
-  { recurso: "descargas-suspeitas", label: "Descargas suspeitas", modulo: "Operação", acoes: ["ver", "corrigir"] },
+  { recurso: "viagens", label: "Viagens (lista e ao vivo)", modulo: "Operação", acoes: ["ver", "ver-comercial", "editar", "excluir", "validar", "compartilhar", "alterar-valor"] },
+  { recurso: "descargas-suspeitas", label: "Descargas fora do local", modulo: "Operação", acoes: ["ver", "corrigir"] },
   { recurso: "abastecimentos", label: "Abastecimentos", modulo: "Operação", acoes: ["ver", "editar", "excluir"] },
-  { recurso: "fechamentos", label: "Fechamentos", modulo: "Operação", acoes: ["ver", "criar", "conferir", "exportar", "excluir"] },
-  { recurso: "envios", label: "Envios", modulo: "Operação", acoes: ["ver", "criar", "excluir"] },
+  { recurso: "fechamentos", label: "Planilhas dos clientes", modulo: "Operação", acoes: ["ver", "criar", "conferir", "exportar", "excluir"] },
+  { recurso: "envios", label: "Planilhas enviadas", modulo: "Operação", acoes: ["ver", "criar", "excluir"] },
   // O que a empresa deve a cada motorista no período. Três ações separadas de
   // propósito: montar o acerto é trabalho de escritório; dizer que está
   // combinado (fechar) e que o dinheiro saiu (pagar) é decisão de quem responde
@@ -92,7 +118,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // marcou presença. `lancar` existe à parte de `editar` porque lançar um dia
   // no lugar do motorista é exceção que exige motivo — e quem pode conferir a
   // grade não deveria poder escrever nela sem querer.
-  { recurso: "alocacoes", label: "Alocações em obra", modulo: "Operação", acoes: ["ver", "criar", "editar", "encerrar"] },
+  { recurso: "alocacoes", label: "Obras e diárias", modulo: "Operação", acoes: ["ver", "criar", "editar", "encerrar"] },
   { recurso: "presenca", label: "Presença na obra", modulo: "Operação", acoes: ["ver", "lancar", "corrigir"] },
   // O documento que vai pra conversa do dia 20. `configurar` é à parte de
   // `ver` porque mexer no dia de corte e no calendário da obra muda quantas
@@ -121,25 +147,25 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // separação, dar a tela do dia pra quem confere presença entregaria junto a
   // localização de todo mundo, todo dia.
   { recurso: "ponto", label: "Ponto do dia", modulo: "Pessoas", acoes: ["ver", "ver-localizacao"] },
-  { recurso: "funcionarios", label: "Funcionários (CLT)", modulo: "Pessoas", acoes: ["ver", "criar", "editar", "desligar", "importar"] },
+  { recurso: "funcionarios", label: "Quem bate ponto", modulo: "Pessoas", acoes: ["ver", "criar", "editar", "desligar", "importar"] },
   { recurso: "jornadas", label: "Jornadas e escalas", modulo: "Pessoas", acoes: ["ver", "editar"] },
   { recurso: "espelho-ponto", label: "Espelho de ponto", modulo: "Pessoas", acoes: ["ver", "exportar"] },
-  { recurso: "correcoes-ponto", label: "Correções de ponto", modulo: "Pessoas", acoes: ["ver", "lancar", "decidir"] },
-  { recurso: "fechamento-ponto", label: "Fechamento do ponto", modulo: "Pessoas", acoes: ["ver", "fechar", "reabrir"] },
+  { recurso: "correcoes-ponto", label: "Acerto de ponto", modulo: "Pessoas", acoes: ["ver", "lancar", "decidir"] },
+  { recurso: "fechamento-ponto", label: "Fechar o mês", modulo: "Pessoas", acoes: ["ver", "fechar", "reabrir"] },
   { recurso: "config-ponto", label: "Regras de ponto", modulo: "Pessoas", acoes: ["ver", "editar"] },
   // Contas a receber e a pagar. `baixar` é separado de `faturar` porque emitir a
   // cobrança é trabalho de escritório e dizer que o dinheiro entrou é de quem
   // responde pelo caixa — e quase nunca é a mesma pessoa.
-  { recurso: "financeiro", label: "Financeiro", modulo: "Operação", acoes: ["ver", "faturar", "baixar"] },
+  { recurso: "financeiro", label: "Contas a pagar e receber", modulo: "Operação", acoes: ["ver", "faturar", "baixar"] },
   { recurso: "fornecedores", label: "Fornecedores", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "custos-veiculo", label: "Custos fixos do veículo", modulo: "Cadastros", acoes: ["ver", "editar"] },
   // Manutenção, pneu, documento do veículo e multa — o que some do radar e vira
   // caminhão parado ou multa vencida.
-  { recurso: "manutencao", label: "Manutenção da frota", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "manutencao", label: "Manutenção e documentos", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "pneus", label: "Pneus", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "multas", label: "Multas", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "documentos-veiculo", label: "Documentos do veículo", modulo: "Cadastros", acoes: ["ver", "editar"] },
-  { recurso: "programacao", label: "Programação do dia", modulo: "Operação", acoes: ["ver", "editar", "publicar"] },
+  { recurso: "programacao", label: "Torre de controle, programação e alertas", modulo: "Operação", acoes: ["ver", "editar", "publicar"] },
   // Relatório de produção por período. Agrupar por cliente/empresa (ou filtrar
   // por eles) exige TAMBÉM "viagens.ver-comercial" no endpoint: o agrupamento
   // por cliente É a carteira, e as colunas de km/toneladas faturados são as
@@ -148,9 +174,9 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // Lançamentos que o app não conseguiu enviar e ficaram guardados aqui pra não
   // se perder. "resolver" é o que encerra o caso (lançado na mão / descartado) —
   // separado do "ver" porque encerrar é decisão, não leitura.
-  { recurso: "lancamentos-resgatados", label: "Lançamentos travados", modulo: "Operação", acoes: ["ver", "resolver"] },
-  { recurso: "notificacoes", label: "Notificações", modulo: "Operação", acoes: ["ver", "excluir"] },
-  { recurso: "demandas", label: "Demandas do agente", modulo: "Operação", acoes: ["ver", "criar"] },
+  { recurso: "lancamentos-resgatados", label: "Lançamentos que não subiram", modulo: "Operação", acoes: ["ver", "resolver"] },
+  { recurso: "notificacoes", label: "Avisos enviados ao app", modulo: "Operação", acoes: ["ver", "excluir"] },
+  { recurso: "demandas", label: "Pedidos de melhoria", modulo: "Operação", acoes: ["ver", "criar"] },
   // Captação de clientes para a plataforma: leads do site e prospecção ativa.
   // É trabalho comercial da Movatruck, não da transportadora que usa o sistema
   // — por isso está em RECURSOS_PLATAFORMA logo abaixo. "importar" dispara a
@@ -178,20 +204,20 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // `expurgar` apaga posições de GPS com mais de 90 dias — é destrutivo, então
   // não pode viver sob a chave de leitura (foi o que aconteceu e virou furo).
   { recurso: "mapa", label: "Mapa", modulo: "Cadastros", acoes: ["ver", "expurgar"] },
-  { recurso: "empresas", label: "Empresas", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "layouts"] },
+  { recurso: "empresas", label: "Empresas-cliente", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "layouts"] },
   { recurso: "clientes", label: "Clientes", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "locais", label: "Locais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "homologar"] },
-  { recurso: "pedagios", label: "Pedágios (rodovias)", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "importar"] },
+  { recurso: "pedagios", label: "Praças de pedágio", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "importar"] },
   { recurso: "materiais", label: "Materiais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
-  { recurso: "tipos-servico", label: "Modos de serviço", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
-  { recurso: "modalidades", label: "Modalidades do motorista", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
-  { recurso: "regras-minimo", label: "Mínimos por faixa", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "tipos-servico", label: "Como a viagem é cobrada", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "modalidades", label: "Vínculos do motorista", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "regras-minimo", label: "Mínimo faturado por km", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // Quanto cada empresa paga por tonelada/km/viagem. Chave própria e separada de
   // `regras-minimo` porque são decisões diferentes: mínimo é quanto se CONTA
   // (operacional, quem confere mexe), preço é quanto se COBRA (comercial, nem
   // todo mundo que confere viagem pode mexer no preço do contrato).
   { recurso: "tabelas-preco", label: "Tabela de preços", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
-  { recurso: "tipos-evento-viagem", label: "Eventos da viagem", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "tipos-evento-viagem", label: "Paradas e ocorrências", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // ---- Sistema ----
   { recurso: "usuarios", label: "Usuários", modulo: "Sistema", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "permissoes", label: "Papéis e permissões", modulo: "Sistema", acoes: ["gerenciar"] },
@@ -207,10 +233,10 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // Emitir documento fiscal é ato com consequência jurídica: quem lança uma
   // viagem não deveria, por isso, poder emitir em nome da empresa. Cancelar é
   // ação à parte porque tem prazo legal e é contada pela SEFAZ.
-  { recurso: "cte", label: "CT-e (emissão)", modulo: "Sistema", acoes: ["ver", "emitir", "cancelar"] },
+  { recurso: "cte", label: "CT-e (emitidos e configuração do emissor)", modulo: "Sistema", acoes: ["ver", "emitir", "cancelar"] },
   { recurso: "whatsapp", label: "WhatsApp", modulo: "Sistema", acoes: ["ver", "gerenciar"] },
   { recurso: "erros", label: "Erros", modulo: "Sistema", acoes: ["ver", "resolver"] },
-  { recurso: "diagnosticos", label: "Diagnósticos", modulo: "Sistema", acoes: ["ver"] },
+  { recurso: "diagnosticos", label: "Diagnóstico do app", modulo: "Sistema", acoes: ["ver"] },
   { recurso: "config-tracking", label: "Tracking GPS", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-busca-locais", label: "Busca de locais", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-ia", label: "Inteligência Artificial", modulo: "Sistema", acoes: ["ver", "editar"] },
@@ -224,9 +250,9 @@ const RESOURCE_DEFS: ResourceDef[] = [
     acoes: ["ver", "reprocessar"],
   },
   { recurso: "config-agente", label: "Agente WhatsApp", modulo: "Sistema", acoes: ["ver", "editar"] },
-  { recurso: "config-campos-layout", label: "Campos do layout", modulo: "Sistema", acoes: ["ver", "editar"] },
-  { recurso: "config-forca-atualizacao", label: "Forçar atualização do app", modulo: "Sistema", acoes: ["ver", "editar"] },
-  { recurso: "config-km-atipico", label: "Km atípico", modulo: "Sistema", acoes: ["ver", "editar"] },
+  { recurso: "config-campos-layout", label: "Colunas da planilha do cliente", modulo: "Sistema", acoes: ["ver", "editar"] },
+  { recurso: "config-forca-atualizacao", label: "Força-atualização do app", modulo: "Sistema", acoes: ["ver", "editar"] },
+  { recurso: "config-km-atipico", label: "Alerta de km fora do padrão", modulo: "Sistema", acoes: ["ver", "editar"] },
 ];
 
 /** Mapa recurso → rótulo amigável (usado na matriz de papéis). */
@@ -245,7 +271,7 @@ export const CATALOGO_PERMISSOES: PermissaoCatalogo[] = RESOURCE_DEFS.flatMap((r
   r.acoes.map((acao, ai) => ({
     chave: `${r.recurso}.${acao}`,
     modulo: r.modulo,
-    titulo: ACAO_TITULO[acao] ?? acao,
+    titulo: ACAO_TITULO_POR_RECURSO[`${r.recurso}.${acao}`] ?? ACAO_TITULO[acao] ?? acao,
     ordem: ri * 100 + ai,
   })),
 );

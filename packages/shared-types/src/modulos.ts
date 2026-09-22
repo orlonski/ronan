@@ -79,6 +79,11 @@ export const MODULOS: ModuloDef[] = [
     recursos: [
       "viagens",
       "abastecimentos",
+      // ⚠️ Estava em "Comunicação", junto de chat e WhatsApp. Não é
+      // comunicação nenhuma: é o raio que o app usa pra achar o local de
+      // descarga. Uma empresa que não comprasse o módulo de conversa ficava
+      // sem regular a busca de local do próprio motorista.
+      "config-busca-locais",
       "motoristas",
       "veiculos",
       "transportadoras",
@@ -150,7 +155,7 @@ export const MODULOS: ModuloDef[] = [
     nome: "Comunicação",
     pitch: "Chat dos motoristas, avisos e o WhatsApp da operação.",
     medido: true,
-    recursos: ["chat", "whatsapp", "config-agente", "config-busca-locais"],
+    recursos: ["chat", "whatsapp", "config-agente"],
   },
   {
     // O contrato em que o caminhão fica à disposição de uma obra e se paga por

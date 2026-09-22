@@ -96,7 +96,10 @@ function Conteudo() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Financeiro</h1>
+        {/* O mesmo nome do item de menu que trouxe a pessoa até aqui. Clicar
+            em "Contas a pagar e receber" e cair numa tela chamada
+            "Financeiro" é pequeno e é desorientação do mesmo jeito. */}
+        <h1 className="text-2xl font-semibold tracking-tight">Contas a pagar e receber</h1>
         <p className="text-sm text-muted-foreground">
           Quem está devendo, há quanto tempo, e o que você tem a pagar.
         </p>
