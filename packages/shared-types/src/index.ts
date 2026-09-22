@@ -1,5 +1,6 @@
 export * from "./enums";
 export * from "./acesso-app";
+export * from "./capacidades-app";
 export * from "./auth";
 export * from "./viagem";
 export * from "./viagem-lifecycle";

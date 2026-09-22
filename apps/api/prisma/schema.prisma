@@ -436,7 +436,11 @@ model Conta {
   /// Default `true` de propósito, ao contrário do irmão abaixo: o recurso já
   /// está no ar e desligá-lo por omissão numa migration seria tirar do ar em
   /// silêncio algo que hoje funciona.
-  iaLeituraTicket Boolean @default(true)
+  iaLeituraTicket Boolean  @default(true)
+  /// Capacidades do app em liberação gradual (`tipo: ROLLOUT` no catálogo)
+  /// que valem NESTA empresa. É da plataforma, não da matriz do cliente — e só
+  /// corta alguma coisa quando a camada PLATAFORMA sair da sombra na empresa.
+  rolloutsApp     String[] @default([])
 
   /// Conferência automática do ticket no backend: um worker lê a foto guardada
   /// e confere contra o que o motorista declarou.
@@ -628,6 +632,11 @@ model Conta {
   cienciasEspelho    CienciaEspelho[]
   onboardingUsuarios OnboardingUsuario[]
   perfisAcessoApp    PerfilAcessoApp[]
+  regrasAcessoApp    RegraAcessoApp[]
+  configAcessoApp    ConfiguracaoAcessoApp?
+  excecoesAcessoApp  ExcecaoAcessoApp[]
+  acessosEfetivosApp AcessoEfetivoApp[]
+  logsAcessoApp      LogAcessoApp[]
 
   @@index([ativa])
   @@map("contas")
@@ -1409,6 +1418,10 @@ model Motorista {
   /// regra por acidente.
   perfilAcessoId          String?
   perfilAcesso            PerfilAcessoApp?     @relation(fields: [perfilAcessoId], references: [id], onDelete: SetNull)
+  /// Por que este motorista está FIXADO no perfil acima em vez de seguir as
+  /// regras da empresa. Com perfil fixado, regra nenhuma o alcança.
+  perfilFixadoMotivo      String?
+  acessoEfetivoApp        AcessoEfetivoApp?
   // Acessos por funcionalidade (controle de feature flag por motorista).
   // Default false nos campos sensíveis = novo motorista nasce travado e o admin
   // libera caso a caso pelo dashboard. podeLancarViagem/podeLancarAbastecimento
@@ -6944,13 +6957,199 @@ model PerfilAcessoApp {
   podeDiaria              Boolean @default(false)
   podeVerValorDiaria      Boolean @default(false)
 
-  motoristas Motorista[]
+  /// AS CAPACIDADES DO PERFIL (chaves `app.*` do catálogo em
+  /// `shared-types/src/capacidades-app.ts`). É a FONTE — as 13 colunas acima
+  /// são a forma antiga e somem quando nada mais as ler.
+  capacidades String[] @default([])
+
+  motoristas          Motorista[]
+  funcionarios        Funcionario[]
+  regras              RegraAcessoApp[]
+  padraoMotoristaDe   ConfiguracaoAcessoApp[] @relation("PerfilPadraoMotorista")
+  padraoFuncionarioDe ConfiguracaoAcessoApp[] @relation("PerfilPadraoFuncionario")
 
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
   @@unique([contaId, nome])
   @@map("perfis_acesso_app")
+}
+
+enum VinculoApp {
+  QUALQUER
+  MOTORISTA
+  FUNCIONARIO
+}
+
+enum CondicaoRegime {
+  QUALQUER
+  PARCEIRO
+  EMPREGADO
+  /// Sem regime declarado — o caso comum de quem só roda frete.
+  NAO_DECLARADO
+}
+
+enum EfeitoExcecaoAcesso {
+  CONCEDER
+  NEGAR
+}
+
+/// De onde sai o acesso de cada pessoa NESTA empresa.
+enum FonteAcessoApp {
+  /// As colunas `pode*` do cadastro continuam mandando (como sempre foi). O
+  /// sistema só ESPELHA: deriva perfil padrão e exceções delas, de hora em
+  /// hora, sem mudar nada pra ninguém.
+  COLUNAS
+  /// Perfil + regras + exceções mandam, e as colunas viram espelho.
+  REGRAS
+}
+
+/// "Quem recebe qual perfil." Avaliadas por `ordem`; a PRIMEIRA que casa
+/// vence. Condição nula (ou QUALQUER) = não importa.
+model RegraAcessoApp {
+  id      String @id @default(uuid())
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  ordem Int
+  nome  String
+  ativo Boolean @default(true)
+
+  vinculo          VinculoApp     @default(QUALQUER)
+  regime           CondicaoRegime @default(QUALQUER)
+  modalidadeId     String?
+  transportadoraId String?
+
+  perfilId String
+  perfil   PerfilAcessoApp @relation(fields: [perfilId], references: [id])
+
+  criadoPorId   String?
+  alteradoPorId String?
+  criadoEm      DateTime @default(now())
+  alteradoEm    DateTime @updatedAt
+
+  @@index([contaId, ordem])
+  @@map("regras_acesso_app")
+}
+
+/// O acesso do app NESTA empresa: o "todo o resto" e os interruptores.
+model ConfiguracaoAcessoApp {
+  contaId String @id
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  fonte FonteAcessoApp @default(COLUNAS)
+
+  /// Quem nenhuma regra alcança cai aqui.
+  perfilPadraoMotoristaId   String?
+  perfilPadraoMotorista     PerfilAcessoApp? @relation("PerfilPadraoMotorista", fields: [perfilPadraoMotoristaId], references: [id], onDelete: SetNull)
+  perfilPadraoFuncionarioId String?
+  perfilPadraoFuncionario   PerfilAcessoApp? @relation("PerfilPadraoFuncionario", fields: [perfilPadraoFuncionarioId], references: [id], onDelete: SetNull)
+
+  /// Camadas que CALCULAM mas não cortam (ver `CAMADAS_CORTE`). Nasce com
+  /// todas as que mudariam o presente: empresa em produção não perde
+  /// funcionalidade por efeito automático. Tirar uma daqui é decisão do dono,
+  /// vendo antes quem perde. APROVACAO fica de fora porque já vale hoje:
+  /// cadastro em análise ou inativo não usa o app.
+  camadasEmSombra String[] @default(["DEPENDENCIA", "REGIME", "PLATAFORMA", "CONTRATO"])
+
+  /// Sobe a cada recálculo que muda alguém — o app compara pra saber se
+  /// precisa buscar de novo.
+  versao Int @default(1)
+
+  /// Resultado do último espelhamento (modo COLUNAS): quando rodou e quantas
+  /// pessoas o cálculo NÃO conseguiu reproduzir. Divergência > 0 = nada foi
+  /// escrito naquela rodada.
+  espelhadoEm         DateTime?
+  espelhoDivergencias Int?
+  espelhoDetalhe      Json?
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@map("configuracao_acesso_app")
+}
+
+/// Exceção individual: dar ou tirar UMA capacidade de UMA pessoa, com motivo.
+/// Nunca fura contrato, regime ou vínculo — só mexe no que o perfil daria.
+model ExcecaoAcessoApp {
+  id      String @id @default(uuid())
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  cpf        String
+  capacidade String
+  efeito     EfeitoExcecaoAcesso
+  motivo     String
+  /// Nulo = não vence. As que vieram do cadastro antigo nascem sem prazo.
+  expiraEm   DateTime?
+  /// MANUAL | MIGRACAO
+  origem     String              @default("MANUAL")
+
+  criadoPorId     String?
+  criadoEm        DateTime  @default(now())
+  revogadaEm      DateTime?
+  revogadaPorId   String?
+  motivoRevogacao String?
+
+  /// "<cpf>:<capacidade>" enquanto viva, NULL depois — uma exceção viva por
+  /// pessoa e capacidade (o mesmo truque do `RegimeVigente`).
+  chaveViva String?
+
+  @@unique([contaId, chaveViva])
+  @@index([contaId, cpf])
+  @@map("excecoes_acesso_app")
+}
+
+/// O ACESSO EFETIVO de cada pessoa na empresa, MATERIALIZADO. Escritor único:
+/// `AcessoAppService`. FKs reais pra o WHERE relacional funcionar (o chat
+/// filtra contato por capacidade dentro da consulta).
+model AcessoEfetivoApp {
+  id      String @id @default(uuid())
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  cpf           String
+  motoristaId   String?      @unique
+  motorista     Motorista?   @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  funcionarioId String?      @unique
+  funcionario   Funcionario? @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+
+  /// O que vale (só as camadas ATIVAS cortam).
+  capacidades       String[]
+  /// O que valeria com TODAS as camadas cortando — o relatório de "quem
+  /// perderia o quê" que o dono olha antes de ligar uma camada.
+  capacidadesSombra String[]
+  /// Por capacidade: de onde veio e o que agiu sobre ela.
+  explicacao        Json
+  hash              String
+  /// A próxima data em que o resultado muda sozinho (exceção vencendo).
+  proximaMudanca    DateTime?
+  calculadoEm       DateTime
+
+  @@unique([contaId, cpf])
+  @@index([contaId])
+  @@map("acessos_efetivos_app")
+}
+
+/// Append-only: o que mudou no acesso de quem, por quê e por quem.
+model LogAcessoApp {
+  id      String @id @default(uuid())
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  /// EFETIVO_MUDOU, ESPELHO, REGRA_*, PERFIL_*, EXCECAO_*…
+  tipo     String
+  cpf      String?
+  alvoId   String?
+  ganhou   String[] @default([])
+  perdeu   String[] @default([])
+  causa    String?
+  motivo   String?
+  autorId  String?
+  criadoEm DateTime @default(now())
+
+  @@index([contaId, cpf, criadoEm])
+  @@map("log_acesso_app")
 }
 
 model RegimeVigente {
@@ -7015,6 +7214,12 @@ model Funcionario {
   alteradoEm  DateTime @updatedAt
   criadoPorId String?
 
+  /// Perfil do app FIXADO à mão (pula as regras). Nulo = segue as regras.
+  perfilAcessoId     String?
+  perfilAcesso       PerfilAcessoApp?  @relation(fields: [perfilAcessoId], references: [id], onDelete: SetNull)
+  perfilFixadoMotivo String?
+  acessoEfetivoApp   AcessoEfetivoApp?
+
   jornadas  VinculoJornada[]
   marcacoes Marcacao[]
   correcoes CorrecaoPonto[]
@@ -7023,6 +7228,7 @@ model Funcionario {
   @@unique([contaId, cpf])
   @@index([contaId, ativo])
   @@index([contaId, identidadeId])
+  @@index([perfilAcessoId])
   @@map("ponto_funcionarios")
 }
 

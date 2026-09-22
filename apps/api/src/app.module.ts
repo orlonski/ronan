@@ -15,6 +15,7 @@ import { MotoristaModule } from "./motorista/motorista.module";
 import { ChatModule } from "./chat/chat.module";
 import { UploadsModule } from "./uploads/uploads.module";
 import { AuditoriaModule } from "./auditoria/auditoria.module";
+import { AcessoAppModule } from "./common/acesso-app/acesso-app.module";
 import { IaModule } from "./ia/ia.module";
 import { FechamentosModule } from "./fechamentos/fechamentos.module";
 import { ErrorsModule } from "./errors/errors.module";
@@ -46,6 +47,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     PrismaModule,
     EscopoModule,
     AuditoriaModule,
+    AcessoAppModule,
     IaModule,
     AuthModule,
     ModulosModule,

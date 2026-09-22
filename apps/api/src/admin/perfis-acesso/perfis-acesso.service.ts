@@ -11,6 +11,7 @@ import {
   type SalvarPerfilAcessoInput,
 } from "@ronan/shared-types";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
+import { PERFIS_HERDADOS } from "../../common/acesso-app/espelho-colunas";
 import { type EscopoAdmin, filtroEscopo } from "../../common/escopo/escopo";
 import { PrismaService } from "../../prisma/prisma.service";
 
@@ -37,6 +38,12 @@ import { PrismaService } from "../../prisma/prisma.service";
  * perfil mexeria no celular de motorista que ele nem enxerga. Aplicar é por
  * pessoa, então aí o escopo FILTRA: ele aplica nos dele, e só nos dele.
  */
+/**
+ * Os perfis que o espelho do cadastro cria (ver `espelho-colunas.ts`) não
+ * existem pra esta tela: ela fala em colunas, e eles em capacidades.
+ */
+const SEM_HERDADOS = { nome: { notIn: PERFIS_HERDADOS } };
+
 @Injectable()
 export class PerfisAcessoService {
   constructor(
@@ -60,6 +67,7 @@ export class PerfisAcessoService {
 
   async listar() {
     const perfis = await this.prisma.perfilAcessoApp.findMany({
+      where: SEM_HERDADOS,
       orderBy: [{ ativo: "desc" }, { nome: "asc" }],
       include: { _count: { select: { motoristas: true } } },
     });
@@ -110,7 +118,7 @@ export class PerfisAcessoService {
    */
   async editar(id: string, dados: SalvarPerfilAcessoInput, usuarioId: string, escopo: EscopoAdmin) {
     this.exigirGlobal(escopo);
-    const atual = await this.prisma.perfilAcessoApp.findFirst({ where: { id } });
+    const atual = await this.prisma.perfilAcessoApp.findFirst({ where: { id, ...SEM_HERDADOS } });
     if (!atual) throw new NotFoundException("Perfil não encontrado.");
     await this.recusarNomeRepetido(dados.nome, id);
 
@@ -157,7 +165,7 @@ export class PerfisAcessoService {
    * eliminar.
    */
   async aplicar(perfilId: string, motoristaIds: string[], usuarioId: string, escopo: EscopoAdmin) {
-    const perfil = await this.prisma.perfilAcessoApp.findFirst({ where: { id: perfilId } });
+    const perfil = await this.prisma.perfilAcessoApp.findFirst({ where: { id: perfilId, ...SEM_HERDADOS } });
     if (!perfil) throw new NotFoundException("Perfil não encontrado.");
     if (!perfil.ativo) throw new BadRequestException("Este perfil está desligado.");
     if (motoristaIds.length === 0) return { atualizados: 0 };
@@ -199,7 +207,7 @@ export class PerfisAcessoService {
    */
   async desligar(id: string, usuarioId: string, escopo: EscopoAdmin) {
     this.exigirGlobal(escopo);
-    const perfil = await this.prisma.perfilAcessoApp.findFirst({ where: { id } });
+    const perfil = await this.prisma.perfilAcessoApp.findFirst({ where: { id, ...SEM_HERDADOS } });
     if (!perfil) throw new NotFoundException("Perfil não encontrado.");
     const r = await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.motorista.updateMany({

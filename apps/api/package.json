@@ -19,7 +19,8 @@
     "testar:ocr": "ts-node -P tsconfig.json --transpile-only src/scripts/testar-ocr-ticket.ts",
     "comparar:ticket": "ts-node -P tsconfig.json --transpile-only src/scripts/comparar-leitura-ticket.ts",
     "dispensar:retroativo": "ts-node -P tsconfig.json --transpile-only src/scripts/dispensar-conferencia-retroativo.ts",
-    "aprovar:retroativo": "ts-node -P tsconfig.json --transpile-only src/scripts/aprovar-conferencias-retroativo.ts"
+    "aprovar:retroativo": "ts-node -P tsconfig.json --transpile-only src/scripts/aprovar-conferencias-retroativo.ts",
+    "acesso:espelhar": "ts-node -P tsconfig.json --transpile-only src/scripts/espelhar-acesso-app.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
