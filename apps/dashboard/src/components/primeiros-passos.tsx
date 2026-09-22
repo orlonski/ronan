@@ -13,6 +13,8 @@ export type Passo = {
   descricao: string;
   rota: string;
   cumprido: boolean;
+  /** Atalho, não requisito — não conta pro "X de Y" nem segura a lista. */
+  opcional?: boolean;
 };
 
 export type EstadoPrimeirosPassos = {
@@ -89,6 +91,11 @@ export function ListaDePassos({ passos }: { passos: Passo[] }) {
                   }
                 >
                   {p.titulo}
+                  {p.opcional && (
+                    <span className="ml-2 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      atalho
+                    </span>
+                  )}
                 </span>
                 {!p.cumprido && (
                   <span className="block text-xs text-muted-foreground">{p.descricao}</span>
@@ -107,7 +114,7 @@ export function ListaDePassos({ passos }: { passos: Passo[] }) {
 }
 
 export function Cabecalho({ passos }: { passos: Passo[] }) {
-  const feitos = passos.filter((p) => p.cumprido).length;
+  const { feitos, total } = contar(passos);
   return (
     <>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -118,12 +125,27 @@ export function Cabecalho({ passos }: { passos: Passo[] }) {
           </p>
         </div>
         <span className="text-sm text-muted-foreground">
-          {feitos} de {passos.length}
+          {feitos} de {total}
         </span>
       </div>
-      <Barra feitos={feitos} total={passos.length} />
+      <Barra feitos={feitos} total={total} />
     </>
   );
+}
+
+/**
+ * O "X de Y" conta só o que é obrigatório.
+ *
+ * O atalho da planilha entra na lista mas não no placar: quem não tem planilha
+ * veria um contador que nunca fecha, e um progresso que não chega ao fim
+ * desmotiva mais do que a ausência dele.
+ */
+export function contar(passos: Passo[]): { feitos: number; total: number } {
+  const obrigatorios = passos.filter((p) => !p.opcional);
+  return {
+    feitos: obrigatorios.filter((p) => p.cumprido).length,
+    total: obrigatorios.length,
+  };
 }
 
 /** O que já foi feito também motiva. */

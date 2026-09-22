@@ -12,6 +12,14 @@ export type PrimeiroPasso = {
   descricao: string;
   rota: string;
   cumprido: boolean;
+  /**
+   * Atalho, não requisito: não entra no cálculo de `concluido`.
+   *
+   * Sem isto, "Traga o que você já rodou" travaria a lista para sempre em
+   * "7 de 8" na conta de quem não tem planilha — e passo que não dá pra
+   * cumprir é o defeito que este checklist já corrigiu uma vez.
+   */
+  opcional?: boolean;
 };
 
 /**
@@ -25,9 +33,20 @@ export type PrimeiroPasso = {
  * contratou Comercial não tem "diga quanto vale a viagem" no caminho dela —
  * esse passo não está pendente, ele não existe.
  */
+/**
+ * Como se reconhece uma viagem que veio de planilha.
+ *
+ * O importador carimba o `clientId` com este prefixo (`importacao.service.ts`),
+ * o que também é o que torna a importação repetível sem duplicar. Aqui ele
+ * serve pra separar duas perguntas que pareciam uma: "já tem histórico?" e "o
+ * motorista já lançou?".
+ */
+const PREFIXO_IMPORTACAO = "import:";
+
 type Exigencia = { passo: string; perm: string };
 
 const EXIGENCIAS: Exigencia[] = [
+  { passo: "historico", perm: "importacao.executar" },
   { passo: "motorista", perm: "motoristas.criar" },
   { passo: "veiculo", perm: "veiculos.criar" },
   { passo: "local", perm: "locais.criar" },
@@ -57,8 +76,17 @@ export class PrimeirosPassosService {
   async listar(
     usuario: { permissoes: string[]; plataforma: boolean },
   ): Promise<{ concluido: boolean; passos: PrimeiroPasso[] }> {
-    const [veiculos, motoristas, locais, empresas, clientes, viagens, motoristasNoApp, precos] =
-      await Promise.all([
+    const [
+      veiculos,
+      motoristas,
+      locais,
+      empresas,
+      clientes,
+      viagens,
+      importadas,
+      motoristasNoApp,
+      precos,
+    ] = await Promise.all([
         this.prisma.veiculo.count(),
         this.prisma.motorista.count(),
         this.prisma.local.count(),
@@ -66,7 +94,18 @@ export class PrimeirosPassosService {
         this.prisma.cliente.count(),
         // Viagem em andamento não conta como "já rodou": o ciclo pode ter sido
         // aberto e abandonado, e o passo é sobre ter chegado ao fim uma vez.
-        this.prisma.viagem.count({ where: { status: { notIn: STATUS_FORA_FECHAMENTO } } }),
+        //
+        // E viagem IMPORTADA não conta aqui: ela prova que o histórico subiu,
+        // não que o motorista lançou. Marcar "Receba a primeira viagem" com uma
+        // planilha seria o checklist dizendo meia-verdade e sumindo antes de o
+        // ciclo que o produto promete ter acontecido uma vez.
+        this.prisma.viagem.count({
+          where: {
+            status: { notIn: STATUS_FORA_FECHAMENTO },
+            NOT: { clientId: { startsWith: PREFIXO_IMPORTACAO } },
+          },
+        }),
+        this.prisma.viagem.count({ where: { clientId: { startsWith: PREFIXO_IMPORTACAO } } }),
         // O passo da viagem é o único que o dono NÃO cumpre sozinho: quem lança
         // é o motorista, pelo celular. Sem este passo no meio, a lista pedia um
         // resultado sem nunca pedir a ação que o produz.
@@ -75,6 +114,22 @@ export class PrimeirosPassosService {
       ]);
 
     const passos: PrimeiroPasso[] = [
+      // O caminho mais curto até o sistema fazer sentido, e o que menos
+      // depende de outras pessoas: a planilha que a empresa já mantém.
+      //
+      // Vem antes de tudo porque resolve vários passos de uma vez (motorista,
+      // caminhão, local, cliente, material) E porque é o único jeito de ver
+      // km, peso e dinheiro no primeiro dia sem esperar alguém instalar um
+      // app. Quem não tem planilha simplesmente segue pelo caminho de baixo.
+      {
+        chave: "historico",
+        titulo: "Traga o que você já rodou",
+        descricao:
+          "Suba a planilha que você já usa: motoristas, caminhões, locais e o histórico de viagens entram de uma vez, com os valores. Subir de novo atualiza, não duplica.",
+        rota: "/importacao",
+        cumprido: importadas > 0,
+        opcional: true,
+      },
       // O motorista vem PRIMEIRO porque o cadastro dele aceita a placa, e a
       // placa cria o caminhão junto — quem começa por aqui marca dois itens de
       // uma vez. Começar pelo caminhão faria a pessoa cadastrar a mesma placa
@@ -138,9 +193,9 @@ export class PrimeirosPassosService {
       // isso que o texto tem que dizer.
       {
         chave: "viagem",
-        titulo: "Receba a primeira viagem",
+        titulo: "Receba a primeira viagem do app",
         descricao:
-          "Quem lança é o motorista, pelo app, na hora da carga. Aqui você confere, corrige e fecha o mês.",
+          "Quem lança é o motorista, pelo celular, na hora da carga. Aqui você confere, corrige e fecha o mês. Histórico importado não vale para este passo — ele é sobre o ciclo rodando.",
         rota: "/viagens",
         cumprido: viagens > 0,
       },
@@ -148,7 +203,12 @@ export class PrimeirosPassosService {
       // demais, e a lista some assim que o último passo fecha — levando junto a
       // única bússola que a pessoa tinha. Com viagem na mão, "vale R$ 0" é uma
       // pergunta que ela já está se fazendo.
-      ...(viagens > 0
+      //
+      // Vale também pra viagem importada: quem subiu o histórico está olhando
+      // pro total do mês passado agora, e é exatamente aí que a pergunta
+      // aparece. Esperar o motorista lançar pra oferecer preço seria segurar a
+      // resposta justamente de quem já fez a pergunta.
+      ...(viagens > 0 || importadas > 0
         ? [
             {
               chave: "preco",
@@ -182,6 +242,10 @@ export class PrimeirosPassosService {
       return permissoes.has(`${recurso}.ver`) && permissoes.has(exigencia.perm);
     });
 
-    return { concluido: visiveis.every((p) => p.cumprido), passos: visiveis };
+    // O opcional fica na lista (com o check quando feito) mas não segura o
+    // `concluido`: quem não tem planilha não deve carregar um pendente eterno
+    // na home por causa de um atalho que não serve pra ele.
+    const obrigatorios = visiveis.filter((p) => !p.opcional);
+    return { concluido: obrigatorios.every((p) => p.cumprido), passos: visiveis };
   }
 }

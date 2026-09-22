@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { LinksLoja } from "@/components/links-loja";
@@ -9,10 +8,10 @@ import {
   Barra,
   CAMINHO_PRIMEIROS_PASSOS,
   ListaDePassos,
+  contar,
   type Passo,
 } from "@/components/primeiros-passos";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
-import { usePermissoes } from "@/lib/permissoes";
 
 /**
  * A primeira tela de quem acabou de criar a conta.
@@ -37,7 +36,6 @@ export function Chegada({
 }) {
   const token = useAuthToken();
   const qc = useQueryClient();
-  const { temPermissao } = usePermissoes();
 
   const dispensar = useMutation({
     mutationFn: () =>
@@ -45,7 +43,7 @@ export function Chegada({
     onSuccess: () => qc.invalidateQueries({ queryKey: [CAMINHO_PRIMEIROS_PASSOS] }),
   });
 
-  const feitos = passos.filter((p) => p.cumprido).length;
+  const { feitos, total } = contar(passos);
 
   return (
     <div className="space-y-6">
@@ -61,21 +59,16 @@ export function Chegada({
           </p>
         </div>
 
-        {/* O atalho que a maioria vai querer, e que estava escondido no último
-            grupo do menu: quem já tem planilha não precisa cadastrar nada à mão
-            nem esperar o motorista pra ver o sistema funcionando. */}
-        {temPermissao("importacao.executar") && <AtalhoImportacao />}
-
         <div className="space-y-3">
           <div className="flex items-baseline justify-between gap-2">
             <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
               Primeiros passos
             </h3>
             <span className="text-sm text-muted-foreground">
-              {feitos} de {passos.length}
+              {feitos} de {total}
             </span>
           </div>
-          <Barra feitos={feitos} total={passos.length} />
+          <Barra feitos={feitos} total={total} />
           <ListaDePassos passos={passos} />
         </div>
 
@@ -107,20 +100,3 @@ export function Chegada({
   );
 }
 
-function AtalhoImportacao() {
-  return (
-    <div className="flex flex-wrap items-center gap-3 rounded-md border border-primary/30 bg-primary/5 p-4">
-      <Upload className="h-5 w-5 shrink-0 text-primary" aria-hidden />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">Já tem os dados numa planilha?</p>
-        <p className="text-sm text-muted-foreground">
-          Suba motoristas, caminhões e até o histórico de viagens de uma vez. O painel abre com
-          a sua operação dentro, sem digitar nada.
-        </p>
-      </div>
-      <Button asChild size="sm">
-        <a href="/importacao">Importar planilha</a>
-      </Button>
-    </div>
-  );
-}

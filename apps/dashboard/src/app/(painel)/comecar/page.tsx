@@ -1,12 +1,10 @@
 "use client";
 
-import { CheckCircle2, Upload } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CheckCircle2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { LinksLoja } from "@/components/links-loja";
 import { LoadingCard } from "@/components/loading";
-import { Barra, ListaDePassos, usePrimeirosPassos } from "@/components/primeiros-passos";
-import { usePermissoes } from "@/lib/permissoes";
+import { Barra, ListaDePassos, contar, usePrimeirosPassos } from "@/components/primeiros-passos";
 
 /**
  * O caminho até a primeira viagem, num lugar que não some.
@@ -23,10 +21,8 @@ import { usePermissoes } from "@/lib/permissoes";
  */
 export default function ComecarPage() {
   const { data, isLoading } = usePrimeirosPassos();
-  const { temPermissao } = usePermissoes();
 
-  const feitos = data?.passos.filter((p) => p.cumprido).length ?? 0;
-  const total = data?.passos.length ?? 0;
+  const { feitos, total } = contar(data?.passos ?? []);
 
   return (
     <div className="space-y-6">
@@ -41,21 +37,6 @@ export default function ComecarPage() {
 
       {data && (
         <>
-          {temPermissao("importacao.executar") && (
-            <Card className="flex flex-wrap items-center gap-3 p-5">
-              <Upload className="h-5 w-5 shrink-0 text-primary" aria-hidden />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">O caminho mais curto: a sua planilha</p>
-                <p className="text-sm text-muted-foreground">
-                  Motoristas, caminhões, locais e até o histórico de viagens entram de uma vez,
-                  com os valores. Subir de novo atualiza, não duplica.
-                </p>
-              </div>
-              <Button asChild size="sm">
-                <a href="/importacao">Importar planilha</a>
-              </Button>
-            </Card>
-          )}
 
           <Card className="space-y-4 p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">

@@ -25,7 +25,22 @@ function prismaFake(contagens: Record<string, number>, modulos: string[]) {
     local: { count: count("local") },
     empresa: { count: count("empresa") },
     cliente: { count: count("cliente") },
-    viagem: { count: count("viagem") },
+    /**
+     * As duas contagens de viagem saem da MESMA tabela e só se distinguem pelo
+     * `where`: uma exclui o prefixo `import:`, a outra exige. Um mock que
+     * ignorasse o filtro devolveria o mesmo número pras duas e deixaria passar
+     * justamente o bug que interessa — histórico importado marcando o passo
+     * "Receba a primeira viagem do app".
+     */
+    viagem: {
+      count: vi.fn(({ where }: { where?: Record<string, unknown> } = {}) => {
+        const importada =
+          typeof where?.clientId === "object" &&
+          where.clientId !== null &&
+          "startsWith" in (where.clientId as object);
+        return Promise.resolve(contagens[importada ? "viagemImportada" : "viagem"] ?? 0);
+      }),
+    },
     tabelaPreco: { count: count("tabelaPreco") },
     moduloContratado: {
       findMany: vi.fn().mockResolvedValue(
@@ -36,10 +51,12 @@ function prismaFake(contagens: Record<string, number>, modulos: string[]) {
 }
 
 const CHEIO = {
-  veiculo: 1, motorista: 1, local: 2, empresa: 1, cliente: 1, viagem: 1, tabelaPreco: 0,
+  veiculo: 1, motorista: 1, local: 2, empresa: 1, cliente: 1, viagem: 1,
+  viagemImportada: 0, tabelaPreco: 0,
 };
 
 const TODAS_PERMS = [
+  "importacao.ver", "importacao.executar",
   "motoristas.ver", "motoristas.criar",
   "veiculos.ver", "veiculos.criar",
   "locais.ver", "locais.criar",
@@ -48,6 +65,9 @@ const TODAS_PERMS = [
   "viagens.ver",
   "tabelas-preco.ver", "tabelas-preco.criar",
 ];
+
+/** Comercial junto porque o passo do preço é dele; o resto é núcleo. */
+const MODULOS = ["comercial"];
 
 describe("primeiros passos", () => {
   let servico: PrimeirosPassosService;
@@ -128,5 +148,69 @@ describe("primeiros passos", () => {
       plataforma: false,
     });
     expect(r.passos.map((p) => p.chave)).not.toContain("preco");
+  });
+
+  /**
+   * A importação é o caminho mais curto até o sistema fazer sentido — e por
+   * meses ela existiu sem que o checklist soubesse dela. Estes testes seguram
+   * as três decisões que esse encontro exigiu.
+   */
+  describe("histórico importado", () => {
+    const VAZIA = {
+      veiculo: 0, motorista: 0, local: 0, empresa: 0, cliente: 0, viagem: 0,
+      viagemImportada: 0, tabelaPreco: 0,
+    };
+
+    it("planilha importada NÃO marca 'primeira viagem do app'", async () => {
+      // O caso que mais importa: o dono sobe o histórico, o painel acende, e o
+      // motorista continua sem ter instalado nada. Dizer que a viagem chegou
+      // seria o checklist mentir e sumir antes do ciclo acontecer uma vez.
+      montar({ ...VAZIA, viagemImportada: 40 }, MODULOS);
+      const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
+
+      const historico = r.passos.find((p) => p.chave === "historico");
+      const viagem = r.passos.find((p) => p.chave === "viagem");
+      expect(historico?.cumprido).toBe(true);
+      expect(viagem?.cumprido).toBe(false);
+    });
+
+    it("viagem do app não marca o passo do histórico", async () => {
+      montar({ ...VAZIA, viagem: 3 }, MODULOS);
+      const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
+
+      expect(r.passos.find((p) => p.chave === "viagem")?.cumprido).toBe(true);
+      expect(r.passos.find((p) => p.chave === "historico")?.cumprido).toBe(false);
+    });
+
+    it("o passo do histórico é opcional: não segura o `concluido`", async () => {
+      // Quem não tem planilha não pode ficar com a home travada em "7 de 8"
+      // para sempre por causa de um atalho que não serve pra ele.
+      montar(
+        { veiculo: 1, motorista: 1, local: 2, empresa: 1, cliente: 1, viagem: 1,
+          viagemImportada: 0, tabelaPreco: 1 },
+        MODULOS,
+      );
+      const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
+
+      expect(r.passos.find((p) => p.chave === "historico")?.cumprido).toBe(false);
+      expect(r.concluido).toBe(true);
+    });
+
+    it("some pra quem não pode importar", async () => {
+      const semImportacao = TODAS_PERMS.filter((k) => !k.startsWith("importacao."));
+      montar(VAZIA, MODULOS);
+      const r = await servico.listar({ permissoes: semImportacao, plataforma: false });
+
+      expect(r.passos.map((p) => p.chave)).not.toContain("historico");
+    });
+
+    it("histórico importado já libera a pergunta do preço", async () => {
+      // Quem acabou de ver o total do mês passado é exatamente quem está se
+      // perguntando quanto aquilo vale.
+      montar({ ...VAZIA, viagemImportada: 12 }, MODULOS);
+      const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
+
+      expect(r.passos.map((p) => p.chave)).toContain("preco");
+    });
   });
 });
