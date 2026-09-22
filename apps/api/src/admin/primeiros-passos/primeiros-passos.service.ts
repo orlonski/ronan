@@ -12,14 +12,6 @@ export type PrimeiroPasso = {
   descricao: string;
   rota: string;
   cumprido: boolean;
-  /**
-   * Atalho, não requisito: não entra no cálculo de `concluido`.
-   *
-   * Sem isto, "Traga o que você já rodou" travaria a lista para sempre em
-   * "7 de 8" na conta de quem não tem planilha — e passo que não dá pra
-   * cumprir é o defeito que este checklist já corrigiu uma vez.
-   */
-  opcional?: boolean;
 };
 
 /**
@@ -46,7 +38,6 @@ const PREFIXO_IMPORTACAO = "import:";
 type Exigencia = { passo: string; perm: string };
 
 const EXIGENCIAS: Exigencia[] = [
-  { passo: "historico", perm: "importacao.executar" },
   { passo: "motorista", perm: "motoristas.criar" },
   { passo: "veiculo", perm: "veiculos.criar" },
   { passo: "local", perm: "locais.criar" },
@@ -73,9 +64,12 @@ const EXIGENCIAS: Exigencia[] = [
 export class PrimeirosPassosService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listar(
-    usuario: { permissoes: string[]; plataforma: boolean },
-  ): Promise<{ concluido: boolean; passos: PrimeiroPasso[] }> {
+  async listar(usuario: { permissoes: string[]; plataforma: boolean }): Promise<{
+    concluido: boolean;
+    passos: PrimeiroPasso[];
+    /** Fora da sequência: o caminho curto de quem já tem a base em planilha. */
+    atalho: PrimeiroPasso | null;
+  }> {
     const [
       veiculos,
       motoristas,
@@ -114,22 +108,6 @@ export class PrimeirosPassosService {
       ]);
 
     const passos: PrimeiroPasso[] = [
-      // O caminho mais curto até o sistema fazer sentido, e o que menos
-      // depende de outras pessoas: a planilha que a empresa já mantém.
-      //
-      // Vem antes de tudo porque resolve vários passos de uma vez (motorista,
-      // caminhão, local, cliente, material) E porque é o único jeito de ver
-      // km, peso e dinheiro no primeiro dia sem esperar alguém instalar um
-      // app. Quem não tem planilha simplesmente segue pelo caminho de baixo.
-      {
-        chave: "historico",
-        titulo: "Traga o que você já rodou",
-        descricao:
-          "Suba a planilha que você já usa: motoristas, caminhões, locais e o histórico de viagens entram de uma vez, com os valores. Subir de novo atualiza, não duplica.",
-        rota: "/importacao",
-        cumprido: importadas > 0,
-        opcional: true,
-      },
       // O motorista vem PRIMEIRO porque o cadastro dele aceita a placa, e a
       // placa cria o caminhão junto — quem começa por aqui marca dois itens de
       // uma vez. Começar pelo caminhão faria a pessoa cadastrar a mesma placa
@@ -242,10 +220,36 @@ export class PrimeirosPassosService {
       return permissoes.has(`${recurso}.ver`) && permissoes.has(exigencia.perm);
     });
 
-    // O opcional fica na lista (com o check quando feito) mas não segura o
-    // `concluido`: quem não tem planilha não deve carregar um pendente eterno
-    // na home por causa de um atalho que não serve pra ele.
-    const obrigatorios = visiveis.filter((p) => !p.opcional);
-    return { concluido: obrigatorios.every((p) => p.cumprido), passos: visiveis };
+    const obrigatorios = visiveis;
+    /**
+     * A importação sai da SEQUÊNCIA e vira oferta paralela.
+     *
+     * Ela chegou a ser o primeiro passo e estava errado: a lista é uma ordem de
+     * dependência ("sem local o app não abre o lançamento"), e um atalho que
+     * pula metade dela não tem posição numa ordem — no topo ainda por cima, ela
+     * recebe quem acabou de entrar com um pedido de planilha, que parece
+     * trabalho antes de o sistema ter mostrado serventia nenhuma.
+     *
+     * Como oferta, ela responde a uma pergunta que a pessoa faz sozinha ("vou
+     * ter que digitar tudo isso?") em vez de mandar fazer.
+     */
+    const podeImportar =
+      usuario.plataforma ||
+      (permissoes.has("importacao.ver") && permissoes.has("importacao.executar"));
+
+    return {
+      concluido: obrigatorios.every((p) => p.cumprido),
+      passos: visiveis,
+      atalho: podeImportar
+        ? {
+            chave: "historico",
+            titulo: "Já tem tudo numa planilha?",
+            descricao:
+              "Motoristas, caminhões, locais e o histórico de viagens entram de uma vez, com os valores. Subir de novo atualiza, não duplica.",
+            rota: "/importacao",
+            cumprido: importadas > 0,
+          }
+        : null,
+    };
   }
 }

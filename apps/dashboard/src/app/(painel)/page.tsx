@@ -131,7 +131,11 @@ export default function PainelHome() {
           </h1>
           <p className="text-sm capitalize text-muted-foreground">{dataHoje}</p>
         </header>
-        <Chegada passos={caminho.passos} onVerPainel={() => setVerPainel(true)} />
+        <Chegada
+          passos={caminho.passos}
+          atalho={caminho.atalho}
+          onVerPainel={() => setVerPainel(true)}
+        />
       </div>
     );
   }

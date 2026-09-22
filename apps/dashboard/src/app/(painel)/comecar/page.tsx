@@ -4,7 +4,13 @@ import { CheckCircle2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { LinksLoja } from "@/components/links-loja";
 import { LoadingCard } from "@/components/loading";
-import { Barra, ListaDePassos, contar, usePrimeirosPassos } from "@/components/primeiros-passos";
+import {
+  Barra,
+  ListaDePassos,
+  OfertaImportar,
+  contar,
+  usePrimeirosPassos,
+} from "@/components/primeiros-passos";
 
 /**
  * O caminho até a primeira viagem, num lugar que não some.
@@ -61,6 +67,7 @@ export default function ComecarPage() {
             ) : null}
 
             <ListaDePassos passos={data.passos} />
+            {data.atalho && !data.atalho.cumprido && <OfertaImportar atalho={data.atalho} />}
           </Card>
 
           <Card className="space-y-3 p-5">

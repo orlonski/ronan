@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Check, Circle } from "lucide-react";
+import { ArrowRight, Check, Circle, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { LinksLoja } from "@/components/links-loja";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
@@ -13,13 +13,13 @@ export type Passo = {
   descricao: string;
   rota: string;
   cumprido: boolean;
-  /** Atalho, não requisito — não conta pro "X de Y" nem segura a lista. */
-  opcional?: boolean;
 };
 
 export type EstadoPrimeirosPassos = {
   concluido: boolean;
   passos: Passo[];
+  /** Fora da sequência: o caminho curto de quem já tem a base em planilha. */
+  atalho: Passo | null;
   chegadaDispensada: boolean;
 };
 
@@ -55,6 +55,7 @@ export function PrimeirosPassos() {
     <Card className="space-y-4 p-5">
       <Cabecalho passos={data.passos} />
       <ListaDePassos passos={data.passos} />
+      {data.atalho && !data.atalho.cumprido && <OfertaImportar atalho={data.atalho} />}
     </Card>
   );
 }
@@ -91,11 +92,6 @@ export function ListaDePassos({ passos }: { passos: Passo[] }) {
                   }
                 >
                   {p.titulo}
-                  {p.opcional && (
-                    <span className="ml-2 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      atalho
-                    </span>
-                  )}
                 </span>
                 {!p.cumprido && (
                   <span className="block text-xs text-muted-foreground">{p.descricao}</span>
@@ -133,19 +129,9 @@ export function Cabecalho({ passos }: { passos: Passo[] }) {
   );
 }
 
-/**
- * O "X de Y" conta só o que é obrigatório.
- *
- * O atalho da planilha entra na lista mas não no placar: quem não tem planilha
- * veria um contador que nunca fecha, e um progresso que não chega ao fim
- * desmotiva mais do que a ausência dele.
- */
+/** Quantos passos da sequência já fecharam. */
 export function contar(passos: Passo[]): { feitos: number; total: number } {
-  const obrigatorios = passos.filter((p) => !p.opcional);
-  return {
-    feitos: obrigatorios.filter((p) => p.cumprido).length,
-    total: obrigatorios.length,
-  };
+  return { feitos: passos.filter((p) => p.cumprido).length, total: passos.length };
 }
 
 /** O que já foi feito também motiva. */
@@ -157,5 +143,33 @@ export function Barra({ feitos, total }: { feitos: number; total: number }) {
         style={{ width: `${total === 0 ? 0 : (feitos / total) * 100}%` }}
       />
     </div>
+  );
+}
+
+/**
+ * O caminho curto, oferecido DEPOIS da lista.
+ *
+ * Já esteve em primeiro lugar e estava errado por dois motivos. A lista é uma
+ * ordem de dependência, e um atalho que pula metade dela não tem posição nessa
+ * ordem. E, no topo, ele recebia quem acabou de entrar com um pedido de
+ * planilha — que parece trabalho antes de o sistema ter mostrado serventia
+ * nenhuma.
+ *
+ * Embaixo, ele responde a uma pergunta que a pessoa já está fazendo sozinha
+ * enquanto lê a lista: "vou ter que digitar tudo isso na mão?".
+ */
+export function OfertaImportar({ atalho }: { atalho: Passo }) {
+  return (
+    <Link
+      href={atalho.rota as never}
+      className="flex items-center gap-3 rounded-md border border-dashed p-3 transition-colors hover:bg-muted"
+    >
+      <Upload className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium">{atalho.titulo}</span>
+        <span className="block text-xs text-muted-foreground">{atalho.descricao}</span>
+      </span>
+      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+    </Link>
   );
 }

@@ -152,14 +152,25 @@ describe("primeiros passos", () => {
 
   /**
    * A importação é o caminho mais curto até o sistema fazer sentido — e por
-   * meses ela existiu sem que o checklist soubesse dela. Estes testes seguram
-   * as três decisões que esse encontro exigiu.
+   * meses ela existiu sem que o checklist soubesse dela.
+   *
+   * Ela chegou a ser o PRIMEIRO passo, e estava errado: a lista é uma ordem de
+   * dependência, e um atalho que pula metade dela não tem posição nessa ordem.
+   * Hoje vem fora da sequência, como oferta.
    */
   describe("histórico importado", () => {
     const VAZIA = {
       veiculo: 0, motorista: 0, local: 0, empresa: 0, cliente: 0, viagem: 0,
       viagemImportada: 0, tabelaPreco: 0,
     };
+
+    it("não é passo: não entra na sequência nem no placar", async () => {
+      montar(VAZIA, MODULOS);
+      const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
+
+      expect(r.passos.map((p) => p.chave)).not.toContain("historico");
+      expect(r.atalho?.chave).toBe("historico");
+    });
 
     it("planilha importada NÃO marca 'primeira viagem do app'", async () => {
       // O caso que mais importa: o dono sobe o histórico, o painel acende, e o
@@ -168,23 +179,21 @@ describe("primeiros passos", () => {
       montar({ ...VAZIA, viagemImportada: 40 }, MODULOS);
       const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
 
-      const historico = r.passos.find((p) => p.chave === "historico");
-      const viagem = r.passos.find((p) => p.chave === "viagem");
-      expect(historico?.cumprido).toBe(true);
-      expect(viagem?.cumprido).toBe(false);
+      expect(r.atalho?.cumprido).toBe(true);
+      expect(r.passos.find((p) => p.chave === "viagem")?.cumprido).toBe(false);
     });
 
-    it("viagem do app não marca o passo do histórico", async () => {
+    it("viagem do app não marca o atalho", async () => {
       montar({ ...VAZIA, viagem: 3 }, MODULOS);
       const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
 
       expect(r.passos.find((p) => p.chave === "viagem")?.cumprido).toBe(true);
-      expect(r.passos.find((p) => p.chave === "historico")?.cumprido).toBe(false);
+      expect(r.atalho?.cumprido).toBe(false);
     });
 
-    it("o passo do histórico é opcional: não segura o `concluido`", async () => {
-      // Quem não tem planilha não pode ficar com a home travada em "7 de 8"
-      // para sempre por causa de um atalho que não serve pra ele.
+    it("quem não tem planilha fecha a lista mesmo assim", async () => {
+      // O atalho fora da sequência é o que garante isto: na versão em que ele
+      // era passo, quem não importa nada ficaria em "7 de 8" para sempre.
       montar(
         { veiculo: 1, motorista: 1, local: 2, empresa: 1, cliente: 1, viagem: 1,
           viagemImportada: 0, tabelaPreco: 1 },
@@ -192,7 +201,7 @@ describe("primeiros passos", () => {
       );
       const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
 
-      expect(r.passos.find((p) => p.chave === "historico")?.cumprido).toBe(false);
+      expect(r.atalho?.cumprido).toBe(false);
       expect(r.concluido).toBe(true);
     });
 
@@ -201,7 +210,7 @@ describe("primeiros passos", () => {
       montar(VAZIA, MODULOS);
       const r = await servico.listar({ permissoes: semImportacao, plataforma: false });
 
-      expect(r.passos.map((p) => p.chave)).not.toContain("historico");
+      expect(r.atalho).toBeNull();
     });
 
     it("histórico importado já libera a pergunta do preço", async () => {
