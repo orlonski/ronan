@@ -8,7 +8,7 @@ import {
   Barra,
   CAMINHO_PRIMEIROS_PASSOS,
   ListaDePassos,
-  OfertaImportar,
+  Ofertas,
   contar,
   type Passo,
 } from "@/components/primeiros-passos";
@@ -28,11 +28,11 @@ import { fetchApi, useAuthToken } from "@/lib/client-api";
  */
 export function Chegada({
   passos,
-  atalho,
+  ofertas,
   onVerPainel,
 }: {
   passos: Passo[];
-  atalho: Passo | null;
+  ofertas: Passo[];
   /** Quem esconde a chegada é a home, que é quem tem os números pra mostrar
    *  no lugar. Guardar esse estado aqui dentro deixaria a tela em branco. */
   onVerPainel: () => void;
@@ -73,7 +73,7 @@ export function Chegada({
           </div>
           <Barra feitos={feitos} total={total} />
           <ListaDePassos passos={passos} />
-          {atalho && !atalho.cumprido && <OfertaImportar atalho={atalho} />}
+          <Ofertas itens={ofertas} />
         </div>
 
         <div className="space-y-2 border-t pt-4">

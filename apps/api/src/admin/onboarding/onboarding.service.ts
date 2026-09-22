@@ -62,7 +62,7 @@ export class OnboardingService {
     rota: string,
     usuario: { id: string; permissoes: string[]; plataforma: boolean },
   ): Promise<TourParaTela | null> {
-    const [tours, estado] = await Promise.all([
+    const [tours, estado, dono] = await Promise.all([
       comoSistema(() =>
         this.prisma.tourPainel.findMany({
           where: { ativo: true },
@@ -70,6 +70,13 @@ export class OnboardingService {
         }),
       ),
       this.estado(usuario.id),
+      // Quando esta pessoa chegou. Operador da plataforma dentro da conta de um
+      // cliente não acha a própria linha (a trava de conta filtra), e é isso que
+      // se quer: ninguém leva holofote na cara na conta dos outros.
+      this.prisma.user.findUnique({
+        where: { id: usuario.id },
+        select: { criadoEm: true },
+      }),
     ]);
 
     const candidatos = tours
@@ -91,7 +98,19 @@ export class OnboardingService {
 
     return {
       chave: tour.chave,
-      automatico: tour.automatico,
+      /**
+       * Abre sozinho só pra quem chegou DEPOIS do tour.
+       *
+       * O tour é onboarding, e onboarding é pra quem está começando. Sem esta
+       * comparação, publicar um tour hoje acende um holofote na home de todo
+       * cliente que usa o painel há meses, explicando o que ele já sabe — a
+       * mesma queixa que tirou "Diga quanto vale a viagem" do checklist.
+       *
+       * Quem já estava aqui continua tendo o tour: pelo botão "Rever o passo a
+       * passo", em /comecar. E pra avisar veterano de novidade o canal é o
+       * sininho, que ele lê quando quiser, não o holofote que para a tela.
+       */
+      automatico: tour.automatico && !!dono && dono.criadoEm >= tour.criadoEm,
       visto: estado.toursVistos.includes(tour.chave),
       passos: passos.map((p) => ({
         id: p.id,

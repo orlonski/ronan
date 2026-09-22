@@ -12,10 +12,11 @@ import { LoadingCard } from "@/components/loading";
 import {
   Barra,
   ListaDePassos,
-  OfertaImportar,
+  Ofertas,
   contar,
   usePrimeirosPassos,
 } from "@/components/primeiros-passos";
+import { pedirTour } from "@/lib/tour";
 
 /**
  * O caminho até a primeira viagem, num lugar que não some.
@@ -41,6 +42,10 @@ export default function ComecarPage() {
    * Mora aqui, e não num botão de ajuda no topo, porque o botão de ajuda ainda
    * não existe — e um texto que manda procurar algo inexistente é pior que não
    * oferecer nada. Quando a ajuda entrar, este mesmo endpoint serve os dois.
+   *
+   * Esquecer no servidor não basta: o tour só abre sozinho pra quem chegou
+   * depois dele, e o veterano é justamente quem clica neste botão. Por isso o
+   * `pedirTour` — o pedido explícito que o host obedece na home.
    */
   const rever = useMutation({
     mutationFn: () =>
@@ -51,6 +56,7 @@ export default function ComecarPage() {
       }),
     onSuccess: () => {
       toast.success("Vou te mostrar de novo na tela inicial.");
+      pedirTour("home.v1");
       router.push("/");
     },
   });
@@ -106,7 +112,7 @@ export default function ComecarPage() {
             ) : null}
 
             <ListaDePassos passos={data.passos} />
-            {data.atalho && !data.atalho.cumprido && <OfertaImportar atalho={data.atalho} />}
+            <Ofertas itens={data.ofertas} />
           </Card>
 
           <Card className="space-y-3 p-5">

@@ -133,7 +133,7 @@ export default function PainelHome() {
         </header>
         <Chegada
           passos={caminho.passos}
-          atalho={caminho.atalho}
+          ofertas={caminho.ofertas}
           onVerPainel={() => setVerPainel(true)}
         />
       </div>

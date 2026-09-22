@@ -14,6 +14,12 @@ vi.mock("../../common/conta/conta-context", () => ({
  * Foi exatamente o que aconteceu quando "Diga quanto vale a viagem" entrou na
  * lista: a tabela de preço é do módulo Comercial e da permissão
  * `tabelas-preco.criar`, e a lista não olhava nem um nem outro.
+ *
+ * O preço ensinou a segunda lição por conta própria: mesmo podado direito, ele
+ * era um PASSO — e passo novo reabre o caminho de quem já terminou. Cliente que
+ * usa o painel há meses viu "faltam algumas coisas" voltar na home por causa de
+ * uma funcionalidade que ele escolheu não usar. Hoje ele é oferta, e conta que
+ * já recebeu viagem do app é `veterana`: o checklist não volta pra ela.
  */
 
 /** Prisma só o bastante: a lista é feita de contagens. */
@@ -66,7 +72,7 @@ const TODAS_PERMS = [
   "tabelas-preco.ver", "tabelas-preco.criar",
 ];
 
-/** Comercial junto porque o passo do preço é dele; o resto é núcleo. */
+/** Comercial junto porque a oferta do preço é dele; o resto é núcleo. */
 const MODULOS = ["comercial"];
 
 describe("primeiros passos", () => {
@@ -79,29 +85,58 @@ describe("primeiros passos", () => {
 
   beforeEach(() => vi.clearAllMocks());
 
-  it("some com o passo do preço quando a conta não tem o módulo Comercial", async () => {
-    const r = await montar(CHEIO, []).listar({ permissoes: TODAS_PERMS, plataforma: false });
-    expect(r.passos.map((p) => p.chave)).not.toContain("preco");
-    // E some de verdade: não é "pendente que não dá pra cumprir".
-    expect(r.concluido).toBe(true);
-  });
-
-  it("mostra o passo do preço quando o módulo está contratado", async () => {
+  it("o preço nunca é passo: não entra na sequência nem segura a lista", async () => {
     const r = await montar(CHEIO, ["comercial"]).listar({
       permissoes: TODAS_PERMS,
       plataforma: false,
     });
-    expect(r.passos.map((p) => p.chave)).toContain("preco");
-    expect(r.concluido).toBe(false);
+    expect(r.passos.map((p) => p.chave)).not.toContain("preco");
+    expect(r.ofertas.map((o) => o.chave)).toContain("preco");
+    // Sem tabela de preço nenhuma (CHEIO tem tabelaPreco: 0) e mesmo assim o
+    // caminho está fechado: quem fatura fora do sistema não fica devendo nada.
+    expect(r.concluido).toBe(true);
   });
 
-  it("some com o passo quando o usuário não tem a permissão de criar", async () => {
+  it("some com a oferta do preço quando a conta não tem o módulo Comercial", async () => {
+    const r = await montar(CHEIO, []).listar({ permissoes: TODAS_PERMS, plataforma: false });
+    expect(r.ofertas.map((o) => o.chave)).not.toContain("preco");
+    expect(r.concluido).toBe(true);
+  });
+
+  it("some com o preço quando o usuário não tem a permissão de criar", async () => {
     const semPreco = TODAS_PERMS.filter((p) => p !== "tabelas-preco.criar");
     const r = await montar(CHEIO, ["comercial"]).listar({
       permissoes: semPreco,
       plataforma: false,
     });
-    expect(r.passos.map((p) => p.chave)).not.toContain("preco");
+    expect(r.ofertas.map((o) => o.chave)).not.toContain("preco");
+  });
+
+  /**
+   * A conta que já roda não está começando.
+   *
+   * Sem isto, todo item acrescentado aqui reaparece na home de quem usa o
+   * sistema há meses — foi como o cliente veterano viu "Diga quanto vale a
+   * viagem" surgir do nada num painel que ele já dominava.
+   */
+  describe("conta veterana", () => {
+    it("marca veterana quando a primeira viagem do app já chegou", async () => {
+      const r = await montar(CHEIO, ["comercial"]).listar({
+        permissoes: TODAS_PERMS,
+        plataforma: false,
+      });
+      expect(r.veterana).toBe(true);
+    });
+
+    it("não marca veterana com histórico só importado", async () => {
+      // A planilha prova que o dado subiu, não que o ciclo rodou: essa conta
+      // ainda precisa do checklist.
+      const r = await montar(
+        { ...CHEIO, viagem: 0, viagemImportada: 300 },
+        ["comercial"],
+      ).listar({ permissoes: TODAS_PERMS, plataforma: false });
+      expect(r.veterana).toBe(false);
+    });
   });
 
   it("nunca devolve passo que o usuário não conseguiria cumprir", async () => {
@@ -113,19 +148,19 @@ describe("primeiros passos", () => {
     expect(r.passos.map((p) => p.chave)).toEqual(["viagem"]);
   });
 
-  it("some com o passo quando dá pra criar mas não dá pra abrir a tela", async () => {
+  it("some com o item quando dá pra criar mas não dá pra abrir a tela", async () => {
     // O TelaGuard gateia por `.ver`; ter só `.criar` cairia no mesmo beco.
     const semVer = TODAS_PERMS.filter((p) => p !== "tabelas-preco.ver");
     const r = await montar(CHEIO, ["comercial"]).listar({
       permissoes: semVer,
       plataforma: false,
     });
-    expect(r.passos.map((p) => p.chave)).not.toContain("preco");
+    expect(r.ofertas.map((o) => o.chave)).not.toContain("preco");
   });
 
   it("operador da plataforma enxerga tudo — é ele quem configura a conta nova", async () => {
     const r = await montar(CHEIO, ["comercial"]).listar({ permissoes: [], plataforma: true });
-    expect(r.passos.map((p) => p.chave)).toContain("preco");
+    expect(r.ofertas.map((o) => o.chave)).toContain("preco");
   });
 
   it("o passo do local exige DOIS: a viagem precisa de carga e de descarga", async () => {
@@ -142,12 +177,12 @@ describe("primeiros passos", () => {
     expect(dois.passos.find((p) => p.chave === "local")?.cumprido).toBe(true);
   });
 
-  it("o passo do preço só aparece depois que existe viagem", async () => {
-    const r = await montar({ ...CHEIO, viagem: 0 }, ["comercial"]).listar({
+  it("o preço só é oferecido depois que existe viagem", async () => {
+    const r = await montar({ ...CHEIO, viagem: 0, viagemImportada: 0 }, ["comercial"]).listar({
       permissoes: TODAS_PERMS,
       plataforma: false,
     });
-    expect(r.passos.map((p) => p.chave)).not.toContain("preco");
+    expect(r.ofertas.map((o) => o.chave)).not.toContain("preco");
   });
 
   /**
@@ -169,7 +204,7 @@ describe("primeiros passos", () => {
       const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
 
       expect(r.passos.map((p) => p.chave)).not.toContain("historico");
-      expect(r.atalho?.chave).toBe("historico");
+      expect(r.ofertas.map((o) => o.chave)).toContain("historico");
     });
 
     it("planilha importada NÃO marca 'primeira viagem do app'", async () => {
@@ -179,7 +214,7 @@ describe("primeiros passos", () => {
       montar({ ...VAZIA, viagemImportada: 40 }, MODULOS);
       const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
 
-      expect(r.atalho?.cumprido).toBe(true);
+      expect(r.ofertas.find((o) => o.chave === "historico")?.cumprido).toBe(true);
       expect(r.passos.find((p) => p.chave === "viagem")?.cumprido).toBe(false);
     });
 
@@ -188,7 +223,7 @@ describe("primeiros passos", () => {
       const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
 
       expect(r.passos.find((p) => p.chave === "viagem")?.cumprido).toBe(true);
-      expect(r.atalho?.cumprido).toBe(false);
+      expect(r.ofertas.find((o) => o.chave === "historico")?.cumprido).toBe(false);
     });
 
     it("quem não tem planilha fecha a lista mesmo assim", async () => {
@@ -201,7 +236,7 @@ describe("primeiros passos", () => {
       );
       const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
 
-      expect(r.atalho?.cumprido).toBe(false);
+      expect(r.ofertas.find((o) => o.chave === "historico")?.cumprido).toBe(false);
       expect(r.concluido).toBe(true);
     });
 
@@ -210,16 +245,18 @@ describe("primeiros passos", () => {
       montar(VAZIA, MODULOS);
       const r = await servico.listar({ permissoes: semImportacao, plataforma: false });
 
-      expect(r.atalho).toBeNull();
+      expect(r.ofertas.map((o) => o.chave)).not.toContain("historico");
     });
 
     it("histórico importado já libera a pergunta do preço", async () => {
       // Quem acabou de ver o total do mês passado é exatamente quem está se
-      // perguntando quanto aquilo vale.
+      // perguntando quanto aquilo vale. Como oferta: ele PODE responder, não
+      // fica devendo a resposta.
       montar({ ...VAZIA, viagemImportada: 12 }, MODULOS);
       const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
 
-      expect(r.passos.map((p) => p.chave)).toContain("preco");
+      expect(r.ofertas.map((o) => o.chave)).toContain("preco");
+      expect(r.passos.map((p) => p.chave)).not.toContain("preco");
     });
   });
 });

@@ -11,7 +11,9 @@ import {
   avancarTour,
   comecarTour,
   encerrarTour,
+  limparPedidoTour,
   medirAlvo,
+  pedidoDeTour,
   useTour,
   voltarTour,
   type PassoTour,
@@ -77,16 +79,25 @@ export function TourHost() {
   /**
    * Abre sozinho só onde faz sentido.
    *
-   * - `automatico`: tour de tela interna interrompe quem navegou de propósito.
+   * - `automatico`: tour de tela interna interrompe quem navegou de propósito —
+   *   e, desde a queixa do cliente veterano, o servidor só manda `true` pra
+   *   quem entrou depois de o tour existir. Holofote é pra quem está chegando.
    * - `visto`: uma vez é uma vez, e isso está no banco, não no navegador.
    * - `assumida`: operador da plataforma visitando cliente não leva tour na
    *   cara — e, pior, marcaria como visto no lugar do dono.
    * - termo pendente: o modal de aceite ganha sempre.
+   *
+   * O PEDIDO vence tudo isso menos o aceite: quem clicou em "Rever o passo a
+   * passo" está pedindo com o dedo. Sem essa porta, a mesma regra que poupa o
+   * veterano do holofote calaria o botão que existe pra ele.
    */
   useEffect(() => {
-    if (!data || !data.automatico || data.visto || assumida) return;
-    if (jaAbriu.current === data.chave) return;
+    if (!data || assumida) return;
+    const pedido = pedidoDeTour() === data.chave;
+    if (!pedido && jaAbriu.current === data.chave) return;
     if (document.querySelector("[data-aceite-termos]")) return;
+    if (!pedido && (!data.automatico || data.visto)) return;
+    limparPedidoTour();
     jaAbriu.current = data.chave;
     comecarTour(data.chave, data.passos);
   }, [data, assumida]);

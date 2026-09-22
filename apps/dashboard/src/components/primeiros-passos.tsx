@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Check, Circle, Upload } from "lucide-react";
+import { ArrowRight, Banknote, Check, Circle, Upload, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { LinksLoja } from "@/components/links-loja";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
@@ -18,8 +18,10 @@ export type Passo = {
 export type EstadoPrimeirosPassos = {
   concluido: boolean;
   passos: Passo[];
-  /** Fora da sequência: o caminho curto de quem já tem a base em planilha. */
-  atalho: Passo | null;
+  /** Fora da sequência: convites que não travam o caminho de ninguém. */
+  ofertas: Passo[];
+  /** A conta já roda: a primeira viagem do app chegou. */
+  veterana: boolean;
   chegadaDispensada: boolean;
 };
 
@@ -47,15 +49,20 @@ export function usePrimeirosPassos() {
  * esconder o que ainda falta. O que ele NÃO faz mais é sumir pra sempre — a
  * lista continua em /comecar, porque quem contrata um auxiliar em março precisa
  * de um lugar pra onde mandá-lo.
+ *
+ * `veterana` é a outra porta de saída, e a mais importante: conta cuja primeira
+ * viagem já chegou não está mais começando. Sem ela, todo item novo acrescentado
+ * aqui reaparecia na home de quem usa o painel há meses — foi o que aconteceu
+ * quando "Diga quanto vale a viagem" entrou na lista.
  */
 export function PrimeirosPassos() {
   const { data } = usePrimeirosPassos();
-  if (!data || data.concluido) return null;
+  if (!data || data.concluido || data.veterana) return null;
   return (
     <Card className="space-y-4 p-5">
       <Cabecalho passos={data.passos} />
       <ListaDePassos passos={data.passos} />
-      {data.atalho && !data.atalho.cumprido && <OfertaImportar atalho={data.atalho} />}
+      <Ofertas itens={data.ofertas} />
     </Card>
   );
 }
@@ -146,30 +153,46 @@ export function Barra({ feitos, total }: { feitos: number; total: number }) {
   );
 }
 
+const ICONE_OFERTA: Record<string, LucideIcon> = { historico: Upload, preco: Banknote };
+
 /**
- * O caminho curto, oferecido DEPOIS da lista.
+ * O que se PODE fazer, oferecido DEPOIS da lista — nunca o que falta fazer.
  *
- * Já esteve em primeiro lugar e estava errado por dois motivos. A lista é uma
- * ordem de dependência, e um atalho que pula metade dela não tem posição nessa
- * ordem. E, no topo, ele recebia quem acabou de entrar com um pedido de
- * planilha — que parece trabalho antes de o sistema ter mostrado serventia
- * nenhuma.
+ * Contorno tracejado e fora do placar de propósito: oferta não entra no "faltam
+ * algumas coisas" nem segura o card na home. A importação já esteve em primeiro
+ * lugar como passo e estava errado — a lista é uma ordem de dependência, e um
+ * atalho que pula metade dela não tem posição nessa ordem. Embaixo, ela responde
+ * a uma pergunta que a pessoa já faz sozinha enquanto lê a lista: "vou ter que
+ * digitar tudo isso na mão?".
  *
- * Embaixo, ele responde a uma pergunta que a pessoa já está fazendo sozinha
- * enquanto lê a lista: "vou ter que digitar tudo isso na mão?".
+ * O preço veio parar aqui pelo mesmo motivo: como passo, ele cobrava de quem
+ * fatura fora do sistema uma tabela que essa pessoa nunca vai preencher.
  */
-export function OfertaImportar({ atalho }: { atalho: Passo }) {
+export function Ofertas({ itens }: { itens: Passo[] }) {
+  // `?? []` porque painel e API sobem em builds separados: por alguns minutos o
+  // painel novo conversa com a API velha, que ainda não manda `ofertas`. Sem
+  // isto, a home inteira quebra num `.filter` de `undefined`.
+  const abertas = (itens ?? []).filter((o) => !o.cumprido);
+  if (abertas.length === 0) return null;
   return (
-    <Link
-      href={atalho.rota as never}
-      className="flex items-center gap-3 rounded-md border border-dashed p-3 transition-colors hover:bg-muted"
-    >
-      <Upload className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium">{atalho.titulo}</span>
-        <span className="block text-xs text-muted-foreground">{atalho.descricao}</span>
-      </span>
-      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-    </Link>
+    <div className="space-y-2">
+      {abertas.map((oferta) => {
+        const Icone = ICONE_OFERTA[oferta.chave] ?? ArrowRight;
+        return (
+          <Link
+            key={oferta.chave}
+            href={oferta.rota as never}
+            className="flex items-center gap-3 rounded-md border border-dashed p-3 transition-colors hover:bg-muted"
+          >
+            <Icone className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">{oferta.titulo}</span>
+              <span className="block text-xs text-muted-foreground">{oferta.descricao}</span>
+            </span>
+            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          </Link>
+        );
+      })}
+    </div>
   );
 }

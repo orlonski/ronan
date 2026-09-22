@@ -52,6 +52,29 @@ export function useTour(): TourAtivo | null {
   return useSyncExternalStore(assinar, ler, () => null);
 }
 
+/**
+ * "Rever o passo a passo": o pedido explícito de quem já viu — ou de quem nunca
+ * ia ver, porque o tour automático é só pra quem chegou depois dele.
+ *
+ * Mora no módulo, e não na URL: a navegação do App Router não recarrega a
+ * página, então o pedido sobrevive ao `router.push("/")` e morre num F5 — que é
+ * exatamente o tempo de vida que ele deve ter. Na URL, ele reabriria o tour
+ * toda vez que a pessoa recarregasse ou compartilhasse o link.
+ */
+let pedido: string | null = null;
+
+export function pedirTour(chave: string): void {
+  pedido = chave;
+}
+
+export function pedidoDeTour(): string | null {
+  return pedido;
+}
+
+export function limparPedidoTour(): void {
+  pedido = null;
+}
+
 export function comecarTour(chave: string, passos: PassoTour[]): void {
   if (passos.length === 0) return;
   atual = { chave, passos, indice: 0 };

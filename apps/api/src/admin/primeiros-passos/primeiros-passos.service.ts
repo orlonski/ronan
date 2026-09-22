@@ -15,17 +15,6 @@ export type PrimeiroPasso = {
 };
 
 /**
- * A permissão que o passo exige pra ser CUMPRIDO — não a de ver a tela.
- *
- * Um passo pendente que abre "Você não tem acesso a esta tela" é pior que passo
- * nenhum: a lista promete um caminho e entrega uma porta fechada, e "fale com um
- * administrador" não ajuda quem já é o administrador da própria empresa.
- *
- * A chave também diz de qual MÓDULO o passo é (moduloDoRecurso): conta que não
- * contratou Comercial não tem "diga quanto vale a viagem" no caminho dela —
- * esse passo não está pendente, ele não existe.
- */
-/**
  * Como se reconhece uma viagem que veio de planilha.
  *
  * O importador carimba o `clientId` com este prefixo (`importacao.service.ts`),
@@ -35,6 +24,17 @@ export type PrimeiroPasso = {
  */
 const PREFIXO_IMPORTACAO = "import:";
 
+/**
+ * A permissão que o item exige pra ser CUMPRIDO — não a de ver a tela.
+ *
+ * Um passo pendente que abre "Você não tem acesso a esta tela" é pior que passo
+ * nenhum: a lista promete um caminho e entrega uma porta fechada, e "fale com um
+ * administrador" não ajuda quem já é o administrador da própria empresa.
+ *
+ * A chave também diz de qual MÓDULO o item é (moduloDoRecurso): conta que não
+ * contratou Comercial não tem "diga quanto vale a viagem" no caminho dela —
+ * esse item não está pendente, ele não existe.
+ */
 type Exigencia = { passo: string; perm: string };
 
 const EXIGENCIAS: Exigencia[] = [
@@ -46,6 +46,7 @@ const EXIGENCIAS: Exigencia[] = [
   { passo: "app", perm: "motoristas.ver" },
   { passo: "viagem", perm: "viagens.ver" },
   { passo: "preco", perm: "tabelas-preco.criar" },
+  { passo: "historico", perm: "importacao.executar" },
 ];
 
 /**
@@ -67,8 +68,10 @@ export class PrimeirosPassosService {
   async listar(usuario: { permissoes: string[]; plataforma: boolean }): Promise<{
     concluido: boolean;
     passos: PrimeiroPasso[];
-    /** Fora da sequência: o caminho curto de quem já tem a base em planilha. */
-    atalho: PrimeiroPasso | null;
+    /** Fora da sequência: convites que não travam o caminho de ninguém. */
+    ofertas: PrimeiroPasso[];
+    /** Conta que já roda — ver `veterana` abaixo. */
+    veterana: boolean;
   }> {
     const [
       veiculos,
@@ -177,22 +180,52 @@ export class PrimeirosPassosService {
         rota: "/viagens",
         cumprido: viagens > 0,
       },
-      // Só entra na lista depois que existe viagem: antes disso é abstrato
-      // demais, e a lista some assim que o último passo fecha — levando junto a
-      // única bússola que a pessoa tinha. Com viagem na mão, "vale R$ 0" é uma
-      // pergunta que ela já está se fazendo.
-      //
-      // Vale também pra viagem importada: quem subiu o histórico está olhando
-      // pro total do mês passado agora, e é exatamente aí que a pergunta
-      // aparece. Esperar o motorista lançar pra oferecer preço seria segurar a
-      // resposta justamente de quem já fez a pergunta.
+    ];
+
+    /**
+     * Ofertas: o que se PODE fazer, nunca o que falta fazer.
+     *
+     * A diferença não é de texto, é de consequência: passo entra no placar, no
+     * "faltam algumas coisas" e segura o card na home até ser cumprido. Nada
+     * aqui faz isso.
+     *
+     * O preço já foi passo e estava errado. Nada no sistema para sem tabela de
+     * preço — a viagem entra valendo zero, e há empresa que fatura fora daqui e
+     * nunca vai preencher isso. Como passo, ele reabria um caminho que estava
+     * fechado havia meses: cliente que usa o painel todo dia viu voltar um
+     * "faltam coisas" por causa de uma funcionalidade que ele decidiu não usar.
+     */
+    const ofertas: PrimeiroPasso[] = [
+      /**
+       * A importação sai da SEQUÊNCIA e vira oferta paralela.
+       *
+       * Ela chegou a ser o primeiro passo e estava errado: a lista é uma ordem
+       * de dependência ("sem local o app não abre o lançamento"), e um atalho
+       * que pula metade dela não tem posição numa ordem — no topo ainda por
+       * cima, ela recebe quem acabou de entrar com um pedido de planilha, que
+       * parece trabalho antes de o sistema ter mostrado serventia nenhuma.
+       *
+       * Como oferta, ela responde a uma pergunta que a pessoa faz sozinha ("vou
+       * ter que digitar tudo isso?") em vez de mandar fazer.
+       */
+      {
+        chave: "historico",
+        titulo: "Já tem tudo numa planilha?",
+        descricao:
+          "Motoristas, caminhões, locais e o histórico de viagens entram de uma vez, com os valores. Subir de novo atualiza, não duplica.",
+        rota: "/importacao",
+        cumprido: importadas > 0,
+      },
+      // Só depois que existe viagem — real ou importada. Antes disso "quanto
+      // vale" é abstrato: não há o que precificar, e a pergunta chega antes de
+      // a pessoa ter motivo pra fazê-la.
       ...(viagens > 0 || importadas > 0
         ? [
             {
               chave: "preco",
               titulo: "Diga quanto vale a viagem",
               descricao:
-                "Sem tabela de preço a viagem entra valendo zero e a planilha de fechamento sai sem a coluna de dinheiro.",
+                "Com tabela de preço, o fechamento sai com a coluna de dinheiro preenchida sozinha. Sem ela, a viagem entra valendo zero — e isso é uma escolha válida.",
               rota: "/tabelas-preco/novo",
               cumprido: precos > 0,
             },
@@ -206,8 +239,8 @@ export class PrimeirosPassosService {
     const modulos = await modulosDaConta(this.prisma, contaIdAtual());
     const permissoes = new Set(usuario.permissoes);
 
-    const visiveis = passos.filter((p) => {
-      const exigencia = EXIGENCIAS.find((e) => e.passo === p.chave);
+    const alcancavel = (item: PrimeiroPasso) => {
+      const exigencia = EXIGENCIAS.find((e) => e.passo === item.chave);
       if (!exigencia) return true;
       const recurso = exigencia.perm.split(".")[0]!;
       const modulo = moduloDoRecurso(recurso);
@@ -218,38 +251,27 @@ export class PrimeirosPassosService {
       // `<recurso>.ver` e a ação exige a dela. Checar só uma deixaria o mesmo
       // beco sem saída de pé, com outro texto.
       return permissoes.has(`${recurso}.ver`) && permissoes.has(exigencia.perm);
-    });
+    };
 
-    const obrigatorios = visiveis;
-    /**
-     * A importação sai da SEQUÊNCIA e vira oferta paralela.
-     *
-     * Ela chegou a ser o primeiro passo e estava errado: a lista é uma ordem de
-     * dependência ("sem local o app não abre o lançamento"), e um atalho que
-     * pula metade dela não tem posição numa ordem — no topo ainda por cima, ela
-     * recebe quem acabou de entrar com um pedido de planilha, que parece
-     * trabalho antes de o sistema ter mostrado serventia nenhuma.
-     *
-     * Como oferta, ela responde a uma pergunta que a pessoa faz sozinha ("vou
-     * ter que digitar tudo isso?") em vez de mandar fazer.
-     */
-    const podeImportar =
-      usuario.plataforma ||
-      (permissoes.has("importacao.ver") && permissoes.has("importacao.executar"));
+    const visiveis = passos.filter(alcancavel);
 
     return {
-      concluido: obrigatorios.every((p) => p.cumprido),
+      concluido: visiveis.every((p) => p.cumprido),
       passos: visiveis,
-      atalho: podeImportar
-        ? {
-            chave: "historico",
-            titulo: "Já tem tudo numa planilha?",
-            descricao:
-              "Motoristas, caminhões, locais e o histórico de viagens entram de uma vez, com os valores. Subir de novo atualiza, não duplica.",
-            rota: "/importacao",
-            cumprido: importadas > 0,
-          }
-        : null,
+      ofertas: ofertas.filter(alcancavel),
+      /**
+       * A conta já roda: a primeira viagem do app chegou.
+       *
+       * O checklist é o caminho ATÉ ela — "faltam algumas coisas para você
+       * lançar sua primeira viagem" vira mentira no segundo seguinte. Daí a
+       * regra: passo novo não reabre caminho que já se fechou. Sem isto,
+       * qualquer item acrescentado aqui reaparece na home de quem usa o
+       * sistema há meses, como se a pessoa estivesse começando de novo.
+       *
+       * A lista inteira continua em /comecar, que é onde ela serve pra
+       * explicar o sistema pra quem entra novo no time.
+       */
+      veterana: viagens > 0,
     };
   }
 }
