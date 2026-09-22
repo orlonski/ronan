@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Movatruck — Proposta Schaba</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#1E3575; --navy-2:#15275A; --laranja:#DF7234; --laranja-txt:#B4501A;
+    --azul-claro:#A6B3D2; --ink:#1A2233; --cinza:#5B6477; --linha:#E3E7F0; --fundo:#F5F7FB;
+    --verde:#1F8A5B;
+  }
+  @page{size:A4;margin:0}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#fff;color:var(--ink);font-family:Inter,system-ui,sans-serif;font-size:10.5pt;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:210mm;height:296.8mm;padding:17mm 17mm 15mm;page-break-after:always;position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .page:last-child{page-break-after:auto}
+  .phead{display:flex;justify-content:space-between;align-items:center;padding-bottom:5mm;border-bottom:1px solid var(--linha);margin-bottom:8mm}
+  .phead img{height:7mm}
+  .phead span{font-size:8.5pt;color:var(--cinza)}
+  .pfoot{margin-top:auto;display:flex;justify-content:space-between;font-size:8pt;color:var(--cinza);border-top:1px solid var(--linha);padding-top:3mm}
+  .eyebrow{font-size:8.5pt;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--laranja-txt);margin:0 0 2mm}
+  h1.sec{font-size:22pt;line-height:1.15;margin:0 0 4mm;color:var(--navy);font-weight:800;letter-spacing:-.01em}
+  .lead{font-size:11.5pt;color:var(--cinza);margin:0 0 7mm;max-width:160mm}
+  h3{font-size:11.5pt;color:var(--navy);margin:0 0 2mm}
+  p{margin:0 0 3mm}
+  .grid{display:grid;gap:4mm}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .num{background:var(--fundo);border:1px solid var(--linha);border-radius:3mm;padding:4.5mm 5mm}
+  .num b{display:block;font-size:20pt;font-weight:800;color:var(--navy);line-height:1.1;font-variant-numeric:tabular-nums}
+  .num span{display:block;font-size:9pt;color:var(--cinza);margin-top:1.5mm;line-height:1.35}
+  .num.dest{background:var(--navy);border-color:var(--navy)}
+  .num.dest b{color:#fff}.num.dest span{color:var(--azul-claro)}
+  table.t{width:100%;border-collapse:collapse;font-size:9.8pt}
+  table.t th{text-align:left;font-size:8pt;text-transform:uppercase;letter-spacing:.08em;color:var(--cinza);font-weight:600;padding:2mm 2.5mm;border-bottom:1.5px solid var(--navy)}
+  table.t td{padding:2.4mm 2.5mm;border-bottom:1px solid var(--linha);vertical-align:top}
+  table.t td.v,table.t th.v{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  table.t td small{display:block;color:var(--cinza);font-size:8.6pt;line-height:1.35;margin-top:.5mm}
+  table.t tr.sub td{font-weight:700;background:var(--fundo)}
+  table.t tr.total td{font-weight:800;font-size:11pt;color:var(--navy);border-bottom:2px solid var(--navy)}
+  table.t tr.desc td{color:var(--verde);font-weight:700}
+  table.t tr.final td{background:var(--navy);color:#fff;font-weight:800;font-size:12.5pt;border:none}
+  .callout{border-left:3px solid var(--laranja);background:#FDF3EC;padding:4mm 5mm;border-radius:0 2mm 2mm 0;font-size:10pt;margin-top:5mm}
+  .callout b{color:var(--laranja-txt)}
+  .card{border:1px solid var(--linha);border-radius:3mm;padding:4.5mm 5mm}
+  .card p{font-size:9.8pt;color:var(--cinza);margin:0}
+  .muted{color:var(--cinza);font-size:8.8pt}
+  /* capa */
+  .capa{background:var(--navy);color:#fff;padding:22mm 20mm 18mm}
+  .capa img{height:12mm;align-self:flex-start}
+  .capa .meio{margin-top:auto;margin-bottom:auto}
+  .capa .eyebrow{color:var(--laranja);font-size:10pt}
+  .capa h1{font-size:36pt;line-height:1.05;margin:0 0 6mm;font-weight:800;letter-spacing:-.02em}
+  .capa h1 em{font-style:normal;color:var(--laranja)}
+  .capa p{font-size:13pt;color:var(--azul-claro);max-width:140mm}
+  .capa .rodape{display:flex;justify-content:space-between;font-size:9.5pt;color:var(--azul-claro);border-top:1px solid rgba(166,179,210,.35);padding-top:5mm}
+  .capa .rodape b{color:#fff;display:block;font-size:10.5pt}
+  .preco{display:flex;align-items:baseline;gap:3mm}
+  .preco b{font-size:34pt;font-weight:800;color:var(--navy);letter-spacing:-.02em}
+  .preco span{color:var(--cinza);font-size:11pt}
+  ul.lista{margin:0;padding-left:5mm}
+  ul.lista li{margin-bottom:2mm}
+</style>
+</head>
+<body>
+
+<!-- 1. CAPA -->
+<section class="page capa">
+  <img src="movatruck-logo-fundo-escuro.svg" alt="Movatruck">
+  <div class="meio">
+    <p class="eyebrow">Proposta para a Schaba</p>
+    <h1>Quanto custa<br>a sua operação<br><em>de verdade.</em></h1>
+    <p>Conta aberta, linha por linha, a partir do que a sua operação usa do sistema. Nenhum valor aqui foi estimado no escuro: tudo sai do banco de dados e do servidor.</p>
+  </div>
+  <div class="rodape">
+    <div><b>Diego Davi Orlonski</b>Movatruck</div>
+    <div style="text-align:right"><b>22 de setembro de 2026</b>Dados: média dos últimos 3 meses</div>
+  </div>
+</section>
+
+<!-- 2. OPERAÇÃO EM NÚMEROS -->
+<section class="page">
+  <div class="phead"><img src="movatruck-logo.svg" alt="Movatruck"><span>Proposta · Schaba</span></div>
+  <p class="eyebrow">1 · A sua operação no sistema</p>
+  <h1 class="sec">O que passa pelo Movatruck num mês da Schaba</h1>
+  <p class="lead">Média mensal dos últimos 90 dias, medida direto no banco de dados. É esse volume que o sistema processa, guarda e confere todos os meses.</p>
+
+  <div class="grid g3">
+    <div class="num dest"><b>2.385</b><span>viagens lançadas por mês</span></div>
+    <div class="num dest"><b>56</b><span>caminhões rodando</span></div>
+    <div class="num dest"><b>92.769 km</b><span>rodados e registrados no mês</span></div>
+    <div class="num"><b>1.554</b><span>viagens com km calculado sozinho pela rota, sem digitação</span></div>
+    <div class="num"><b>639</b><span>viagens com pedágio calculado pelas praças do trajeto</span></div>
+    <div class="num"><b>620</b><span>tickets de balança conferidos por inteligência artificial</span></div>
+    <div class="num"><b>1.906</b><span>fotos guardadas por mês (ticket e abastecimento) — 5.948 no acervo</span></div>
+    <div class="num"><b>110.096</b><span>posições de GPS registradas no trajeto dos motoristas</span></div>
+    <div class="num"><b>2.502</b><span>notificações enviadas ao app dos motoristas</span></div>
+    <div class="num"><b>676</b><span>mensagens de WhatsApp enviadas pelo sistema</span></div>
+    <div class="num"><b>309</b><span>abastecimentos lançados</span></div>
+    <div class="num"><b>24 h</b><span>no ar, todos os dias, com o app funcionando mesmo sem sinal</span></div>
+  </div>
+
+  <div class="callout">Por trás de cada viagem lançada rodam cálculo de rota, busca de pedágio, armazenamento de foto, leitura por IA e aviso no celular. A próxima página mostra <b>quem faz cada uma dessas coisas e quanto custa</b>.</div>
+
+  <div class="pfoot"><span>Movatruck</span><span>2</span></div>
+</section>
+
+<!-- 3. O QUE RODA POR TRÁS -->
+<section class="page">
+  <div class="phead"><img src="movatruck-logo.svg" alt="Movatruck"><span>Proposta · Schaba</span></div>
+  <p class="eyebrow">2 · O que roda por trás</p>
+  <h1 class="sec">Sete serviços trabalhando em cada viagem</h1>
+  <p class="lead">A estrutura é compartilhada entre as transportadoras que usam o Movatruck. Por isso a sua parte é uma fração do que custaria manter tudo isso sozinho. A divisão é proporcional aos caminhões que rodam: hoje, 72% do custo cabe à Schaba.</p>
+
+  <table class="t">
+    <thead><tr><th>Serviço</th><th>O que faz pela sua operação</th><th class="v">Sua parte/mês</th></tr></thead>
+    <tbody>
+      <tr><td><b>Servidor de rotas</b></td><td>Calcula o km real pela estrada, com perfil de caminhão. É o que evita km digitado errado e é a base do cálculo de pedágio.<small>1.554 viagens calculadas por mês</small></td><td class="v">R$ 60,02</td></tr>
+      <tr><td><b>Navegação ao vivo</b></td><td>Guia o motorista por voz até a carga e a descarga, com servidor próprio.</td><td class="v">R$ 17,94</td></tr>
+      <tr><td><b>Armazenamento de fotos</b></td><td>Guarda tickets, comprovantes de abastecimento e documentos, com cópia de segurança.<small>1.906 fotos novas por mês</small></td><td class="v">R$ 17,05</td></tr>
+      <tr><td><b>WhatsApp da operação</b></td><td>Servidor dedicado ao número da operação: avisos, códigos de acesso, resumos.</td><td class="v">R$ 14,55</td></tr>
+      <tr><td><b>Banco de dados</b></td><td>Todas as viagens, cadastros e o histórico completo, com backup.</td><td class="v">R$ 9,67</td></tr>
+      <tr><td><b>Servidor do sistema</b></td><td>Atende o app do motorista e o painel do escritório, aplica as regras e sincroniza o que chega sem sinal.</td><td class="v">R$ 5,86</td></tr>
+      <tr><td><b>Painel do escritório</b></td><td>As telas de lançamento, conferência e fechamento, no computador e no celular.</td><td class="v">R$ 4,10</td></tr>
+      <tr class="sub"><td colspan="2">Servidor, sua parte</td><td class="v">R$ 129,18</td></tr>
+    </tbody>
+  </table>
+
+  <p class="muted" style="margin-top:4mm">Como foi dividido: o servidor custa R$ 350/mês e o Movatruck ocupa 75% dele. Essa parte foi dividida entre os serviços pela memória que cada um usa (medida no painel do servidor em 22/09/2026) e depois pela participação da Schaba nos caminhões rodando. Hoje o servidor usa 28% da capacidade: dá pra crescer cerca de 3 vezes sem trocar de máquina.</p>
+
+  <div class="pfoot"><span>Movatruck</span><span>3</span></div>
+</section>
+
+<!-- 4. A CONTA ABERTA -->
+<section class="page">
+  <div class="phead"><img src="movatruck-logo.svg" alt="Movatruck"><span>Proposta · Schaba</span></div>
+  <p class="eyebrow">3 · A conta aberta</p>
+  <h1 class="sec">Do servidor ao valor final, sem nada escondido</h1>
+  <p class="lead">Tudo o que o sistema consome para a sua operação ficar de pé, somado ao meu trabalho. Depois, o que eu deixo de cobrar.</p>
+
+  <table class="t">
+    <thead><tr><th>Item</th><th class="v">Por mês</th></tr></thead>
+    <tbody>
+      <tr><td>Servidor: rotas, navegação, fotos, WhatsApp, banco, sistema e painel<small>detalhado na página anterior</small></td><td class="v">R$ 129,18</td></tr>
+      <tr><td>Inteligência artificial que confere os tickets<small>medido: US$ 1,81 no mês para 620 conferências</small></td><td class="v">R$ 9,77</td></tr>
+      <tr><td>Mensagens de WhatsApp pela API oficial<small>medido: 676 mensagens</small></td><td class="v">R$ 26,84</td></tr>
+      <tr><td>Ferramenta de IA de desenvolvimento<small>o que permite corrigir e melhorar o sistema no ritmo que a operação pede</small></td><td class="v">R$ 394,87</td></tr>
+      <tr><td>Contabilidade</td><td class="v">R$ 122,05</td></tr>
+      <tr><td>Publicação do app na App Store (iPhone)</td><td class="v">R$ 31,98</td></tr>
+      <tr><td>Domínios, certificados e publicação de atualizações</td><td class="v">R$ 21,54</td></tr>
+      <tr class="sub"><td>Custo da operação</td><td class="v">R$ 736,24</td></tr>
+      <tr><td>Meu trabalho: correções, melhorias, suporte e treinamento<small>40 h/mês a R$ 100/h; a sua parte proporcional é de ~29 h</small></td><td class="v">R$ 2.871,79</td></tr>
+      <tr><td>Reserva e margem (25%)<small>cobre imprevistos: servidor que cai, IA que sobe de preço, mês difícil</small></td><td class="v">R$ 902,01</td></tr>
+      <tr><td>Impostos (6%)</td><td class="v">R$ 287,88</td></tr>
+      <tr class="total"><td>Valor cheio da sua operação</td><td class="v">R$ 4.797,92</td></tr>
+      <tr class="desc"><td>Meu trabalho não é cobrado nos primeiros 12 meses<small style="color:var(--verde)">as horas, com a margem e o imposto que incidiriam sobre elas</small></td><td class="v">− R$ 3.818,88</td></tr>
+      <tr class="final"><td>A Schaba paga</td><td class="v">R$ 979,05</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">Isso dá <b>R$ 0,41 por viagem</b> lançada, ou <b>1 centavo por km</b> registrado.</div>
+
+  <div class="pfoot"><span>Movatruck</span><span>4</span></div>
+</section>
+
+<!-- 5. PROPOSTA -->
+<section class="page">
+  <div class="phead"><img src="movatruck-logo.svg" alt="Movatruck"><span>Proposta · Schaba</span></div>
+  <p class="eyebrow">4 · A proposta</p>
+  <h1 class="sec">Uma régua só, que acompanha o tamanho da operação</h1>
+  <p class="lead">A cobrança é por caminhão que rodou. Caminhão parado não paga. Se a operação cresce, a conta cresce junto; se diminui, cai.</p>
+
+  <div class="grid g2" style="margin-bottom:6mm">
+    <div class="card">
+      <p class="eyebrow" style="margin-bottom:1mm">Preço por caminhão</p>
+      <div class="preco"><b>R$ 17,50</b><span>/mês</span></div>
+      <p>por caminhão com pelo menos uma viagem no mês</p>
+    </div>
+    <div class="card" style="background:var(--fundo)">
+      <p class="eyebrow" style="margin-bottom:1mm">Hoje, com 56 caminhões</p>
+      <div class="preco"><b>R$ 980</b><span>/mês</span></div>
+      <p>valor cheio seria ~R$ 85,70 por caminhão</p>
+    </div>
+  </div>
+
+  <h3>Como funciona</h3>
+  <ul class="lista">
+    <li><b>Valor estável:</b> a mensalidade usa a média de caminhões dos últimos 3 meses e é recalculada a cada trimestre. Não muda de um mês pro outro.</li>
+    <li><b>Pagamento:</b> Pix automático mensal, com a nota fiscal.</li>
+    <li><b>Tudo incluído:</b> servidores, IA, WhatsApp, app no Android e no iPhone, atualizações, correções, suporte e treinamento. Sem limite de motoristas, viagens ou usuários do escritório.</li>
+    <li><b>12 meses sem cobrar o meu trabalho.</b> Depois disso a gente revê a condição juntos, com a mesma conta aberta, e qualquer mudança é avisada com 60 dias de antecedência.</li>
+    <li><b>A conta é revista uma vez por ano com os números reais.</b> Se o custo cair, o preço cai.</li>
+    <li><b>Os dados são seus:</b> exportação completa quando quiser, sem custo.</li>
+  </ul>
+
+  <div class="callout">Nada aqui é preço de tabela inventado. Cada linha pode ser conferida: o volume vem do banco de dados, o custo do servidor vem do painel da hospedagem e o custo de IA e WhatsApp vem do que foi gasto de verdade.</div>
+
+  <div class="pfoot"><span>Movatruck · contato@movatruck.com.br</span><span>5</span></div>
+</section>
+
+</body>
+</html>

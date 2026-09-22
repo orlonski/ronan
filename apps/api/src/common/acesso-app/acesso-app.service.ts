@@ -751,7 +751,13 @@ export class AcessoAppService {
   ): Promise<string> {
     const existe = await tx.perfilAcessoApp.findFirst({ where: { nome }, select: { id: true } });
     if (existe) {
-      await tx.perfilAcessoApp.update({ where: { id: existe.id }, data: { capacidades, ativo: true } });
+      // A descrição vai junto: enquanto a empresa segue a ficha, este perfil é
+      // do sistema, e o texto tem que dizer o que ele dá HOJE. Nas regras o
+      // espelho não roda, e o que alguém escreveu à mão fica.
+      await tx.perfilAcessoApp.update({
+        where: { id: existe.id },
+        data: { capacidades, descricao, ativo: true },
+      });
       return existe.id;
     }
     const p = await tx.perfilAcessoApp.create({
