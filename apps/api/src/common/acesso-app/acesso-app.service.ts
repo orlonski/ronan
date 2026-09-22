@@ -1,14 +1,18 @@
 import { createHash } from "node:crypto";
-import { Injectable, Logger } from "@nestjs/common";
+import { ConflictException, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { Prisma } from "@prisma/client";
 import {
   ACESSOS_APP_CHAVES,
   CAMADAS_CORTE,
   CAPACIDADE_POR_CHAVE,
+  CAPACIDADES_APP,
   type AcessoAppChave,
   type CamadaCorte,
   type CapacidadeApp,
+  type MudancaAcessoApp,
+  type PreviaCadastroAppInput,
+  type SimularAcessoAppInput,
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { contaIdAtual } from "../conta/conta-context";
@@ -122,6 +126,15 @@ export class AcessoAppService {
     return { ...r, divergencias: 0 };
   }
 
+  /**
+   * Na primeira vez que alguém abre a tela, a empresa pode ainda não ter
+   * passado pelo cron: espelha agora pra tela não nascer vazia.
+   */
+  async sincronizarSeNuncaRodou(): Promise<void> {
+    const cfg = await this.garantirConfig();
+    if (cfg.fonte === "COLUNAS" && !cfg.espelhadoEm) await this.espelharDasColunas("PRIMEIRA_VISITA");
+  }
+
   private async garantirConfig() {
     const contaId = contaIdAtual();
     return this.prisma.configuracaoAcessoApp.upsert({
@@ -148,6 +161,7 @@ export class AcessoAppService {
           select: {
             id: true,
             cpf: true,
+            nome: true,
             ativo: true,
             status: true,
             modalidadeId: true,
@@ -157,7 +171,7 @@ export class AcessoAppService {
           },
         }),
         tx.funcionario.findMany({
-          select: { id: true, cpf: true, ativo: true, perfilAcessoId: true },
+          select: { id: true, cpf: true, nome: true, ativo: true, perfilAcessoId: true },
         }),
         tx.regimeVigente.findMany({
           where: { chaveViva: { not: null } },
@@ -225,7 +239,84 @@ export class AcessoAppService {
       excecoesPorCpf.set(cpf, lista);
     }
 
-    return { config, ctx, pessoas, excecoesPorCpf, motoristas };
+    const nomes = new Map<string, string>();
+    for (const f of funcionarios) nomes.set(soDigitos(f.cpf), f.nome);
+    for (const m of motoristas) nomes.set(soDigitos(m.cpf), m.nome);
+
+    return { config, ctx, pessoas, excecoesPorCpf, motoristas, nomes };
+  }
+
+  /**
+   * Aplica um rascunho da tela sobre o contexto carregado — é o que permite
+   * mostrar "37 pessoas mudam" ANTES de salvar, com o mesmo resolvedor.
+   */
+  private aplicarRascunho(ctx: ContaAcessoCtx, r: SimularAcessoAppInput): ContaAcessoCtx {
+    const perfis = new Map(ctx.perfis);
+    let padraoM = ctx.perfilPadraoMotoristaId;
+    let padraoF = ctx.perfilPadraoFuncionarioId;
+    if (r.perfil) {
+      const id = r.perfil.id ?? "__rascunho__";
+      const atual = perfis.get(id);
+      perfis.set(id, {
+        id,
+        nome: atual?.nome ?? "Rascunho",
+        ativo: r.perfil.ativo,
+        capacidades: r.perfil.capacidades,
+      });
+    }
+    if (r.padrao) {
+      padraoM = r.padrao.perfilPadraoMotoristaId;
+      padraoF = r.padrao.perfilPadraoFuncionarioId;
+    }
+    return {
+      ...ctx,
+      perfis,
+      regras: r.regras
+        ? r.regras.map((x, i) => ({
+            id: x.id ?? `__nova_${i}`,
+            ordem: i,
+            nome: x.nome,
+            ativo: x.ativo,
+            vinculo: x.vinculo,
+            regime: x.regime,
+            modalidadeId: x.modalidadeId ?? null,
+            transportadoraId: x.transportadoraId ?? null,
+            perfilId: x.perfilId,
+          }))
+        : ctx.regras,
+      perfilPadraoMotoristaId: padraoM,
+      perfilPadraoFuncionarioId: padraoF,
+      camadasEmSombra: r.camadasEmSombra ? new Set(r.camadasEmSombra) : ctx.camadasEmSombra,
+      rolloutsApp: r.rolloutsApp ? new Set(r.rolloutsApp) : ctx.rolloutsApp,
+    };
+  }
+
+  /**
+   * As colunas `pode*` que o resolvedor escreve quando a empresa está nas
+   * regras. Calculadas com APROVACAO em sombra: a aprovação já é cobrada à
+   * parte (login e guard), e zerar as colunas de quem está em análise faria o
+   * motorista aprovado agora ficar sem nada até o próximo recálculo.
+   */
+  private colunasDoResolvedor(
+    pessoas: Map<string, PessoaAcesso>,
+    ctx: ContaAcessoCtx,
+    excecoesPorCpf: Map<string, ExcecaoAcessoCtx[]>,
+    agora: Date,
+  ): Map<string, ColunasAcesso> {
+    const ctxColunas = { ...ctx, camadasEmSombra: new Set([...ctx.camadasEmSombra, "APROVACAO" as const]) };
+    const out = new Map<string, ColunasAcesso>();
+    for (const [cpf, p] of pessoas) {
+      if (!p.motorista) continue;
+      const efetivo = new Set<string>(
+        resolverAcessoApp(p, ctxColunas, excecoesPorCpf.get(cpf) ?? [], agora).efetivo,
+      );
+      const colunas: ColunasAcesso = {};
+      for (const def of CAPACIDADES_APP) {
+        if (def.colunaLegada?.espelha) colunas[def.colunaLegada.coluna] = efetivo.has(def.chave);
+      }
+      out.set(cpf, colunas);
+    }
+    return out;
   }
 
   private calcular(
@@ -249,8 +340,10 @@ export class AcessoAppService {
     resultados: Map<string, ResultadoAcesso>,
     causa: string,
     agora: Date,
+    colunas?: { alvo: Map<string, ColunasAcesso>; atuais: { id: string; cpf: string }[] & Record<string, unknown>[] },
   ): Promise<number> {
     const contaId = contaIdAtual();
+    if (colunas) await this.escreverColunas(tx, colunas.alvo, colunas.atuais);
     const atuais = await tx.acessoEfetivoApp.findMany({
       select: { cpf: true, hash: true, capacidades: true },
     });
@@ -300,6 +393,15 @@ export class AcessoAppService {
         });
       } else if (!atual) {
         mudaram++;
+        // Pessoa nova numa empresa que já tinha acessos calculados (cadastro,
+        // contratação): o que ela ganhou ao entrar também é rastro. Só a
+        // PRIMEIRA carga da empresa inteira fica de fora — seria uma linha
+        // por pessoa dizendo "ganhou tudo o que já tinha".
+        if (atuais.length > 0) {
+          await tx.logAcessoApp.create({
+            data: { tipo: "EFETIVO_NASCEU", cpf, ganhou, perdeu: [], causa },
+          });
+        }
       }
     }
 
@@ -316,19 +418,208 @@ export class AcessoAppService {
     return mudaram;
   }
 
+  /**
+   * O ESPELHO AO CONTRÁRIO: com a empresa nas regras, as colunas `pode*` viram
+   * reflexo do resolvedor — é o que mantém app, guards e o WHERE do chat
+   * funcionando sem mudar uma linha enquanto eles ainda leem as colunas.
+   * Só escreve quem mudou.
+   */
+  private async escreverColunas(
+    tx: Tx,
+    alvo: Map<string, ColunasAcesso>,
+    atuais: Record<string, unknown>[],
+  ): Promise<void> {
+    for (const m of atuais) {
+      const quer = alvo.get(soDigitos(String(m.cpf)));
+      if (!quer) continue;
+      const diff: ColunasAcesso = {};
+      for (const [c, v] of Object.entries(quer) as [AcessoAppChave, boolean][]) {
+        if (m[c] !== v) diff[c] = v;
+      }
+      if (Object.keys(diff).length) {
+        await tx.motorista.update({ where: { id: String(m.id) }, data: diff });
+      }
+    }
+  }
+
   /** Recalcula e grava o efetivo de todo mundo da empresa. */
   async recalcular(causa: string): Promise<{ pessoas: number; mudaram: number }> {
     await this.garantirConfig();
     const agora = new Date();
     return this.prisma.$transaction(
       async (tx) => {
-        const { ctx, pessoas, excecoesPorCpf } = await this.carregarContexto(tx, agora);
+        const { config, ctx, pessoas, excecoesPorCpf, motoristas } = await this.carregarContexto(
+          tx,
+          agora,
+        );
         const resultados = this.calcular(pessoas, ctx, excecoesPorCpf, agora);
-        const mudaram = await this.gravar(tx, pessoas, resultados, causa, agora);
+        // Só nas regras o resolvedor manda nas colunas. No espelho, a ficha manda.
+        const colunas =
+          config.fonte === "REGRAS"
+            ? {
+                alvo: this.colunasDoResolvedor(pessoas, ctx, excecoesPorCpf, agora),
+                atuais: motoristas as unknown as { id: string; cpf: string }[] & Record<string, unknown>[],
+              }
+            : undefined;
+        const mudaram = await this.gravar(tx, pessoas, resultados, causa, agora, colunas);
         return { pessoas: pessoas.size, mudaram };
       },
       { timeout: 60_000 },
     );
+  }
+
+  /**
+   * Recalcula já, sem prender quem chamou — pra depois de cadastrar, aprovar,
+   * contratar. No espelho não há o que fazer (a ficha manda). Falha aqui é
+   * logada e o cron de 2 minutos cobre.
+   */
+  agendarRecalculo(causa: string): void {
+    void (async () => {
+      const cfg = await this.prisma.configuracaoAcessoApp.findUnique({
+        where: { contaId: contaIdAtual() },
+        select: { fonte: true },
+      });
+      if (cfg?.fonte !== "REGRAS") return;
+      await this.recalcular(causa);
+    })().catch((e) =>
+      this.log.error(`Recalcular acesso (${causa}) falhou: ${e instanceof Error ? e.message : e}`),
+    );
+  }
+
+  @Cron("0 */2 * * * *", { name: "acesso-app-regras", timeZone: "America/Sao_Paulo" })
+  async cronRegras(): Promise<void> {
+    await comLockDeCron(this.prisma, "acesso-app-regras", async () => {
+      await paraCadaConta(this.prisma, async () => {
+        const cfg = await this.prisma.configuracaoAcessoApp.findUnique({
+          where: { contaId: contaIdAtual() },
+          select: { fonte: true },
+        });
+        if (cfg?.fonte === "REGRAS") await this.recalcular("CRON");
+      });
+    });
+  }
+
+  // ─── leitura pro painel ──────────────────────────────────────────────────
+
+  /**
+   * O que muda pra quem, se o rascunho for salvo. Compara o cálculo de hoje
+   * com o cálculo com o rascunho — os dois pelo mesmo resolvedor.
+   */
+  async simular(rascunho: SimularAcessoAppInput): Promise<{ total: number; mudam: MudancaAcessoApp[] }> {
+    await this.garantirConfig();
+    const agora = new Date();
+    const { ctx, pessoas, excecoesPorCpf, nomes } = await this.carregarContexto(this.prisma, agora);
+    const antes = this.calcular(pessoas, ctx, excecoesPorCpf, agora);
+    const depois = this.calcular(pessoas, this.aplicarRascunho(ctx, rascunho), excecoesPorCpf, agora);
+    const mudam: MudancaAcessoApp[] = [];
+    for (const [cpf, a] of antes) {
+      const d = depois.get(cpf)!;
+      const sa = new Set(a.efetivo);
+      const sd = new Set(d.efetivo);
+      const ganhou = d.efetivo.filter((c) => !sa.has(c));
+      const perdeu = a.efetivo.filter((c) => !sd.has(c));
+      if (!ganhou.length && !perdeu.length) continue;
+      const p = pessoas.get(cpf)!;
+      mudam.push({
+        cpf,
+        nome: nomes.get(cpf) ?? cpf,
+        motoristaId: p.motorista?.id ?? null,
+        funcionarioId: p.funcionario?.id ?? null,
+        ganhou,
+        perdeu,
+      });
+    }
+    mudam.sort((x, y) => y.perdeu.length - x.perdeu.length || x.nome.localeCompare(y.nome));
+    return { total: mudam.length, mudam: mudam.slice(0, 500) };
+  }
+
+  /**
+   * Com que perfil um motorista AINDA NÃO SALVO entraria — o "vai entrar como"
+   * do cadastro. Mesmo resolvedor, com um cadastro hipotético já aprovado
+   * (é assim que o painel cria). Se o CPF já é alguém da empresa (o CLT que
+   * passa a dirigir), o regime e o cadastro de funcionário dele entram na conta.
+   */
+  async previaCadastro(dados: PreviaCadastroAppInput) {
+    await this.garantirConfig();
+    const agora = new Date();
+    const { config, ctx, pessoas, excecoesPorCpf } = await this.carregarContexto(this.prisma, agora);
+    const cpf = soDigitos(dados.cpf ?? "");
+    const existente = cpf.length === 11 ? pessoas.get(cpf) : undefined;
+    const pessoa: PessoaAcesso = {
+      cpf: cpf || "__novo__",
+      regime: existente?.regime ?? null,
+      funcionario: existente?.funcionario ?? null,
+      motorista: {
+        id: "__novo__",
+        ativo: true,
+        aprovado: true,
+        modalidadeId: dados.modalidadeId ?? null,
+        transportadoraId: dados.transportadoraId ?? null,
+        perfilFixadoId: null,
+      },
+    };
+    const r = resolverAcessoApp(pessoa, ctx, existente ? (excecoesPorCpf.get(cpf) ?? []) : [], agora);
+    return {
+      fonte: config.fonte,
+      base: r.base.motorista,
+      efetivo: r.efetivo,
+      jaExiste: !!existente?.motorista,
+    };
+  }
+
+  /** O acesso de UMA pessoa, calculado agora, com o porquê de cada item. */
+  async explicar(cpfBruto: string) {
+    await this.garantirConfig();
+    const agora = new Date();
+    const cpf = soDigitos(cpfBruto);
+    const { config, ctx, pessoas, excecoesPorCpf, nomes } = await this.carregarContexto(
+      this.prisma,
+      agora,
+    );
+    const pessoa = pessoas.get(cpf);
+    if (!pessoa) return null;
+    const resultado = resolverAcessoApp(pessoa, ctx, excecoesPorCpf.get(cpf) ?? [], agora);
+    const excecoes = await this.prisma.excecaoAcessoApp.findMany({
+      where: { cpf, revogadaEm: null },
+      orderBy: { criadoEm: "desc" },
+    });
+    return {
+      cpf,
+      nome: nomes.get(cpf) ?? cpf,
+      fonte: config.fonte,
+      regime: pessoa.regime,
+      vinculos: {
+        motorista: pessoa.motorista ? { id: pessoa.motorista.id, aprovado: pessoa.motorista.aprovado, ativo: pessoa.motorista.ativo } : null,
+        funcionario: pessoa.funcionario ? { id: pessoa.funcionario.id, ativo: pessoa.funcionario.ativo } : null,
+      },
+      ...resultado,
+      excecoes,
+    };
+  }
+
+  /**
+   * Passa a empresa do espelho da ficha pras regras.
+   *
+   * ⚠️ Não muda nada pra ninguém, e é conferido: espelha a ficha uma última
+   * vez (com o portão), vira a chave e recalcula — as colunas que o resolvedor
+   * escreve são as mesmas que já estavam lá. Se o portão reprovar, não vira.
+   */
+  async passarParaRegras(autorId: string): Promise<{ pessoas: number }> {
+    const r = await this.espelharDasColunas("PASSAR_PARA_REGRAS");
+    if (r.divergencias > 0) {
+      throw new ConflictException(
+        `O cálculo não reproduziu a ficha de ${r.divergencias} pessoa(s) — nada mudou. Isso é defeito nosso, não da configuração.`,
+      );
+    }
+    const contaId = contaIdAtual();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.configuracaoAcessoApp.update({ where: { contaId }, data: { fonte: "REGRAS" } });
+      await tx.logAcessoApp.create({
+        data: { tipo: "FONTE_REGRAS", autorId, causa: "A empresa passou a configurar o acesso pelas regras." },
+      });
+    });
+    const rec = await this.recalcular("PASSAR_PARA_REGRAS");
+    return { pessoas: rec.pessoas };
   }
 
   // ─── espelho das colunas ─────────────────────────────────────────────────
@@ -391,8 +682,17 @@ export class AcessoAppService {
 
           await this.sincronizarExcecoesDoEspelho(tx, plano.excecoes, agora);
 
-          // O PORTÃO: o cálculo tem que reproduzir a ficha de cada aprovado ativo.
+          // O PORTÃO: perfil + exceções têm que reproduzir a ficha de cada
+          // aprovado ativo. Confere com as camadas de corte TODAS em sombra
+          // (menos aprovação): o que o portão prova é o espelho, não as
+          // travas. Uma trava que a plataforma ligou corta o efetivo gravado —
+          // é decisão dela — mas não pode reprovar o espelho.
           const { ctx, pessoas, excecoesPorCpf } = await this.carregarContexto(tx, agora);
+          const ctxPortao = {
+            ...ctx,
+            camadasEmSombra: new Set<CamadaCorte>(CAMADAS_CORTE.filter((c) => c !== "APROVACAO")),
+          };
+          const conferido = this.calcular(pessoas, ctxPortao, excecoesPorCpf, agora);
           const resultados = this.calcular(pessoas, ctx, excecoesPorCpf, agora);
           const divergencias: DivergenciaEspelho[] = [];
           for (const m of motoristas) {
@@ -400,7 +700,7 @@ export class AcessoAppService {
             if (!p.motorista?.ativo || !p.motorista.aprovado) continue;
             const quer = new Set(plano.desejado.get(m.id)!);
             const tem = new Set(
-              resultados
+              conferido
                 .get(p.cpf)!
                 .efetivo.filter((c) => CAPACIDADE_POR_CHAVE[c].vinculo !== "FUNCIONARIO"),
             );

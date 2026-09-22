@@ -153,6 +153,7 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/tipos-servico", perm: "tipos-servico.ver" },
   { prefixo: "/modalidades", perm: "modalidades.ver" },
   { prefixo: "/perfis-acesso", perm: "perfis-acesso.ver" },
+  { prefixo: "/acesso-app", perm: "perfis-acesso.ver" },
   { prefixo: "/usuarios", perm: "usuarios.ver" },
   { prefixo: "/whatsapp", perm: "whatsapp.ver" },
   { prefixo: "/erros", perm: "erros.ver" },

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { PontoService } from "./ponto.service";
 import { PontoAdminService } from "./ponto-admin.service";
 
+/** O recálculo do acesso do app não interessa a estes testes. */
+const SEM_ACESSO_APP = { agendarRecalculo: () => {} } as never;
+
 /**
  * A localização da batida: as duas pontas.
  *
@@ -66,7 +69,7 @@ function servicoAdmin(localizacao: unknown) {
       logs.push(e);
     },
   };
-  return { s: new PontoAdminService(prisma as never, auditoria as never), logs };
+  return { s: new PontoAdminService(prisma as never, auditoria as never, SEM_ACESSO_APP), logs };
 }
 
 describe("consultar a coordenada deixa rastro", () => {
@@ -105,7 +108,7 @@ describe("consultar a coordenada deixa rastro", () => {
       log: async () => {
         throw new Error("banco fora");
       },
-    } as never);
+    } as never, SEM_ACESSO_APP);
     await expect(s.localizacaoDaMarcacao("m1", "u1")).resolves.toBeTruthy();
   });
 });

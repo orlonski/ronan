@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
 import { IdentidadeService } from "../../auth/identidade.service";
+import { AcessoAppService } from "../../common/acesso-app/acesso-app.service";
 import { parseArquivo } from "../../fechamentos/parsers";
 import { ENTIDADE_POR_CHAVE, type EntidadeImportavel } from "../../common/importacao/campos";
 import {
@@ -61,6 +62,7 @@ export class ImportacaoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly identidades: IdentidadeService,
+    private readonly acessoApp: AcessoAppService,
   ) {}
 
   /** Lê o arquivo e devolve o que ENTRARIA, sem gravar nada. */
@@ -141,6 +143,11 @@ export class ImportacaoService {
       const r = await this.gravar(entidade, linha, args, avisos);
       if (r === "criado") criados++;
       else if (r === "atualizado") atualizados++;
+    }
+
+    // Quem entrou pela planilha nasce no padrão de acesso da empresa, na hora.
+    if (entidade.chave === "motoristas" && criados > 0) {
+      this.acessoApp.agendarRecalculo("MOTORISTA_IMPORTADO");
     }
 
     this.log.log(

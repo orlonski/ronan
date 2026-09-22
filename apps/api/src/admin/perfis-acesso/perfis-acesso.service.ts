@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -12,6 +13,7 @@ import {
 } from "@ronan/shared-types";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { PERFIS_HERDADOS } from "../../common/acesso-app/espelho-colunas";
+import { contaIdAtual } from "../../common/conta/conta-context";
 import { type EscopoAdmin, filtroEscopo } from "../../common/escopo/escopo";
 import { PrismaService } from "../../prisma/prisma.service";
 
@@ -51,6 +53,20 @@ export class PerfisAcessoService {
     private readonly auditoria: AuditoriaService,
   ) {}
 
+  /**
+   * Nas regras, esta tela (das colunas) não escreve mais: o resolvedor é quem
+   * escreve as colunas, e o que ela gravasse seria desfeito no recálculo.
+   */
+  private async exigirEspelho() {
+    const cfg = await this.prisma.configuracaoAcessoApp.findUnique({
+      where: { contaId: contaIdAtual() },
+      select: { fonte: true },
+    });
+    if (cfg?.fonte === "REGRAS") {
+      throw new ConflictException("Esta empresa configura o acesso pela tela Acesso ao app.");
+    }
+  }
+
   private exigirGlobal(escopo: EscopoAdmin) {
     if (escopo) {
       throw new ForbiddenException(
@@ -84,6 +100,7 @@ export class PerfisAcessoService {
 
   async criar(dados: SalvarPerfilAcessoInput, usuarioId: string, escopo: EscopoAdmin) {
     this.exigirGlobal(escopo);
+    await this.exigirEspelho();
     await this.recusarNomeRepetido(dados.nome, null);
     const p = await this.prisma.perfilAcessoApp.create({
       data: {
@@ -118,6 +135,7 @@ export class PerfisAcessoService {
    */
   async editar(id: string, dados: SalvarPerfilAcessoInput, usuarioId: string, escopo: EscopoAdmin) {
     this.exigirGlobal(escopo);
+    await this.exigirEspelho();
     const atual = await this.prisma.perfilAcessoApp.findFirst({ where: { id, ...SEM_HERDADOS } });
     if (!atual) throw new NotFoundException("Perfil não encontrado.");
     await this.recusarNomeRepetido(dados.nome, id);
@@ -165,6 +183,7 @@ export class PerfisAcessoService {
    * eliminar.
    */
   async aplicar(perfilId: string, motoristaIds: string[], usuarioId: string, escopo: EscopoAdmin) {
+    await this.exigirEspelho();
     const perfil = await this.prisma.perfilAcessoApp.findFirst({ where: { id: perfilId, ...SEM_HERDADOS } });
     if (!perfil) throw new NotFoundException("Perfil não encontrado.");
     if (!perfil.ativo) throw new BadRequestException("Este perfil está desligado.");
@@ -207,6 +226,7 @@ export class PerfisAcessoService {
    */
   async desligar(id: string, usuarioId: string, escopo: EscopoAdmin) {
     this.exigirGlobal(escopo);
+    await this.exigirEspelho();
     const perfil = await this.prisma.perfilAcessoApp.findFirst({ where: { id, ...SEM_HERDADOS } });
     if (!perfil) throw new NotFoundException("Perfil não encontrado.");
     const r = await this.prisma.$transaction(async (tx) => {

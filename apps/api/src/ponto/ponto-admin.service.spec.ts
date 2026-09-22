@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { comConta } from "../common/conta/conta-context";
 import { PontoAdminService } from "./ponto-admin.service";
 
+/** O recálculo do acesso do app não interessa a estes testes. */
+const SEM_ACESSO_APP = { agendarRecalculo: () => {} } as never;
+
 /**
  * A config do ponto nasce no primeiro acesso à tela — e nasceu quebrada.
  *
@@ -29,7 +32,7 @@ describe("a config do ponto nasce certa", () => {
       motivoCorrecaoPonto: { create: async () => ({}) },
       feriadoPonto: { create: async () => ({}) },
     };
-    const s = new PontoAdminService(prisma as never, { log: async () => {} } as never);
+    const s = new PontoAdminService(prisma as never, { log: async () => {} } as never, SEM_ACESSO_APP);
     // `await` DENTRO do run: a promise do Prisma é preguiçosa, e devolvê-la
     // pra fora faria a consulta rodar sem conta no contexto.
     const cfg = await comConta("c1", async () => s.config());
@@ -49,7 +52,7 @@ describe("a config do ponto nasce certa", () => {
       },
       conta: { findFirst: async () => ({ nome: "X", cnpj: "1" }) },
     };
-    const s = new PontoAdminService(prisma as never, { log: async () => {} } as never);
+    const s = new PontoAdminService(prisma as never, { log: async () => {} } as never, SEM_ACESSO_APP);
     await comConta("c1", async () => s.config());
     expect(criou).toBe(0);
   });

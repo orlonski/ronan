@@ -23,6 +23,7 @@ import {
 import { valorDaDiariaObra, type TabelaPrecoRow } from "../common/viagem-preco";
 import { resolverRemuneracao } from "../common/acerto-motorista";
 import { abrirRegime, encerrarRegime, regimeVivo } from "../common/regime-vigente";
+import { AcessoAppService } from "../common/acesso-app/acesso-app.service";
 import { parseXlsx } from "../fechamentos/parsers/xlsx-parser";
 import { lerMedicaoDaPlanilha } from "./medicao-planilha";
 import { montarModeloMedicao } from "./medicao-modelo";
@@ -92,7 +93,10 @@ export function paraYmd(d: Date): string {
 export class MensalService {
   private readonly log = new Logger(MensalService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly acessoApp: AcessoAppService,
+  ) {}
 
   // ----------------------------------------------------------- alocação ---
 
@@ -152,7 +156,7 @@ export class MensalService {
     // a outra de pé — e o furo seria exatamente o que a trava existe pra
     // impedir. O `await` mora DENTRO, porque a promise do Prisma é preguiçosa
     // e a trava de conta vive num AsyncLocalStorage.
-    return this.prisma.$transaction(async (tx) => {
+    const alocacao = await this.prisma.$transaction(async (tx) => {
       /**
        * ⚠️ O REGIME DERIVA DO VÍNCULO QUE JÁ EXISTE, e não do formulário.
        *
@@ -207,6 +211,9 @@ export class MensalService {
         },
       });
     });
+    // A alocação pode ter aberto o regime de parceiro — e regime decide acesso.
+    this.acessoApp.agendarRecalculo("ALOCACAO_CRIADA");
+    return alocacao;
   }
 
   async editarAlocacao(id: string, dados: EditarAlocacaoInput) {
@@ -263,7 +270,7 @@ export class MensalService {
       select: { cpf: true },
     });
 
-    return this.prisma.$transaction(async (tx) => {
+    const encerrada = await this.prisma.$transaction(async (tx) => {
       const atualizada = await tx.alocacaoObra.update({
         where: { id },
         data: { ativa: false, vigenteDe: null, encerradaEm: new Date(), encerradaMotivo: motivo },
@@ -287,6 +294,9 @@ export class MensalService {
       }
       return atualizada;
     });
+    // O regime de parceiro que a alocação abriu pode ter acabado aqui.
+    this.acessoApp.agendarRecalculo("ALOCACAO_ENCERRADA");
+    return encerrada;
   }
 
   private async buscarAlocacao(id: string) {

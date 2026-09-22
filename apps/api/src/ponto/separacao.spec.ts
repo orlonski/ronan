@@ -75,7 +75,7 @@ describe("ponto e mensal não se misturam", () => {
     expect(vazamentos).toEqual([]);
   });
 
-  it("o ÚNICO código compartilhado é a trava de regime", () => {
+  it("o código compartilhado é só a trava de regime e o aviso de recálculo do acesso", () => {
     // Se um segundo arquivo comum aparecer, é decisão consciente — e tem que
     // passar por aqui, não acontecer sozinho num refactor.
     const doPonto = new Set(arquivosDe(join(RAIZ, "ponto")).flatMap(importsDe));
@@ -87,7 +87,13 @@ describe("ponto e mensal não se misturam", () => {
     const dominio = comuns.filter(
       (x) => x.includes("/common/") && !INFRA.some((i) => x.includes(i)),
     );
-    expect(dominio.sort()).toEqual(["../common/regime-vigente"]);
+    // `acesso-app` entrou em 22/09/2026, e de propósito: os dois mexem em
+    // regime (contratar CLT, alocar na obra), e regime decide o que aparece no
+    // celular — cada um avisa o recálculo, sem saber nada do outro.
+    expect(dominio.sort()).toEqual([
+      "../common/acesso-app/acesso-app.service",
+      "../common/regime-vigente",
+    ]);
   });
 
   it("cadastrar motorista pode MOSTRAR o regime, nunca decidir com ele", () => {

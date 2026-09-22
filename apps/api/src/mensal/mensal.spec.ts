@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { MensalService } from "./mensal.service";
 
+/** O recálculo do acesso do app não interessa a estes testes. */
+const SEM_ACESSO_APP = { agendarRecalculo: () => {} } as never;
+
 /**
  * As travas do mensal.
  *
@@ -86,7 +89,7 @@ function servico(estado: {
   // A alocação e o regime são escritos na mesma transação; o mock roda o
   // callback com o próprio client.
   (prisma as Record<string, unknown>).$transaction = async (fn: (tx: unknown) => unknown) => fn(prisma);
-  return { s: new MensalService(prisma as never), escritas };
+  return { s: new MensalService(prisma as never, SEM_ACESSO_APP), escritas };
 }
 
 const ONTEM = "2026-09-18";
@@ -146,7 +149,7 @@ describe("corrigir o início da alocação", () => {
         findFirst: async () => ({ data: new Date("2026-09-05T00:00:00.000Z") }),
       },
     };
-    const s = new MensalService(prisma as never);
+    const s = new MensalService(prisma as never, SEM_ACESSO_APP);
     await expect(s.editarAlocacao("a1", { inicio: "2026-09-10" })).rejects.toThrow(
       /2026-09-05/,
     );
@@ -171,7 +174,7 @@ describe("corrigir o início da alocação", () => {
       },
       registroPresenca: { findFirst: async () => null },
     };
-    const s = new MensalService(prisma as never);
+    const s = new MensalService(prisma as never, SEM_ACESSO_APP);
     await s.editarAlocacao("a1", { inicio: "2026-09-19" });
     expect((escritas[0]!.inicio as Date).toISOString().slice(0, 10)).toBe("2026-09-19");
   });
@@ -244,7 +247,7 @@ describe("o painel não apaga a prova do motorista", () => {
         delete: async () => ({}),
       },
     };
-    const s = new MensalService(prisma as never);
+    const s = new MensalService(prisma as never, SEM_ACESSO_APP);
     await expect(s.removerPresenca("p1", "achei errado")).rejects.toThrow(/marcado pelo motorista/i);
   });
 
@@ -255,7 +258,7 @@ describe("o painel não apaga a prova do motorista", () => {
         delete: async () => ({}),
       },
     };
-    const s = new MensalService(prisma as never);
+    const s = new MensalService(prisma as never, SEM_ACESSO_APP);
     await expect(s.removerPresenca("p1", "lancei na obra errada")).resolves.toEqual({
       removido: true,
     });
@@ -290,7 +293,7 @@ describe("o motorista desfaz o próprio toque", () => {
         },
       },
     };
-    const s = new MensalService(prisma as never);
+    const s = new MensalService(prisma as never, SEM_ACESSO_APP);
     await expect(s.desmarcarPresenca("mot1", ONTEM)).resolves.toEqual({ desmarcado: true });
     expect(apagados).toEqual(["p1"]);
   });
@@ -303,7 +306,7 @@ describe("o motorista desfaz o próprio toque", () => {
         delete: async () => ({}),
       },
     };
-    const s = new MensalService(prisma as never);
+    const s = new MensalService(prisma as never, SEM_ACESSO_APP);
     await expect(s.desmarcarPresenca("mot1", ONTEM)).rejects.toThrow(/escritório/i);
   });
 
@@ -314,7 +317,7 @@ describe("o motorista desfaz o próprio toque", () => {
       alocacaoObra: { findFirst: async () => ({ id: "a1" }) },
       registroPresenca: { findFirst: async () => null, delete: async () => ({}) },
     };
-    const s = new MensalService(prisma as never);
+    const s = new MensalService(prisma as never, SEM_ACESSO_APP);
     await expect(s.desmarcarPresenca("mot1", ONTEM)).resolves.toEqual({ desmarcado: true });
   });
 });
@@ -363,7 +366,7 @@ describe("os dias do mês do motorista", () => {
         }),
       },
     };
-    return new MensalService(prisma as never);
+    return new MensalService(prisma as never, SEM_ACESSO_APP);
   }
 
   it("conta os dias de TODAS as alocações do mês, não só a ativa", async () => {
@@ -619,5 +622,5 @@ function servicoComEspiaDeWhere(destino: { regime?: string }) {
       },
     },
   } as Record<string, unknown>;
-  return { s: new MensalService(prisma as never) };
+  return { s: new MensalService(prisma as never, SEM_ACESSO_APP) };
 }

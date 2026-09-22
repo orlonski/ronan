@@ -21,6 +21,7 @@ import { TransportadorasModule } from "./transportadoras/transportadoras.module"
 import { ClientesModule } from "./clientes/clientes.module";
 import { MotoristasModule } from "./motoristas/motoristas.module";
 import { PerfisAcessoModule } from "./perfis-acesso/perfis-acesso.module";
+import { AcessoAppAdminModule } from "./acesso-app/acesso-app-admin.module";
 import { UsersModule } from "./users/users.module";
 import { LocaisModule } from "./locais/locais.module";
 import { ViagensAdminModule } from "./viagens/viagens.module";
@@ -71,6 +72,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     ClientesModule,
     MotoristasModule,
     PerfisAcessoModule,
+    AcessoAppAdminModule,
     UsersModule,
     LocaisModule,
     ViagensAdminModule,

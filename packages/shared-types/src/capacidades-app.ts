@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { AcessoAppChave } from "./acesso-app";
 import type { ModuloChave } from "./modulos";
 
@@ -435,3 +436,120 @@ export const CAMADAS_CORTE = [
   "CONTRATO",
 ] as const;
 export type CamadaCorte = (typeof CAMADAS_CORTE)[number];
+
+// ─── Entradas do painel ─────────────────────────────────────────────────────
+
+const CapacidadeAppSchema = z.enum(CAPACIDADES_APP_CHAVES);
+
+export const SalvarPerfilAppInput = z.object({
+  nome: z.string().trim().min(2).max(60),
+  descricao: z.string().trim().max(200).optional().nullable(),
+  capacidades: z.array(CapacidadeAppSchema).max(CAPACIDADES_APP_CHAVES.length),
+});
+export type SalvarPerfilAppInput = z.infer<typeof SalvarPerfilAppInput>;
+
+export const RegraAcessoAppInput = z.object({
+  id: z.string().uuid().optional().nullable(),
+  nome: z.string().trim().min(2).max(80),
+  ativo: z.boolean(),
+  vinculo: z.enum(["QUALQUER", "MOTORISTA", "FUNCIONARIO"]),
+  regime: z.enum(["QUALQUER", "PARCEIRO", "EMPREGADO", "NAO_DECLARADO"]),
+  modalidadeId: z.string().uuid().optional().nullable(),
+  transportadoraId: z.string().uuid().optional().nullable(),
+  perfilId: z.string().uuid(),
+});
+export type RegraAcessoAppInput = z.infer<typeof RegraAcessoAppInput>;
+
+/** A lista inteira, na ordem em que é avaliada. */
+export const SalvarRegrasAppInput = z.object({ regras: z.array(RegraAcessoAppInput).max(50) });
+export type SalvarRegrasAppInput = z.infer<typeof SalvarRegrasAppInput>;
+
+export const PadraoAcessoAppInput = z.object({
+  perfilPadraoMotoristaId: z.string().uuid().nullable(),
+  perfilPadraoFuncionarioId: z.string().uuid().nullable(),
+});
+export type PadraoAcessoAppInput = z.infer<typeof PadraoAcessoAppInput>;
+
+export const CriarExcecaoAppInput = z
+  .object({
+    motoristaId: z.string().uuid().optional(),
+    funcionarioId: z.string().uuid().optional(),
+    capacidade: CapacidadeAppSchema,
+    efeito: z.enum(["CONCEDER", "NEGAR"]),
+    // Motivo de verdade, como no km: "teste" não explica nada daqui a seis meses.
+    motivo: z.string().trim().min(10, "Escreva o motivo em pelo menos 10 caracteres.").max(300),
+    expiraEm: z.coerce.date().optional().nullable(),
+  })
+  .refine((v) => !!v.motoristaId !== !!v.funcionarioId, {
+    message: "Informe o motorista OU o funcionário.",
+  });
+export type CriarExcecaoAppInput = z.infer<typeof CriarExcecaoAppInput>;
+
+/** A mesma exceção pra várias pessoas de uma vez (seleção na lista). */
+export const ExcecaoLoteAppInput = z.object({
+  motoristaIds: z.array(z.string().uuid()).min(1).max(500),
+  capacidade: CapacidadeAppSchema,
+  efeito: z.enum(["CONCEDER", "NEGAR"]),
+  motivo: z.string().trim().min(10, "Escreva o motivo em pelo menos 10 caracteres.").max(300),
+  expiraEm: z.coerce.date().optional().nullable(),
+});
+export type ExcecaoLoteAppInput = z.infer<typeof ExcecaoLoteAppInput>;
+
+/**
+ * Fixar um perfil em quem as regras não descrevem bem — ou, com `perfilId`
+ * nulo, devolver a pessoa às regras. Fixar é exceção de perfil inteiro, então
+ * pede motivo como qualquer exceção.
+ */
+export const FixarPerfilAppInput = z.object({
+  motoristaIds: z.array(z.string().uuid()).min(1).max(500),
+  perfilId: z.string().uuid().nullable(),
+  motivo: z.string().trim().min(10, "Escreva o motivo em pelo menos 10 caracteres.").max(300),
+});
+export type FixarPerfilAppInput = z.infer<typeof FixarPerfilAppInput>;
+
+export const RevogarExcecaoAppInput = z.object({
+  motivo: z.string().trim().min(10, "Escreva o motivo em pelo menos 10 caracteres.").max(300),
+});
+export type RevogarExcecaoAppInput = z.infer<typeof RevogarExcecaoAppInput>;
+
+/**
+ * Rascunho pra SIMULAR antes de salvar: o que muda pra quem. Só o que vier
+ * preenchido substitui o que está no banco.
+ */
+export const SimularAcessoAppInput = z.object({
+  perfil: z
+    .object({ id: z.string().uuid().nullable(), capacidades: z.array(CapacidadeAppSchema), ativo: z.boolean() })
+    .optional(),
+  regras: z.array(RegraAcessoAppInput).max(50).optional(),
+  padrao: PadraoAcessoAppInput.optional(),
+  camadasEmSombra: z.array(z.enum(CAMADAS_CORTE)).optional(),
+  rolloutsApp: z.array(CapacidadeAppSchema).optional(),
+});
+export type SimularAcessoAppInput = z.infer<typeof SimularAcessoAppInput>;
+
+export const ConfigPlataformaAcessoAppInput = z.object({
+  camadasEmSombra: z.array(z.enum(CAMADAS_CORTE)),
+  rolloutsApp: z.array(CapacidadeAppSchema),
+});
+export type ConfigPlataformaAcessoAppInput = z.infer<typeof ConfigPlataformaAcessoAppInput>;
+
+/**
+ * Cadastro de motorista ainda não salvo: com que perfil ele entraria. O CPF
+ * vale porque a pessoa pode já ser registrada (CLT) nesta empresa.
+ */
+export const PreviaCadastroAppInput = z.object({
+  cpf: z.string().optional().nullable(),
+  modalidadeId: z.string().uuid().optional().nullable(),
+  transportadoraId: z.string().uuid().optional().nullable(),
+});
+export type PreviaCadastroAppInput = z.infer<typeof PreviaCadastroAppInput>;
+
+/** Uma pessoa que muda numa simulação. */
+export type MudancaAcessoApp = {
+  cpf: string;
+  nome: string;
+  motoristaId: string | null;
+  funcionarioId: string | null;
+  ganhou: CapacidadeApp[];
+  perdeu: CapacidadeApp[];
+};

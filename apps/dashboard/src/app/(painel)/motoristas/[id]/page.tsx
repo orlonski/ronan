@@ -11,6 +11,7 @@ import { MotoristaForm, type Motorista } from "../_components/motorista-form";
 import { HistoricoNotificacoes } from "./historico-notificacoes";
 import { PedirDocumentos } from "./pedir-documentos";
 import { RegimeCard, type RegimeDaPessoa } from "./regime-card";
+import { AcessoAppCard, type AcessoDaPessoa } from "./acesso-app-card";
 
 type ResumoVersoes = {
   latestUpdateId: string | null;
@@ -28,6 +29,8 @@ export default function EditarMotoristaPage({
     "/admin/motoristas",
     id,
   );
+  // Mesma chave do card: o react-query entrega uma resposta só pros dois.
+  const acesso = useApiQuery<AcessoDaPessoa>(`/admin/acesso-app/motoristas/${id}`);
   const resumo = useApiQuery<ResumoVersoes>("/admin/motoristas/versoes/resumo", {
     staleTime: 60_000,
   });
@@ -55,8 +58,9 @@ export default function EditarMotoristaPage({
               precisa saber por onde essa pessoa recebe antes de mexer em
               qualquer coisa que envolva dinheiro. */}
           <RegimeCard regime={item.data.regime ?? null} />
+          <AcessoAppCard motoristaId={id} />
           <PedirDocumentos motoristaId={id} />
-          <MotoristaForm initial={item.data} />
+          <MotoristaForm initial={item.data} acessoPorRegras={acesso.data?.fonte === "REGRAS"} />
           <HistoricoNotificacoes motoristaId={id} />
         </>
       )}

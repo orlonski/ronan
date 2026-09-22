@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { FileText, HardHat, Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -39,6 +39,7 @@ import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource, useApiQuery } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { EstadoVazio } from "@/components/estado-vazio";
+import { AcessoEmLote, type PerfilOpcao } from "./_components/acesso-em-lote";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type DocumentoResumo = { tipo: TipoDocumentoMotorista; validade: string | null };
@@ -66,6 +67,8 @@ type Motorista = AppVersaoInfo & {
   viagensMes: number;
   /** Como a pessoa é paga aqui. `null` = ninguém declarou ainda, e é o comum. */
   regime: { tipo: "PARCEIRO" | "EMPREGADO"; desde: string } | null;
+  /** O perfil do app que está valendo, e quantas exceções a pessoa tem. */
+  acessoApp: { perfil: string | null; excecoes: number } | null;
 };
 type ResumoVersoes = {
   latestVersion: string | null;
@@ -94,6 +97,22 @@ const SEM_VERSAO = "sem-versao";
  * nunca teve regime aberto), e trinta etiquetas cinzas esconderiam as cinco
  * que importam.
  */
+function AcessoAppCell({ acesso }: { acesso: NonNullable<Motorista["acessoApp"]> }) {
+  return (
+    <span className="text-sm">
+      {acesso.perfil}
+      {acesso.excecoes > 0 && (
+        <span
+          className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+          title="Tem acesso diferente do perfil, com motivo — veja na ficha"
+        >
+          {acesso.excecoes === 1 ? "1 exceção" : `${acesso.excecoes} exceções`}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function RegimeBadge({ regime }: { regime: Motorista["regime"] }) {
   if (!regime) return null;
   const empregado = regime.tipo === "EMPREGADO";
@@ -154,8 +173,60 @@ export default function MotoristasPage() {
     [resumo.data?.latestUpdateId, resumo.data?.latestBuiltAt, resumo.data?.fonte],
   );
 
+  // Marcar vários e dar/tirar acesso de uma vez. Só com a empresa nas regras:
+  // no espelho, a ficha de cada um manda e o lote seria recusado.
+  const painelAcesso = useApiQuery<{ fonte: "COLUNAS" | "REGRAS"; perfis: PerfilOpcao[] }>(
+    temPermissao("perfis-acesso.ver") ? "/admin/acesso-app" : undefined,
+    { staleTime: 60_000 },
+  );
+  const podeLote = temPermissao("perfis-acesso.aplicar") && painelAcesso.data?.fonte === "REGRAS";
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const alternar = (id: string) =>
+    setMarcados((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const daPagina = (list.data?.data ?? []).map((m) => m.id);
+  const paginaToda = daPagina.length > 0 && daPagina.every((id) => marcados.has(id));
+
   const columns = useMemo<ColumnDef<Motorista>[]>(
     () => [
+      ...(podeLote
+        ? [
+            {
+              id: "marcar",
+              enableSorting: false,
+              size: 36,
+              header: () => (
+                <input
+                  type="checkbox"
+                  aria-label="Marcar todos desta página"
+                  checked={paginaToda}
+                  onChange={() =>
+                    setMarcados((prev) => {
+                      const n = new Set(prev);
+                      for (const id of daPagina) {
+                        if (paginaToda) n.delete(id);
+                        else n.add(id);
+                      }
+                      return n;
+                    })
+                  }
+                />
+              ),
+              cell: ({ row }) => (
+                <input
+                  type="checkbox"
+                  aria-label={`Marcar ${row.original.nome}`}
+                  checked={marcados.has(row.original.id)}
+                  onChange={() => alternar(row.original.id)}
+                />
+              ),
+            } satisfies ColumnDef<Motorista>,
+          ]
+        : []),
       {
         id: "nome",
         accessorKey: "nome",
@@ -192,6 +263,19 @@ export default function MotoristasPage() {
         cell: ({ row }) =>
           row.original.regime ? (
             <RegimeBadge regime={row.original.regime} />
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        // O perfil que vale hoje, não o que alguém escolheu: vem do efetivo que
+        // o resolvedor gravou. O "porquê" fica na ficha.
+        id: "acessoApp",
+        header: () => <span className="block">Acesso ao app</span>,
+        enableSorting: false,
+        cell: ({ row }) =>
+          row.original.acessoApp?.perfil ? (
+            <AcessoAppCell acesso={row.original.acessoApp} />
           ) : (
             <span className="text-muted-foreground">—</span>
           ),
@@ -401,7 +485,7 @@ export default function MotoristasPage() {
         ),
       },
     ],
-    [update, latest, podeVerTransportadora],
+    [update, latest, podeVerTransportadora, podeLote, marcados, paginaToda, list.data],
   );
 
   return (
@@ -427,6 +511,14 @@ export default function MotoristasPage() {
           </Permitido>
         </div>
       </header>
+
+      {podeLote && (
+        <AcessoEmLote
+          selecionados={[...marcados]}
+          perfis={painelAcesso.data?.perfis ?? []}
+          onLimpar={() => setMarcados(new Set())}
+        />
+      )}
 
       <DataTable
         columns={columns}
@@ -517,11 +609,21 @@ export default function MotoristasPage() {
         renderMobileCard={(m) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
             <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
-              <DocumentosBadge
-                motoristaId={m.id}
-                motoristaNome={m.nome}
-                documentos={m.documentos}
-              />
+              <div className="flex items-center gap-3">
+                {podeLote && (
+                  <input
+                    type="checkbox"
+                    aria-label={`Marcar ${m.nome}`}
+                    checked={marcados.has(m.id)}
+                    onChange={() => alternar(m.id)}
+                  />
+                )}
+                <DocumentosBadge
+                  motoristaId={m.id}
+                  motoristaNome={m.nome}
+                  documentos={m.documentos}
+                />
+              </div>
 
               <div className="min-w-0 space-y-2">
                 <div className="flex items-center gap-2 text-sm">
@@ -572,8 +674,13 @@ export default function MotoristasPage() {
                     </>
                   )}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <AppVersaoCell motorista={m} latest={latest} />
+                  {m.acessoApp?.perfil && (
+                    <span className="text-xs text-muted-foreground">
+                      App: <AcessoAppCell acesso={m.acessoApp} />
+                    </span>
+                  )}
                   <span className="text-xs text-muted-foreground tabular-nums">
                     {m.viagensTotal} viagens · {m.viagensMes} no mês
                   </span>

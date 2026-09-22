@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
+import { AcessoAppService } from "../common/acesso-app/acesso-app.service";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { abrirRegime, encerrarRegime, soDigitos } from "../common/regime-vigente";
 import { contaIdAtual } from "../common/conta/conta-context";
@@ -51,6 +52,7 @@ export class PontoAdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditoria: AuditoriaService,
+    private readonly acessoApp: AcessoAppService,
   ) {}
 
   // ─────────────────────────── primeiro acesso ───────────────────────────
@@ -263,7 +265,7 @@ export class PontoAdminService {
 
     const admitidoEm = new Date(`${dados.admitidoEm}T00:00:00.000Z`);
 
-    return this.prisma.$transaction(async (tx) => {
+    const resultado = await this.prisma.$transaction(async (tx) => {
       await abrirRegime(tx, {
         cpf,
         regime: "EMPREGADO",
@@ -303,6 +305,9 @@ export class PontoAdminService {
       }
       return f;
     });
+    // Ponto entra (ou sai) do app dele — nas regras, na hora.
+    this.acessoApp.agendarRecalculo("FUNCIONARIO_CONTRATADO");
+    return resultado;
   }
 
   async editarFuncionario(id: string, dados: Record<string, unknown>) {
@@ -320,7 +325,7 @@ export class PontoAdminService {
     const f = await this.prisma.funcionario.findFirst({ where: { id }, select: { cpf: true } });
     if (!f) throw new NotFoundException("Funcionário não encontrado.");
 
-    return this.prisma.$transaction(async (tx) => {
+    const resultado = await this.prisma.$transaction(async (tx) => {
       const atualizado = await tx.funcionario.update({
         where: { id },
         data: {
@@ -346,6 +351,9 @@ export class PontoAdminService {
       });
       return atualizado;
     });
+    // Ponto entra (ou sai) do app dele — nas regras, na hora.
+    this.acessoApp.agendarRecalculo("FUNCIONARIO_DESLIGADO");
+    return resultado;
   }
 
   // ─────────────────────────── importação ───────────────────────────

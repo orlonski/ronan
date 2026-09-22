@@ -29,6 +29,18 @@
   exceção, efetivo e log; `common/acesso-app/resolver.ts` (puro, testado);
   espelho do cadastro (`fonte: COLUNAS`) de hora em hora com portão que só
   grava se reproduzir a ficha de cada aprovado. Ninguém lê o efetivo ainda.
+- **F2**: a empresa passa da ficha pras regras por um botão (conferido: as
+  colunas saem idênticas) e daí em diante o resolvedor é o único escritor dos
+  `pode*`. Tela `/acesso-app` (Perfis, Quem recebe, Exceções) com simulação;
+  card na ficha do motorista e em "Quem bate ponto"; coluna e seleção em lote
+  na lista (exceção ou perfil fixado pra vários); "vai entrar como" no
+  cadastro novo. Recálculo na hora ao criar/importar/aprovar motorista,
+  contratar/desligar funcionário e abrir/encerrar alocação na obra; cron de 2
+  min cobre o resto. Nas regras, o PATCH antigo de acessos e a tela antiga de
+  perfis recusam com 409 (o caminho é a exceção com motivo).
+  **Ainda não entrou:** "Fixar perfil" pela ficha de uma pessoa (hoje só pelo
+  lote), filtros por perfil/exceção na lista, prazo de 90 dias das exceções
+  herdadas (D4) e o banner "vencendo".
 
 ---
 

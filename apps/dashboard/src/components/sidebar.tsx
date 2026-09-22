@@ -292,7 +292,7 @@ const GRUPOS: Grupo[] = [
       { href: "/modalidades", label: "Vínculos do motorista", icon: IdCard, perm: "modalidades.ver" },
       // Fica em Cadastros, não em Frota e pessoas: é tabela que se preenche uma
       // vez e vale pra todo mundo, como as outras deste grupo.
-      { href: "/perfis-acesso", label: "Perfis de acesso do app", icon: SlidersHorizontal, perm: "perfis-acesso.ver" },
+      { href: "/acesso-app", label: "Acesso ao app", icon: SlidersHorizontal, perm: "perfis-acesso.ver" },
       { href: "/tipos-evento-viagem", label: "Paradas e ocorrências", icon: ListChecks, perm: "tipos-evento-viagem.ver" },
     ],
   },

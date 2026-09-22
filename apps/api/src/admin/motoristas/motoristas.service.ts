@@ -29,6 +29,7 @@ import { ymdSaoPaulo } from "../../common/timezone";
 import { adotarLancamentosOrfaos } from "../../common/transportadora";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { nasceComoConvite } from "../../common/vinculo";
+import { AcessoAppService } from "../../common/acesso-app/acesso-app.service";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { EasUpdateService } from "./eas-update.service";
 
@@ -135,6 +136,7 @@ export class MotoristasService {
     private readonly envio: EnvioWhatsappService,
     private readonly identidades: IdentidadeService,
     private readonly auditoria: AuditoriaService,
+    private readonly acessoApp: AcessoAppService,
   ) {}
 
   /**
@@ -209,9 +211,10 @@ export class MotoristasService {
     const flat = result.data.map(
       (m) => this.flatten(m as Parameters<typeof this.flatten>[0]) as Record<string, unknown>,
     );
-    const [contagens, regimes] = await Promise.all([
+    const [contagens, regimes, acessos] = await Promise.all([
       this.contarViagens(flat.map((m) => m.id as string), escopo),
       this.regimesDaPagina(flat.map((m) => m.cpf as string | null)),
+      this.acessosDaPagina(flat.map((m) => m.id as string), flat.map((m) => m.cpf as string | null)),
     ]);
     return {
       data: flat.map((m) => ({
@@ -219,6 +222,7 @@ export class MotoristasService {
         viagensTotal: contagens.total.get(m.id as string) ?? 0,
         viagensMes: contagens.mes.get(m.id as string) ?? 0,
         regime: regimes.get(soDigitos((m.cpf as string) ?? "")) ?? null,
+        acessoApp: acessos.get(m.id as string) ?? null,
       })),
       pagination: result.pagination,
     };
@@ -247,6 +251,38 @@ export class MotoristasService {
     });
     for (const l of linhas) {
       if (l.chaveViva) mapa.set(l.chaveViva, { tipo: l.regime, desde: l.iniciouEm });
+    }
+    return mapa;
+  }
+
+  /**
+   * O perfil de acesso ao app de cada pessoa da PÁGINA, e quantas exceções
+   * vivas ela tem. Lê o EFETIVO gravado pelo resolvedor (não recalcula): a
+   * lista mostra o que está valendo, e a ficha explica o porquê.
+   */
+  private async acessosDaPagina(ids: string[], cpfs: (string | null)[]) {
+    const mapa = new Map<string, { perfil: string | null; excecoes: number }>();
+    if (ids.length === 0) return mapa;
+    const chaves = cpfs.map((c) => soDigitos(c ?? "")).filter((c) => c.length === 11);
+    const [efetivos, excecoes] = await Promise.all([
+      this.prisma.acessoEfetivoApp.findMany({
+        where: { motoristaId: { in: ids } },
+        select: { motoristaId: true, cpf: true, explicacao: true },
+      }),
+      this.prisma.excecaoAcessoApp.groupBy({
+        by: ["cpf"],
+        where: { cpf: { in: chaves }, revogadaEm: null },
+        _count: { _all: true },
+      }),
+    ]);
+    const porCpf = new Map(excecoes.map((e) => [e.cpf, e._count._all]));
+    for (const e of efetivos) {
+      if (!e.motoristaId) continue;
+      const base = (e.explicacao as { base?: { motorista?: { perfilNome?: string } | null } }).base;
+      mapa.set(e.motoristaId, {
+        perfil: base?.motorista?.perfilNome ?? null,
+        excecoes: porCpf.get(e.cpf) ?? 0,
+      });
     }
     return mapa;
   }
@@ -465,6 +501,7 @@ export class MotoristasService {
       });
       void this.avisarConvite(identidade.id, identidade.telefone, contaIdAtual());
     }
+    this.acessoApp.agendarRecalculo("MOTORISTA_CRIADO");
     return this.flatten(created);
   }
 
@@ -572,6 +609,7 @@ export class MotoristasService {
       identidade.telefone,
       contaIdAtual(),
     ).catch(() => ({ whatsapp: "NAO_SAIU" as const }));
+    this.acessoApp.agendarRecalculo("MOTORISTA_CONVIDADO");
     return { ...this.flatten(motorista), avisoWhatsapp: aviso.whatsapp };
   }
 
@@ -764,6 +802,7 @@ export class MotoristasService {
         updated.transportadoraId,
       );
     }
+    this.acessoApp.agendarRecalculo("MOTORISTA_EDITADO");
     return this.flatten(updated);
   }
 
@@ -789,6 +828,18 @@ export class MotoristasService {
     usuarioId: string,
   ) {
     await this.ensureNoEscopo(id, escopo);
+    // Nas regras, quem escreve as colunas é o resolvedor: um interruptor aqui
+    // seria desfeito no recálculo seguinte, em silêncio. O caminho é a exceção
+    // com motivo (tela Acesso ao app / ficha).
+    const cfgAcesso = await this.prisma.configuracaoAcessoApp.findUnique({
+      where: { contaId: contaIdAtual() },
+      select: { fonte: true },
+    });
+    if (cfgAcesso?.fonte === "REGRAS") {
+      throw new ConflictException(
+        "Esta empresa configura o acesso do app pelas regras. Pra mudar só pra esta pessoa, abra uma exceção com motivo.",
+      );
+    }
     const antes = await this.prisma.motorista.findUnique({
       where: { id },
       select: Object.fromEntries(Object.keys(input).map((k) => [k, true])) as Record<string, true>,
@@ -849,6 +900,7 @@ export class MotoristasService {
       },
       select: SAFE_SELECT,
     });
+    this.acessoApp.agendarRecalculo("MOTORISTA_APROVACAO");
     return this.flatten(updated);
   }
 

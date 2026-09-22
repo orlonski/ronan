@@ -1,6 +1,7 @@
 import {
   CAPACIDADES_APP,
   CAPACIDADE_POR_CHAVE,
+  MODULOS_POR_CHAVE,
   ehCapacidadeApp,
   type CamadaCorte,
   type CapacidadeApp,
@@ -256,7 +257,7 @@ function cortesDe(def: CapacidadeAppDef, pessoa: PessoaAcesso, conta: ContaAcess
     out.push({
       camada: "CONTRATO",
       sombra: sombra("CONTRATO"),
-      detalhe: `O módulo "${def.modulo}" não está contratado.`,
+      detalhe: `O módulo "${MODULOS_POR_CHAVE[def.modulo]?.nome ?? def.modulo}" não está contratado.`,
     });
   }
   return out;

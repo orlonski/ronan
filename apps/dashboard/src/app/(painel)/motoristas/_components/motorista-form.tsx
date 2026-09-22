@@ -136,7 +136,14 @@ function maskCpf(input: string): string {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 }
 
-type Props = { initial?: Motorista };
+type Props = { initial?: Motorista; acessoPorRegras?: boolean };
+
+type PreviaAcesso = {
+  fonte: "COLUNAS" | "REGRAS";
+  base: { perfilNome: string; via: "FIXADO" | "REGRA" | "PADRAO"; regraNome?: string } | null;
+  efetivo: string[];
+  jaExiste: boolean;
+};
 
 type AcessosState = {
   podeLancarViagem: boolean;
@@ -155,7 +162,7 @@ type AcessosState = {
   receberResumoDiario: boolean;
 };
 
-export function MotoristaForm({ initial }: Props) {
+export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
   const router = useRouter();
   const create = useCreateResource<Record<string, unknown>, Motorista>(PATH, PATH);
   const update = useUpdateResource<Record<string, unknown>, Motorista>(PATH, PATH);
@@ -289,6 +296,35 @@ export function MotoristaForm({ initial }: Props) {
       vivo = false;
     };
   }, [cpfDigitado, initial, token]);
+
+  /**
+   * "Vai entrar como…": com a empresa nas regras, quem cadastra não escolhe
+   * acesso nenhum — o perfil sai das regras. Mostrar ANTES de salvar é o que
+   * evita o "cadastrei e ele ficou sem nada" (ou com o que não devia).
+   */
+  const [previaAcesso, setPreviaAcesso] = useState<PreviaAcesso | null>(null);
+  useEffect(() => {
+    if (initial || !token) return;
+    let vivo = true;
+    const t = setTimeout(() => {
+      void fetchApi<PreviaAcesso>("/admin/acesso-app/previa-cadastro", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          cpf: cpfDigitado.length === 11 ? cpfDigitado : null,
+          modalidadeId: form.modalidadeId ?? null,
+          transportadoraId: form.transportadoraId ?? null,
+        }),
+      })
+        .then((r) => vivo && setPreviaAcesso(r))
+        // Sem a prévia o cadastro segue igual: é aviso, não trava.
+        .catch(() => vivo && setPreviaAcesso(null));
+    }, 400);
+    return () => {
+      vivo = false;
+      clearTimeout(t);
+    };
+  }, [initial, token, cpfDigitado, form.modalidadeId, form.transportadoraId]);
 
   function addPlaca() {
     setForm((f) => ({ ...f, placas: [...f.placas, { placa: "", modelo: "" }] }));
@@ -691,7 +727,9 @@ export function MotoristaForm({ initial }: Props) {
           )}
         </div>
 
-        {initial && (
+        {/* Nas regras, os interruptores somem: quem manda é o perfil, e a
+            diferença de uma pessoa só é exceção com motivo (card lá em cima). */}
+        {initial && !acessoPorRegras && (
           <div className="space-y-3 border-t pt-4">
             <div>
               <Label className="text-base">Acessos do app</Label>
@@ -801,6 +839,28 @@ export function MotoristaForm({ initial }: Props) {
           </div>
         )}
       </Card>
+
+      {!initial && previaAcesso?.fonte === "REGRAS" && !previaAcesso.jaExiste && (
+        <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+          {previaAcesso.base ? (
+            <>
+              Vai entrar no app como{" "}
+              <strong className="text-foreground">{previaAcesso.base.perfilNome}</strong>
+              {previaAcesso.base.via === "REGRA"
+                ? ` (pela regra "${previaAcesso.base.regraNome}")`
+                : " (o padrão da empresa)"}
+              .
+            </>
+          ) : (
+            <>Nenhuma regra alcança este cadastro e a empresa não tem padrão: ele entra sem acesso nenhum no app.</>
+          )}{" "}
+          Quem decide isso são as regras em{" "}
+          <Link href="/acesso-app" className="underline">
+            Acesso ao app
+          </Link>
+          ; depois de salvar, a diferença só dele vira exceção na ficha.
+        </p>
+      )}
 
       <div className="flex justify-end gap-2">
         <BotaoCancelar href="/motoristas" sujo={sujo} />
