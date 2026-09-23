@@ -274,10 +274,23 @@ export function resolverAcessoApp(
     explicacao[def.chave] = { ligado: false, ligadoSombra: false, origem: null, cortes: [] };
   }
 
-  // 1. Base, por vínculo.
-  const base = {
-    motorista: pessoa.motorista ? baseDoVinculo("MOTORISTA", pessoa, conta) : null,
-    funcionario: pessoa.funcionario ? baseDoVinculo("FUNCIONARIO", pessoa, conta) : null,
+  // 1. Base: UMA PESSOA, UM TIPO.
+  //
+  // ⚠️ Quem tem cadastro de motorista recebe o tipo do motorista (o perfil da
+  // modalidade dele, ou o "sem modalidade") — e só ele, cobrindo também o que
+  // é de funcionário (o ponto), se ele for CLT. Quem só é funcionário recebe o
+  // "só bate ponto". Antes somava os dois, e a tabela mentia: desmarcar
+  // "Bater ponto" na coluna do motorista CLT não tirava nada, porque o ponto
+  // vinha da outra coluna. O ponto continua só pra quem é funcionário: é
+  // estrutural (corte VINCULO), não regra de acesso.
+  const baseM = pessoa.motorista ? baseDoVinculo("MOTORISTA", pessoa, conta) : null;
+  const base: { motorista: BaseAcesso | null; funcionario: BaseAcesso | null } = {
+    motorista: baseM,
+    funcionario: pessoa.funcionario
+      ? pessoa.motorista
+        ? baseM
+        : baseDoVinculo("FUNCIONARIO", pessoa, conta)
+      : null,
   };
   const concedido = new Set<CapacidadeApp>();
   for (const vinculo of ["MOTORISTA", "FUNCIONARIO"] as const) {

@@ -10,6 +10,7 @@ import {
   RevogarExcecaoAppInput,
   SalvarPerfilAppInput,
   SalvarRegrasAppInput,
+  SalvarTabelaAppInput,
   SimularAcessoAppInput,
   TravasServidorAppInput,
 } from "@ronan/shared-types";
@@ -108,6 +109,23 @@ export class AcessoAppAdminController {
   @RequerPermissao("perfis-acesso.excluir")
   religarPerfil(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.religarPerfil(id, user.id, user.escopo);
+  }
+
+  /** O que muda se estas colunas da tabela forem salvas. */
+  @Post("tabela/simular")
+  @RequerPermissao("perfis-acesso.ver")
+  simularTabela(@Body(new ZodValidationPipe(SalvarTabelaAppInput)) body: SalvarTabelaAppInput) {
+    return this.service.simularTabela(body);
+  }
+
+  /** As colunas da tabela: o que cada modalidade vê no celular. */
+  @Put("tabela")
+  @RequerPermissao("perfis-acesso.editar")
+  salvarTabela(
+    @Body(new ZodValidationPipe(SalvarTabelaAppInput)) body: SalvarTabelaAppInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.salvarTabela(body, user.id, user.escopo);
   }
 
   @Put("regras")

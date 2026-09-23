@@ -175,16 +175,17 @@ describe("vínculo: capacidade mora num cadastro", () => {
     expect(r.explicacao["app.ponto.bater"]!.cortes[0]).toMatchObject({ camada: "VINCULO", sombra: false });
   });
 
-  it("quem tem os dois cadastros soma os dois perfis, um por vínculo", () => {
+  it("quem tem os dois cadastros recebe SÓ o tipo do motorista (decisão do dono, 22/09/2026)", () => {
+    // Antes somava os dois perfis. Agora uma pessoa tem um tipo: o do motorista,
+    // que cobre também o ponto (se o tipo tiver). "frete" não tem ponto.
     const r = resolverAcessoApp(
       pessoa({ funcionario: { id: "f1", ativo: true, perfilFixadoId: null } }),
       conta(),
       [],
       AGORA,
     );
-    expect(r.efetivo).toEqual(
-      expect.arrayContaining(["app.viagem.lancar", "app.ponto.bater", "app.chat.usar"]),
-    );
+    expect(r.efetivo).toEqual(expect.arrayContaining(["app.viagem.lancar", "app.chat.usar"]));
+    expect(r.efetivo).not.toContain("app.ponto.bater");
   });
 });
 
@@ -339,5 +340,45 @@ describe("com todas as camadas de hoje em sombra, o cálculo é o perfil", () =>
     const r = resolverAcessoApp(pessoa({ regime: "EMPREGADO" }), tudo, [], AGORA);
     expect(r.efetivo).toEqual(["app.viagem.guiada", "app.diaria.lancar", "app.chat.usar", "app.telemetria"]);
     expect(r.sombra).toEqual([]);
+  });
+});
+
+describe("uma pessoa, um tipo: o motorista CLT recebe só o tipo do motorista", () => {
+  /**
+   * Quem tem cadastro de motorista recebe o perfil do tipo dele (modalidade
+   * ou "sem modalidade") e SÓ ele — inclusive o ponto, se for CLT. Se somasse
+   * o "só bate ponto", desmarcar "Bater ponto" na coluna dele não tiraria nada.
+   */
+  const perfis = [
+    perfil("frete", ["app.viagem.lancar", "app.diaria.lancar", "app.ponto.bater"]),
+    perfil("registrado", ["app.ponto.bater", "app.ponto.espelho"]),
+  ];
+  const ctx = conta({ perfis });
+  const funcionario = { id: "f1", ativo: true, perfilFixadoId: null };
+
+  it("recebe exatamente o tipo do motorista, com o ponto que está nele", () => {
+    const r = resolverAcessoApp(pessoa({ funcionario }), ctx, [], AGORA);
+    expect([...r.efetivo].sort()).toEqual(["app.diaria.lancar", "app.ponto.bater", "app.viagem.lancar"]);
+  });
+
+  it("o que só está no 'só bate ponto' não vem junto", () => {
+    const r = resolverAcessoApp(pessoa({ funcionario, regime: "EMPREGADO" }), ctx, [], AGORA);
+    expect(r.efetivo).not.toContain("app.ponto.espelho");
+  });
+
+  it("o ponto do tipo do motorista só vale pra quem é funcionário (estrutural)", () => {
+    const r = resolverAcessoApp(pessoa(), ctx, [], AGORA);
+    expect(r.efetivo).not.toContain("app.ponto.bater");
+  });
+
+  it("quem só é funcionário recebe o 'só bate ponto'", () => {
+    const r = resolverAcessoApp(pessoa({ motorista: null, funcionario }), ctx, [], AGORA);
+    expect([...r.efetivo].sort()).toEqual(["app.ponto.bater", "app.ponto.espelho"]);
+  });
+
+  it("diferença só dele continua valendo por cima do tipo", () => {
+    const ex = [{ id: "e1", capacidade: "app.ponto.espelho", efeito: "CONCEDER" as const, motivo: "m", expiraEm: null, revogadaEm: null }];
+    const r = resolverAcessoApp(pessoa({ funcionario, regime: "EMPREGADO" }), ctx, ex, AGORA);
+    expect(r.efetivo).toContain("app.ponto.espelho");
   });
 });

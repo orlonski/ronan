@@ -13,6 +13,21 @@ import type { Prisma } from "@prisma/client";
  * (marcas, siglas internas) ficam de fora de propósito.
  */
 
+/**
+ * As modalidades de motorista que toda empresa recebe (decisão do dono,
+ * 22/09/2026): os três vínculos do mercado. São o ponto de partida da tela
+ * "Permissões do app" — cada uma vira um tipo ali. Dado, não regra: a empresa
+ * renomeia, desliga e cria as dela em Vínculos do motorista.
+ *
+ * Nascem SEM régua de pagamento e sem exigir foto (os padrões do banco): só o
+ * rótulo. Pagamento e fotos são a empresa que configura.
+ */
+export const MODALIDADES_INICIAIS = [
+  { slug: "autonomo-tac", nome: "Autônomo (TAC)", ordem: 1 },
+  { slug: "agregado", nome: "Agregado", ordem: 2 },
+  { slug: "empregado-clt", nome: "Empregado CLT", ordem: 3 },
+] as const;
+
 /** Materiais comuns de quem transporta agregado. */
 export const MATERIAIS_INICIAIS = [
   "Areia",

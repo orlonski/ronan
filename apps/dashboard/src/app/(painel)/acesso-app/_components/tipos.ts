@@ -18,6 +18,12 @@ export type PainelAcessoApp = {
   espelho: { em: string | null; divergencias: number | null };
   perfilPadraoMotoristaId: string | null;
   perfilPadraoFuncionarioId: string | null;
+  /**
+   * As colunas da tabela: uma por modalidade (Vínculos do motorista), mais
+   * "SEM_MODALIDADE" e "SO_PONTO". `herda` = a modalidade ainda não tem
+   * configuração própria e recebe o mesmo que "sem modalidade".
+   */
+  colunas: ColunaApp[];
   perfis: PerfilApp[];
   regras: RegraApp[];
   pessoas: number;
@@ -33,6 +39,15 @@ export type PainelAcessoApp = {
     transportadoras: { id: string; nome: string }[];
   };
   plataforma: boolean;
+};
+
+export type ColunaApp = {
+  chave: string;
+  nome: string;
+  quem: string;
+  capacidades: string[];
+  herda: boolean;
+  pessoas: number;
 };
 
 export type Simulacao = { total: number; mudam: MudancaAcessoApp[] };

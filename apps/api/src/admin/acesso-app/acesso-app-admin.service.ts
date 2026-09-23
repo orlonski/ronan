@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
@@ -16,6 +17,8 @@ import {
   type RevogarExcecaoAppInput,
   type SalvarPerfilAppInput,
   type SalvarRegrasAppInput,
+  type SalvarTabelaAppInput,
+  type CapacidadeApp,
   type TravasServidorAppInput,
 } from "@ronan/shared-types";
 import { AcessoAppService, ondeExcecaoViva } from "../../common/acesso-app/acesso-app.service";
@@ -132,6 +135,7 @@ export class AcessoAppAdminService {
       },
       perfilPadraoMotoristaId: cfg.perfilPadraoMotoristaId,
       perfilPadraoFuncionarioId: cfg.perfilPadraoFuncionarioId,
+      colunas: await this.colunasDaTabela(),
       perfis: perfis.map((p) => ({ ...p, pessoas: pessoasPorPerfil.get(p.id) ?? 0 })),
       regras,
       pessoas: efetivos.length,
@@ -278,6 +282,184 @@ export class AcessoAppAdminService {
       select: { id: true },
     });
     if (existe) throw new BadRequestException(`Já existe um perfil chamado "${nome}".`);
+  }
+
+  // ─── a tabela ────────────────────────────────────────────────────────────
+
+  /**
+   * AS COLUNAS DA TABELA: uma por modalidade da empresa (tela Vínculos do
+   * motorista), mais "sem modalidade" e "só bate ponto".
+   *
+   * O tipo de cada pessoa sai do cadastro: a modalidade do motorista; quem só
+   * é funcionário, "só bate ponto". Nada disso é regra no código — as
+   * modalidades são dado da empresa, e o que cada uma vê também.
+   *
+   * Por baixo, a modalidade com configuração própria é um perfil + uma regra
+   * ("motorista da modalidade X → perfil X"). Modalidade sem configuração
+   * ainda recebe o mesmo que "sem modalidade" (`herda: true`), que é o que
+   * acontece hoje.
+   */
+  async colunasDaTabela() {
+    const cfg = await this.config();
+    const [modalidades, perfis, regras, porModalidade, funcionarios, cpfsMotoristas] = await Promise.all([
+      this.prisma.modalidadeMotorista.findMany({
+        where: { ativo: true },
+        select: { id: true, nome: true },
+        orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+      }),
+      this.prisma.perfilAcessoApp.findMany({ select: { id: true, capacidades: true } }),
+      this.prisma.regraAcessoApp.findMany({ where: { ativo: true }, orderBy: { ordem: "asc" } }),
+      this.prisma.motorista.groupBy({
+        by: ["modalidadeId"],
+        where: { ativo: true, aceite: { not: "PENDENTE" } },
+        _count: { _all: true },
+      }),
+      this.prisma.funcionario.findMany({ where: { ativo: true }, select: { cpf: true } }),
+      this.prisma.motorista.findMany({ where: { ativo: true }, select: { cpf: true } }),
+    ]);
+    const capsDe = (id: string | null) => perfis.find((p) => p.id === id)?.capacidades ?? [];
+    const pessoas = (mod: string | null) => porModalidade.find((g) => g.modalidadeId === mod)?._count._all ?? 0;
+    const temMotorista = new Set(cpfsMotoristas.map((m) => soDigitos(m.cpf)));
+    const regraDa = (modalidadeId: string) =>
+      regras.find(
+        (r) => r.vinculo === "MOTORISTA" && r.regime === "QUALQUER" && r.modalidadeId === modalidadeId && !r.transportadoraId,
+      );
+    return [
+      {
+        chave: "SEM_MODALIDADE",
+        nome: "Sem modalidade",
+        quem: "Motorista que ainda não tem modalidade.",
+        capacidades: capsDe(cfg.perfilPadraoMotoristaId),
+        herda: false,
+        pessoas: pessoas(null),
+      },
+      ...modalidades.map((m) => {
+        const regra = regraDa(m.id);
+        return {
+          chave: m.id,
+          nome: m.nome,
+          quem: `Motorista com a modalidade ${m.nome}.`,
+          capacidades: regra ? capsDe(regra.perfilId) : capsDe(cfg.perfilPadraoMotoristaId),
+          herda: !regra,
+          pessoas: pessoas(m.id),
+        };
+      }),
+      {
+        chave: "SO_PONTO",
+        nome: "Só bate ponto",
+        quem: "CLT sem cadastro de motorista (mecânico, escritório).",
+        capacidades: capsDe(cfg.perfilPadraoFuncionarioId),
+        herda: false,
+        pessoas: funcionarios.filter((f) => !temMotorista.has(soDigitos(f.cpf))).length,
+      },
+    ];
+  }
+
+  /**
+   * O que muda se estas colunas forem salvas — o mesmo cálculo de verdade,
+   * com a tabela em rascunho. Modalidade que ainda não tem configuração ganha
+   * um perfil e uma regra de rascunho.
+   */
+  async simularTabela(dados: SalvarTabelaAppInput) {
+    const cfg = await this.exigirRegras();
+    const regras = await this.prisma.regraAcessoApp.findMany({ orderBy: { ordem: "asc" } });
+    const perfis: { id: string; capacidades: CapacidadeApp[]; ativo: boolean }[] = [];
+    // O rascunho de regras vai como a tela as mandaria (id opcional, sem ordem).
+    const novasRegras: Record<string, unknown>[] = regras.map(
+      ({ ordem: _o, criadoEm: _c, alteradoEm: _a, criadoPorId: _p, alteradoPorId: _q, contaId: _t, ...r }) => r,
+    );
+    for (const c of dados.colunas) {
+      const alvo = await this.alvoDaColuna(c.chave, cfg, regras);
+      if (alvo.perfilId) {
+        perfis.push({ id: alvo.perfilId, capacidades: c.capacidades, ativo: true });
+      } else if (alvo.modalidadeId) {
+        const id = randomUUID();
+        perfis.push({ id, capacidades: c.capacidades, ativo: true });
+        novasRegras.push(this.regraDaModalidade(alvo.modalidadeId, alvo.nome, id));
+      }
+    }
+    return this.acesso.simular({ perfis, regras: novasRegras as never });
+  }
+
+  async salvarTabela(dados: SalvarTabelaAppInput, autorId: string, escopo: EscopoAdmin) {
+    this.exigirGlobal(escopo);
+    const cfg = await this.exigirRegras();
+    const regras = await this.prisma.regraAcessoApp.findMany({ orderBy: { ordem: "asc" } });
+    await this.prisma.$transaction(async (tx) => {
+      let proximaOrdem = regras.length ? Math.max(...regras.map((r) => r.ordem)) + 1 : 0;
+      for (const c of dados.colunas) {
+        const alvo = await this.alvoDaColuna(c.chave, cfg, regras);
+        const depois = new Set<string>(c.capacidades);
+        if (alvo.perfilId) {
+          const atual = await tx.perfilAcessoApp.findFirstOrThrow({ where: { id: alvo.perfilId } });
+          const antes = new Set(atual.capacidades);
+          const ganhou = [...depois].filter((x) => !antes.has(x));
+          const perdeu = [...antes].filter((x) => !depois.has(x));
+          if (!ganhou.length && !perdeu.length) continue;
+          await tx.perfilAcessoApp.update({ where: { id: alvo.perfilId }, data: { capacidades: [...depois], ativo: true } });
+          await tx.logAcessoApp.create({
+            data: { tipo: "TABELA_SALVA", autorId, alvoId: alvo.perfilId, ganhou, perdeu, causa: alvo.nome },
+          });
+        } else if (alvo.modalidadeId) {
+          // A modalidade ganha a configuração própria: um perfil com o nome
+          // dela (ou com "(app)" se o nome já é de outro perfil) e a regra.
+          const livre = !(await tx.perfilAcessoApp.findFirst({ where: { nome: alvo.nome }, select: { id: true } }));
+          const perfil = await tx.perfilAcessoApp.create({
+            data: {
+              nome: livre ? alvo.nome : `${alvo.nome} (app)`,
+              descricao: `Motorista com a modalidade ${alvo.nome}.`,
+              capacidades: [...depois],
+            },
+          });
+          await tx.regraAcessoApp.create({
+            data: {
+              ...this.regraDaModalidade(alvo.modalidadeId, alvo.nome, perfil.id),
+              ordem: proximaOrdem++,
+              criadoPorId: autorId,
+              alteradoPorId: autorId,
+            },
+          });
+          await tx.logAcessoApp.create({
+            data: { tipo: "TABELA_SALVA", autorId, alvoId: perfil.id, ganhou: [...depois], causa: alvo.nome },
+          });
+        }
+      }
+    });
+    return this.acesso.recalcular("TABELA_SALVA");
+  }
+
+  private regraDaModalidade(modalidadeId: string, nome: string, perfilId: string) {
+    return {
+      nome: `Modalidade ${nome}`.slice(0, 80),
+      ativo: true,
+      vinculo: "MOTORISTA" as const,
+      regime: "QUALQUER" as const,
+      modalidadeId,
+      transportadoraId: null,
+      perfilId,
+    };
+  }
+
+  /** Qual perfil (ou modalidade ainda sem perfil) uma coluna da tabela edita. */
+  private async alvoDaColuna(
+    chave: string,
+    cfg: { perfilPadraoMotoristaId: string | null; perfilPadraoFuncionarioId: string | null },
+    regras: { vinculo: string; regime: string; modalidadeId: string | null; transportadoraId: string | null; perfilId: string; ativo: boolean }[],
+  ): Promise<{ perfilId: string | null; modalidadeId: string | null; nome: string }> {
+    if (chave === "SEM_MODALIDADE") {
+      if (!cfg.perfilPadraoMotoristaId) throw new ConflictException("A tabela desta empresa ainda está sendo montada.");
+      return { perfilId: cfg.perfilPadraoMotoristaId, modalidadeId: null, nome: "Sem modalidade" };
+    }
+    if (chave === "SO_PONTO") {
+      if (!cfg.perfilPadraoFuncionarioId) throw new ConflictException("A tabela desta empresa ainda está sendo montada.");
+      return { perfilId: cfg.perfilPadraoFuncionarioId, modalidadeId: null, nome: "Só bate ponto" };
+    }
+    const mod = await this.prisma.modalidadeMotorista.findFirst({ where: { id: chave }, select: { id: true, nome: true } });
+    if (!mod) throw new BadRequestException("Modalidade não encontrada.");
+    const regra = regras.find(
+      (r) => r.ativo && r.vinculo === "MOTORISTA" && r.regime === "QUALQUER" && r.modalidadeId === mod.id && !r.transportadoraId,
+    );
+    return { perfilId: regra?.perfilId ?? null, modalidadeId: mod.id, nome: mod.nome };
   }
 
   // ─── quem recebe ─────────────────────────────────────────────────────────

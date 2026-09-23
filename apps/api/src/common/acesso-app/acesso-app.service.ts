@@ -265,6 +265,12 @@ export class AcessoAppService {
     const perfis = new Map(ctx.perfis);
     let padraoM = ctx.perfilPadraoMotoristaId;
     let padraoF = ctx.perfilPadraoFuncionarioId;
+    // Vários perfis de uma vez (a tabela salva as três colunas juntas).
+    for (const x of r.perfis ?? []) {
+      const atual = perfis.get(x.id);
+      // Perfil que ainda não existe (coluna nova da tabela) entra como rascunho.
+      perfis.set(x.id, { id: x.id, nome: atual?.nome ?? "Rascunho", capacidades: x.capacidades, ativo: x.ativo });
+    }
     if (r.perfil) {
       const id = r.perfil.id ?? "__rascunho__";
       const atual = perfis.get(id);
@@ -681,15 +687,24 @@ export class AcessoAppService {
             where: { contaId },
             select: { perfilPadraoMotoristaId: true, perfilPadraoFuncionarioId: true },
           });
-          const herdadoM = await this.perfilHerdado(tx, PERFIL_HERDADO_MOTORISTA, plano.padrao,
-            "O que o motorista vê no celular.", cfgAntes?.perfilPadraoMotoristaId ?? null);
+          // Uma pessoa, um tipo: o motorista CLT recebe só o tipo do motorista.
+          // Por isso o "sem modalidade" leva também o ponto que o registrado
+          // já tem — é o que ele recebia pela soma. Pra quem não é
+          // funcionário o ponto não vale (corte de vínculo), então não muda
+          // nada pra ninguém.
+          const herdadoM = await this.perfilHerdado(tx, PERFIL_HERDADO_MOTORISTA,
+            [...new Set([...plano.padrao, ...capacidadesDoRegistradoHerdado()])],
+            "O motorista que ainda não tem modalidade.", cfgAntes?.perfilPadraoMotoristaId ?? null);
           const herdadoF = await this.perfilHerdado(tx, PERFIL_HERDADO_FUNCIONARIO,
             capacidadesDoRegistradoHerdado(),
-            "O que quem é registrado em carteira vê no celular: o ponto e os documentos.",
+            "O CLT que não tem cadastro de motorista (mecânico, escritório).",
             cfgAntes?.perfilPadraoFuncionarioId ?? null);
           await tx.configuracaoAcessoApp.update({
             where: { contaId },
-            data: { perfilPadraoMotoristaId: herdadoM, perfilPadraoFuncionarioId: herdadoF },
+            data: {
+              perfilPadraoMotoristaId: herdadoM,
+              perfilPadraoFuncionarioId: herdadoF,
+            },
           });
 
           // Quem foi posto num perfil pela tela antiga fica FIXADO nele.
@@ -768,7 +783,7 @@ export class AcessoAppService {
     descricao: string,
     idAtual: string | null,
   ): Promise<string> {
-    const antigo = NOMES_ANTIGOS_HERDADOS[nome];
+    const antigos = NOMES_ANTIGOS_HERDADOS[nome] ?? [];
     const ocupadoPorOutro = async (id: string | null) =>
       (await tx.perfilAcessoApp.findFirst({
         where: { nome, ...(id ? { id: { not: id } } : {}) },
@@ -779,12 +794,15 @@ export class AcessoAppService {
     if (idAtual) {
       existente = await tx.perfilAcessoApp.findFirst({ where: { id: idAtual }, select: { id: true, nome: true } });
       // Padrão que a empresa trocou por um perfil DELA não é o herdado.
-      if (existente && existente.nome !== nome && existente.nome !== antigo && !existente.nome.startsWith(`${nome} (`)) {
+      if (existente && existente.nome !== nome && !antigos.includes(existente.nome) && !existente.nome.startsWith(`${nome} (`)) {
         existente = null;
       }
     }
-    if (!existente && antigo) {
-      existente = await tx.perfilAcessoApp.findFirst({ where: { nome: antigo }, select: { id: true, nome: true } });
+    if (!existente && antigos.length) {
+      existente = await tx.perfilAcessoApp.findFirst({
+        where: { nome: { in: antigos } },
+        select: { id: true, nome: true },
+      });
     }
     if (!existente && !(await ocupadoPorOutro(null))) {
       existente = await tx.perfilAcessoApp.findFirst({ where: { nome }, select: { id: true, nome: true } });

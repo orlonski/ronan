@@ -292,7 +292,6 @@ const GRUPOS: Grupo[] = [
       { href: "/modalidades", label: "Vínculos do motorista", icon: IdCard, perm: "modalidades.ver" },
       // Fica em Cadastros, não em Frota e pessoas: é tabela que se preenche uma
       // vez e vale pra todo mundo, como as outras deste grupo.
-      { href: "/acesso-app", label: "Acesso ao app", icon: SlidersHorizontal, perm: "perfis-acesso.ver" },
       { href: "/tipos-evento-viagem", label: "Paradas e ocorrências", icon: ListChecks, perm: "tipos-evento-viagem.ver" },
     ],
   },
@@ -315,6 +314,9 @@ const GRUPOS: Grupo[] = [
       { href: "/configuracoes/contrato", label: "Contrato", icon: FileText, secao: "Sua conta" },
       { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver", secao: "Sua conta" },
       { href: "/configuracoes/permissoes", label: "Papéis e permissões", icon: ShieldCheck, perm: "permissoes.gerenciar", secao: "Sua conta" },
+      // O app do motorista é a outra metade de "Papéis e permissões" (abas no
+      // topo das duas telas). Item próprio porque a permissão é outra.
+      { href: "/acesso-app", label: "Permissões do app", icon: SlidersHorizontal, perm: "perfis-acesso.ver", secao: "Sua conta" },
       { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver", secao: "Sua conta" },
 
       { href: "/configuracoes/campos-layout", label: "Colunas da planilha do cliente", icon: Columns3, perm: "config-campos-layout.ver", secao: "Como o sistema se comporta" },

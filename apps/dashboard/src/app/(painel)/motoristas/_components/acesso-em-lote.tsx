@@ -52,9 +52,6 @@ export function AcessoEmLote({
       <Button size="sm" variant="outline" onClick={() => setAbrindo("excecao")}>
         Dar ou tirar um acesso
       </Button>
-      <Button size="sm" variant="outline" onClick={() => setAbrindo("fixar")}>
-        Mudar o grupo
-      </Button>
       <Button size="sm" variant="ghost" className="ml-auto" onClick={onLimpar}>
         Desmarcar
       </Button>

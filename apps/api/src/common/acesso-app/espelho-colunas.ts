@@ -28,11 +28,13 @@ export type ColunasAcesso = Partial<Record<AcessoAppChave, boolean>>;
  * antigos continuam reconhecidos (`NOMES_ANTIGOS_HERDADOS`) pra renomear o
  * que já existe sem criar um grupo duplicado.
  */
-export const PERFIL_HERDADO_MOTORISTA = "Motoristas";
-export const PERFIL_HERDADO_FUNCIONARIO = "Registrados (CLT)";
-export const NOMES_ANTIGOS_HERDADOS: Record<string, string> = {
-  [PERFIL_HERDADO_MOTORISTA]: "Padrão da empresa (herdado)",
-  [PERFIL_HERDADO_FUNCIONARIO]: "Registrado (herdado)",
+/** O motorista que ainda não tem modalidade (tela Vínculos do motorista). */
+export const PERFIL_HERDADO_MOTORISTA = "Sem modalidade";
+/** O CLT sem cadastro de motorista (mecânico, escritório). */
+export const PERFIL_HERDADO_FUNCIONARIO = "Só bate ponto";
+export const NOMES_ANTIGOS_HERDADOS: Record<string, string[]> = {
+  [PERFIL_HERDADO_MOTORISTA]: ["Motorista parceiro", "Motoristas", "Padrão da empresa (herdado)"],
+  [PERFIL_HERDADO_FUNCIONARIO]: ["CLT que não dirige", "Registrados (CLT)", "Registrado (herdado)"],
 };
 
 /**
@@ -44,7 +46,7 @@ export const NOMES_ANTIGOS_HERDADOS: Record<string, string> = {
 export const PERFIS_HERDADOS = [
   PERFIL_HERDADO_MOTORISTA,
   PERFIL_HERDADO_FUNCIONARIO,
-  ...Object.values(NOMES_ANTIGOS_HERDADOS),
+  ...Object.values(NOMES_ANTIGOS_HERDADOS).flat(),
 ];
 
 export const MOTIVO_ESPELHO = "Já era assim na ficha dele.";

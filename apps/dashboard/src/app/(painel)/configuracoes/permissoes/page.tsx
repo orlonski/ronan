@@ -14,6 +14,7 @@ import { RequerTela } from "@/components/requer-tela";
 import { PublicarModelo, UsarModelo } from "./_components/modelos";
 import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/confirm-dialog";
+import { AbasPermissoes } from "@/components/abas-permissoes";
 
 type PermissaoRow = {
   chave: string;
@@ -175,6 +176,7 @@ function PermissoesInner() {
   return (
     <div className="space-y-6">
     <ConfirmDialog />
+      <AbasPermissoes />
       <div>
         <h1 className="text-2xl font-bold">Papéis e permissões</h1>
         <p className="mt-1 text-sm text-muted-foreground">

@@ -215,7 +215,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // O molde de acessos do app. `aplicar` é chave à parte de `editar` porque
   // aplicar reescreve TRINTA pessoas de uma vez: é poder de outra ordem que
   // corrigir o nome do perfil.
-  { recurso: "perfis-acesso", label: "Acesso ao app", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "aplicar", "excluir"] },
+  { recurso: "perfis-acesso", label: "Permissões do app", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "aplicar", "excluir"] },
   { recurso: "regras-minimo", label: "Mínimo faturado por km", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // Quanto cada empresa paga por tonelada/km/viagem. Chave própria e separada de
   // `regras-minimo` porque são decisões diferentes: mínimo é quanto se CONTA

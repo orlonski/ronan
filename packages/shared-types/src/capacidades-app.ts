@@ -522,6 +522,11 @@ export const SimularAcessoAppInput = z.object({
     .optional(),
   regras: z.array(RegraAcessoAppInput).max(50).optional(),
   padrao: PadraoAcessoAppInput.optional(),
+  /** Vários perfis de uma vez: as três colunas da tabela. */
+  perfis: z
+    .array(z.object({ id: z.string().uuid(), capacidades: z.array(CapacidadeAppSchema), ativo: z.boolean() }))
+    .max(10)
+    .optional(),
   camadasEmSombra: z.array(z.enum(CAMADAS_CORTE)).optional(),
   rolloutsApp: z.array(CapacidadeAppSchema).optional(),
 });
@@ -582,6 +587,23 @@ export function capacidadeNaConta(
   if (!daConta) return undefined;
   return daConta.capacidades.includes(chave);
 }
+
+/**
+ * A TABELA DE ACESSO: o que cada tipo de pessoa vê no celular. O tipo é a
+ * MODALIDADE do motorista (dado da empresa, tela Vínculos do motorista), mais
+ * "sem modalidade" e "só bate ponto".
+ */
+export const SalvarTabelaAppInput = z.object({
+  /**
+   * `chave`: "SEM_MODALIDADE" (motorista sem modalidade), "SO_PONTO" (CLT sem
+   * cadastro de motorista) ou o id de uma modalidade (Vínculos do motorista).
+   */
+  colunas: z
+    .array(z.object({ chave: z.string().min(1).max(64), capacidades: z.array(CapacidadeAppSchema) }))
+    .min(1)
+    .max(50),
+});
+export type SalvarTabelaAppInput = z.infer<typeof SalvarTabelaAppInput>;
 
 /** Quais capacidades o SERVIDOR já barra no `/m/*` desta empresa (F4). */
 export const TravasServidorAppInput = z.object({

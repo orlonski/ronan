@@ -18,7 +18,12 @@ import { UploadsService } from "../../uploads/uploads.service";
 import { CamposLayoutService } from "../campos-layout/campos-layout.service";
 import { PermissoesService, PAPEL_ADMIN } from "../permissoes/permissoes.service";
 import { MODULOS_PADRAO } from "@ronan/shared-types";
-import { MATERIAIS_INICIAIS, TIPOS_EVENTO_INICIAIS, TIPOS_SERVICO_INICIAIS } from "./kit-inicial";
+import {
+  MATERIAIS_INICIAIS,
+  MODALIDADES_INICIAIS,
+  TIPOS_EVENTO_INICIAIS,
+  TIPOS_SERVICO_INICIAIS,
+} from "./kit-inicial";
 import { gerarCodigoConvite } from "./codigo-convite";
 import { identificarChave } from "../../common/identificar-chave";
 import { cifrar, decifrar } from "../../common/cripto";
@@ -389,6 +394,11 @@ export class ContasService implements OnModuleInit {
 
         await this.prisma.material.createMany({
           data: MATERIAIS_INICIAIS.map((nome) => ({ nome, contaId: conta.id })),
+          skipDuplicates: true,
+        });
+
+        await this.prisma.modalidadeMotorista.createMany({
+          data: MODALIDADES_INICIAIS.map((m) => ({ ...m, contaId: conta.id })),
           skipDuplicates: true,
         });
 

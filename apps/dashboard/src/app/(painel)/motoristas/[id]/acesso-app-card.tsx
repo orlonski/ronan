@@ -90,14 +90,19 @@ export function AcessoAppCard(alvo: AlvoAcesso) {
               <span className="text-muted-foreground">Sem grupo: só o básico do app.</span>
             ) : (
               <>
-                Grupo{grupos.length > 1 ? "s" : ""}:{" "}
-                {grupos.map((g, i) => (
+                Tipo:{" "}
+                {[...new Map(grupos.map((g) => [g.perfilId, g])).values()].map((g, i) => (
                   <span key={g.perfilId}>
                     {i > 0 && " + "}
                     <strong>{g.perfilNome}</strong>
-                    {g.via === "FIXADO" && <span className="text-muted-foreground"> (escolhido só pra ele)</span>}
+                    {g.via === "FIXADO" && <span className="text-muted-foreground"> (escolhido na mão)</span>}
                   </span>
                 ))}
+                <span className="block text-xs text-muted-foreground">
+                  {ehMotorista
+                    ? "O tipo vem da modalidade dele (no cadastro, mais abaixo)."
+                    : "Quem não tem cadastro de motorista é “Só bate ponto”."}
+                </span>
               </>
             )}
           </p>
@@ -149,13 +154,15 @@ export function AcessoAppCard(alvo: AlvoAcesso) {
             <Button variant="outline" size="sm" onClick={() => setMudando(true)}>
               Dar ou tirar algo só dele
             </Button>
-            {ehMotorista && (
+            {/* Escolher o tipo na mão não existe mais na tela: o tipo sai do
+                cadastro. Quem já foi posto num grupo na mão pode voltar. */}
+            {ehMotorista && grupos.some((g) => g.via === "FIXADO") && (
               <button
                 type="button"
                 className="text-xs text-muted-foreground underline"
                 onClick={() => setMudandoGrupo(true)}
               >
-                Mudar o grupo dele
+                Voltar ao automático
               </button>
             )}
           </div>
