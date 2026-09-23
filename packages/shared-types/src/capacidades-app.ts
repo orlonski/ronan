@@ -31,9 +31,6 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.locais.verTodos",
   "app.pedagio.lancar",
   "app.abastecimento.lancar",
-  "app.diaria.lancar",
-  "app.diaria.verValor",
-  "app.obra.presenca",
   "app.posicao.compartilhar",
   "app.programacao.ver",
   "app.acertos.ver",
@@ -52,7 +49,6 @@ export type CapacidadeApp = (typeof CAPACIDADES_APP_CHAVES)[number];
 export const GRUPOS_CAPACIDADE_APP = [
   "Viagens",
   "Gastos",
-  "Obra e diária",
   "Operação",
   "Dinheiro",
   "Convívio",
@@ -86,8 +82,8 @@ export type CapacidadeAppDef = {
   vinculo: VinculoCapacidade;
   /**
    * Guarda-corpo jurídico — SÓ onde muda alguma coisa. Empregado não recebe
-   * diária, obra nem acerto: somar pagamento por diária e folha na mesma
-   * pessoa desenha vínculo dentro do produto.
+   * acerto: somar pagamento por produção e folha na mesma pessoa desenha
+   * vínculo dentro do produto.
    */
   regimesProibidos?: ("EMPREGADO" | "PARCEIRO")[];
   /** Módulo contratado de que depende. Sempre explícito. */
@@ -220,44 +216,6 @@ const DEFS: CapacidadeAppDef[] = [
     gate: "SERVIDOR",
     aoPerder: "VALA",
     colunaLegada: { coluna: "podeLancarAbastecimento", espelha: true },
-  },
-  {
-    chave: "app.diaria.lancar",
-    label: "Lançar diária",
-    efeito: "Escolher o modo por período e marcar entrada e saída em vez de peso.",
-    grupo: "Obra e diária",
-    tipo: "EMPRESA",
-    vinculo: "MOTORISTA",
-    regimesProibidos: ["EMPREGADO"],
-    modulo: "mensal",
-    gate: "SERVIDOR",
-    aoPerder: "VALA",
-    colunaLegada: { coluna: "podeDiaria", espelha: true },
-  },
-  {
-    chave: "app.diaria.verValor",
-    label: "Ver quanto vale a diária dele",
-    efeito: "O valor em R$ aparece na conta de diárias do app.",
-    grupo: "Obra e diária",
-    tipo: "EMPRESA",
-    vinculo: "MOTORISTA",
-    regimesProibidos: ["EMPREGADO"],
-    modulo: "mensal",
-    gate: "FILTRO",
-    aoPerder: "RECUSAR",
-    colunaLegada: { coluna: "podeVerValorDiaria", espelha: true },
-  },
-  {
-    chave: "app.obra.presenca",
-    label: "Marcar presença na obra",
-    efeito: "O \"cheguei\" da obra e a lista de dias dele.",
-    grupo: "Obra e diária",
-    tipo: "EMPRESA",
-    vinculo: "MOTORISTA",
-    regimesProibidos: ["EMPREGADO"],
-    modulo: "mensal",
-    gate: "SERVIDOR",
-    aoPerder: "VALA",
   },
   {
     chave: "app.posicao.compartilhar",

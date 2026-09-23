@@ -134,7 +134,6 @@ export class ViagemLifecycleAdminService {
     const v = await this.prisma.viagem.findUnique({
       where: { id },
       include: {
-        tipoServico: { select: { medicao: true } },
         _count: { select: { eventosViagem: true } },
       },
     });
@@ -156,8 +155,7 @@ export class ViagemLifecycleAdminService {
     if (!v.materialId) divs.add(MotivoDivergencia.FALTA_MATERIAL);
     if (!v.localDescargaId) divs.add(MotivoDivergencia.FALTA_LOCAL_DESCARGA);
     if (v.km == null) divs.add(MotivoDivergencia.FALTA_KM);
-    // Diária não tem peso: cobrar tonelada dela seria carimbo que nunca fecha.
-    if (v.tipoServico?.medicao !== "PERIODO" && (v.toneladas == null || Number(v.toneladas) <= 0)) {
+    if (v.toneladas == null || Number(v.toneladas) <= 0) {
       divs.add(MotivoDivergencia.FALTA_TONELADAS);
     }
 

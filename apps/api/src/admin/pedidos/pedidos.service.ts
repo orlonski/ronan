@@ -21,7 +21,7 @@ const INCLUDE = {
   material: { select: { id: true, nome: true } },
   localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
-  tipoServico: { select: { id: true, nome: true, medicao: true } },
+  tipoServico: { select: { id: true, nome: true } },
   _count: { select: { planejadas: true } },
 } satisfies Prisma.PedidoInclude;
 
@@ -180,7 +180,6 @@ export class PedidosService {
         km: true,
         toneladas: true,
         materialId: true,
-        tipoServico: { select: { medicao: true } },
         motorista: { select: { id: true, nome: true } },
         veiculo: { select: { id: true, placa: true } },
         cliente: { select: { id: true, nome: true, empresaId: true } },

@@ -19,7 +19,6 @@ export type TipoServico = {
   ativo: boolean;
   padrao: boolean;
   ordem: number;
-  medicao: "PESO" | "PERIODO";
   exigeMaterial: boolean;
   exigeTicket: boolean;
   exigeLocalDescarga: boolean;
@@ -32,7 +31,6 @@ type Props = { initial?: TipoServico };
 
 type TipoServicoBody = {
   nome: string;
-  medicao: "PESO" | "PERIODO";
   exigeMaterial: boolean;
   exigeTicket: boolean;
   exigeLocalDescarga: boolean;
@@ -46,7 +44,6 @@ export function TipoServicoForm({ initial }: Props) {
   const update = useUpdateResource<Partial<TipoServicoBody>, TipoServico>(PATH, PATH);
   const [form, setForm] = useState<TipoServicoBody>({
     nome: initial?.nome ?? "",
-    medicao: initial?.medicao ?? "PESO",
     exigeMaterial: initial?.exigeMaterial ?? true,
     exigeTicket: initial?.exigeTicket ?? true,
     exigeLocalDescarga: initial?.exigeLocalDescarga ?? true,
@@ -61,10 +58,7 @@ export function TipoServicoForm({ initial }: Props) {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (initial) {
-      // `medicao` não é editável depois de criado: virar a medição de um modo
-      // que já tem viagens lançadas reinterpretaria o histórico inteiro.
-      const { medicao: _medicao, ...editaveis } = form;
-      await update.mutateAsync({ id: initial.id, body: editaveis });
+      await update.mutateAsync({ id: initial.id, body: form });
     } else {
       await create.mutateAsync(form);
     }
@@ -72,16 +66,6 @@ export function TipoServicoForm({ initial }: Props) {
   }
 
   const saving = create.isPending || update.isPending;
-  const ehPeriodo = form.medicao === "PERIODO";
-
-  /** Escolher "por período" no cadastro já sugere o desenho de uma diária. */
-  function escolherMedicao(medicao: "PESO" | "PERIODO") {
-    setForm((f) =>
-      medicao === "PERIODO"
-        ? { ...f, medicao, exigeMaterial: false, exigeTicket: false }
-        : { ...f, medicao, exigeMaterial: true, exigeTicket: true },
-    );
-  }
 
   return (
     <Card className="p-6">
@@ -93,7 +77,7 @@ export function TipoServicoForm({ initial }: Props) {
             required
             value={form.nome}
             onChange={(e) => setForm({ ...form, nome: e.target.value })}
-            placeholder="ex: Diária"
+            placeholder="ex: Frete por tonelada"
             autoFocus
           />
           <p className="text-xs text-muted-foreground">
@@ -101,57 +85,11 @@ export function TipoServicoForm({ initial }: Props) {
           </p>
         </div>
 
-        <div className="space-y-2 rounded-lg border p-3">
-          <Label>Como é medido</Label>
-          {initial ? (
-            <p className="text-sm">
-              {ehPeriodo ? "Por período (entrada e saída)" : "Por peso (toneladas)"}
-              <span className="ml-2 text-xs text-muted-foreground">
-                não dá pra mudar depois de criado
-              </span>
-            </p>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => escolherMedicao("PESO")}
-                className={`rounded-lg border p-3 text-left transition-colors ${
-                  !ehPeriodo ? "border-primary bg-primary/5" : "hover:bg-muted/50"
-                }`}
-              >
-                <div className="text-sm font-medium">Por peso</div>
-                <div className="text-xs text-muted-foreground">
-                  O motorista informa as toneladas. É o frete de sempre.
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => escolherMedicao("PERIODO")}
-                className={`rounded-lg border p-3 text-left transition-colors ${
-                  ehPeriodo ? "border-primary bg-primary/5" : "hover:bg-muted/50"
-                }`}
-              >
-                <div className="text-sm font-medium">Por período</div>
-                <div className="text-xs text-muted-foreground">
-                  O motorista marca a hora que entrou e a que saiu. É a diária.
-                </div>
-              </button>
-            </div>
-          )}
-          {ehPeriodo && (
-            <p className="text-xs text-muted-foreground">
-              Serviço por período não tem peso: o app troca o campo de toneladas por
-              entrada e saída, e essa viagem não entra na soma de toneladas nem nas
-              regras de mínimo.
-            </p>
-          )}
-        </div>
-
         <div className="space-y-3 rounded-lg border p-3">
           <Label>O que esse serviço pede</Label>
           <LinhaFlag
             titulo="Material"
-            hint="Desligue pra diária de caminhão à disposição, que não carrega um material específico."
+            hint="Desligue pro serviço que não carrega um material específico."
             active={form.exigeMaterial}
             onChange={(next) => setForm({ ...form, exigeMaterial: next })}
           />

@@ -117,8 +117,7 @@ export const CriarMotoristaInput = z
     valorPorViagem: z.number().positive().max(99999.99).nullish(),
     valorPorTonelada: z.number().positive().max(99999.99).nullish(),
     valorPorKm: z.number().positive().max(99999.99).nullish(),
-    valorDiaria: z.number().positive().max(99999.99).nullish(),
-    // Pra onde o acerto é pago. Sem normalizar: chave PIX pode ser CPF,
+      // Pra onde o acerto é pago. Sem normalizar: chave PIX pode ser CPF,
     // telefone, e-mail ou aleatória, e "consertar" a digitação é errar.
     chavePix: z.string().trim().max(140).nullish(),
     // Registrado em carteira aqui E pago por produção neste cadastro: o painel
@@ -163,8 +162,7 @@ export const AtualizarMotoristaInput = z
     valorPorViagem: z.number().positive().max(99999.99).nullish(),
     valorPorTonelada: z.number().positive().max(99999.99).nullish(),
     valorPorKm: z.number().positive().max(99999.99).nullish(),
-    valorDiaria: z.number().positive().max(99999.99).nullish(),
-    // Pra onde o acerto é pago. Sem normalizar: chave PIX pode ser CPF,
+      // Pra onde o acerto é pago. Sem normalizar: chave PIX pode ser CPF,
     // telefone, e-mail ou aleatória, e "consertar" a digitação é errar.
     chavePix: z.string().trim().max(140).nullish(),
     // Registrado em carteira aqui E pago por produção neste cadastro: o painel

@@ -42,7 +42,7 @@ export function HoraField({
   data: string;
   /**
    * Hora de entrada (ISO), quando este campo é o de SAÍDA. Se a hora escolhida
-   * cair antes dela, a diária virou a noite e a saída vai pro dia seguinte.
+   * cair antes dela, virou a noite e a saída vai pro dia seguinte.
    */
   referencia?: string;
   onChange: (iso: string) => void;

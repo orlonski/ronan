@@ -33,7 +33,6 @@ export const MODULOS_CHAVES = [
   "torre",
   "fiscal",
   "comunicacao",
-  "mensal",
   "admissao",
   "ponto",
   "plataforma",
@@ -161,20 +160,7 @@ export const MODULOS: ModuloDef[] = [
     recursos: ["chat", "whatsapp", "config-agente"],
   },
   {
-    // O contrato em que o caminhão fica à disposição de uma obra e se paga por
-    // DIÁRIA, não por viagem. É módulo à parte porque é outro negócio: a
-    // transportadora que só roda frete não compra isto, e quem vive de obra
-    // não usa metade da Operação.
-    chave: "mensal",
-    nome: "Obra e diária",
-    pitch:
-      "O caminhão fica na obra e você cobra por dia. O motorista marca a presença num toque e você chega no dia 20 com o espelho pronto.",
-    recursos: ["alocacoes", "presenca", "espelhos"],
-  },
-  {
-    // Juntar os papéis que a obra exige antes do caminhão entrar. Módulo à
-    // parte do mensal porque quem roda frete comum também precisa disso, e
-    // quem só opera obra pode não querer pagar pelos dois.
+    // Juntar os papéis que a empresa exige antes de o motorista rodar.
     chave: "admissao",
     nome: "Admissão de motorista",
     pitch:
@@ -184,11 +170,9 @@ export const MODULOS: ModuloDef[] = [
   {
     // Controle de jornada de FUNCIONÁRIO REGISTRADO EM CARTEIRA.
     //
-    // Módulo à parte do "mensal" por decisão jurídica, não por arrumação: lá o
-    // motorista é parceiro autônomo pago por diária e o léxico de vínculo é
-    // proibido; aqui é empregado e a jornada é o assunto. A mesma pessoa não
-    // pode estar nos dois, e quem garante isso é o banco (`RegimeVigente`),
-    // não a boa vontade de quem cadastra.
+    // Aqui é empregado e a jornada é o assunto; o parceiro autônomo não bate
+    // ponto. A mesma pessoa não pode ser as duas coisas, e quem garante isso é
+    // o banco (`RegimeVigente`), não a boa vontade de quem cadastra.
     chave: "ponto",
     nome: "Ponto eletrônico",
     pitch:

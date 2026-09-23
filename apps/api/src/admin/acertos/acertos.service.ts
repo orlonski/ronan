@@ -16,7 +16,6 @@ import { dentroDeEmprego, periodosDeEmprego } from "../../common/regime-vigente"
 import {
   calcularAcerto,
   resolverRemuneracao,
-  type DiariaObraParaAcerto,
   totalizarAcerto,
   type AbastecimentoParaAcerto,
   type ViagemParaAcerto,
@@ -167,7 +166,7 @@ export class AcertosService {
       );
     }
 
-    const [viagens, abastecimentos, pedagiosAvulsos, diasDeObra] = await Promise.all([
+    const [viagens, abastecimentos, pedagiosAvulsos] = await Promise.all([
       this.prisma.viagem.findMany({
         where: {
           motoristaId: input.motoristaId,
@@ -184,7 +183,6 @@ export class AcertosService {
           km: true,
           toneladas: true,
           valorPedagioTotal: true,
-          tipoServico: { select: { medicao: true } },
           cliente: { select: { nome: true } },
           valor: { select: { valorFrete: true } },
           pedagios: { select: { id: true, valor: true, pracaPedagio: true } },
@@ -208,28 +206,6 @@ export class AcertosService {
         select: { id: true, data: true, valor: true, pracaPedagio: true },
         orderBy: { data: "asc" },
       }),
-      // Os dias de obra (o mensal). O filtro é pela ALOCAÇÃO, não pelo
-      // registro: é a alocação que sabe de quem é o motorista e qual a obra —
-      // e é dela que sai o valor combinado quando ele difere da régua.
-      this.prisma.registroPresenca.findMany({
-        where: {
-          data: { gte: inicio, lte: fim },
-          // ⚠️ `regime: PARCEIRO` não é filtro de conveniência: dia de obra de
-          // quem é REGISTRADO EM CARTEIRA não pode virar linha de acerto. Ele
-          // recebe por folha, e pagar por dia por fora é salário por fora
-          // (art. 457 §1º da CLT) — o dia dele mede o caminhão pro contratante,
-          // não o pagamento dele.
-          alocacao: { motoristaId: input.motoristaId, regime: "PARCEIRO" },
-        },
-        select: {
-          id: true,
-          data: true,
-          alocacao: {
-            select: { valorDiaria: true, cliente: { select: { nome: true } } },
-          },
-        },
-        orderBy: { data: "asc" },
-      }),
     ]);
 
     const viagensParaAcerto: ViagemParaAcerto[] = viagens
@@ -246,7 +222,6 @@ export class AcertosService {
       km: v.km,
       toneladas: v.toneladas,
       valorPedagioTotal: v.valorPedagioTotal,
-      ehDiaria: v.tipoServico?.medicao === "PERIODO",
       valorFrete: v.valor?.valorFrete ?? null,
       clienteNome: v.cliente?.nome ?? null,
       pedagios: v.pedagios.map((p) => ({ id: p.id, valor: p.valor, praca: p.pracaPedagio })),
@@ -262,22 +237,9 @@ export class AcertosService {
         emComboio: a.emComboio,
       }));
 
-    // O `regime: PARCEIRO` da consulta já cobre o caso normal; o filtro por
-    // data pega o que ela não vê — alocação aberta como parceiro e a pessoa
-    // registrada depois, com a alocação viva.
-    const diariasObra: DiariaObraParaAcerto[] = diasDeObra
-      .filter((d) => foraDoEmprego(d.data))
-      .map((d) => ({
-        registroId: d.id,
-        data: d.data,
-        obraNome: d.alocacao.cliente.nome,
-        valorDiaria: d.alocacao.valorDiaria,
-      }));
-
     const calculado = calcularAcerto({
       viagens: viagensParaAcerto,
       abastecimentos: abastecimentosParaAcerto,
-      diariasObra,
       pedagiosAvulsos: pedagiosAvulsos
         .filter((p) => foraDoEmprego(p.data))
         .map((p) => ({
@@ -314,7 +276,6 @@ export class AcertosService {
             viagemId: i.viagemId ?? null,
             pedagioId: i.pedagioId ?? null,
             abastecimentoId: i.abastecimentoId ?? null,
-            registroPresencaId: i.registroPresencaId ?? null,
             descricao: i.descricao,
             valor: i.valor,
             automatico: true,

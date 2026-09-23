@@ -111,19 +111,14 @@ export class AdmissaoService {
    *
    * Duas perguntas, e as duas decidem:
    *
-   * 1. **QUEM PEDE** — a exigência do contratante da obra em que ele está, mais
-   *    as da transportadora (contratante nulo).
+   * 1. **QUEM PEDE** — as exigências da transportadora (contratante nulo).
    * 2. **DE QUEM SE PEDE** (`publico`) — papelada de admissão se cobra de quem
    *    TEM VÍNCULO com a empresa, e não da frota inteira: o motorista de frete
    *    comum não pode abrir o app com "3 documentos faltam" de uma papelada
    *    que nunca foi dele.
    *
-   * ⚠️ VÍNCULO, NÃO OBRA. Isto já foi "tem alocação de obra ativa", e estava
-   * errado: o motorista contratado em carteira que ainda não foi pra obra
-   * nenhuma — ou cuja empresa nem usa o controle de obra — não via documento
-   * nenhum. A pergunta certa é "esta pessoa tem vínculo vivo aqui?", que o
-   * `RegimeVigente` responde para os dois casos: contratado em carteira e
-   * parceiro alocado. Obra é detalhe de operação, não requisito de admissão.
+   * ⚠️ VÍNCULO: a pergunta é "esta pessoa tem vínculo vivo aqui?", e quem
+   * responde é o `RegimeVigente`.
    *
    * ⚠️ O filtro só vale pra TELA DO MOTORISTA (`soDoPublicoDele`). O escritório
    * e o link de coleta continuam vendo o catálogo inteiro, e isso não é
@@ -132,24 +127,16 @@ export class AdmissaoService {
    * serve — o escritório junta a papelada e só então contrata.
    */
   async exigidosPara(motoristaId: string, opts?: { soDoPublicoDele?: boolean }) {
-    const [alocacao, motorista] = await Promise.all([
-      this.prisma.alocacaoObra.findFirst({
-        where: { motoristaId, ativa: true },
-        include: { cliente: { select: { empresaId: true, nome: true } } },
-      }),
-      this.prisma.motorista.findFirst({
-        where: { id: motoristaId },
-        select: { cpf: true },
-      }),
-    ]);
-    const empresaId = alocacao?.cliente.empresaId;
+    const motorista = await this.prisma.motorista.findFirst({
+      where: { id: motoristaId },
+      select: { cpf: true },
+    });
 
-    // Contratado em carteira OU parceiro alocado: os dois têm vínculo vivo, e
-    // os dois mandam documento. Quem não tem nenhum é o motorista de frete
-    // comum, e dele só se pede o que vale pra frota inteira.
-    const temVinculo =
-      alocacao !== null ||
-      (await regimeVivo(this.prisma as never, motorista?.cpf ?? "")) !== null;
+    // Quem tem vínculo vivo manda documento. Quem não tem é o motorista de
+    // frete comum, e dele só se pede o que vale pra frota inteira.
+    // (O contratante vinha da alocação de obra, que saiu do sistema: sem ela,
+    // o motorista vê as exigências da transportadora inteira.)
+    const temVinculo = (await regimeVivo(this.prisma as never, motorista?.cpf ?? "")) !== null;
 
     return this.prisma.documentoExigido.findMany({
       where: {
@@ -157,7 +144,7 @@ export class AdmissaoService {
         // O que se pede de REGISTRADO mora no cadastro de funcionário, não no
         // de motorista: aparece junto no app dele, mas não é deste dono.
         publico: { not: "REGISTRADOS" },
-        OR: [{ empresaId: null }, ...(empresaId ? [{ empresaId }] : [])],
+        empresaId: null,
         // Sem vínculo, só o que vale pra todo mundo — e só quando quem
         // pergunta é o app dele.
         ...(opts?.soDoPublicoDele && !temVinculo ? { publico: "TODOS" as const } : {}),
@@ -574,17 +561,10 @@ export class AdmissaoService {
    * registrado. Uma lista só: pra ela é tudo "papel que a empresa pediu".
    */
   async paraOApp(quem: QuemNoApp) {
-    const [doMotorista, doRegistrado, alocacao] = await Promise.all([
-      // Na tela DELE, só o que é dele: quem não está em obra não é cobrado de
-      // papelada de obra.
+    const [doMotorista, doRegistrado] = await Promise.all([
+      // Na tela DELE, só o que é dele.
       quem.motoristaId ? this.estadoDosDocumentos(quem.motoristaId, { soDoPublicoDele: true }) : null,
       quem.funcionarioId ? this.estadoDoFuncionario(quem.funcionarioId) : null,
-      quem.motoristaId
-        ? this.prisma.alocacaoObra.findFirst({
-            where: { motoristaId: quem.motoristaId, ativa: true },
-            select: { cliente: { select: { nome: true } } },
-          })
-        : null,
     ]);
     const partes = [doMotorista, doRegistrado].filter((p): p is NonNullable<typeof p> => p !== null);
     const soma = (k: "prontos" | "total" | "faltamObrigatorios" | "faltamDele" | "comOEscritorio") =>
@@ -599,7 +579,10 @@ export class AdmissaoService {
     };
 
     return {
-      obra: alocacao?.cliente.nome ?? null,
+      // Sempre null: vinha da alocação de obra, que saiu do sistema. Fica na
+      // resposta porque o app já instalado lê o campo (e cai no "Pedidos pelo
+      // escritório" com null).
+      obra: null,
       documentos: estado.documentos.map((d) => ({
         id: d.exigenciaId,
         titulo: d.titulo,

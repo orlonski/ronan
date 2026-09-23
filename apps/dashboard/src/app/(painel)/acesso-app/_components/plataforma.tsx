@@ -22,12 +22,12 @@ const CAMADAS: { chave: CamadaCorte; label: string; efeito: string }[] = [
   {
     chave: "CONTRATO",
     label: "Módulo contratado",
-    efeito: "Sem o módulo, a capacidade some do app (chat sem Comunicação, diária sem Obra e diária…).",
+    efeito: "Sem o módulo, a capacidade some do app (chat sem Comunicação, programação sem Torre…).",
   },
   {
     chave: "REGIME",
     label: "Regime (CLT × parceiro)",
-    efeito: "Quem é registrado em carteira não recebe diária, obra nem acertos.",
+    efeito: "Quem é registrado em carteira não recebe acertos.",
   },
   {
     chave: "PLATAFORMA",

@@ -58,16 +58,6 @@ const AcessosInput = z.object({
   podeReferenciaKm: z.boolean().optional(),
   podeTelemetria: z.boolean().optional(),
   podeChat: z.boolean().optional(),
-  podeDiaria: z.boolean().optional(),
-  /**
-   * Ele vê em R$ quanto as diárias de obra do mês valem pra ele.
-   *
-   * Nasce desligada e é decisão do dono, por motorista: quando o combinado é
-   * claro, ver o valor evita a ligação de fim de mês; quando não é, a tela de
-   * conferência vira tela de cobrança. Quem sabe qual dos dois é o caso não é
-   * o código.
-   */
-  podeVerValorDiaria: z.boolean().optional(),
   receberResumoDiario: z.boolean().optional(),
 });
 type AcessosInput = z.infer<typeof AcessosInput>;

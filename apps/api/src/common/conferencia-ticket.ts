@@ -97,7 +97,7 @@ export type Declarado = {
   placasConhecidas?: string[];
   /**
    * `false` quando não há peso pra conferir: viagem AGUARDANDO_PESO (o romaneio
-   * sai no fim do dia), diária medida por período, material sem ticket.
+   * sai no fim do dia), modo sem ticket, material sem ticket.
    * Sem isto, `declarado: null` × `lido: 32` viraria DIVERGE e o sistema
    * cobraria TODO motorista que lançou sem romaneio.
    */
@@ -648,7 +648,7 @@ export function decidirVeredito(
   limiares: LimiaresConferencia = LIMIARES_PADRAO,
 ): Veredito {
   // Nada pra conferir não é sucesso nem falha: é uma viagem que não tinha o que
-  // comparar (diária, material sem ticket, foto que não é ticket).
+  // comparar (modo sem ticket, material sem ticket, foto que não é ticket).
   //
   // Foto ilegível NÃO passa por aqui: quem detecta isso é o leitor, e o
   // desfecho é outro (pedir foto nova). Ver `Veredito`.

@@ -174,7 +174,7 @@ export default function ModalidadesPage() {
           <EstadoVazio
             icone={IdCard}
             titulo="Nenhum vínculo cadastrado"
-            descricao="O vínculo carrega a régua de pagamento (percentual, por viagem, por tonelada, km ou diária). Sem ele o acerto não sabe quanto pagar."
+            descricao="O vínculo carrega a régua de pagamento (percentual, por viagem, por tonelada ou km). Sem ele o acerto não sabe quanto pagar."
             acaoHref="/modalidades/novo"
             acaoLabel="Criar vínculo"
             perm="modalidades.criar"

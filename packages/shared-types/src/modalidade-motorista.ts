@@ -26,7 +26,6 @@ export const CriarModalidadeMotoristaInput = z.object({
   valorPorViagem: z.number().positive().max(99999.99).nullish(),
   valorPorTonelada: z.number().positive().max(99999.99).nullish(),
   valorPorKm: z.number().positive().max(99999.99).nullish(),
-  valorDiaria: z.number().positive().max(99999.99).nullish(),
   reembolsaPedagio: z.boolean().optional(),
   reembolsaAbastecimento: z.boolean().optional(),
 });
@@ -45,7 +44,6 @@ export const AtualizarModalidadeMotoristaInput = z.object({
   valorPorViagem: z.number().positive().max(99999.99).nullish(),
   valorPorTonelada: z.number().positive().max(99999.99).nullish(),
   valorPorKm: z.number().positive().max(99999.99).nullish(),
-  valorDiaria: z.number().positive().max(99999.99).nullish(),
   reembolsaPedagio: z.boolean().optional(),
   reembolsaAbastecimento: z.boolean().optional(),
 });
@@ -67,7 +65,6 @@ export const ModalidadeMotorista = z.object({
   valorPorViagem: z.string().nullable().optional(),
   valorPorTonelada: z.string().nullable().optional(),
   valorPorKm: z.string().nullable().optional(),
-  valorDiaria: z.string().nullable().optional(),
   reembolsaPedagio: z.boolean().optional(),
   reembolsaAbastecimento: z.boolean().optional(),
 });

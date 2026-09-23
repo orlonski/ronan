@@ -36,9 +36,9 @@ export type ContextoDispensaConferencia = {
  *   local de descarga, cliente, cadastro que sumiu) e carimbou o que falta em
  *   `ViagemDivergencia`. É EXATAMENTE o caso que precisa de gente olhando —
  *   aprovar aqui esconderia o buraco dentro do faturamento.
- * - `AGUARDANDO_PESO` / `AGUARDANDO_SAIDA`: a viagem ainda não terminou. A
- *   aprovação vem quando ela se completar, pelos caminhos de `completarPeso` e
- *   `encerrarDiaria` — que passam por aqui de novo.
+ * - `AGUARDANDO_PESO`: a viagem ainda não terminou. A aprovação vem quando
+ *   ela se completar, pelo caminho de `completarPeso` — que passa por aqui de
+ *   novo.
  * - `EM_ANDAMENTO`: lifecycle guiado aberto, metade dos campos pode estar nula.
  * - `DIVERGENTE` / `OK` / `AJUSTADA` / `EM_CONFERENCIA`: já houve decisão sobre
  *   a viagem. Robô não passa por cima de gente.

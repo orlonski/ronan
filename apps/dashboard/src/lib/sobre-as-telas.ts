@@ -300,9 +300,8 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/tabelas-preco": {
     oQue:
-      "Quanto cada empresa paga pelo frete: por tonelada, por quilômetro, por " +
-      "viagem fechada, por diária de caminhão à disposição ou por diária de " +
-      "obra. Sem preço aqui, a viagem não tem valor.",
+      "Quanto cada empresa paga pelo frete: por tonelada, por quilômetro ou por " +
+      "viagem fechada. Sem preço aqui, a viagem não tem valor.",
     faz: [
       "Cadastrar o preço por empresa, material, modo de serviço e faixa de km rodado",
       "Marcar se o pedágio vem por fora do frete",
@@ -531,23 +530,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
-  // ——— MENSALISTA ————————————————————————————————————————————————————
-
-  "/obras": {
-    oQue:
-      "O caminhão que fica o mês numa obra e recebe por diária: aqui ficam os dias " +
-      "em que ele esteve lá, pra você conferir a medição que o contratante manda.",
-    faz: [
-      "Alocar motorista e caminhão numa obra, com o valor da diária combinado",
-      "Ver a grade do mês dia a dia: o que o motorista marcou pelo app e o que foi lançado aqui",
-      "Importar a planilha do contratante — ou digitar o total de cada um — e ver quantas diárias não bateram e quanto isso vale em R$",
-    ],
-    naoEAqui: {
-      procurando: "quem é registrado em carteira e bate ponto",
-      vaEm: "Ponto do dia",
-      href: "/ponto",
-    },
-  },
+  // ——— REGISTRADOS ———————————————————————————————————————————————————
 
   "/ponto": {
     oQue:
@@ -560,9 +543,9 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Abrir o espelho de uma pessoa pelo nome",
     ],
     naoEAqui: {
-      procurando: "os dias de caminhão em obra, que são pagos por diária",
-      vaEm: "Obras e diárias",
-      href: "/obras",
+      procurando: "o motorista parceiro, que recebe por viagem",
+      vaEm: "Motoristas",
+      href: "/motoristas",
     },
   },
 
@@ -609,7 +592,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Registrar o desligamento sem perder o que já foi apurado",
     ],
     naoEAqui: {
-      procurando: "o motorista parceiro, que recebe por viagem ou por diária",
+      procurando: "o motorista parceiro, que recebe por viagem",
       vaEm: "Motoristas",
       href: "/motoristas",
     },
@@ -715,15 +698,14 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/tipos-servico": {
     oQue:
-      "Diz se a viagem é medida por peso (o frete de sempre) ou por período (a " +
-      "diária) — e é isso que muda o que o app pergunta ao motorista.",
+      "O que o lançamento da viagem exige em cada modo de serviço — e é isso " +
+      "que muda o que o app pergunta ao motorista.",
     faz: [
-      "Criar o modo diária, em que o app pede hora de entrada e de saída e não pede peso",
       "Escolher o que cada modo exige: material, ticket, local de descarga, km",
       "Ver qual modo vale pras viagens que não escolhem nenhum; com um modo só, o app nem mostra a pergunta",
     ],
     naoEAqui: {
-      procurando: "quanto vale a tonelada, o km ou a diária",
+      procurando: "quanto vale a tonelada ou o km",
       vaEm: "Tabela de preços",
       href: "/tabelas-preco",
     },
@@ -732,7 +714,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
   "/modalidades": {
     oQue:
       "Como cada motorista parceiro é pago — percentual do frete, valor por " +
-      "viagem, por tonelada, por km ou diária. É a régua que o acerto do mês usa; " +
+      "viagem, por tonelada ou por km. É a régua que o acerto do mês usa; " +
       "não tem nada a ver com registro em carteira.",
     faz: [
       "Criar os vínculos que você usa (próprio, agregado, terceiro) e dizer quanto cada um recebe",

@@ -212,7 +212,7 @@ export default function TabelasPrecoPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Tabela de preços</h1>
           <p className="text-sm text-muted-foreground">
-            Quanto cada empresa paga por tonelada, km, viagem ou diária. O preço multiplica a
+            Quanto cada empresa paga por tonelada, km ou viagem. O preço multiplica a
             quantidade já com o mínimo aplicado.
           </p>
         </div>

@@ -48,7 +48,7 @@ type Modelo = { id: string; nome: string };
  * pelo cadastro de motorista e bate ponto por este.
  *
  * O que não pode é outra coisa: a mesma pessoa ser REGISTRADA e PARCEIRA ao
- * mesmo tempo (paga por diária de obra e por folha). Quem impede é o banco,
+ * mesmo tempo (paga por produção e por folha). Quem impede é o banco,
  * pelo `RegimeVigente`: contratar alguém com regime de parceiro vivo devolve
  * 409 dizendo o que encerrar antes. Esta frase dizia "não pode estar nos
  * dois cadastros", e contradizia a ficha do motorista e a tela de perfis.

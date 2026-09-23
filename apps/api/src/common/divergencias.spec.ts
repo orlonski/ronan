@@ -55,10 +55,9 @@ describe("Divergencias — o que segura a viagem e o que só sinaliza", () => {
     expect(d.statusFinal(StatusViagem.ENVIADA)).toBe(StatusViagem.ENVIADA);
   });
 
-  it("status de fluxo vence o INCOMPLETA — a diária precisa saber que espera a saída", () => {
+  it("status de fluxo vence o INCOMPLETA — quem aguarda o peso continua sabendo disso", () => {
     const d = new Divergencias();
     d.add(MotivoDivergencia.FALTA_KM);
-    expect(d.statusFinal(StatusViagem.AGUARDANDO_SAIDA)).toBe(StatusViagem.AGUARDANDO_SAIDA);
     expect(d.statusFinal(StatusViagem.AGUARDANDO_PESO)).toBe(StatusViagem.AGUARDANDO_PESO);
     expect(d.statusFinal(StatusViagem.EM_ANDAMENTO)).toBe(StatusViagem.EM_ANDAMENTO);
   });

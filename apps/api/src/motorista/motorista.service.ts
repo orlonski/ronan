@@ -167,7 +167,6 @@ export class MotoristaService {
         podeReferenciaKm: true,
         podeTelemetria: true,
         podeChat: true,
-        podeDiaria: true,
         // Vínculo do motorista: decide quais fotos o abastecimento exige dele.
         // Vai no /m/me (e não no catálogo) porque é dado DELE, não da conta.
         modalidade: {
@@ -964,14 +963,6 @@ export class MotoristaService {
         ? { ativo: true, id: { in: vinculadosIds } }
         : { ativo: true };
 
-    // Modos de serviço: só chegam pro motorista com a flag `podeDiaria`.
-    // Sem a flag o app não recebe nada e fica idêntico ao de hoje — é a camada
-    // de rollout gradual (a outra é a conta não ter cadastrado modo nenhum).
-    const motorista = await this.prisma.motorista.findUnique({
-      where: { id: motoristaId },
-      select: { podeDiaria: true },
-    });
-
     // Política de comprovante da CONTA. Vai no catálogo pra o app conseguir
     // bloquear o lançamento por falta de foto SEM depender de internet — e no
     // topo, não dentro de cliente/empresa: é config da transportadora, não da
@@ -1001,22 +992,20 @@ export class MotoristaService {
         },
         orderBy: { nome: "asc" },
       }),
-      motorista?.podeDiaria
-        ? this.prisma.tipoServico.findMany({
-            where: { ativo: true },
-            select: {
-              id: true,
-              nome: true,
-              padrao: true,
-              medicao: true,
-              exigeMaterial: true,
-              exigeTicket: true,
-              exigeLocalDescarga: true,
-              exigeKm: true,
-            },
-            orderBy: [{ ordem: "asc" }, { nome: "asc" }],
-          })
-        : Promise.resolve([]),
+      // Com um modo só cadastrado (o caso comum), o app nem mostra o seletor.
+      this.prisma.tipoServico.findMany({
+        where: { ativo: true },
+        select: {
+          id: true,
+          nome: true,
+          padrao: true,
+          exigeMaterial: true,
+          exigeTicket: true,
+          exigeLocalDescarga: true,
+          exigeKm: true,
+        },
+        orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+      }),
       this.prisma.cliente.findMany({
         where: { ativa: true },
         select: {

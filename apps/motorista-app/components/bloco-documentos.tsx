@@ -9,23 +9,20 @@ import { usePermite } from "@/lib/acessos-app";
  * A porta pros documentos, na home.
  *
  * ⚠️ Ele mostra um NÚMERO, não um botão — e isso não é preferência de estilo.
- * É a lição que custou três versões no bloco da obra (ver o histórico em
- * `components/home-obra.tsx`): as que morreram mostravam uma AÇÃO A FAZER, e o
- * motorista olhava sem saber o que era. A que funcionou responde a pergunta
+ * É a lição que custou três versões num bloco da home (o da obra, que já saiu
+ * do app): as que morreram mostravam uma AÇÃO A FAZER, e o motorista olhava
+ * sem saber o que era. A que funcionou responde a pergunta
  * antes de ser tocada. Aqui a pergunta é "falta alguma coisa minha?".
  *
  * As outras três regras que vieram da mesma cicatriz:
  *
  * - **Some sozinho quando zera.** Bloco que fica pra sempre na home empurra o
  *   app inteiro pra baixo todo dia por uma tarefa que acabou. Documento de
- *   admissão termina; a conta de diárias não.
+ *   admissão termina.
  * - **Altura fixa, nunca cresce com a lista.** 12 documentos não podem virar
  *   12 linhas na home.
  * - **Nunca vermelho.** Vermelho na home está reservado pro "o dia de hoje não
  *   entrou na conta", que é erro real e urgente. Documento faltando é rotina.
- *
- * Fica ANTES do bloco da obra de propósito: é uma coisa que acaba, e quem
- * ainda tem documento faltando ainda não entrou na obra direito.
  */
 
 const ALTURA = 96;

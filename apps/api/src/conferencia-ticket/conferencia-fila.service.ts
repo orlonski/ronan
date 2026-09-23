@@ -199,7 +199,6 @@ export class ConferenciaFilaService {
   }): string | null {
     if (v.fotos.length === 0) return "sem foto de ticket";
     if (v.status === StatusViagem.EM_ANDAMENTO) return "viagem ainda aberta";
-    if (v.status === StatusViagem.AGUARDANDO_SAIDA) return "diária sem saída marcada";
     if (v.revisadoEm) return "um humano já conferiu";
     if (v.status === StatusViagem.DIVERGENTE || v.status === StatusViagem.OK) {
       return "já tem decisão humana no status";

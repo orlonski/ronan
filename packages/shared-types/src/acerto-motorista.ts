@@ -6,7 +6,6 @@ import { z } from "zod";
 
 export const TIPOS_ITEM_ACERTO = [
   "FRETE",
-  "DIARIA",
   "REEMBOLSO_PEDAGIO",
   "REEMBOLSO_ABASTECIMENTO",
   "ADIANTAMENTO",
@@ -42,7 +41,6 @@ export const TIPOS_DEBITO_ACERTO = [
 
 export const ITEM_ACERTO_LABEL: Record<TipoItemAcertoTipo, string> = {
   FRETE: "Frete da viagem",
-  DIARIA: "Diária",
   REEMBOLSO_PEDAGIO: "Pedágio que você pagou",
   REEMBOLSO_ABASTECIMENTO: "Abastecimento que você pagou",
   ADIANTAMENTO: "Adiantamento já recebido",
@@ -142,7 +140,6 @@ export const RemuneracaoInput = z.object({
   valorPorViagem: z.number().positive().max(99999.99).nullish(),
   valorPorTonelada: z.number().positive().max(99999.99).nullish(),
   valorPorKm: z.number().positive().max(99999.99).nullish(),
-  valorDiaria: z.number().positive().max(99999.99).nullish(),
 });
 export type RemuneracaoInput = z.infer<typeof RemuneracaoInput>;
 

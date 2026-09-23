@@ -947,8 +947,6 @@ function pendenciaDoStatus(status: string): string | null {
   switch (status) {
     case "AGUARDANDO_PESO":
       return "falta o peso e o ticket";
-    case "AGUARDANDO_SAIDA":
-      return "falta marcar a hora da saída";
     case "EM_ANDAMENTO":
       return "viagem ainda aberta, não foi finalizada";
     case "DIVERGENTE":
@@ -978,8 +976,6 @@ function situacaoDoStatus(status: string): string {
       return "deu diferença na conferência";
     case "AGUARDANDO_PESO":
       return "esperando o peso e o ticket";
-    case "AGUARDANDO_SAIDA":
-      return "esperando a hora da saída";
     case "EM_ANDAMENTO":
       return "ainda aberta";
     default:

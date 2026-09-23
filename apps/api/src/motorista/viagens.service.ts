@@ -20,14 +20,13 @@ import { garantirCadastro, ItemInexistenteException } from "../common/item-inexi
 import { aplicarDivergencias, Divergencias } from "../common/divergencias";
 import { resolverTransportadora } from "../common/transportadora";
 import { contaIdAtual } from "../common/conta/conta-context";
-import { resolverModoServico, resolverPeriodo } from "../common/tipo-servico";
+import { resolverModoServico } from "../common/tipo-servico";
 import { exigeFotoDaViagem, resolverJustificativaSemFoto } from "../common/exige-foto";
 import {
   carimbosDaDispensa,
   dispensaConferencia,
   textoDispensa,
 } from "../common/conferencia-dispensada";
-import { formatarDuracao } from "@ronan/shared-types";
 import {
   aplicarMinimos,
   resolverRegraMinimo,
@@ -61,9 +60,8 @@ const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
   cliente: { select: { id: true, nome: true, empresaId: true, toneladasMinimas: true, kmMinimos: true } },
   material: { select: { id: true, nome: true } },
-  // O app precisa do modo pra renderizar peso x entrada/saída na lista e no
-  // detalhe. `medicao` é o que decide; o nome é o rótulo do badge.
-  tipoServico: { select: { id: true, nome: true, medicao: true } },
+  // O nome do modo é o rótulo do badge na lista e no detalhe.
+  tipoServico: { select: { id: true, nome: true } },
   localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   fotos: { select: { id: true, storageKey: true } },
@@ -86,7 +84,7 @@ const VIAGEM_DETALHE_INCLUDE = {
     },
   },
   material: { select: { id: true, nome: true } },
-  tipoServico: { select: { id: true, nome: true, medicao: true } },
+  tipoServico: { select: { id: true, nome: true } },
   localCarga: {
     select: { id: true, nome: true, logradouro: true, cidade: true, uf: true, lat: true, lng: true },
   },
@@ -1242,15 +1240,13 @@ export class ViagensMotoristaService {
       clienteId = null;
     }
 
-    // Modo de serviço: define o que este lançamento exige (peso x período).
-    // Autoritativo — o app esconde os campos, mas quem valida é aqui. Tipo que
+    // Modo de serviço: define o que este lançamento exige. Autoritativo — o app esconde os campos, mas quem valida é aqui. Tipo que
     // sumiu do cadastro cai no padrão da conta e sai carimbado (nunca recusa).
     const modo = await resolverModoServico(this.prisma, input.tipoServicoId, divs);
-    const ehPeriodo = modo.medicao === "PERIODO";
 
     // Material é lido aqui (e não junto do bota-fora, mais abaixo) porque a
-    // validação do ticket já depende dele. Modo que não exige material (diária
-    // de caminhão à disposição) grava materialId null.
+    // validação do ticket já depende dele. Modo que não exige material grava
+    // materialId null.
     let materialId = modo.exigeMaterial ? (input.materialId ?? null) : null;
     if (modo.exigeMaterial && !input.materialId) {
       divs.add(MotivoDivergencia.FALTA_MATERIAL);
@@ -1278,16 +1274,11 @@ export class ViagensMotoristaService {
       divs.add(MotivoDivergencia.FALTA_KM);
     }
 
-    // Período (diária): valida entrada/saída e diz se a diária ficou aberta.
-    const periodo = resolverPeriodo(modo, input);
-
     // Modo "aguardando peso": motorista lança sem peso/ticket porque o romaneio
     // só sai no fim do dia. Pula a validação de ticket (fica null); peso e ticket
     // entram depois via completarPeso (app) ou update admin (dashboard).
-    // Serviço medido por período não tem peso nenhum — nunca entra nesse modo.
-    const aguardandoPeso = !ehPeriodo && input.aguardandoPeso === true;
-    const semPeso =
-      !ehPeriodo && !aguardandoPeso && (input.toneladas == null || input.toneladas <= 0);
+    const aguardandoPeso = input.aguardandoPeso === true;
+    const semPeso = !aguardandoPeso && (input.toneladas == null || input.toneladas <= 0);
     if (semPeso) divs.add(MotivoDivergencia.FALTA_TONELADAS);
 
     // Ticket: basta o modo OU o material dispensar. Número repetido NÃO impede
@@ -1325,7 +1316,7 @@ export class ViagensMotoristaService {
       motoristaId,
       divs,
     });
-    // Modo sem local de descarga (diária que começa e termina no mesmo lugar)
+    // Modo sem local de descarga
     // não tem o que resolver aqui.
     const localDescargaId = input.localDescargaId
       ? await this.garantirLocal({
@@ -1373,13 +1364,7 @@ export class ViagensMotoristaService {
     // esperando um aval que ninguém tem motivo pra dar. A regra recusa sozinha
     // quando o status desejado não é ENVIADA — INCOMPLETA e os "aguardando"
     // continuam pedindo gente. Ver common/conferencia-dispensada.ts.
-    const statusBase = divs.statusFinal(
-      aguardandoPeso
-        ? "AGUARDANDO_PESO"
-        : periodo.aguardandoSaida
-          ? "AGUARDANDO_SAIDA"
-          : "ENVIADA",
-    );
+    const statusBase = divs.statusFinal(aguardandoPeso ? "AGUARDANDO_PESO" : "ENVIADA");
     const dispensada = dispensaConferencia({
       materialDispensa: material?.dispensaConferencia,
       statusDesejado: statusBase,
@@ -1397,17 +1382,11 @@ export class ViagensMotoristaService {
         data: rest.data,
         // Aguardando peso: toneladas fica null até completar (romaneio no fim do
         // dia). Status AGUARDANDO_PESO mantém a viagem fora de match/fechamento/KPIs.
-        // Serviço medido por período não tem peso — fica null sempre.
-        toneladas: ehPeriodo ? null : aguardandoPeso ? null : rest.toneladas,
-        entradaEm: periodo.entradaEm,
-        saidaEm: periodo.saidaEm,
-        duracaoMinutos: periodo.duracaoMinutos,
-        // Diária aberta (sem saída) também é viagem incompleta: AGUARDANDO_SAIDA
-        // a mantém fora de match/fechamento/KPIs até o motorista encerrar.
+        toneladas: aguardandoPeso ? null : rest.toneladas,
         // Carimbo bloqueante (falta km/material/local/peso, cadastro sumido)
         // vence e manda pra INCOMPLETA — fora de match/fechamento/KPI até o
-        // painel completar. AGUARDANDO_PESO/SAIDA prevalecem: são fluxos
-        // legítimos que já mantêm a viagem fora do fechamento e cuja semântica
+        // painel completar. AGUARDANDO_PESO prevalece: é fluxo legítimo que já
+        // mantém a viagem fora do fechamento e cuja semântica
         // o INCOMPLETA apagaria.
         ...(dispensada ? carimbosDaDispensa(new Date()) : { status: statusBase }),
         ...(divs.paraCreateAninhado() ? { divergencias: divs.paraCreateAninhado() } : {}),
@@ -1547,7 +1526,7 @@ export class ViagensMotoristaService {
     // - Motorista sincronizou viagem mas nao abriu /m/rotas/calcular pra esse par
     // Sem isso, o dashboard nao mostra polilinha no mapa de trajeto e
     // a query de "pedagios na rota" volta vazia. Best-effort em background.
-    // Modo sem local de descarga (diária) não tem par pra cachear.
+    // Modo sem local de descarga não tem par pra cachear.
     if (rest.localDescargaId) {
       void this.roteamento
         .calcularKm(rest.localCargaId, rest.localDescargaId)
@@ -1587,22 +1566,10 @@ export class ViagensMotoristaService {
         select: { nome: true },
       });
       const quem = m?.nome ?? "motorista";
-      const titulo = ehPeriodo
-        ? periodo.aguardandoSaida
-          ? `Diária aberta por ${quem}`
-          : `Diária de ${quem}`
-        : aguardandoPeso
-          ? `Viagem sem peso de ${quem}`
-          : `Nova viagem de ${quem}`;
-      const corpo = ehPeriodo
-        ? `${viagem.cliente?.nome ?? ""} · ${
-            periodo.aguardandoSaida
-              ? "aguardando a saída"
-              : formatarDuracao(periodo.duracaoMinutos)
-          }`
-        : aguardandoPeso
-          ? `${viagem.cliente?.nome ?? ""} · aguardando peso/romaneio`
-          : `${viagem.ticket ? `Ticket ${viagem.ticket} · ` : ""}${viagem.cliente?.nome ?? ""} · ${viagem.toneladas ?? 0}t`;
+      const titulo = aguardandoPeso ? `Viagem sem peso de ${quem}` : `Nova viagem de ${quem}`;
+      const corpo = aguardandoPeso
+        ? `${viagem.cliente?.nome ?? ""} · aguardando peso/romaneio`
+        : `${viagem.ticket ? `Ticket ${viagem.ticket} · ` : ""}${viagem.cliente?.nome ?? ""} · ${viagem.toneladas ?? 0}t`;
       await this.notificarAdmins("nova-viagem", titulo, corpo, {
         viagemId: viagem.id,
         motoristaId,
@@ -1669,7 +1636,7 @@ export class ViagensMotoristaService {
         })
       : null;
     const ticket = ticketRaw?.trim() || null;
-    // Basta UM dos dois dispensar: o modo de serviço (diária não tem pesagem) ou
+    // Basta UM dos dois dispensar: o modo de serviço (sem ticket) ou
     // o material (concreto não gera ticket).
     const exige = modoExigeTicket && material?.exigeTicket !== false;
     if (exige && !ticket) {
@@ -1709,79 +1676,6 @@ export class ViagensMotoristaService {
     });
     const regras = await this.regrasMinimoAtivas();
     return viagens.map((v) => serializarViagemComMinimos(v, regras));
-  }
-
-  /**
-   * Lista as diárias do motorista que ficaram abertas (AGUARDANDO_SAIDA).
-   * Alimenta o card "Diária aberta" na home do app. Espelha listarAguardandoPeso:
-   * mais antiga primeiro, que é a que ele mais provavelmente esqueceu.
-   */
-  async listarAguardandoSaida(motoristaId: string) {
-    const viagens = await this.prisma.viagem.findMany({
-      where: { motoristaId, status: "AGUARDANDO_SAIDA" },
-      include: VIAGEM_INCLUDE,
-      orderBy: { entradaEm: "asc" },
-    });
-    const regras = await this.regrasMinimoAtivas();
-    return viagens.map((v) => serializarViagemComMinimos(v, regras));
-  }
-
-  /**
-   * Encerra uma diária aberta (AGUARDANDO_SAIDA): grava a saída, calcula a
-   * duração e transita pra ENVIADA. Espelho de completarPeso, inclusive na
-   * idempotência — se a diária já foi encerrada, devolve a viagem em vez de
-   * erro, que é o que faz o retry do outbox offline não virar item preso.
-   */
-  async encerrarDiaria(motoristaId: string, viagemId: string, input: { saidaEm: Date }) {
-    const viagem = await this.prisma.viagem.findUnique({
-      where: { id: viagemId },
-      select: {
-        id: true,
-        motoristaId: true,
-        status: true,
-        entradaEm: true,
-        tipoServicoId: true,
-        materialId: true,
-      },
-    });
-    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
-    if (viagem.motoristaId !== motoristaId) {
-      throw new ForbiddenException("Esta viagem não é sua.");
-    }
-    // Idempotência: já encerrada → devolve a atual.
-    if (viagem.status !== "AGUARDANDO_SAIDA") {
-      const atual = await this.prisma.viagem.findUnique({
-        where: { id: viagemId },
-        include: VIAGEM_INCLUDE,
-      });
-      return atual ? serializarViagemComMinimos(atual, await this.regrasMinimoAtivas()) : null;
-    }
-
-    // Reusa a mesma validação do create pra saída/duração — uma regra só.
-    const modo = await resolverModoServico(this.prisma, viagem.tipoServicoId);
-    const periodo = resolverPeriodo(modo, {
-      entradaEm: viagem.entradaEm ?? undefined,
-      saidaEm: input.saidaEm,
-    });
-
-    // Diária normalmente nem tem material (`TipoServico.exigeMaterial = false`),
-    // mas quando tem, a regra é a mesma: a saída foi marcada, a viagem está
-    // completa, e material que não gera papel não precisa de conferência.
-    const { dispensada: dispensadaDiaria, materialNome: materialNomeDiaria } =
-      await this.dispensaDoMaterial(viagem.materialId, "ENVIADA");
-
-    const atualizada = await this.prisma.viagem.update({
-      where: { id: viagemId },
-      data: {
-        saidaEm: periodo.saidaEm,
-        duracaoMinutos: periodo.duracaoMinutos,
-        ...(dispensadaDiaria ? carimbosDaDispensa(new Date()) : { status: "ENVIADA" as const }),
-      },
-      include: VIAGEM_INCLUDE,
-    });
-    if (dispensadaDiaria) await this.anunciarDispensa(atualizada.id, materialNomeDiaria);
-
-    return serializarViagemComMinimos(atualizada, await this.regrasMinimoAtivas());
   }
 
   /**
@@ -2274,7 +2168,7 @@ export class ViagensMotoristaService {
     }
 
     // Foto do comprovante (mesma regra do create): carimba a falta, nunca recusa.
-    // O lifecycle guiado não escolhe modo de serviço (diária não passa por aqui),
+    // O lifecycle guiado não escolhe modo de serviço,
     // então só o material suprime.
     const exigeFotoFin = exigeFotoDaViagem({
       contaExige: (await this.contaExigeFoto()).viagem,

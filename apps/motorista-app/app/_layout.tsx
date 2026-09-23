@@ -21,6 +21,7 @@ import { getConnected, subscribeConnected } from "@/lib/connectivity";
 import { TelaCarregando } from "@/components/tela-carregando";
 import { aplicarOtaAoVoltar, baixarUpdateNoBoot } from "@/lib/ota";
 import { loadTokens, migrarProtecaoKeychain } from "@/lib/auth";
+import { limparRestosDeObraEDiaria } from "@/db/database";
 import { prepararSessoes } from "@/lib/boot-sessao";
 import { EscolherEmpresaAbertura } from "@/components/escolher-empresa-abertura";
 import {
@@ -200,6 +201,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void (async () => {
       await migrarProtecaoKeychain();
+      // Obra e diária saíram do sistema: o que sobrou delas na fila e no cache
+      // só daria erro ao reenviar. Idempotente — depois da 1ª vez é no-op.
+      await limparRestosDeObraEDiaria();
       await recuperarItensPresos();
       // Traz pro painel o passivo que ficou preso em erro no aparelho (e
       // devolve pra fila o que agora tem chance de subir). Sem toque do

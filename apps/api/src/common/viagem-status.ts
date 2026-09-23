@@ -6,7 +6,6 @@ import { StatusViagem } from "@prisma/client";
  *
  * - EM_ANDAMENTO: lifecycle guiado ainda aberto (campos podem estar nulos).
  * - AGUARDANDO_PESO: lançada sem peso/ticket (romaneio no fim do dia).
- * - AGUARDANDO_SAIDA: diária aberta — entrada marcada, saída ainda não.
  * - INCOMPLETA: entrou faltando dado essencial (km/material/local/peso) ou
  *   apontando pra cadastro que sumiu. O servidor aceitou de propósito, em vez
  *   de recusar e matar o lançamento no celular do motorista — o que falta está
@@ -21,6 +20,5 @@ import { StatusViagem } from "@prisma/client";
 export const STATUS_FORA_FECHAMENTO: StatusViagem[] = [
   StatusViagem.EM_ANDAMENTO,
   StatusViagem.AGUARDANDO_PESO,
-  StatusViagem.AGUARDANDO_SAIDA,
   StatusViagem.INCOMPLETA,
 ];

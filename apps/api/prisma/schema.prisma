@@ -36,11 +36,6 @@ enum StatusViagem {
   /// match/fechamento/KPIs/resumos/export enquanto incompleta. Vira ENVIADA
   /// quando o motorista (app) ou o admin (dashboard) completa peso + ticket.
   AGUARDANDO_PESO
-  /// Viagem de serviço medido por PERÍODO (diária): o motorista marcou a hora de
-  /// entrada e ainda não marcou a de saída. Mesma natureza do AGUARDANDO_PESO —
-  /// incompleta, visível pro admin, NUNCA entra em match/fechamento/KPIs/export.
-  /// Vira ENVIADA quando o motorista (app) ou o admin (dashboard) grava a saída.
-  AGUARDANDO_SAIDA
   /// Viagem que ENTROU faltando dado essencial (km, material, local de descarga,
   /// peso fora do modo aguardando-peso) ou apontando pra cadastro que sumiu do
   /// servidor. Antes desses casos eram RECUSADOS com 4xx e o lançamento morria
@@ -119,16 +114,6 @@ model ViagemDivergencia {
   @@index([contaId, resolvidoEm])
   @@index([viagemId])
   @@map("viagem_divergencias")
-}
-
-/// Como a viagem é MEDIDA — e portanto o que o app pede ao motorista.
-/// Ver model TipoServico.
-enum MedicaoViagem {
-  /// Viagem medida em toneladas transportadas (o padrão de sempre).
-  PESO
-  /// Viagem medida pelo tempo em que o caminhão ficou à disposição (diária):
-  /// entrada → saída. Não tem peso.
-  PERIODO
 }
 
 enum TipoDivergencia {
@@ -606,15 +591,11 @@ model Conta {
   cobrancasAssinatura           CobrancaAssinatura[]
   aceitesTermo                  AceiteTermo[]
 
-  alocacoesObra        AlocacaoObra[]
-  registrosPresenca    RegistroPresenca[]
-  configsMensal        ConfigMensalContratante[]
   documentosExigidos   DocumentoExigido[]
   convitesColeta       ConviteColeta[]
-  medicoesContratante  MedicaoContratante[]
   assinaturaDocumentos AssinaturaDocumento[]
 
-  // --- Ponto eletrônico (funcionário CLT). Módulo à parte do mensal. ---
+  // --- Ponto eletrônico (funcionário CLT). ---
   regimesVigentes    RegimeVigente[]
   funcionarios       Funcionario[]
   marcacoes          Marcacao[]
@@ -763,10 +744,7 @@ model User {
   aceitesTermo           AceiteTermo[]
   onboarding             OnboardingUsuario?
 
-  alocacoesObraCriadas AlocacaoObra[]
-  presencasLancadas    RegistroPresenca[]
-  coletasCriadas       ConviteColeta[]      @relation("CriouColeta")
-  medicoesLancadas     MedicaoContratante[] @relation("LancouMedicao")
+  coletasCriadas ConviteColeta[] @relation("CriouColeta")
 
   @@index([contaId])
   @@map("users")
@@ -1463,13 +1441,6 @@ model Motorista {
   /// Serviço medido por período (diária): o motorista pode escolher o modo de
   /// serviço no lançamento e marcar hora de entrada/saída em vez de peso.
   ///
-  /// Default TRUE porque quem já esconde o campo é o CATÁLOGO: com um único modo
-  /// cadastrado (o caso de toda conta que não usa diária) o app nem renderiza o
-  /// seletor. Deixar false aqui só criava um segundo interruptor pra ligar na
-  /// mão sem ganho nenhum. Continua desligável caso a caso pelo painel — aí vira
-  /// o que ele deveria ser: uma exceção ("esse aqui não lança diária"), não um
-  /// pré-requisito.
-  podeDiaria              Boolean              @default(true)
   // --- remuneração própria deste motorista (vence a da modalidade) ---
   /// null = usa a regra da modalidade. Preenchido = este motorista negociou
   /// diferente, que é a norma com agregado.
@@ -1478,7 +1449,6 @@ model Motorista {
   valorPorViagem          Decimal?             @db.Decimal(10, 2)
   valorPorTonelada        Decimal?             @db.Decimal(10, 2)
   valorPorKm              Decimal?             @db.Decimal(10, 2)
-  valorDiaria             Decimal?             @db.Decimal(10, 2)
   /// Pra onde o pagamento vai. Guardado como o motorista digitou (pode ser CPF,
   /// telefone, e-mail ou chave aleatória) — normalizar chave PIX é errar.
   chavePix                String?
@@ -1536,16 +1506,7 @@ model Motorista {
 
   alertas AlertaOperacional[]
 
-  alocacoesObra AlocacaoObra[]
-
-  /// Mostrar no app quanto ele já tem a receber nas diárias do período.
-  ///
-  /// Nasce DESLIGADA e o painel liga por motorista, como as outras flags.
-  /// Motivo de não ser sempre ligada: a tela de registrar presença tem um
-  /// único assunto — "cheguei" —, e pendurar dinheiro nela transforma o gesto
-  /// numa conferência de valor, que é conversa do acerto e não da obra.
-  podeVerValorDiaria Boolean         @default(false)
-  convitesColeta     ConviteColeta[]
+  convitesColeta ConviteColeta[]
 
   assinaturasDocumento AssinaturaDocumento[]
 
@@ -1806,18 +1767,18 @@ enum OrigemDocumento {
 /// - `exig:<id>` quando o arquivo atende uma exigência do catálogo;
 /// - `gaveta:<TIPO>` quando é anexo avulso do painel, que é como sempre foi.
 ///
-/// É o mesmo truque de `AlocacaoObra.vigenteDe` e `RegimeVigente.chaveViva`:
+/// É o mesmo truque de `RegimeVigente.chaveViva`:
 /// uma coluna que carrega a regra de unicidade em vez de espalhá-la por
 /// validações de service. Quem escreve usa `chaveDocumento()` em
 /// `common/chave-documento.ts` — nunca monta a string na mão.
 model MotoristaDocumento {
-  contaId     String    @default("__SEM_CONTA__")
-  conta       Conta     @relation(fields: [contaId], references: [id])
-  id          String     @id @default(uuid())
+  contaId       String       @default("__SEM_CONTA__")
+  conta         Conta        @relation(fields: [contaId], references: [id])
+  id            String       @id @default(uuid())
   /// De QUEM é o arquivo: do cadastro de motorista OU do de funcionário
   /// (registrado em carteira). Exatamente um dos dois — CHECK no banco.
-  motoristaId String?
-  motorista   Motorista? @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId   String?
+  motorista     Motorista?   @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
   funcionarioId String?
   funcionario   Funcionario? @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
 
@@ -2083,8 +2044,6 @@ model Veiculo {
   pneus            Pneu[]
   multas           Multa[]
 
-  alocacoesObra AlocacaoObra[]
-
   @@unique([contaId, placa])
   @@index([ativo])
   @@index([transportadoraId])
@@ -2196,9 +2155,7 @@ model Empresa {
 
   faturas            Fatura[]
   titulosReceber     TituloReceber[]
-  configMensal       ConfigMensalContratante?
   documentosExigidos DocumentoExigido[]
-  medicoes           MedicaoContratante[]
 
   @@unique([contaId, cnpj])
   @@index([ativa])
@@ -2277,8 +2234,6 @@ model Cliente {
   telefone            String?
   email               String?
 
-  alocacoesObra AlocacaoObra[]
-
   @@index([empresaId])
   @@index([ativa])
   @@index([contaId])
@@ -2352,32 +2307,29 @@ model Material {
 /// ⚠️ Conta que só tem o tipo `frete` (o do kit inicial) se comporta EXATAMENTE
 /// como antes desta feature existir: o app nem mostra o seletor.
 model TipoServico {
-  contaId            String        @default("__SEM_CONTA__")
-  conta              Conta         @relation(fields: [contaId], references: [id])
-  id                 String        @id @default(uuid())
+  contaId            String   @default("__SEM_CONTA__")
+  conta              Conta    @relation(fields: [contaId], references: [id])
+  id                 String   @id @default(uuid())
   /// Chave estável usada no código/seed (ex: "frete", "diaria"). Imutável.
   slug               String
   /// Rótulo que o motorista lê no app (editável pelo admin).
   nome               String
-  ativo              Boolean       @default(true)
+  ativo              Boolean  @default(true)
   /// O tipo herdado por viagem sem tipoServicoId (histórico e app antigo). Só um
   /// por conta — garantido por índice parcial único criado no migration.sql.
-  padrao             Boolean       @default(false)
+  padrao             Boolean  @default(false)
   /// Ordena o seletor no app.
-  ordem              Int           @default(0)
-  /// PESO = pede toneladas (comportamento de sempre).
-  /// PERIODO = pede hora de entrada e de saída, e NÃO pede peso.
-  medicao            MedicaoViagem @default(PESO)
+  ordem              Int      @default(0)
   // --- o que esse tipo exige (mesmo espírito dos `pede*` do TipoEventoViagem) ---
-  /// false = a viagem não tem material (diária de caminhão à disposição).
-  exigeMaterial      Boolean       @default(true)
+  /// false = a viagem não tem material.
+  exigeMaterial      Boolean  @default(true)
   /// Combinado em E com Material.exigeTicket: basta um dos dois dispensar.
-  exigeTicket        Boolean       @default(true)
-  exigeLocalDescarga Boolean       @default(true)
-  exigeKm            Boolean       @default(true)
-  criadoEm           DateTime      @default(now())
-  alteradoEm         DateTime      @updatedAt
-  criadoPor          User?         @relation("CriouTipoServico", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  exigeTicket        Boolean  @default(true)
+  exigeLocalDescarga Boolean  @default(true)
+  exigeKm            Boolean  @default(true)
+  criadoEm           DateTime @default(now())
+  alteradoEm         DateTime @updatedAt
+  criadoPor          User?    @relation("CriouTipoServico", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId        String?
 
   viagens      Viagem[]
@@ -2424,8 +2376,6 @@ enum TipoRemuneracao {
 enum TipoItemAcerto {
   /// O que ele ganhou pela viagem, pela regra da modalidade.
   FRETE
-  /// Diária (serviço medido por período).
-  DIARIA
   /// Pedágio que ELE pagou do próprio bolso e a empresa devolve.
   REEMBOLSO_PEDAGIO
   /// Idem combustível.
@@ -2509,40 +2459,34 @@ model AcertoMotorista {
  * preenchida.
  */
 model ItemAcerto {
-  contaId            String            @default("__SEM_CONTA__")
-  conta              Conta             @relation(fields: [contaId], references: [id])
-  id                 String            @id @default(uuid())
-  acerto             AcertoMotorista   @relation(fields: [acertoId], references: [id], onDelete: Cascade)
-  acertoId           String
-  tipo               TipoItemAcerto
-  viagem             Viagem?           @relation(fields: [viagemId], references: [id], onDelete: SetNull)
-  viagemId           String?
-  pedagio            Pedagio?          @relation(fields: [pedagioId], references: [id], onDelete: SetNull)
-  pedagioId          String?
-  abastecimento      Abastecimento?    @relation(fields: [abastecimentoId], references: [id], onDelete: SetNull)
-  abastecimentoId    String?
-  /// O DIA de obra que gerou esta linha (o mensal). Aponta pro registro pelo
-  /// mesmo motivo do `viagemId`: sem o vínculo, regerar o acerto não sabe o
-  /// que já pagou, e o motorista não consegue dizer a que dia a linha se refere.
-  registroPresenca   RegistroPresenca? @relation(fields: [registroPresencaId], references: [id], onDelete: SetNull)
-  registroPresencaId String?
+  contaId         String          @default("__SEM_CONTA__")
+  conta           Conta           @relation(fields: [contaId], references: [id])
+  id              String          @id @default(uuid())
+  acerto          AcertoMotorista @relation(fields: [acertoId], references: [id], onDelete: Cascade)
+  acertoId        String
+  tipo            TipoItemAcerto
+  viagem          Viagem?         @relation(fields: [viagemId], references: [id], onDelete: SetNull)
+  viagemId        String?
+  pedagio         Pedagio?        @relation(fields: [pedagioId], references: [id], onDelete: SetNull)
+  pedagioId       String?
+  abastecimento   Abastecimento?  @relation(fields: [abastecimentoId], references: [id], onDelete: SetNull)
+  abastecimentoId String?
   /// O que o motorista lê na linha. Snapshot: sobrevive à viagem ser editada.
-  descricao          String
+  descricao       String
   /// Um sinal só, positivo credita e negativo desconta — assim a soma do extrato
   /// não depende de lembrar o sinal de cada tipo.
-  valor              Decimal           @db.Decimal(12, 2)
+  valor           Decimal         @db.Decimal(12, 2)
   /// Obrigatório em desconto lançado à mão. Tirar dinheiro de parceiro autônomo
   /// sem justificativa escrita é a mesma doutrina do km: não pode.
-  motivo             String?
+  motivo          String?
   /// True = a regra gerou. False = alguém digitou. O regerar só mexe no automático.
-  automatico         Boolean           @default(true)
-  criadoPor          User?             @relation("CriouItemAcerto", fields: [criadoPorId], references: [id], onDelete: SetNull)
-  criadoPorId        String?
-  criadoEm           DateTime          @default(now())
+  automatico      Boolean         @default(true)
+  criadoPor       User?           @relation("CriouItemAcerto", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId     String?
+  criadoEm        DateTime        @default(now())
 
   @@index([acertoId])
   @@index([viagemId])
-  @@index([registroPresencaId])
   @@index([contaId])
   @@map("itens_acerto")
 }
@@ -2575,9 +2519,6 @@ model ModalidadeMotorista {
   valorPorViagem         Decimal?        @db.Decimal(10, 2)
   valorPorTonelada       Decimal?        @db.Decimal(10, 2)
   valorPorKm             Decimal?        @db.Decimal(10, 2)
-  /// Quanto ele ganha por diária (serviço medido por período). Independente do
-  /// tipo acima: um agregado pago por percentual também pode fazer diária.
-  valorDiaria            Decimal?        @db.Decimal(10, 2)
   /// A empresa devolve o pedágio que ele pagou do bolso? Default true porque é
   /// o combinado em 99% dos casos — e porque não devolver, em silêncio, é o
   /// tipo de coisa que faz motorista ir embora.
@@ -2603,9 +2544,7 @@ model ModalidadeMotorista {
 /// kmFaixaDe inclusivo, kmFaixaAte exclusivo (null = sem teto). Pelo menos um
 /// dos mínimos (km/toneladas) preenchido.
 /**
- * Em que unidade o frete é cobrado. Espelha `TipoServico.medicao` no espírito,
- * mas é outra coisa: medicao diz COMO o serviço é medido, isto diz POR QUAL
- * unidade ele é pago. Uma viagem medida em PESO pode ser paga por viagem fechada.
+ * Em que unidade o frete é cobrado.
  */
 enum BasePreco {
   /// R$ por tonelada efetiva (o mais comum em agregados).
@@ -2614,20 +2553,6 @@ enum BasePreco {
   KM
   /// Valor fechado por viagem, independente de peso e distância.
   VIAGEM
-  /// R$ por diária/período. Única base válida pra TipoServico.medicao = PERIODO.
-  PERIODO
-  /// R$ por dia de caminhão à disposição de uma OBRA (o mensal).
-  ///
-  /// Parece `PERIODO` e NÃO é: aquela precifica uma VIAGEM cujo serviço é
-  /// medido por período (tem viagem, tem entrada e saída); esta precifica um
-  /// DIA de `RegistroPresenca`, onde não existe viagem nenhuma. Separar não é
-  /// preciosismo — uma empresa pode ter as duas coisas, com valores
-  /// diferentes, e uma base só faria o preço da diária de obra ser cobrado da
-  /// viagem à disposição (ou o contrário) sem ninguém ver.
-  ///
-  /// Nunca casa com viagem: `calcularValorViagem` recusa, e a resolução de
-  /// linha exclui esta base por padrão.
-  DIARIA_OBRA
 }
 
 /**
@@ -2654,9 +2579,8 @@ model TabelaPreco {
   /// null = vale pra qualquer material.
   material       Material?    @relation(fields: [materialId], references: [id], onDelete: Cascade)
   materialId     String?
-  /// null = vale pra qualquer modo de serviço. Preencher quando a diária (ou
-  /// outro modo) tiver preço próprio — é o que permite `PERIODO` conviver com
-  /// frete por tonelada na mesma empresa.
+  /// null = vale pra qualquer modo de serviço. Preencher quando um modo tiver
+  /// preço próprio.
   tipoServico    TipoServico? @relation(fields: [tipoServicoId], references: [id], onDelete: Cascade)
   tipoServicoId  String?
   kmFaixaDe      Decimal      @db.Decimal(10, 2)
@@ -2709,7 +2633,7 @@ model ViagemValor {
   base            BasePreco
   precoUnitario   Decimal      @db.Decimal(10, 2)
   /// A quantidade EFETIVA que foi multiplicada (toneladas ou km pós-mínimo, ou
-  /// 1 nas bases VIAGEM/PERIODO). Guardada pra conta ser reconstituível sem
+  /// 1 na base VIAGEM). Guardada pra conta ser reconstituível sem
   /// recalcular nada.
   quantidade      Decimal      @db.Decimal(12, 3)
   valorFrete      Decimal      @db.Decimal(12, 2)
@@ -3732,24 +3656,14 @@ model Viagem {
   clienteId               String?
   material                Material?          @relation(fields: [materialId], references: [id])
   materialId              String?
-  /// Modo de serviço da viagem (como ela é medida). NULL = o tipo `padrao` da
-  /// conta, que é PESO — é assim que todo o histórico e todo app antigo seguem
+  /// Modo de serviço da viagem (o que o lançamento exige). NULL = o tipo
+  /// `padrao` da conta — é assim que todo o histórico e todo app antigo seguem
   /// funcionando sem migração de dados. Ver model TipoServico.
   tipoServico             TipoServico?       @relation(fields: [tipoServicoId], references: [id])
   tipoServicoId           String?
   data                    DateTime?          @db.Date
-  /// Null quando o serviço é medido por PERÍODO (diária). Ver TipoServico.medicao.
+  /// Null enquanto a viagem não tem peso (EM_ANDAMENTO, AGUARDANDO_PESO).
   toneladas               Decimal?           @db.Decimal(10, 3)
-  /// Serviço medido por PERÍODO (diária): quando o caminhão entrou e saiu.
-  /// DateTime completo (não só hora) de propósito — diária que vira a noite
-  /// (22h → 06h) precisa fechar sozinha, sem heurística de "dia seguinte".
-  /// Null nas viagens medidas por peso.
-  entradaEm               DateTime?
-  saidaEm                 DateTime?
-  /// Duração derivada de saidaEm - entradaEm, gravada na escrita pra permitir
-  /// orderBy/_sum em SQL (mesmo espírito do kmCalculado). Null enquanto a saída
-  /// não foi marcada (status AGUARDANDO_SAIDA).
-  duracaoMinutos          Int?
   /// Null quando o material não exige ticket (ex: concreto). Ver Material.exigeTicket.
   ticket                  String?
   km                      Decimal?           @db.Decimal(10, 2)
@@ -6334,240 +6248,15 @@ model AceiteTermo {
   @@map("aceites_termo")
 }
 
-// ---------------------------------------------------------------- mensal ---
-//
-// O contrato em que o caminhão fica À DISPOSIÇÃO DE UMA OBRA e o pagamento é
-// por DIÁRIA — não por viagem, não por tonelada.
-//
-// LEIA ISTO ANTES DE MEXER: aqui NÃO existe ponto, jornada, falta nem atraso,
-// e essas palavras não podem entrar em nome de coluna, de enum nem em texto de
-// tela. O motorista é PARCEIRO AUTÔNOMO. O que se registra é a PRESENÇA DO
-// CAMINHÃO NA OBRA num dia — um fato do contrato de transporte, não o
-// cumprimento de horário por um empregado. Somar "ponto" a pagamento por
-// diária, habitualidade e documento de NR é desenhar os elementos do vínculo
-// empregatício dentro do produto, e a conta cai na transportadora.
-//
-// Pela mesma razão NÃO existe horário esperado: sem horário-alvo não há
-// atraso, sem atraso não há descumprimento, sem descumprimento não há
-// subordinação.
-
-/// Quem marcou a presença daquele dia.
-///
-/// Guardado porque o escritório precisa saber o que é registro do motorista e
-/// o que foi lançado no painel por ele — a prova que vale contra a medição do
-/// contratante é a primeira. Nunca vira julgamento sobre o motorista.
-enum OrigemPresenca {
-  /// O motorista tocou no app. É a prova forte.
-  APP
-  /// Alguém do escritório lançou pelo painel (exige motivo).
-  PAINEL
-}
-
-/// "Este caminhão, com este motorista, está à disposição desta obra, por esta
-/// diária, neste período."
-///
-/// É a peça que faltava, e ela existe por um motivo de INTERFACE antes de ser
-/// de dados: é a alocação que permite o app não perguntar NADA. Obra, veículo,
-/// contratante e valor já estão decididos aqui, então a tela do motorista tem
-/// um botão e nada mais. Sem ela, o app volta a ter lista — e lista é o que
-/// este público não consegue usar.
-///
-/// A obra é o `Cliente` (que já tem contratante, locais e preço); não existe
-/// entidade "Obra". E isto é tabela AO LADO da Viagem, nunca status novo em
-/// `StatusViagem`: a lição do `ViagemPlanejada` custou caro.
-model AlocacaoObra {
-  contaId String @default("__SEM_CONTA__")
-  conta   Conta  @relation(fields: [contaId], references: [id])
-  id      String @id @default(uuid())
-
-  /// A OBRA. É um Cliente — ele já carrega o contratante, os locais e a tabela
-  /// de preço.
-  clienteId String
-  cliente   Cliente @relation(fields: [clienteId], references: [id])
-
-  motoristaId String
-  motorista   Motorista @relation(fields: [motoristaId], references: [id])
-
-  veiculoId String
-  veiculo   Veiculo @relation(fields: [veiculoId], references: [id])
-
-  /// Vigência. `fim` nulo = vigente sem data marcada.
-  inicio DateTime  @db.Date
-  fim    DateTime? @db.Date
-
-  /// O QUE a pessoa é nesta obra.
-  ///
-  /// ⚠️ NÃO se escolhe no formulário: deriva do vínculo que já existe pro CPF
-  /// (`RegimeVigente`). Quem decide é o contrato de trabalho, não a tela de
-  /// alocação — e é isso que impede a alocação de abrir um regime de PARCEIRO
-  /// por cima de um contrato de emprego vivo, que era o 409 que barrava o
-  /// escritório sem caminho de saída.
-  ///
-  /// `PARCEIRO` é o caso original e continua abrindo o regime. `EMPREGADO`
-  /// não abre nada: ele só REFLETE a contratação que o módulo de ponto já fez,
-  /// e a alocação passa a significar o caminhão-dia à disposição da obra —
-  /// fato comercial com o contratante, não pagamento ao motorista.
-  regime RegimeTrabalho @default(PARCEIRO)
-
-  /// A régua de pagamento DESTA alocação, quando ela difere da modalidade.
-  ///
-  /// Terceiro degrau da escada que já existe (`ModalidadeMotorista.valorDiaria`
-  /// → `Motorista.valorDiaria` → aqui), e pelo mesmo motivo dos outros dois: o
-  /// mesmo motorista em duas obras no mesmo período tem duas diárias
-  /// diferentes, e sem isto o acerto nasce errado. Override é tudo-ou-nada.
-  ///
-  /// ⚠️ SEMPRE NULO quando `regime` é EMPREGADO, e o banco garante (CHECK na
-  /// migration). Valor por dia pago a empregado seu, fora da folha, é salário
-  /// por fora (art. 457 §1º da CLT) — e ainda serviria de prova de que a
-  /// "parceria" nunca foi parceria. Quem é registrado recebe por folha; a obra
-  /// mede caminhão-dia.
-  valorDiaria Decimal? @db.Decimal(10, 2)
-
-  /// False = acabou. Não se apaga alocação: os dias registrados apontam pra
-  /// ela e o espelho de um mês fechado precisa continuar legível.
-  ativa           Boolean   @default(true)
-  encerradaEm     DateTime?
-  encerradaMotivo String?
-
-  criadoEm    DateTime @default(now())
-  alteradoEm  DateTime @updatedAt
-  criadoPorId String?
-  criadoPor   User?    @relation(fields: [criadoPorId], references: [id])
-
-  presencas RegistroPresenca[]
-
-  /// Chave que só existe enquanto a alocação está viva.
-  ///
-  /// Vale `motoristaId` enquanto `ativa`, e NULL quando encerrada. É o que faz
-  /// o banco garantir UMA obra por vez sem proibir histórico: no Postgres dois
-  /// NULLs não colidem, então o motorista acumula quantas alocações encerradas
-  /// tiver e no máximo uma viva. Índice parcial de verdade (`WHERE ativa`) o
-  /// Prisma não declara, e índice que só existe na migration vira drift.
-  ///
-  /// Quem mantém em dia é o service, nunca a mão: encerrar põe NULL aqui no
-  /// mesmo update que põe `ativa=false`.
-  vigenteDe String?
-
-  /// UMA obra por vez, por decisão do dono (19/09/2026).
-  ///
-  /// Não é limitação técnica, é o que sustenta o botão único: com duas
-  /// alocações vivas o app teria que perguntar "qual obra?", e a pergunta é
-  /// justamente o que não pode existir. A sobreposição de período entre uma
-  /// alocação nova e as encerradas é conferida no service.
-  @@unique([contaId, vigenteDe], map: "uma_alocacao_ativa_por_motorista")
-  @@index([contaId, clienteId, ativa])
-  @@index([motoristaId, ativa])
-  @@map("alocacoes_obra")
-}
-
-/// O caminhão esteve na obra neste DIA.
-///
-/// Por DIA, não por período: decisão do dono (19/09/2026). Um toque, uma
-/// linha, sem hora de saída — porque exigir a saída obriga um segundo toque e
-/// cria a figura do "esqueceu de fechar", que este público não resolve sozinho.
-/// A hora do toque fica gravada como informação, nunca como cobrança.
-///
-/// O dia é o dia em SÃO PAULO, resolvido no aparelho no instante do toque e
-/// não no servidor na hora do envio: o outbox pode drenar horas depois, e um
-/// toque às 23h50 que sobe 00h10 tem que continuar sendo o dia de ontem.
-model RegistroPresenca {
-  contaId String @default("__SEM_CONTA__")
-  conta   Conta  @relation(fields: [contaId], references: [id])
-  id      String @id @default(uuid())
-
-  alocacaoId String
-  alocacao   AlocacaoObra @relation(fields: [alocacaoId], references: [id])
-
-  /// O dia. Coluna Date de propósito: o assunto é o dia, não o instante.
-  data DateTime @db.Date
-
-  /// Quando o dedo tocou. Serve pra explicar, nunca pra julgar — não existe
-  /// horário esperado com que comparar.
-  registradoEm DateTime @default(now())
-
-  origem OrigemPresenca @default(APP)
-
-  /// Onde ele estava no instante do toque, quando o aparelho soube dizer.
-  ///
-  /// É EVIDÊNCIA, nunca porteiro: coordenada fora da obra não recusa o
-  /// registro e não acusa ninguém — no máximo marca pra conferência humana. O
-  /// registro funciona sem GPS nenhum, porque 4G e sinal em obra são ruins e
-  /// recusar por isso puniria o motorista por um problema que não é dele.
-  /// Aqui, e não em `MotoristaPosicao`, porque aquela tem expurgo de 90 dias e
-  /// a discussão da medição passa disso.
-  latitude  Float?
-  longitude Float?
-  precisao  Float?
-
-  /// Lançamento pelo painel exige motivo escrito, no mesmo espírito da
-  /// alteração de km: o escritório pode corrigir, mas fica registrado quem
-  /// corrigiu e por quê.
-  motivoPainel String?
-  criadoPorId  String?
-  criadoPor    User?   @relation(fields: [criadoPorId], references: [id])
-
-  /// Idempotência do outbox. O app manda `alocacao+data+CHEGADA`, sempre igual:
-  /// tocar cinco vezes com 4G ruim continua sendo um dia.
-  clientId String?
-
-  criadoEm DateTime @default(now())
-
-  /// As linhas de acerto que este dia gerou (normalmente uma).
-  itensAcerto ItemAcerto[]
-
-  /// Um dia, um registro. É esta linha que faz o segundo toque devolver a
-  /// mesma tela verde em vez de criar duplicata.
-  @@unique([alocacaoId, data])
-  @@unique([contaId, clientId])
-  @@index([contaId, data])
-  @@map("registros_presenca")
-}
-
-/// O que muda de um contratante pro outro no mensal.
-///
-/// Existe por causa da regra da casa: nada chumbado em código. São vários
-/// contratantes, cada um com o seu combinado — o dia em que a medição chega, e
-/// quais dias da semana o contrato espera o caminhão na obra. Chumbar o "dia
-/// 20" faria o próximo cliente exigir deploy pra começar a operar.
-///
-/// Os defaults aqui são SEMENTE, não regra: existem pra a tela abrir preenchida
-/// com o caso mais comum, e qualquer um deles se muda no painel.
-model ConfigMensalContratante {
-  contaId String @default("__SEM_CONTA__")
-  conta   Conta  @relation(fields: [contaId], references: [id])
-  id      String @id @default(uuid())
-
-  /// O contratante. 1:1 porque é o combinado com ele, não com cada obra.
-  empresaId String  @unique
-  empresa   Empresa @relation(fields: [empresaId], references: [id])
-
-  /// O dia em que a medição chega e a competência fecha. 20 = de 21 do mês
-  /// passado a 20 deste.
-  diaCorte Int @default(20)
-
-  /// Quais dias da semana o contrato espera o caminhão na obra (0 = domingo).
-  ///
-  /// É isto que transforma "o mês tem 30 dias" em "eram 26 diárias" — sem essa
-  /// régua não existe divergência, só uma lista de dias soltos. Obra que roda
-  /// de segunda a sábado é o caso comum; por isso o default. Domingo de fora
-  /// não é julgamento sobre ninguém: é o combinado do contrato.
-  diasEsperadosSemana Int[] @default([1, 2, 3, 4, 5, 6])
-
-  criadoEm   DateTime @default(now())
-  alteradoEm DateTime @updatedAt
-
-  @@index([contaId])
-  @@map("config_mensal_contratante")
-}
-
 // ------------------------------------------------------------- admissão ---
 //
-// O que o contratante exige antes do caminhão entrar na obra, e o link por
-// onde esses papéis chegam sem ninguém caçar foto no WhatsApp.
+// O que a empresa exige de quem roda pra ela, e o link por onde esses papéis
+// chegam sem ninguém caçar foto no WhatsApp.
 
 /// De quem se cobra um documento exigido.
 enum PublicoDocumento {
-  /// Só de quem está no mensal (alocado numa obra). É o padrão.
+  /// Nome histórico (vem da obra, que saiu do sistema): de quem tem regime
+  /// vigente na empresa. É o padrão.
   MENSAL
   /// De todo motorista da transportadora, esteja em obra ou não.
   TODOS
@@ -6603,8 +6292,8 @@ model DocumentoExigido {
   /// ⚠️ Sem isto, exigência sem contratante valia pra TODO motorista da conta —
   /// e quem só roda frete comum abria o app com "3 documentos faltam" de uma
   /// papelada de obra que não é dele. Decisão do dono (21/09/2026): documento
-  /// de admissão é cobrança de quem está no mensal; para o resto não aparece
-  /// pendência nenhuma.
+  /// de admissão é cobrança de quem tem regime vigente na empresa; para o resto
+  /// não aparece pendência nenhuma.
   ///
   /// Default `MENSAL` de propósito: o silêncio é o padrão seguro. Uma
   /// exigência nova que nasce valendo pra frota inteira cobra gente que nunca
@@ -6734,8 +6423,8 @@ model AssinaturaDocumento {
   id      String @id @default(uuid())
 
   /// Mesmo dono do documento assinado: motorista OU funcionário (CHECK).
-  motoristaId String?
-  motorista   Motorista? @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId   String?
+  motorista     Motorista?   @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
   funcionarioId String?
   funcionario   Funcionario? @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
 
@@ -6851,69 +6540,23 @@ model ConviteColeta {
   @@map("convites_coleta")
 }
 
-/// O que o contratante mediu numa competência, do jeito que ele mandou.
-///
-/// Guardado ANTES de comparar e sem nenhuma correção nossa: é o documento
-/// dele, e a discussão do dia 20 é justamente sobre o que ele disse. Ajustar
-/// na entrada apagaria a prova de que havia o que ajustar.
-///
-/// As linhas ficam em Json de propósito. O formato do que o contratante manda
-/// varia — hoje é o que alguém digita olhando a planilha dele, amanhã pode ser
-/// a planilha lida direto — e cada variação viraria uma migration se isso
-/// fosse coluna. O que é ESTÁVEL e por isso é regra em código está em
-/// `common/medicao-mensal.ts`: a comparação.
-model MedicaoContratante {
-  contaId String @default("__SEM_CONTA__")
-  conta   Conta  @relation(fields: [contaId], references: [id])
-  id      String @id @default(uuid())
-
-  empresaId String
-  empresa   Empresa @relation(fields: [empresaId], references: [id])
-
-  /// "2026-09" — o mês em que a medição chegou.
-  competencia String
-
-  /// `[{ alocacaoId, dias?: string[], totalDias?: number }]`.
-  ///
-  /// `dias` quando a medição vem dia a dia (dá pra apontar QUAL caiu);
-  /// `totalDias` quando ela só traz o número (aí só dá pra dizer que não bate).
-  linhas Json
-
-  /// De onde veio: digitado olhando a planilha, ou lido dela.
-  origem String @default("MANUAL")
-
-  criadoPorId String?
-  criadoPor   User?    @relation("LancouMedicao", fields: [criadoPorId], references: [id])
-  criadoEm    DateTime @default(now())
-  alteradoEm  DateTime @updatedAt
-
-  /// Uma medição por contratante por competência. Lançar de novo corrige a
-  /// mesma linha em vez de criar uma segunda verdade sobre o mesmo mês.
-  @@unique([empresaId, competencia])
-  @@index([contaId, competencia])
-  @@map("medicoes_contratante")
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // PONTO ELETRÔNICO — controle de jornada de FUNCIONÁRIO REGISTRADO.
 //
-// ⚠️ Módulo à parte do "mensal" (obra e diária) por decisão jurídica, não por
-// arrumação de pastas. Lá o motorista é PARCEIRO AUTÔNOMO pago por diária, e o
-// léxico de vínculo é proibido — tem teste varrendo `src/mensal/` atrás de
-// "ponto", "jornada", "falta" e "atraso". Aqui é EMPREGADO, e jornada é o
+// ⚠️ O motorista PARCEIRO é autônomo; aqui é EMPREGADO, e jornada é o
 // assunto. Somar as duas coisas na mesma pessoa desenharia os elementos de
 // vínculo dentro do produto, e a conta cairia na transportadora.
 //
 // A separação não é documental: `RegimeVigente` impede, no banco, a mesma
 // pessoa estar nos dois lados. E nenhuma tabela `ponto_*` tem FK pra
-// `Motorista`, `AlocacaoObra`, `RegistroPresenca` ou `ItemAcerto` — é a
+// `Motorista` ou `ItemAcerto` — é a
 // ausência dessas arestas que impede o grafo de ligar os dois módulos.
 // ═══════════════════════════════════════════════════════════════════════════
 
 enum RegimeTrabalho {
-  /// Parceiro autônomo: mensal, obra e diária. Não bate ponto.
+  /// Parceiro autônomo. Não bate ponto.
   PARCEIRO
-  /// Empregado registrado: bate ponto. Não entra em alocação de obra.
+  /// Empregado registrado: bate ponto.
   EMPREGADO
 }
 
@@ -6968,8 +6611,6 @@ model PerfilAcessoApp {
   podeTelemetria          Boolean @default(false)
   podeChat                Boolean @default(false)
   podeVerStories          Boolean @default(false)
-  podeDiaria              Boolean @default(false)
-  podeVerValorDiaria      Boolean @default(false)
 
   /// AS CAPACIDADES DO PERFIL (chaves `app.*` do catálogo em
   /// `shared-types/src/capacidades-app.ts`). É a FONTE — as 13 colunas acima
@@ -7188,7 +6829,7 @@ model RegimeVigente {
 
   /// Vale o `cpf` enquanto vigente, NULL quando encerrado.
   ///
-  /// Molde literal de `AlocacaoObra.vigenteDe`: no Postgres dois NULLs não
+  /// No Postgres dois NULLs não
   /// colidem, então o banco garante UM regime vivo por pessoa sem proibir
   /// histórico. `@@unique([contaId, cpf])` proibiria o histórico junto.
   chaveViva String?
@@ -7236,7 +6877,7 @@ model Funcionario {
 
   /// Perfil do app FIXADO à mão (pula as regras). Nulo = segue as regras.
   perfilAcessoId     String?
-  perfilAcesso       PerfilAcessoApp?  @relation(fields: [perfilAcessoId], references: [id], onDelete: SetNull)
+  perfilAcesso       PerfilAcessoApp?      @relation(fields: [perfilAcessoId], references: [id], onDelete: SetNull)
   perfilFixadoMotivo String?
   acessoEfetivoApp   AcessoEfetivoApp?
   documentos         MotoristaDocumento[]

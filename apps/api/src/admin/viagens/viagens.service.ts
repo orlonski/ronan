@@ -422,7 +422,7 @@ export class ViagensAdminService {
           motorista: { select: { id: true; nome: true } };
           cliente: { select: { id: true; nome: true; empresaId: true; toneladasMinimas: true; kmMinimos: true } };
           material: { select: { id: true; nome: true; exigeTicket: true } };
-          tipoServico: { select: { id: true; nome: true; medicao: true } };
+          tipoServico: { select: { id: true; nome: true } };
           ticketDuplicadoDe: { select: { id: true; ticket: true; data: true } };
           divergencias: {
             where: { resolvidoEm: null };
@@ -468,7 +468,7 @@ export class ViagensAdminService {
         material: { select: { id: true, nome: true, exigeTicket: true } },
         // O painel precisa do modo pra decidir entre coluna de peso e de
         // permanência — e aplicarMinimos precisa dele pro guarda da diária.
-        tipoServico: { select: { id: true, nome: true, medicao: true } },
+        tipoServico: { select: { id: true, nome: true } },
         // Pro selo e pro link "ver a outra viagem" no painel.
         ticketDuplicadoDe: { select: { id: true, ticket: true, data: true } },
         // O que o lançamento trouxe pendente. Só as ABERTAS: resolvida vira
@@ -519,7 +519,7 @@ export class ViagensAdminService {
         material: true,
         // O painel decide entre tile de peso e de permanência com isto — e o
         // guarda de mínimo em aplicarMinimos depende dele.
-        tipoServico: { select: { id: true, nome: true, medicao: true } },
+        tipoServico: { select: { id: true, nome: true } },
         // Pro selo e pro link "ver a outra viagem" no painel.
         ticketDuplicadoDe: { select: { id: true, ticket: true, data: true } },
         // Quem mexeu no km do motorista — o painel mostra o nome junto do motivo.
@@ -709,27 +709,6 @@ export class ViagensAdminService {
     }
     if (antes.status === StatusViagem.AGUARDANDO_PESO && campos.toneladas != null) {
       dataUpdate.status = StatusViagem.ENVIADA;
-    }
-
-    // Espelho da regra acima pra diária: o admin fecha pelo painel a que o
-    // motorista deixou aberta. A duração é sempre RECALCULADA aqui (nunca vem
-    // do cliente) pra não existir viagem com hora e duração se contradizendo.
-    const entradaFinal = campos.entradaEm ?? antes.entradaEm;
-    const saidaFinal = campos.saidaEm ?? antes.saidaEm;
-    if (campos.entradaEm !== undefined || campos.saidaEm !== undefined) {
-      if (entradaFinal && saidaFinal) {
-        const minutos = Math.round((saidaFinal.getTime() - entradaFinal.getTime()) / 60000);
-        if (minutos <= 0) {
-          throw new BadRequestException("A hora de saída precisa ser depois da hora de entrada.");
-        }
-        dataUpdate.duracaoMinutos = minutos;
-        if (antes.status === StatusViagem.AGUARDANDO_SAIDA) {
-          dataUpdate.status = StatusViagem.ENVIADA;
-        }
-      } else {
-        // Admin limpou a saída: a diária volta a ser uma diária aberta.
-        dataUpdate.duracaoMinutos = null;
-      }
     }
 
     // As chaves fiscais só entram se forem chaves de verdade. O Zod já garantiu

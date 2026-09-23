@@ -47,7 +47,6 @@ import {
   drainLocais,
   enqueueAbastecimento,
   enqueueCompletarPeso,
-  enqueueEncerrarDiaria,
   enqueueLocal,
   enqueuePedagio,
   enqueueStory,
@@ -87,7 +86,6 @@ export type TipoServico = {
   id: string;
   nome: string;
   padrao?: boolean;
-  medicao?: "PESO" | "PERIODO";
   exigeMaterial?: boolean;
   exigeTicket?: boolean;
   exigeLocalDescarga?: boolean;
@@ -125,8 +123,8 @@ export type Empresa = EmpresaDoCliente;
 export type Catalogos = {
   veiculos: Veiculo[];
   materiais: Material[];
-  // Vazio/ausente = motorista sem a flag podeDiaria, conta sem modo cadastrado,
-  // ou cache antigo. Nos três casos o app se comporta como sempre.
+  // Vazio/ausente = conta sem modo cadastrado ou cache antigo. Nos dois casos
+  // o app se comporta como sempre.
   tiposServico?: TipoServico[];
   clientes: Cliente[];
   locais: Local[];
@@ -171,9 +169,6 @@ export type Me = {
   podeTelemetria: boolean;
   // Chat entre motoristas (aba Conversas). Rollout gradual — default false.
   podeChat: boolean;
-  // Escolher o modo de serviço no lançamento (diária). Default true — o que
-  // esconde o seletor é a conta ter um modo só. Desligar é exceção.
-  podeDiaria: boolean;
   /**
    * Vínculo do motorista (próprio/agregado/terceiro) e o que ele exige de foto
    * no abastecimento. Null/ausente = não classificado: nada muda pra ele, vale
@@ -202,11 +197,7 @@ export type Viagem = {
    * Modo de serviço da viagem. Ausente = frete por tonelada — é assim que todo
    * o histórico e todo cache antigo continuam sendo lidos certo.
    */
-  tipoServico?: { id: string; nome: string; medicao: "PESO" | "PERIODO" } | null;
-  /** Só em serviço medido por período (diária). ISO. */
-  entradaEm?: string | null;
-  saidaEm?: string | null;
-  duracaoMinutos?: number | null;
+  tipoServico?: { id: string; nome: string } | null;
   ticket: string;
   km: string;
   // Snapshot do km OSRM no momento do lançamento. Quando km !== kmCalculado,
@@ -244,7 +235,7 @@ export type Viagem = {
   sincronizadoEm: string;
   veiculo: Veiculo;
   cliente: { id: string; nome: string };
-  // Nulos quando o modo de serviço não os exige (diária à disposição).
+  // Nulos quando o modo de serviço não os exige.
   // Declarados assim de propósito: o compilador força cada tela a tratar o
   // caso, em vez de a tela quebrar no celular do motorista.
   material: Material | null;
@@ -368,10 +359,6 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   if (typeof anyM.podeReferenciaKm !== "boolean") anyM.podeReferenciaKm = false;
   // Opt-in: telemetria off por default (cache antigo / sem a flag).
   if (typeof anyM.podeTelemetria !== "boolean") anyM.podeTelemetria = false;
-  // Default TRUE (igual ao backend): quem esconde o seletor é o catálogo — com
-  // um modo só, o app não renderiza o campo. Cache antigo sem a chave não pode
-  // travar o motorista fora de uma feature que a conta já habilitou.
-  if (typeof anyM.podeDiaria !== "boolean") anyM.podeDiaria = true;
   // Chat e stories nascem LIGADOS no banco. Sem normalizar, cache antigo sem a
   // chave escondia a aba Conversas até a próxima resposta do servidor.
   if (typeof anyM.podeChat !== "boolean") anyM.podeChat = true;
@@ -698,76 +685,6 @@ export type ResumoMes = {
 };
 
 /** Home: top 10 mais recentes, sem filtro. */
-/** A obra em que o caminhão está hoje, e os dias que ficaram em branco. */
-export type ObraDeHoje = {
-  alocacao: { id: string; obra: string; placa: string } | null;
-  hoje: { data: string; registrado: boolean } | null;
-  /**
-   * Quantas diárias já entraram na conta do mês. Opcional porque cache gravado
-   * antes desta versão não tem o campo — e o app tem que abrir igual.
-   */
-  mes?: { rotulo: string; total: number };
-  /** Dias do período que ninguém marcou. NÃO são faltas — são dias em branco. */
-  pendentes: string[];
-};
-
-/**
- * Cache-first como todo o resto, e aqui isso é o recurso inteiro: o motorista
- * abre o app no pátio, com 4G ruim, e o botão tem que estar na tela na hora.
- * Esperar a rede pra saber se ele tem obra hoje seria esperar pra mostrar um
- * botão cuja resposta já estava no aparelho ontem.
- */
-export function useObraDeHoje(enabled = true) {
-  const cacheKey = "q:obra-hoje";
-  const buscarRede = async (): Promise<ObraDeHoje> => {
-    const fresh = await api.get<ObraDeHoje>("/m/obra/hoje");
-    void cachePut(cacheKey, fresh).catch(() => {});
-    return fresh;
-  };
-  return useQuery({
-    queryKey: ["obra-hoje"],
-    // Motorista sem empresa não tem obra: chamar /m/obra/hoje ali seria gastar
-    // uma requisição em 4G ruim pra receber 403.
-    enabled,
-    staleTime: 60_000,
-    queryFn: () => cacheFirst<ObraDeHoje>(["obra-hoje"], cacheKey, buscarRede),
-  });
-}
-
-export type MeusDiasObra = {
-  mes: string;
-  total: number;
-  dias: { data: string; marcado: boolean; origem: string | null; futuro: boolean }[];
-  obras: string[];
-  /**
-   * Quanto as diárias do mês valem PRA ELE.
-   *
-   * `null` é o normal: nasce desligado e é o dono quem liga, por motorista
-   * (`Motorista.podeVerValorDiaria`). Opcional no tipo porque cache gravado
-   * antes desta versão não tem o campo.
-   */
-  valor?: { total: string; unitario: string | null } | null;
-};
-
-/**
- * Os dias que ele já marcou no mês. Cache-first como tudo: pra quem é pago por
- * diária, "quantos dias eu fiz" não pode depender de sinal.
- */
-export function useMeusDiasObra(mes: string, enabled = true) {
-  const cacheKey = `q:meus-dias-obra:${mes}`;
-  const buscarRede = async (): Promise<MeusDiasObra> => {
-    const fresh = await api.get<MeusDiasObra>(`/m/obra/meus-dias?mes=${mes}`);
-    void cachePut(cacheKey, fresh).catch(() => {});
-    return fresh;
-  };
-  return useQuery({
-    queryKey: ["meus-dias-obra", mes],
-    enabled,
-    staleTime: 60_000,
-    queryFn: () => cacheFirst<MeusDiasObra>(["meus-dias-obra", mes], cacheKey, buscarRede),
-  });
-}
-
 // ═══════════════════════ DOCUMENTOS DA OBRA ═══════════════════════════════
 
 export type DocumentoDaObra = {
@@ -971,54 +888,6 @@ export function useCatalogoPonto(enabled = true) {
   });
 }
 
-/**
- * Soma ou tira a diária de HOJE direto no cache, sem rede.
- *
- * Existe porque o número é o herói da tela e o motorista está num pátio com
- * 4G ruim: se o total só mudasse quando o servidor respondesse, ele tocaria em
- * "somar", veria o mesmo número e tocaria de novo. Pior, fechar e reabrir o
- * app perderia a conta — o estado ficaria só na memória da sessão.
- *
- * Mexe nos DOIS caches (o card e a tela do mês) de propósito: o número do card
- * é a porta pra tela do mês, e divergir entre a porta e o que tem atrás dela é
- * o pior defeito possível num produto que existe pra ser contraprova.
- *
- * O servidor continua sendo a verdade: a próxima carga com rede sobrescreve
- * isto inteiro.
- */
-export async function contarDiariaLocal(dia: string, soma: 1 | -1): Promise<ObraDeHoje | null> {
-  const mes = dia.slice(0, 7);
-
-  const atual = await cacheGet<ObraDeHoje>("q:obra-hoje");
-  let novo: ObraDeHoje | null = null;
-  if (atual?.hoje && atual.hoje.data === dia && atual.hoje.registrado !== (soma === 1)) {
-    novo = {
-      ...atual,
-      hoje: { ...atual.hoje, registrado: soma === 1 },
-      mes: atual.mes ? { ...atual.mes, total: Math.max(0, atual.mes.total + soma) } : atual.mes,
-    };
-    await cachePut("q:obra-hoje", novo).catch(() => {});
-  }
-
-  const doMes = await cacheGet<MeusDiasObra>(`q:meus-dias-obra:${mes}`);
-  if (doMes) {
-    const achou = doMes.dias.some((d) => d.data === dia);
-    const dias = achou
-      ? doMes.dias.map((d) => (d.data === dia ? { ...d, marcado: soma === 1 } : d))
-      : doMes.dias;
-    const mudou = achou && doMes.dias.some((d) => d.data === dia && d.marcado !== (soma === 1));
-    if (mudou) {
-      await cachePut(`q:meus-dias-obra:${mes}`, {
-        ...doMes,
-        dias,
-        total: Math.max(0, doMes.total + soma),
-      }).catch(() => {});
-    }
-  }
-
-  return novo;
-}
-
 export function useViagens() {
   const cacheKey = "q:viagens";
   const buscarRede = async (): Promise<Viagem[]> => {
@@ -1093,7 +962,7 @@ export type ViagemDetalhe = Viagem & {
   localCarga: Viagem["localCarga"] & { logradouro: string; lat: number | null; lng: number | null };
   // NonNullable + `| null` explícito: `X | null & {...}` colapsaria o null e a
   // tela acharia que a descarga sempre existe (some no typecheck, quebra no
-  // celular quando é diária sem descarga).
+  // celular quando é viagem sem descarga).
   localDescarga:
     | (NonNullable<Viagem["localDescarga"]> & {
         logradouro: string;
@@ -1236,73 +1105,6 @@ export function useCompletarPeso() {
       /* cache indisponível — ignora */
     }
     await enqueueCompletarPeso(input);
-    void qc.invalidateQueries({ queryKey: ["viagens"] });
-    void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
-    void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
-  };
-}
-
-/**
- * Diárias abertas (AGUARDANDO_SAIDA): o motorista marcou a entrada e ainda não
- * saiu. Alimenta o card da home. Espelho de useViagensAguardandoPeso.
- */
-export function useDiariasAbertas() {
-  const qc = useQueryClient();
-  const cacheKey = "q:viagens-aguardando-saida";
-  const buscarRede = async (): Promise<Viagem[]> => {
-    const fresh = await api.get<Viagem[]>("/m/viagens/aguardando-saida");
-    const itens = fresh.map(normalizarViagem);
-    void cachePut(cacheKey, itens).catch(() => {});
-    return itens;
-  };
-  const query = useQuery({
-    queryKey: ["viagens-aguardando-saida"],
-    staleTime: 30_000,
-    queryFn: () =>
-      cacheFirst<Viagem[]>(
-        ["viagens-aguardando-saida"],
-        cacheKey,
-        buscarRede,
-        (arr) => arr.map(normalizarViagem),
-      ),
-  });
-
-  // Mesmo motivo do aguardando-peso: abrir/encerrar diária é offline-first, e
-  // sem isso o card só se atualizaria no staleTime.
-  useEffect(() => {
-    let t: ReturnType<typeof setTimeout> | null = null;
-    const off = onSyncChange(() => {
-      if (t) clearTimeout(t);
-      t = setTimeout(() => {
-        void qc.invalidateQueries({ queryKey: ["viagens-aguardando-saida"] });
-      }, 1200);
-    });
-    return () => {
-      if (t) clearTimeout(t);
-      off();
-    };
-  }, [qc]);
-
-  return query;
-}
-
-/**
- * Offline-first: enfileira o "encerrar diária" (hora de saída) de uma viagem
- * AGUARDANDO_SAIDA. Espelho de useCompletarPeso.
- */
-export function useEncerrarDiaria() {
-  const qc = useQueryClient();
-  return async (input: { viagemId: string; saidaEm: string }) => {
-    const semItem = (cur?: Viagem[] | null): Viagem[] | undefined =>
-      cur ? cur.filter((v) => v.id !== input.viagemId) : undefined;
-    qc.setQueryData<Viagem[]>(["viagens-aguardando-saida"], semItem);
-    try {
-      const disk = await cacheGet<Viagem[]>("q:viagens-aguardando-saida");
-      if (disk) await cachePut("q:viagens-aguardando-saida", semItem(disk) ?? []);
-    } catch {
-      /* cache indisponível — ignora */
-    }
-    await enqueueEncerrarDiaria(input);
     void qc.invalidateQueries({ queryKey: ["viagens"] });
     void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
     void qc.invalidateQueries({ queryKey: ["resumo-mes"] });

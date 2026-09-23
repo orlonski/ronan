@@ -90,7 +90,6 @@ const SAFE_SELECT = {
   valorPorViagem: true,
   valorPorTonelada: true,
   valorPorKm: true,
-  valorDiaria: true,
   chavePix: true,
   ativo: true,
   status: true,
@@ -119,8 +118,6 @@ const SAFE_SELECT = {
   podeReferenciaKm: true,
   podeTelemetria: true,
   podeChat: true,
-  podeDiaria: true,
-  podeVerValorDiaria: true,
   receberResumoDiario: true,
   perfilAcessoId: true,
   criadoEm: true,
@@ -503,7 +500,6 @@ export class MotoristasService {
           valorPorViagem: data.valorPorViagem ?? null,
           valorPorTonelada: data.valorPorTonelada ?? null,
           valorPorKm: data.valorPorKm ?? null,
-          valorDiaria: data.valorDiaria ?? null,
           chavePix: data.chavePix ?? null,
           ...(ehConvite
             ? { aceite: "PENDENTE" as const, convidadoPorId: usuarioId, convidadoEm: new Date() }
@@ -956,8 +952,6 @@ export class MotoristasService {
       podeReferenciaKm?: boolean;
       podeTelemetria?: boolean;
       podeChat?: boolean;
-      podeDiaria?: boolean;
-      podeVerValorDiaria?: boolean;
       receberResumoDiario?: boolean;
     },
     escopo: EscopoAdmin,
@@ -997,8 +991,6 @@ export class MotoristasService {
         podeReferenciaKm: true,
         podeTelemetria: true,
         podeChat: true,
-        podeDiaria: true,
-        podeVerValorDiaria: true,
         receberResumoDiario: true,
       },
     });

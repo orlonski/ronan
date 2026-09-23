@@ -229,6 +229,5 @@ export const TIPOS_SERVICO_INICIAIS: Prisma.TipoServicoCreateManyContaInput[] = 
     nome: "Frete por tonelada",
     ordem: 1,
     padrao: true,
-    medicao: "PESO",
   },
 ];

@@ -113,18 +113,6 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // do dia. `publicar` é à parte de `editar` pelo mesmo motivo que em marketing:
   // montar é rascunho, publicar avisa gente de fora e vira combinado.
   { recurso: "pedidos", label: "Pedidos do cliente", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
-  // O caminhão à disposição de uma obra, pago por diária. Dois recursos
-  // separados porque são duas pessoas: quem negocia e cadastra a alocação
-  // (contrato, valor, vigência) não é quem confere dia a dia se o pessoal
-  // marcou presença. `lancar` existe à parte de `editar` porque lançar um dia
-  // no lugar do motorista é exceção que exige motivo — e quem pode conferir a
-  // grade não deveria poder escrever nela sem querer.
-  { recurso: "alocacoes", label: "Obras e diárias", modulo: "Operação", acoes: ["ver", "criar", "editar", "encerrar"] },
-  { recurso: "presenca", label: "Presença na obra", modulo: "Operação", acoes: ["ver", "lancar", "corrigir"] },
-  // O documento que vai pra conversa do dia 20. `configurar` é à parte de
-  // `ver` porque mexer no dia de corte e no calendário da obra muda quantas
-  // diárias o mês inteiro tem — é decisão de contrato, não de conferência.
-  { recurso: "espelhos", label: "Espelho de diárias", modulo: "Operação", acoes: ["ver", "configurar"] },
   // A admissão: o que o contratante exige antes do caminhão entrar na obra, e
   // o link por onde esses papéis chegam. `coletas.criar` é separado de `ver`
   // porque gerar link é expor documento de alguém a quem tiver a URL — é ação

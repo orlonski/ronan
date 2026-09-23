@@ -152,16 +152,14 @@ export class Divergencias {
   /**
    * Status final da viagem. Um carimbo bloqueante vence o status desejado —
    * MENOS quando o desejado já é um "fora do fechamento" próprio
-   * (EM_ANDAMENTO, AGUARDANDO_PESO, AGUARDANDO_SAIDA), que carrega semântica
-   * de fluxo que INCOMPLETA apagaria: uma diária aberta precisa continuar
-   * sabendo que está esperando a saída.
+   * (EM_ANDAMENTO, AGUARDANDO_PESO), que carrega semântica de fluxo que
+   * INCOMPLETA apagaria: quem aguarda o peso precisa continuar sabendo disso.
    */
   statusFinal(desejado: StatusViagem): StatusViagem {
     if (!this.bloqueia) return desejado;
     if (
       desejado === StatusViagem.EM_ANDAMENTO ||
-      desejado === StatusViagem.AGUARDANDO_PESO ||
-      desejado === StatusViagem.AGUARDANDO_SAIDA
+      desejado === StatusViagem.AGUARDANDO_PESO
     ) {
       return desejado;
     }

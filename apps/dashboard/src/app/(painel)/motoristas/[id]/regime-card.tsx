@@ -62,8 +62,8 @@ export function RegimeCard({ regime }: { regime: RegimeDaPessoa }) {
         </p>
         <p className="text-sm text-muted-foreground">
           {empregado
-            ? "Recebe por folha de pagamento. Viagem e dia de obra dele não entram em acerto, e a diária não se aplica."
-            : "Recebe pelo que produz: viagem, tonelada, km ou diária, conforme a modalidade."}
+            ? "Recebe por folha de pagamento. As viagens dele não entram em acerto."
+            : "Recebe pelo que produz: viagem, tonelada ou km, conforme a modalidade."}
         </p>
       </div>
     </div>

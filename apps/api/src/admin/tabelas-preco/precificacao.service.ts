@@ -49,7 +49,6 @@ export class PrecificacaoService {
         tipoServicoId: true,
         // Sem este select o mínimo por período volta a valer e a diária fatura
         // tonelada inventada. Mesma pegadinha documentada em viagem-minimos.
-        tipoServico: { select: { medicao: true } },
         materialId: true,
         cliente: { select: { empresaId: true } },
         valor: { select: { alteracaoMotivo: true } },

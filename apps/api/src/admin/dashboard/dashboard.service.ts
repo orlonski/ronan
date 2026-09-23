@@ -208,12 +208,6 @@ export class DashboardService {
       where: { status: "AGUARDANDO_PESO", ...frota },
     });
 
-    // Diárias que o motorista abriu e não encerrou. Mesma natureza da pendência
-    // acima: fora de fechamento até alguém marcar a saída.
-    const diariasAbertas = await this.prisma.viagem.count({
-      where: { status: "AGUARDANDO_SAIDA", ...frota },
-    });
-
     // Resolve nomes dos rankings em um round adicional (ids únicos, ~15 registros)
     const motoristaIds = rankingMotoristasRaw.map((r) => r.motoristaId);
     // EM_ANDAMENTO tem clienteId/materialId null e já foi filtrada por status/data.
@@ -285,7 +279,6 @@ export class DashboardService {
         viagensDivergentes,
         errosPendentes: errosPendentesGroups.length,
         aguardandoPeso,
-        diariasAbertas,
       },
       conferencia: {
         total: conferidasTotal + pendentesConferencia,

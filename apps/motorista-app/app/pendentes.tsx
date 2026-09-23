@@ -22,9 +22,7 @@ import {
   type PendingPedagio,
   type PendingAbastecimento,
   type PendingCompletarPeso,
-  type PendingEncerrarDiaria,
   type PendingPonto,
-  type PendingPresencaObra,
   type PendingFoto,
   type PendingLocal,
   type PendingStory,
@@ -36,10 +34,7 @@ import { usePendingPedagios } from "@/hooks/use-pending-pedagios";
 import { usePendingAbastecimentos } from "@/hooks/use-pending-abastecimentos";
 import { usePendingLifecycle, type LifecycleTrip } from "@/hooks/use-pending-lifecycle";
 import { usePendingCompletarPeso } from "@/hooks/use-pending-completar-peso";
-import { fmtHoraBR } from "@/lib/datetime";
-import { usePendingEncerrarDiaria } from "@/hooks/use-pending-encerrar-diaria";
 import { usePendingPonto } from "@/hooks/use-pending-ponto";
-import { usePendingPresencaObra } from "@/hooks/use-pending-presenca-obra";
 import { usePendingOutros } from "@/hooks/use-pending-outros";
 import { usePendingDocumentos } from "@/hooks/use-pending-documentos";
 import {
@@ -47,7 +42,6 @@ import {
   descartarPedagioPendente,
   descartarAbastecimentoPendente,
   descartarCompletarPesoPendente,
-  descartarEncerrarDiariaPendente,
   descartarFotoPendente,
   descartarLocalPendente,
   descartarStoryPendente,
@@ -57,11 +51,8 @@ import {
   tentarNovamentePedagioPendente,
   tentarNovamenteAbastecimentoPendente,
   tentarNovamenteCompletarPeso,
-  tentarNovamenteEncerrarDiaria,
   tentarNovamentePonto,
-  tentarNovamentePresencaObra,
   descartarPonto,
-  descartarPresencaObra,
   tentarNovamenteTripLifecycle,
   tentarNovamenteFotoPendente,
   tentarNovamenteLocalPendente,
@@ -102,9 +93,7 @@ export default function Pendentes() {
   const abastecimentos = usePendingAbastecimentos();
   const lifecycleTrips = usePendingLifecycle();
   const completarPeso = usePendingCompletarPeso();
-  const encerrarDiaria = usePendingEncerrarDiaria();
   const ponto = usePendingPonto();
-  const presencaObra = usePendingPresencaObra();
   const outros = usePendingOutros();
   const documentos = usePendingDocumentos();
   const cat = useCatalogos();
@@ -168,19 +157,6 @@ export default function Pendentes() {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
-  async function descartarEncerramento(item: PendingEncerrarDiaria) {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const ok = await showConfirm({
-      title: "Descartar este envio?",
-      message:
-        "A hora de saída não vai ser enviada. A diária continua aberta — você pode encerrar de novo depois.",
-      confirmLabel: "Descartar",
-      destructive: true,
-    });
-    if (!ok) return;
-    await descartarEncerrarDiariaPendente(item.viagemId);
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }
   const [detalheItem, setDetalheItem] = useState<PendingComum | null>(null);
 
   async function descartarTrip(trip: LifecycleTrip) {
@@ -278,13 +254,9 @@ export default function Pendentes() {
             rows.length > 0 ||
             lifecycleTrips.length > 0 ||
             completarPeso.length > 0 ||
-            encerrarDiaria.length > 0 ||
-            // Faltava aqui, e só aqui: o tipo estava na lista e na condição de
-            // "tudo sincronizado", mas não na que decide MOSTRAR o bloco. Com
-            // só uma presença pendente a tela abria vazia, enquanto a home
-            // dizia "1 dia esperando enviar". É a armadilha que o CLAUDE.md
-            // descreve, e integrar um tipo novo pela metade é como se cai nela.
-            presencaObra.length > 0 ||
+            // Todo tipo da lista abaixo precisa estar AQUI também: faltando,
+            // o bloco não aparece e a tela abre vazia enquanto a home conta
+            // o item. É a armadilha que o CLAUDE.md descreve.
             ponto.length > 0 ? (
               <View className="mb-2 gap-3">
                 <Text className="text-sm text-muted-foreground">
@@ -333,33 +305,12 @@ export default function Pendentes() {
                     onTentarNovamente={() => tentarNovamentePonto(item.clientId)}
                   />
                 ))}
-                {presencaObra.map((item) => (
-                  <PresencaObraCard
-                    key={`po-${item.clientId}`}
-                    item={item}
-                    onDescartar={() => void descartarPresencaObra(item.clientId)}
-                    onTentarNovamente={() => tentarNovamentePresencaObra(item.clientId)}
-                  />
-                ))}
-                {encerrarDiaria.map((item) => (
-                  <EncerrarDiariaCard
-                    key={`ed-${item.viagemId}`}
-                    item={item}
-                    onDescartar={() => descartarEncerramento(item)}
-                    onEditar={() =>
-                      router.push(`/encerrar-diaria?viagemId=${item.viagemId}`)
-                    }
-                    onTentarNovamente={() => tentarNovamenteEncerrarDiaria(item.viagemId)}
-                  />
-                ))}
               </View>
             ) : null
           }
           ListEmptyComponent={
             lifecycleTrips.length === 0 &&
             completarPeso.length === 0 &&
-            encerrarDiaria.length === 0 &&
-            presencaObra.length === 0 &&
             ponto.length === 0 ? (
               <EmptyState
                 icon={CloudOff}
@@ -528,7 +479,6 @@ function CompletarPesoCard({
   );
 }
 
-/** Espelho do CompletarPesoCard pro encerramento de diária. */
 /**
  * A BATIDA DE PONTO esperando internet.
  *
@@ -586,124 +536,6 @@ function PontoCard({
           </View>
         </>
       ) : null}
-    </View>
-  );
-}
-
-/**
- * O dia na obra esperando internet.
- *
- * Sem botão de editar, ao contrário dos irmãos: não há o que corrigir num
- * registro que é só "estive lá neste dia". Ou vai, ou o motorista descarta.
- */
-function PresencaObraCard({
-  item,
-  onDescartar,
-  onTentarNovamente,
-}: {
-  item: PendingPresencaObra;
-  onDescartar: () => void;
-  onTentarNovamente: () => void;
-}) {
-  const temErro = item.status === "error";
-  const [a, m, d] = item.payload.data.split("-");
-  return (
-    <View className="rounded-2xl border-2 border-violet-500/40 bg-card p-4">
-      <View className="flex-row items-start justify-between gap-3">
-        <View className="flex-1 flex-row items-start gap-2">
-          <Clock size={20} color="#7c3aed" />
-          <View className="flex-1">
-            <Badge variant="outline">Obra</Badge>
-            <Text className="mt-1.5 text-lg font-bold text-foreground">
-              Dia na obra
-            </Text>
-            <Text className="mt-0.5 text-base font-medium text-muted-foreground">
-              {d}/{m}/{a}
-            </Text>
-          </View>
-        </View>
-        <Badge variant={temErro ? "destructive" : "warning"}>
-          {temErro ? "Deu erro" : "Enviando"}
-        </Badge>
-      </View>
-      {temErro ? (
-        <>
-          {item.errorMsg ? (
-            <Text className="mt-2 text-sm text-destructive">{item.errorMsg}</Text>
-          ) : null}
-          <View className="mt-3 flex-row gap-2">
-            <Button variant="outline" className="flex-1" onPress={onTentarNovamente}>
-              <Text>Tentar de novo</Text>
-            </Button>
-            <Button variant="outline" className="flex-1" onPress={onDescartar}>
-              <Text>Descartar</Text>
-            </Button>
-          </View>
-        </>
-      ) : null}
-    </View>
-  );
-}
-
-function EncerrarDiariaCard({
-  item,
-  onDescartar,
-  onEditar,
-  onTentarNovamente,
-}: {
-  item: PendingEncerrarDiaria;
-  onDescartar: () => void;
-  onEditar: () => void;
-  onTentarNovamente: () => void;
-}) {
-  const temErro = item.status === "error";
-  return (
-    <View className="rounded-2xl border-2 border-violet-500/40 bg-card p-4">
-      <View className="flex-row items-start justify-between gap-3">
-        <View className="flex-1 flex-row items-start gap-2">
-          <Clock size={20} color="#7c3aed" />
-          <View className="flex-1">
-            <Badge variant="outline">Diária</Badge>
-            <Text className="mt-1.5 text-lg font-bold text-foreground">
-              Encerrar diária
-            </Text>
-            <Text className="mt-0.5 text-base font-medium text-muted-foreground">
-              Saída às {fmtHoraBR(item.payload.saidaEm)}
-            </Text>
-          </View>
-        </View>
-        <Badge variant="warning">
-          Enviando
-        </Badge>
-      </View>
-
-      {item.errorMsg && (
-        <View className="mt-3 gap-1 rounded-lg border border-border bg-muted/40 p-3">
-          <Text className="text-xs font-semibold text-muted-foreground">Última tentativa:</Text>
-          <Text className="text-xs text-muted-foreground" numberOfLines={3}>
-            {item.errorMsg}
-          </Text>
-        </View>
-      )}
-
-      <View className="mt-3 flex-row gap-2">
-        <Button variant="outline" size="sm" className="flex-1" onPress={onDescartar}>
-          <Trash2 size={16} color="#dc2626" />
-          <Text className="ml-1 font-semibold text-destructive">Descartar</Text>
-        </Button>
-        {temErro && (
-          <>
-            <Button variant="outline" size="sm" className="flex-1" onPress={onEditar}>
-              <Pencil size={16} color="#0f172a" />
-              <Text className="ml-1 font-semibold">Editar</Text>
-            </Button>
-            <Button size="sm" className="flex-1" onPress={onTentarNovamente}>
-              <RefreshCw size={16} color="white" />
-              <Text className="ml-1 font-semibold text-primary-foreground">De novo</Text>
-            </Button>
-          </>
-        )}
-      </View>
     </View>
   );
 }

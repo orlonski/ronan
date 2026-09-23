@@ -21,9 +21,8 @@ import { RequerCapacidade } from "@/components/requer-capacidade";
  *
  * DESENHO, e cada item aqui é uma lição já paga em outra tela deste app:
  *
- * 1. **Número primeiro, não barra de progresso nem porcentagem.** Mesma
- *    gramática da conta de diárias (`components/home-obra.tsx`): "faltam 4" ele
- *    entende sem ninguém explicar.
+ * 1. **Número primeiro, não barra de progresso nem porcentagem.** "faltam 4"
+ *    ele entende sem ninguém explicar.
  * 2. **Nada some da lista.** A tela pública de coleta escondia o que já tinha
  *    sido enviado "por privacidade", e a pessoa mandava sete arquivos sem saber
  *    qual entrou (ver o comentário em `apps/dashboard/src/app/coleta/[token]`).

@@ -27,7 +27,7 @@ export type AcessoAppDef = {
   label: string;
   /** O que muda NO APP DELE quando está ligado. Aparece embaixo do rótulo. */
   efeito: string;
-  grupo: "Lançar" | "Viagem guiada" | "Conveniências" | "Convívio" | "Diária";
+  grupo: "Lançar" | "Viagem guiada" | "Conveniências" | "Convívio";
   /**
    * Custa dinheiro por uso.
    *
@@ -113,19 +113,6 @@ const DEFS = [
     efeito: "A barra de fotos de 24h na tela inicial dele.",
     grupo: "Convívio",
   },
-  {
-    chave: "podeDiaria",
-    label: "Lançar diária",
-    efeito:
-      "Escolher o modo por período e marcar entrada e saída em vez de peso. Com um modo de serviço só cadastrado, o app nem pergunta.",
-    grupo: "Diária",
-  },
-  {
-    chave: "podeVerValorDiaria",
-    label: "Ver quanto vale a diária dele",
-    efeito: "O valor em R$ aparece na conta de diárias do app.",
-    grupo: "Diária",
-  },
 ] as const;
 
 export type AcessoAppChave = (typeof DEFS)[number]["chave"];
@@ -141,7 +128,7 @@ export const ACESSOS_APP: readonly AcessoAppDef[] = DEFS;
 export const ACESSOS_APP_CHAVES = DEFS.map((a) => a.chave) as AcessoAppChave[];
 
 /** Os grupos na ordem em que a tela mostra. */
-export const ACESSOS_APP_GRUPOS = ["Lançar", "Viagem guiada", "Conveniências", "Convívio", "Diária"] as const;
+export const ACESSOS_APP_GRUPOS = ["Lançar", "Viagem guiada", "Conveniências", "Convívio"] as const;
 
 /** O conjunto de acessos — o que um perfil guarda e o que um motorista tem. */
 export type AcessosApp = Record<AcessoAppChave, boolean>;
@@ -158,7 +145,7 @@ export const SalvarPerfilAcessoInput = z.object({
   /**
    * Regime que este perfil costuma servir. **Só sugere no cadastro.**
    *
-   * ⚠️ Nunca decide. O regime é sobre PAGAMENTO (diária/produção × folha), e o
+   * ⚠️ Nunca decide. O regime é sobre PAGAMENTO (produção × folha), e o
    * motorista CLT da própria transportadora dirige e lança viagem — é o caso
    * mais comum de quem compra o módulo de ponto. Amarrar "empregado logo não
    * lança" trancaria a porta dele.

@@ -32,7 +32,6 @@ export type Modalidade = {
   valorPorViagem: string | null;
   valorPorTonelada: string | null;
   valorPorKm: string | null;
-  valorDiaria: string | null;
   reembolsaPedagio: boolean;
   reembolsaAbastecimento: boolean;
 };
@@ -50,7 +49,6 @@ type Body = {
   valorPorViagem: number | null;
   valorPorTonelada: number | null;
   valorPorKm: number | null;
-  valorDiaria: number | null;
   reembolsaPedagio: boolean;
   reembolsaAbastecimento: boolean;
 };
@@ -78,7 +76,6 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
     valorPorViagem: initial?.valorPorViagem ?? "",
     valorPorTonelada: initial?.valorPorTonelada ?? "",
     valorPorKm: initial?.valorPorKm ?? "",
-    valorDiaria: initial?.valorDiaria ?? "",
     reembolsaPedagio: initial?.reembolsaPedagio ?? true,
     reembolsaAbastecimento: initial?.reembolsaAbastecimento ?? true,
   });
@@ -102,8 +99,6 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
       valorPorViagem: form.tipoRemuneracao === "VALOR_POR_VIAGEM" ? parseValor(form.valorPorViagem) : null,
       valorPorTonelada: form.tipoRemuneracao === "VALOR_POR_TONELADA" ? parseValor(form.valorPorTonelada) : null,
       valorPorKm: form.tipoRemuneracao === "VALOR_POR_KM" ? parseValor(form.valorPorKm) : null,
-      // A diária é independente da régua: vale sempre.
-      valorDiaria: parseValor(form.valorDiaria),
       reembolsaPedagio: form.reembolsaPedagio,
       reembolsaAbastecimento: form.reembolsaAbastecimento,
     };
@@ -237,20 +232,6 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
                 />
               </div>
             )}
-
-            <div className="space-y-2">
-              <Label htmlFor="modalidade-valor-da-diaria-r">Valor da diária (R$)</Label>
-              <Input id="modalidade-valor-da-diaria-r"
-                inputMode="decimal"
-                placeholder="deixe vazio se não faz diária"
-                value={form.valorDiaria}
-                onChange={(e) => setForm({ ...form, valorDiaria: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                Vale sempre, independente da regra acima — um motorista pago por
-                porcentagem também pode ficar um dia à disposição.
-              </p>
-            </div>
           </div>
 
           <div className="space-y-3 border-t pt-3">

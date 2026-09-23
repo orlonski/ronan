@@ -38,8 +38,7 @@ import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { API_URL } from "@/lib/api-url";
 import { loadTokens } from "@/lib/auth";
-import { fmtDataBR, fmtPeriodoBR } from "@/lib/datetime";
-import { formatarDuracao } from "@ronan/shared-types";
+import { fmtDataBR } from "@/lib/datetime";
 import {
   useExcluirViagem,
   useInformarValorPedagio,
@@ -633,7 +632,7 @@ export default function ViagemDetalheScreen() {
                   </Text>
                 </View>
               </View>
-              {/* Diária à disposição pode não ter descarga. */}
+              {/* Modo sem descarga: a linha some. */}
               {detalhe.data.localDescarga ? (
                 <View className="flex-row items-start gap-3">
                   <ArrowDown size={20} color="#dc2626" />
@@ -673,34 +672,22 @@ export default function ViagemDetalheScreen() {
           {/* Stats */}
           <Card>
             <View className="flex-row gap-6">
-              {detalhe.data.tipoServico?.medicao === "PERIODO" ? (
-                <Stat
-                  label="Permanência"
-                  value={
-                    detalhe.data.saidaEm
-                      ? formatarDuracao(detalhe.data.duracaoMinutos)
-                      : "—"
-                  }
-                  subValue={fmtPeriodoBR(detalhe.data.entradaEm, detalhe.data.saidaEm)}
-                />
-              ) : (
-                <Stat
-                  label="Toneladas"
-                  value={
-                    detalhe.data.status === "AGUARDANDO_PESO"
-                      ? "—"
-                      : fmtNum(detalhe.data.toneladasEfetiva, 3)
-                  }
-                  fromAi={detalhe.data.ocrCampos?.includes("toneladas")}
-                  subValue={
-                    detalhe.data.status === "AGUARDANDO_PESO"
-                      ? "aguardando"
-                      : detalhe.data.toneladasAjustada
-                        ? `informado ${fmtNum(detalhe.data.toneladasInformada, 3)}`
-                        : undefined
-                  }
-                />
-              )}
+              <Stat
+                label="Toneladas"
+                value={
+                  detalhe.data.status === "AGUARDANDO_PESO"
+                    ? "—"
+                    : fmtNum(detalhe.data.toneladasEfetiva, 3)
+                }
+                fromAi={detalhe.data.ocrCampos?.includes("toneladas")}
+                subValue={
+                  detalhe.data.status === "AGUARDANDO_PESO"
+                    ? "aguardando"
+                    : detalhe.data.toneladasAjustada
+                      ? `informado ${fmtNum(detalhe.data.toneladasInformada, 3)}`
+                      : undefined
+                }
+              />
               <Stat
                 label="Km"
                 value={fmtNum(detalhe.data.kmEfetivo, 2)}

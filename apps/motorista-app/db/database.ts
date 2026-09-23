@@ -70,6 +70,31 @@ export async function limparCacheDeConsultas(): Promise<void> {
   }
 }
 
+/**
+ * Apaga o que sobrou no aparelho de obra e diária, que saíram do sistema em
+ * 22/09/2026: a fila de "dia na obra" e de "encerrar diária" (as rotas não
+ * existem mais — reenviar só daria erro) e o cache das telas que sumiram.
+ *
+ * Varre TODOS os cadastros (AsyncStorage cru, não o `storage` carimbado): o
+ * resto pode estar na empresa que não é a ativa agora. Idempotente — depois
+ * da primeira vez não acha nada.
+ */
+export async function limparRestosDeObraEDiaria(): Promise<void> {
+  try {
+    const alvos = (await AsyncStorage.getAllKeys()).filter(
+      (k) =>
+        k.endsWith("outbox.presenca-obra") ||
+        k.endsWith("outbox.viagem-encerrar-diaria") ||
+        k.includes("cache.q:obra-hoje") ||
+        k.includes("cache.q:meus-dias-obra:") ||
+        k.includes("cache.q:viagens-aguardando-saida"),
+    );
+    if (alvos.length > 0) await AsyncStorage.multiRemove(alvos);
+  } catch {
+    /* sem storage: fica o lixo, que nenhuma tela lê mais */
+  }
+}
+
 export async function cacheDelete(key: string): Promise<void> {
   try {
     await storage.removeItem(chave(`cache.${key}`));
@@ -220,58 +245,6 @@ export type PendingCompletarPeso = {
   /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
    * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
    * como transitória e ressuscitaria o item pra sempre. */
-  errorPermanenteLocal?: boolean;
-};
-
-/** Encerrar uma diária JÁ sincronizada que está em AGUARDANDO_SAIDA (o
- * motorista marcou a entrada e depois saiu). viagemId é o id real do servidor
- * (POST /m/viagens/:id/encerrar-diaria). Idempotente no backend.
- * Espelho de PendingCompletarPeso. */
-export type PendingEncerrarDiaria = {
-  /** UUID client-side pra identificar essa pending. */
-  clientId: string;
-  viagemId: string;
-  /** ISO do instante em que o caminhão saiu. */
-  payload: { saidaEm: string };
-  status: "pending" | "syncing" | "error";
-  attempts: number;
-  createdAt: number;
-  lastTriedAt?: number;
-  errorMsg?: string;
-  errorStatus?: number;
-  errorIssues?: ZodIssueSaved[];
-  errorPermanenteLocal?: boolean;
-};
-
-/**
- * O toque: o caminhão esteve na obra neste dia.
- *
- * `clientId` é DETERMINÍSTICO (`alocacao|data|CHEGADA`), nunca uuid novo: é o
- * que faz cinco toques com 4G ruim continuarem sendo um dia só. O servidor
- * também deduplica por (alocação, dia) e devolve 200 com o registro existente,
- * então reenvio nunca vira erro na cara do motorista.
- *
- * `data` é resolvida NO APARELHO no instante do toque, não no envio: o outbox
- * pode drenar horas depois, e um toque às 23h50 que sobe 00h10 tem que
- * continuar sendo o dia de ontem.
- */
-export type PendingPresencaObra = {
-  clientId: string;
-  payload: {
-    /** "AAAA-MM-DD", no fuso de São Paulo, carimbado no toque. */
-    data: string;
-    clientId: string;
-    latitude?: number;
-    longitude?: number;
-    precisao?: number;
-  };
-  status: "pending" | "syncing" | "error";
-  attempts: number;
-  createdAt: number;
-  lastTriedAt?: number;
-  errorMsg?: string;
-  errorStatus?: number;
-  errorIssues?: ZodIssueSaved[];
   errorPermanenteLocal?: boolean;
 };
 
@@ -481,8 +454,6 @@ const VG_EVENTOS_KEY = "outbox.viagem-eventos";
 const VG_FINALIZAR_KEY = "outbox.viagem-finalizar";
 const VG_CANCELAR_KEY = "outbox.viagem-cancelar";
 const COMPLETAR_PESO_KEY = "outbox.viagem-completar-peso";
-const ENCERRAR_DIARIA_KEY = "outbox.viagem-encerrar-diaria";
-const PRESENCA_OBRA_KEY = "outbox.presenca-obra";
 const PONTO_KEY = "outbox.ponto";
 const DOCUMENTO_ADMISSAO_KEY = "outbox.documento-admissao";
 
@@ -500,12 +471,8 @@ const SUFIXOS_OUTBOX = [
   VG_FINALIZAR_KEY,
   VG_CANCELAR_KEY,
   COMPLETAR_PESO_KEY,
-  // Entrou por último e ficou de fora desta lista. Efeito: motorista em mais de
-  // uma empresa via "0 não enviados" na linha da empresa que tinha um encerrar
-  // diária preso — justamente o silêncio que o contador existe pra evitar — e o
-  // item podia não ser adotado numa migração de storage.
-  ENCERRAR_DIARIA_KEY,
-  PRESENCA_OBRA_KEY,
+  // Tipo novo TEM que entrar nesta lista: o que fica de fora some do contador
+  // de "não enviados" e pode não ser adotado numa migração de storage.
   PONTO_KEY,
   DOCUMENTO_ADMISSAO_KEY,
 ];
@@ -713,26 +680,6 @@ export async function deletePendingCompletarPeso(viagemId: string): Promise<void
   );
 }
 
-export async function listPendingPresencaObra(): Promise<PendingPresencaObra[]> {
-  return readList<PendingPresencaObra>(PRESENCA_OBRA_KEY);
-}
-
-export async function upsertPendingPresencaObra(item: PendingPresencaObra): Promise<void> {
-  const list = await listPendingPresencaObra();
-  const i = list.findIndex((x) => x.clientId === item.clientId);
-  if (i >= 0) list[i] = item;
-  else list.push(item);
-  await writeList(PRESENCA_OBRA_KEY, list);
-}
-
-export async function deletePendingPresencaObra(clientId: string): Promise<void> {
-  const list = await listPendingPresencaObra();
-  await writeList(
-    PRESENCA_OBRA_KEY,
-    list.filter((x) => x.clientId !== clientId),
-  );
-}
-
 export async function listPendingPonto(): Promise<PendingPonto[]> {
   return readList<PendingPonto>(PONTO_KEY);
 }
@@ -772,26 +719,6 @@ export async function deletePendingDocumentoAdmissao(clientId: string): Promise<
   await writeList(
     DOCUMENTO_ADMISSAO_KEY,
     list.filter((x) => x.clientId !== clientId),
-  );
-}
-
-export async function listPendingEncerrarDiaria(): Promise<PendingEncerrarDiaria[]> {
-  return readList<PendingEncerrarDiaria>(ENCERRAR_DIARIA_KEY);
-}
-
-export async function upsertPendingEncerrarDiaria(item: PendingEncerrarDiaria): Promise<void> {
-  const list = await listPendingEncerrarDiaria();
-  const idx = list.findIndex((x) => x.viagemId === item.viagemId);
-  if (idx >= 0) list[idx] = item;
-  else list.unshift(item);
-  await writeList(ENCERRAR_DIARIA_KEY, list);
-}
-
-export async function deletePendingEncerrarDiaria(viagemId: string): Promise<void> {
-  const list = await listPendingEncerrarDiaria();
-  await writeList(
-    ENCERRAR_DIARIA_KEY,
-    list.filter((x) => x.viagemId !== viagemId),
   );
 }
 

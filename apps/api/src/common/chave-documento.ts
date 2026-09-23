@@ -22,7 +22,7 @@
  * - `gaveta:<TIPO>` — anexo avulso do painel, que é como sempre funcionou pra
  *   quem não usa o módulo de admissão.
  *
- * Mesmo molde de `AlocacaoObra.vigenteDe` e `RegimeVigente.chaveViva`: uma
+ * Mesmo molde de `RegimeVigente.chaveViva`: uma
  * coluna que o banco sabe cobrar, em vez de uma regra que cada service lembra
  * de aplicar.
  */

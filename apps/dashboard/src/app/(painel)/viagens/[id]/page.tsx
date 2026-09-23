@@ -68,8 +68,6 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
-import { fmtPeriodoSP } from "@/lib/datetime-br";
-import { formatarDuracao } from "@ronan/shared-types";
 import {
   fmtBR,
   fmtBRL,
@@ -96,7 +94,7 @@ type ViagemDetalhe = {
    * `null` = não há preço cadastrado que sirva. A tela trata os dois diferente.
    */
   valor?: {
-    base: "TONELADA" | "KM" | "VIAGEM" | "PERIODO";
+    base: "TONELADA" | "KM" | "VIAGEM";
     precoUnitario: string;
     quantidade: string;
     valorFrete: string;
@@ -177,7 +175,7 @@ type ViagemDetalhe = {
   motorista: { id: string; nome: string; cpf: string };
   // Omitidos pelo backend pra quem não tem `viagens.ver-comercial`.
   cliente?: { id: string; nome: string; empresa: { nome: string } } | null;
-  // Nulos quando o modo de serviço não os exige (diária à disposição).
+  // Nulos quando o modo de serviço não os exige.
   material: { id: string; nome: string; exigeTicket: boolean } | null;
   /** Preenchido quando a viagem veio sem foto numa empresa que exige. */
   justificativaSemFoto: string | null;
@@ -187,10 +185,7 @@ type ViagemDetalhe = {
   divergencias: DivergenciaViagem[] | null;
   duplicidadeAceitaEm: string | null;
   /** Modo de serviço. null = frete por tonelada (histórico e app antigo). */
-  tipoServico: { id: string; nome: string; medicao: "PESO" | "PERIODO" } | null;
-  entradaEm: string | null;
-  saidaEm: string | null;
-  duracaoMinutos: number | null;
+  tipoServico: { id: string; nome: string } | null;
   localCarga: {
     id: string;
     nome: string;
@@ -200,7 +195,7 @@ type ViagemDetalhe = {
     lat: number | null;
     lng: number | null;
   };
-  // Nulo quando o modo de serviço não exige descarga (diária à disposição).
+  // Nulo quando o modo de serviço não exige descarga.
   localDescarga: {
     id: string;
     nome: string;
@@ -725,40 +720,21 @@ export default function ViagemDetalhePage({
                 )
               }
             />
-            {/* Serviço medido por período (diária) não tem peso: o tile vira a
-                permanência, que é o que se cobra. Mostrar "0,000 t" aqui faria
-                a viagem parecer defeituosa. */}
-            {v.tipoServico?.medicao === "PERIODO" ? (
-              <CampoTile
-                label="Permanência"
-                value={
-                  <span className="inline-flex flex-col">
-                    <span className="text-base">
-                      {v.saidaEm ? formatarDuracao(v.duracaoMinutos) : "em aberto"}
+            <CampoTile
+              label="Toneladas"
+              value={
+                <span className="inline-flex flex-wrap items-baseline gap-x-1">
+                  {/* Sem `viagens.ver-comercial` não vem o faturado — mostra o
+                      que o motorista lançou, que é operacional. */}
+                  {fmtNum(v.toneladasEfetiva ?? v.toneladasInformada, 3)} t
+                  {v.toneladasAjustada && (
+                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                      ↑ mínimo
                     </span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {fmtPeriodoSP(v.entradaEm, v.saidaEm)}
-                    </span>
-                  </span>
-                }
-              />
-            ) : (
-              <CampoTile
-                label="Toneladas"
-                value={
-                  <span className="inline-flex flex-wrap items-baseline gap-x-1">
-                    {/* Sem `viagens.ver-comercial` não vem o faturado — mostra o
-                        que o motorista lançou, que é operacional. */}
-                    {fmtNum(v.toneladasEfetiva ?? v.toneladasInformada, 3)} t
-                    {v.toneladasAjustada && (
-                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                        ↑ mínimo
-                      </span>
-                    )}
-                  </span>
-                }
-              />
-            )}
+                  )}
+                </span>
+              }
+            />
             {v.valorPedagioTotal && (
               <CampoTile label="Pedágio" value={fmtBRL(v.valorPedagioTotal)} />
             )}
@@ -918,7 +894,7 @@ export default function ViagemDetalhePage({
                         </div>
                       )}
                     </div>
-                    {/* Modo de serviço sem local de descarga (diária à disposição):
+                    {/* Modo de serviço sem local de descarga:
                         o bloco inteiro some em vez de renderizar vazio. */}
                     {v.localDescarga && (
                     <div>

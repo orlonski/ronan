@@ -57,8 +57,6 @@ export const PADRAO_DO_BANCO: ColunasAcesso = {
   podeReferenciaKm: false,
   podeTelemetria: false,
   podeChat: true,
-  podeDiaria: true,
-  podeVerValorDiaria: false,
 };
 
 const SOMBRA_INICIAL: CamadaCorte[] = ["DEPENDENCIA", "REGIME", "PLATAFORMA", "CONTRATO"];

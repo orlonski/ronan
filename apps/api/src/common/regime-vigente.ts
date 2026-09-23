@@ -4,12 +4,12 @@ import { Prisma, type RegimeTrabalho } from "@prisma/client";
 /**
  * A TRAVA ENTRE OS DOIS MUNDOS: parceiro autônomo e empregado registrado.
  *
- * ⚠️ Este é o ÚNICO arquivo que os módulos `mensal` e `ponto` compartilham, e
- * é de propósito. Vocabulário neutro pra passar nos filtros de léxico dos
- * dois lados: aqui não se diz "diária" nem "jornada".
+ * Vocabulário neutro de propósito: aqui não se diz "diária" nem "jornada".
+ * (A obra/diária, que abria o regime de parceiro, saiu do sistema em
+ * 22/09/2026; o ponto segue abrindo o de empregado.)
  *
- * O problema que ele resolve: o mensal paga por DIÁRIA a parceiro autônomo, e
- * o ponto controla JORNADA de empregado. A mesma pessoa nos dois, na mesma
+ * O problema que ele resolve: o parceiro autônomo é pago por produção, e o
+ * ponto controla JORNADA de empregado. A mesma pessoa nos dois, na mesma
  * empresa, no mesmo período, é o desenho dos elementos de vínculo dentro do
  * produto — e a conta cai na transportadora, não na gente. Documentação não
  * impede isso; constraint impede.
@@ -18,7 +18,7 @@ import { Prisma, type RegimeTrabalho } from "@prisma/client";
  * e é a chave que um perito usa. A mesma pessoa pode ter dois cadastros com
  * ids diferentes; ela não tem dois CPFs.
  *
- * ⚠️ `chaveViva` é o molde literal do `AlocacaoObra.vigenteDe`: vale o CPF
+ * ⚠️ `chaveViva` vale o CPF
  * enquanto o regime está vivo e NULL depois. No Postgres dois NULLs não
  * colidem, então o banco garante UM regime vivo por pessoa sem proibir o
  * histórico — que `@@unique([contaId, cpf])` proibiria junto.
@@ -153,14 +153,14 @@ export async function encerrarRegime(
  *
  * ⚠️ Existe porque três critérios diferentes respondiam isso: esta tabela, a
  * existência de cadastro de funcionário ativo (o que o token olha) e a cópia
- * congelada em `AlocacaoObra.regime`. Três respostas pra uma pergunta é como
+ * congelada na alocação de obra (que saiu do sistema). Três respostas pra uma pergunta é como
  * quatro furos conviveram sem ninguém ver — cada ponto perguntava pra um
  * lugar diferente e todos pareciam certos isolados.
  *
  * ⚠️ E o que ela NÃO responde: qual cadastro a pessoa tem. Motorista CLT da
  * própria transportadora tem os DOIS cadastros de propósito (lança viagem e
  * bate ponto no mesmo dia) — a exclusividade daqui é sobre PAGAMENTO, entre
- * obra/diária e folha. Confundir as duas coisas já trancou a porta do caso
+ * produção e folha. Confundir as duas coisas já trancou a porta do caso
  * mais comum de quem compra o módulo.
  *
  * `null` é resposta legítima e é a mais comum: motorista de frete comum nunca

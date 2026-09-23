@@ -29,7 +29,7 @@ export type ContextoFotoViagem = {
   contaExige?: boolean | null;
   /** `Material.temComprovanteFoto` — false = material que não gera papel. */
   materialTemComprovante?: boolean | null;
-  /** `TipoServico.exigeTicket` — diária não tem ticket, logo não tem foto dele. */
+  /** `TipoServico.exigeTicket` — modo sem ticket não tem foto dele. */
   modoExigeTicket?: boolean;
 };
 
@@ -37,7 +37,7 @@ export type ContextoFotoViagem = {
  * A transportadora exige a foto E existe comprovante pra fotografar?
  *
  * As duas supressões são deliberadas: cobrar foto de concreto (que não gera
- * ticket) ou de uma diária (que não tem romaneio) deixaria o motorista preso
+ * ticket) ou de um modo sem ticket deixaria o motorista preso
  * pedindo foto de um papel que não existe.
  */
 export function exigeFotoDaViagem(ctx: ContextoFotoViagem): boolean {

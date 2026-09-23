@@ -8,7 +8,6 @@ import {
   ArrowDown,
   ArrowRight,
   ArrowUp,
-  Clock,
   CloudOff,
   Fuel,
   MapPin,
@@ -22,11 +21,9 @@ import {
   Truck,
   WifiOff,
 } from "lucide-react-native";
-import { fmtHoraBR } from "@/lib/datetime";
 import { HomePessoal } from "@/components/home-pessoal";
 import { HomeRegistrado } from "@/components/home-registrado";
 import { BlocoDocumentos } from "@/components/bloco-documentos";
-import { BlocoObra } from "@/components/home-obra";
 import { useVisao } from "@/lib/visao";
 import {
   ActivityIndicator,
@@ -61,8 +58,6 @@ import {
   useResumoMes,
   useTrackingConfig,
   useViagens,
-  useDiariasAbertas,
-  useObraDeHoje,
   useViagensAguardandoPeso,
   type Viagem,
 } from "@/lib/queries";
@@ -115,10 +110,6 @@ export default function Home() {
   // vazia, porque tudo ali depende do `/m/me` que ele não alcança.
   if (visao === "pessoal") return <HomePessoal />;
 
-  // Quem está numa obra vê a conta de diárias DENTRO desta mesma home, não
-  // uma tela no lugar dela: ver `BlocoObra`. Substituir a home custou o acesso
-  // a Pendentes, a viagens e ao resto — prominência se ganha com tamanho e
-  // posição, não amputando o que já existia.
   return <HomeDaEmpresa />;
 }
 
@@ -129,11 +120,6 @@ function HomeDaEmpresa() {
   const pending = usePending();
   const aguardandoPeso = useViagensAguardandoPeso();
   const nAguardandoPeso = aguardandoPeso.data?.length ?? 0;
-  // Diárias abertas (entrada marcada, saída pendente). Sem a flag podeDiaria o
-  // motorista nunca abre uma, então a lista fica sempre vazia e o card não sai.
-  const diariasAbertas = useDiariasAbertas();
-  const nDiariasAbertas = diariasAbertas.data?.length ?? 0;
-  const diariaUnica = nDiariasAbertas === 1 ? diariasAbertas.data?.[0] : undefined;
   const posicaoConfig = usePosicaoConfig();
   const excluir = useExcluirViagem();
   const updates = Updates.useUpdates();
@@ -372,21 +358,9 @@ function HomeDaEmpresa() {
             {/* Stories dos motoristas (estilo Instagram) */}
             <StoriesBar />
 
-            {/* O que falta na ficha dele. Some sozinho quando não falta nada —
-                diferente da conta de diárias, isto é uma coisa que ACABA, e é
-                por isso que pode vir antes dela sem cometer o erro da versão
-                que empurrava o app inteiro pra baixo todo dia. */}
+            {/* O que falta na ficha dele. Some sozinho quando não falta nada:
+                é uma coisa que ACABA. */}
             <BlocoDocumentos />
-
-            {/* A conta de diárias de quem está numa obra. Some sozinho quando
-                não há alocação.
-
-                Fica DEPOIS dos stories, não antes. No topo ele empurrava o app
-                inteiro pra baixo todo dia — e um bloco que muda a forma da
-                home conforme o dado é o tipo de coisa que ninguém entende. Os
-                stories são a linha de sempre; a conta vem logo abaixo, no
-                primeiro bloco de conteúdo. */}
-            <BlocoObra />
 
             {/* Banner viagem em andamento (ou capturada aguardando lançamento) */}
             {tracking.data && (
@@ -493,7 +467,7 @@ function HomeDaEmpresa() {
             {/* Banner: itens só aguardando sincronizar (sem erro). Amarelo — informativo.
                 Usa `pending.total`, nunca a soma dos campos: somar aqui já
                 falhou três vezes (abastecimento, depois foto/local/story,
-                depois encerrar-diária e a diária de obra). Cada tipo novo
+                depois mais dois tipos que já saíram do app). Cada tipo novo
                 nascia fora da conta e travava a fila sem aparecer em lugar
                 nenhum. Com o total, o próximo tipo entra sozinho. */}
             {pending.total > 0 && (
@@ -535,38 +509,6 @@ function HomeDaEmpresa() {
                   </Text>
                   <Text className="text-sm text-muted-foreground">
                     Toque pra completar o peso e o romaneio
-                  </Text>
-                </View>
-              </Pressable>
-            )}
-
-            {/* Banner: diárias em que ele marcou a entrada e não encerrou.
-                Violeta (mesma cor da diária no painel) e persistente — enquanto
-                a saída não entra, a viagem fica fora do fechamento. */}
-            {nDiariasAbertas > 0 && (
-              <Pressable
-                onPress={() =>
-                  router.push(
-                    diariaUnica
-                      ? `/encerrar-diaria?viagemId=${diariaUnica.id}`
-                      : "/historico",
-                  )
-                }
-                className="flex-row items-center gap-3 rounded-2xl border-2 border-violet-500/40 bg-violet-500/15 p-4 active:opacity-75"
-              >
-                <View className="h-12 w-12 items-center justify-center rounded-full bg-violet-500">
-                  <Clock size={22} color="white" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-base font-bold text-foreground">
-                    {nDiariasAbertas === 1
-                      ? "Diária aberta"
-                      : `${nDiariasAbertas} diárias abertas`}
-                  </Text>
-                  <Text className="text-sm text-muted-foreground">
-                    {diariaUnica?.entradaEm
-                      ? `Você entrou às ${fmtHoraBR(diariaUnica.entradaEm)} — toque pra encerrar`
-                      : "Toque pra marcar a hora que você saiu"}
                   </Text>
                 </View>
               </Pressable>

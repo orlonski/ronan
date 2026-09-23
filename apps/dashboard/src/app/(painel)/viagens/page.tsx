@@ -44,19 +44,13 @@ import { fmtBR, fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
 import { InfoIcone } from "@/components/info-icone";
 import { STATUS_VIAGEM_COLOR, STATUS_VIAGEM_LABEL } from "@/lib/status-viagem";
-import { fmtPeriodoSP } from "@/lib/datetime-br";
-import { formatarDuracao } from "@ronan/shared-types";
 
 type Viagem = {
   id: string;
   data: string;
   toneladas: string;
   /** Modo de serviço. null = frete por tonelada (histórico e app antigo). */
-  tipoServico: { id: string; nome: string; medicao: "PESO" | "PERIODO" } | null;
-  /** Só em serviço medido por período (diária). */
-  entradaEm: string | null;
-  saidaEm: string | null;
-  duracaoMinutos: number | null;
+  tipoServico: { id: string; nome: string } | null;
   ticket: string | null;
   km: string;
   status: string;
@@ -73,7 +67,7 @@ type Viagem = {
   motorista: { id: string; nome: string };
   // Omitidos pelo backend pra quem não tem `viagens.ver-comercial`.
   cliente?: { id: string; nome: string } | null;
-  // Nulos quando o modo de serviço não os exige (diária à disposição).
+  // Nulos quando o modo de serviço não os exige.
   material: { id: string; nome: string; exigeTicket: boolean } | null;
   localCarga: { id: string; nome: string; cidade: string; uf: string };
   localDescarga: { id: string; nome: string; cidade: string; uf: string } | null;
@@ -95,11 +89,6 @@ type Viagem = {
   /** Quando o registro chegou/sincronizou no backend — fallback de criadoOfflineEm. */
   sincronizadoEm: string;
 };
-
-/** Serviço medido por período (diária) — troca peso por entrada/saída na tela. */
-function ehPeriodo(v: Viagem): boolean {
-  return v.tipoServico?.medicao === "PERIODO";
-}
 
 /** Instante em que a viagem foi criada: offline (device) tem prioridade sobre a sincronização. */
 function criadoEm(v: Viagem): string {
@@ -256,11 +245,6 @@ export default function ViagensPage() {
               ) : (
                 <span className="text-muted-foreground">—</span>
               )}
-              {ehPeriodo(row.original) && (
-                <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
-                  {row.original.tipoServico?.nome ?? "Diária"}
-                </span>
-              )}
             </div>
             {row.original.cliente && (
               <div className="text-xs text-muted-foreground">{row.original.cliente.nome}</div>
@@ -295,38 +279,16 @@ export default function ViagensPage() {
         id: "toneladas",
         accessorKey: "toneladas",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Toneladas" />,
-        // Serviço medido por período não tem peso — mostrar "0,000 t" faria
-        // parecer viagem com problema, e ainda insinuaria que soma no total.
-        cell: ({ row }) =>
-          ehPeriodo(row.original) ? (
-            <span className="text-sm text-muted-foreground">—</span>
-          ) : (
-            <ValorComMinimo
-              className="text-sm"
-              efetivo={row.original.toneladasEfetiva}
-              real={row.original.toneladasInformada}
-              ajustada={row.original.toneladasAjustada}
-              unidade="t"
-              casas={3}
-            />
-          ),
-      },
-      {
-        id: "permanencia",
-        enableSorting: false,
-        header: "Permanência",
-        cell: ({ row }) => {
-          const v = row.original;
-          if (!ehPeriodo(v)) return <span className="text-sm text-muted-foreground">—</span>;
-          return (
-            <div className="text-xs">
-              <div className="tabular-nums">{fmtPeriodoSP(v.entradaEm, v.saidaEm)}</div>
-              <div className="font-medium text-violet-700">
-                {v.saidaEm ? formatarDuracao(v.duracaoMinutos) : "em aberto"}
-              </div>
-            </div>
-          );
-        },
+        cell: ({ row }) => (
+          <ValorComMinimo
+            className="text-sm"
+            efetivo={row.original.toneladasEfetiva}
+            real={row.original.toneladasInformada}
+            ajustada={row.original.toneladasAjustada}
+            unidade="t"
+            casas={3}
+          />
+        ),
       },
       {
         id: "ticket",
@@ -450,7 +412,6 @@ export default function ViagensPage() {
                     { value: "DIVERGENTE", label: "Divergente" },
                     { value: "AJUSTADA", label: "Ajustada" },
                     { value: "AGUARDANDO_PESO", label: "Aguardando peso" },
-                    { value: "AGUARDANDO_SAIDA", label: "Diária aberta" },
                     { value: "INCOMPLETA", label: "Falta preencher" },
                   ]}
                 />
@@ -613,11 +574,6 @@ function ViagemCard({ v }: { v: Viagem }) {
                 <span className="font-mono">{v.veiculo.placa}</span>
               </InfoIcone>
               {v.material && <InfoIcone icon={Package}>{v.material.nome}</InfoIcone>}
-              {ehPeriodo(v) && (
-                <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
-                  {v.tipoServico?.nome ?? "Diária"}
-                </span>
-              )}
               {v.cliente && <InfoIcone icon={Building2}>{v.cliente.nome}</InfoIcone>}
             </div>
           </div>
@@ -628,22 +584,16 @@ function ViagemCard({ v }: { v: Viagem }) {
             {/* nowrap: as três métricas ficam sempre na mesma linha; quem
                 encolhe é o ticket (o mais longo e o menos crítico de ler) */}
             <div className="flex min-w-0 flex-1 items-center justify-between gap-x-3 overflow-hidden text-sm font-semibold tabular-nums sm:justify-start sm:gap-x-8">
-              {ehPeriodo(v) ? (
-                <InfoIcone icon={Clock} className="shrink-0">
-                  {v.saidaEm ? formatarDuracao(v.duracaoMinutos) : "em aberto"}
-                </InfoIcone>
-              ) : (
-                <InfoIcone icon={Weight} className="shrink-0">
-                  <ValorComMinimo
-                    efetivo={v.toneladasEfetiva}
-                    real={v.toneladasInformada}
-                    ajustada={v.toneladasAjustada}
-                    unidade="t"
-                    casas={3}
-                    semAnotacao
-                  />
-                </InfoIcone>
-              )}
+              <InfoIcone icon={Weight} className="shrink-0">
+                <ValorComMinimo
+                  efetivo={v.toneladasEfetiva}
+                  real={v.toneladasInformada}
+                  ajustada={v.toneladasAjustada}
+                  unidade="t"
+                  casas={3}
+                  semAnotacao
+                />
+              </InfoIcone>
               <InfoIcone icon={Route} className="shrink-0">
                 <ValorComMinimo
                   efetivo={v.kmEfetivo}

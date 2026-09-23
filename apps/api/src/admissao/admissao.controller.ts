@@ -183,8 +183,8 @@ export class ColetaPublicaController {
 /**
  * O que o MOTORISTA vê: o que ainda falta pra ficha dele fechar.
  *
- * SEM `@AcessoMotorista(...)`, pelo mesmo motivo do `m/obra`: isto não é
- * feature em rollout, é o que decide se ele entra na obra. Gatear por flag
+ * SEM `@AcessoMotorista(...)`: isto não é feature em rollout, é o que decide
+ * se ele começa a rodar. Gatear por flag
  * deixaria alguém sem conseguir ver por que está parado. E como o guard de
  * acesso não roda sem decorator, a checagem de cadastro aprovado é feita aqui
  * na mão (ver CLAUDE.md).

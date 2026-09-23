@@ -60,8 +60,7 @@ export type ValorCalculado = {
 export type SemPrecoMotivo =
   | "VIAGEM_INCOMPLETA"
   | "SEM_EMPRESA"
-  | "SEM_TABELA"
-  | "BASE_INCOMPATIVEL";
+  | "SEM_TABELA";
 
 /**
  * Só a data importa pra vigência, nunca a hora. O container roda em UTC e a
@@ -95,23 +94,12 @@ export function tabelaPrecoAplicada(
     tipoServicoId: string | null;
     kmReal: DecimalLike;
     data: Date | string;
-    /**
-     * Quais bases podem casar. Omitido = tudo MENOS `DIARIA_OBRA`.
-     *
-     * O default não é conveniência, é blindagem: a diária de obra precifica um
-     * dia sem viagem, e uma linha dessas tem material nulo e faixa começando
-     * em zero — ou seja, casaria com qualquer viagem curta e passaria a cobrar
-     * frete a preço de diária. Quem quer a diária de obra pede por ela.
-     */
-    bases?: readonly BasePreco[];
   },
 ): TabelaPrecoRow | null {
   const km = dec(args.kmReal);
-  const basesOk = args.bases ?? (["TONELADA", "KM", "VIAGEM", "PERIODO"] as const);
   const candidatas = tabelas.filter(
     (t) =>
       t.ativo !== false &&
-      basesOk.includes(t.base) &&
       t.empresaId === args.empresaId &&
       (t.materialId == null || t.materialId === args.materialId) &&
       (t.tipoServicoId == null || t.tipoServicoId === args.tipoServicoId) &&
@@ -122,9 +110,9 @@ export function tabelaPrecoAplicada(
   if (candidatas.length === 0) return null;
 
   candidatas.sort((a, b) => {
-    // Modo de serviço específico é o desempate mais forte: uma linha de diária
-    // não pode perder pra uma linha genérica de frete só porque a genérica tem
-    // faixa mais estreita — seria cobrar diária por tonelada.
+    // Modo de serviço específico é o desempate mais forte: a linha feita pra
+    // aquele modo não pode perder pra uma genérica só porque a genérica tem
+    // faixa mais estreita.
     const servA = a.tipoServicoId ? 1 : 0;
     const servB = b.tipoServicoId ? 1 : 0;
     if (servA !== servB) return servB - servA;
@@ -175,22 +163,6 @@ export function calcularValorViagem(
   });
   if (!linha) return { motivo: "SEM_TABELA" };
 
-  const ehPeriodo = viagem.tipoServico?.medicao === "PERIODO";
-  // Diária cobrada por tonelada é dinheiro inventado — o caminhão pode não ter
-  // saído do pátio. `aplicarMinimos` já blinda o mínimo por período pelo mesmo
-  // motivo; aqui a blindagem é do preço.
-  if (ehPeriodo && linha.base !== "PERIODO" && linha.base !== "VIAGEM") {
-    return { motivo: "BASE_INCOMPATIVEL" };
-  }
-  if (!ehPeriodo && linha.base === "PERIODO") {
-    return { motivo: "BASE_INCOMPATIVEL" };
-  }
-  // Cinto e suspensório: a resolução acima já não devolve `DIARIA_OBRA`, mas
-  // se alguém afrouxar o filtro um dia, o pior resultado possível é cobrar do
-  // contratante uma viagem a preço de diária — e isso sai na fatura como se
-  // estivesse certo. Nunca é válido pra viagem, ponto.
-  if (linha.base === "DIARIA_OBRA") return { motivo: "BASE_INCOMPATIVEL" };
-
   // O preço multiplica o EFETIVO, nunca o real.
   const efetivo = aplicarMinimos(viagem, args.minimo);
 
@@ -202,8 +174,8 @@ export function calcularValorViagem(
     case "KM":
       quantidade = dec(efetivo.kmEfetivo);
       break;
-    // VIAGEM e PERIODO são valor fechado: a quantidade é 1 e fica gravada assim
-    // pra conta ser reconstituível sem um `if` em cada lugar que lê.
+    // VIAGEM é valor fechado: a quantidade é 1 e fica gravada assim pra conta
+    // ser reconstituível sem um `if` em cada lugar que lê.
     default:
       quantidade = new Prisma.Decimal(1);
   }
@@ -225,45 +197,11 @@ export function calcularValorViagem(
   };
 }
 
-/**
- * Quanto vale UM DIA de caminhão à disposição de uma obra.
- *
- * A outra metade do mensal. Até aqui o produto contava dias e conferia dias
- * com o contratante — e a conversa do dia 20 é sobre dinheiro. Contar sem
- * valorar deixava a transportadora dizendo "eu tenho 22 e vocês têm 20" sem
- * conseguir dizer quanto isso custa, que é a única frase que resolve a mesa.
- *
- * Mesma tabela de preço do frete, de propósito: reajuste, vigência e
- * histórico já funcionam ali, e um cadastro paralelo só pra obra viraria dois
- * lugares pra atualizar e um deles esquecido. O que muda é a chave — não tem
- * material, não tem km, não tem viagem: é empresa + dia.
- *
- * Resolve POR DIA, nunca pelo mês: reajuste no meio da competência tem que
- * valer do dia em que entrou, igual acontece com viagem.
- */
-export function valorDaDiariaObra(args: {
-  tabelas: TabelaPrecoRow[];
-  empresaId: string | null | undefined;
-  data: Date | string;
-}): { linha: TabelaPrecoRow; motivo?: never } | { linha?: never; motivo: SemPrecoMotivo } {
-  if (!args.empresaId) return { motivo: "SEM_EMPRESA" };
-  const linha = tabelaPrecoAplicada(args.tabelas, {
-    empresaId: args.empresaId,
-    materialId: null,
-    tipoServicoId: null,
-    kmReal: 0,
-    data: args.data,
-    bases: ["DIARIA_OBRA"],
-  });
-  return linha ? { linha } : { motivo: "SEM_TABELA" };
-}
-
 /** Texto pro painel explicar por que a viagem está sem valor. */
 export const SEM_PRECO_TEXTO: Record<SemPrecoMotivo, string> = {
   VIAGEM_INCOMPLETA: "Viagem ainda incompleta — só ganha valor quando fechar.",
   SEM_EMPRESA: "Viagem sem empresa tomadora, então não há de quem cobrar.",
   SEM_TABELA: "Nenhum preço cadastrado que sirva pra esta viagem.",
-  BASE_INCOMPATIVEL: "O preço cadastrado é de outra unidade (diária x frete).",
 };
 
 /**

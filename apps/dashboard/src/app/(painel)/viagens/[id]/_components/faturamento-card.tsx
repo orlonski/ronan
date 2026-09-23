@@ -40,7 +40,7 @@ type Props = {
   toneladasAjustada?: boolean;
   // Regra de mínimo que casou
   regraMinimo?: RegraMinimo | null;
-  /** Null quando o modo de serviço não exige material (diária à disposição). */
+  /** Null quando o modo de serviço não exige material. */
   materialNome: string | null;
   /**
    * Quanto a viagem vale. Ausente pra quem não tem `viagens.ver-comercial` (o
@@ -48,7 +48,7 @@ type Props = {
    * cadastrado — os dois casos aparecem diferente na tela.
    */
   valor?: {
-    base: "TONELADA" | "KM" | "VIAGEM" | "PERIODO";
+    base: "TONELADA" | "KM" | "VIAGEM";
     precoUnitario: string;
     quantidade: string;
     valorFrete: string;
@@ -65,7 +65,6 @@ const BASE_UNIDADE: Record<string, string> = {
   TONELADA: "por tonelada",
   KM: "por km",
   VIAGEM: "por viagem",
-  PERIODO: "por diária",
 };
 
 function brl(v: string): string {

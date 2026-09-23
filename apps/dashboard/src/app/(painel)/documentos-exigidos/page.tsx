@@ -123,7 +123,7 @@ function Conteudo() {
           {porContratante.length > 0 && (
             <Grupo
               titulo="Por contratante"
-              descricao="Só é pedido de quem está alocado numa obra desse contratante."
+              descricao="Aparecem no link de coleta; no app do motorista vale só o que é da transportadora inteira."
               itens={porContratante}
               nomeEmpresa={nomeEmpresa}
               onMudou={() => void qc.invalidateQueries({ queryKey: [PATH] })}

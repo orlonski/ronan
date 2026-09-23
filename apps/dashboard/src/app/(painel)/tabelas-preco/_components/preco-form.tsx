@@ -21,7 +21,7 @@ import { hojeSP } from "@/lib/datetime-br";
 
 type Empresa = { id: string; nome: string };
 type Material = { id: string; nome: string };
-type TipoServico = { id: string; nome: string; medicao: "PESO" | "PERIODO" };
+type TipoServico = { id: string; nome: string };
 
 export type Preco = {
   id: string;
@@ -101,36 +101,6 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
     setForm((f) => ({ ...f, empresaId: empresas.data![0]!.id }));
   }, [initial, form.empresaId, empresas.data]);
 
-  const servicoEscolhido = tiposServico.data?.find((t) => t.id === form.tipoServicoId);
-  const ehPeriodo = servicoEscolhido?.medicao === "PERIODO";
-
-  // Escolher um modo medido por período e deixar a base em tonelada criaria uma
-  // linha que nunca casa com viagem nenhuma — o backend recusa, mas é melhor o
-  // formulário já ir junto do que deixar o usuário descobrir no erro.
-  useEffect(() => {
-    if (ehPeriodo && form.base !== "PERIODO" && form.base !== "VIAGEM") {
-      setForm((f) => ({ ...f, base: "PERIODO" }));
-    }
-    if (!ehPeriodo && form.base === "PERIODO") {
-      setForm((f) => ({ ...f, base: "TONELADA" }));
-    }
-  }, [ehPeriodo, form.base]);
-
-  const ehDiariaObra = form.base === "DIARIA_OBRA";
-
-  // A diária de obra é resolvida por empresa + dia: material e modo NÃO entram
-  // na chave. Uma linha dessas com material preenchido não casaria com nada e
-  // ficaria cadastrada parecendo certa — o pior tipo de defeito de tabela de
-  // preço, porque só aparece quando alguém procura o dinheiro que sumiu.
-  useEffect(() => {
-    if (!ehDiariaObra) return;
-    if (form.materialId || form.tipoServicoId) {
-      setForm((f) => ({ ...f, materialId: "", tipoServicoId: "" }));
-    }
-  }, [ehDiariaObra, form.materialId, form.tipoServicoId]);
-
-  const porFaixa = form.base === "TONELADA" || form.base === "KM" || form.base === "VIAGEM";
-
   async function onSubmit(ev: React.FormEvent) {
     ev.preventDefault();
     setErro(null);
@@ -197,7 +167,6 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
             <Label htmlFor="precoform-material">Material</Label>
             <Select id="precoform-material"
               value={form.materialId}
-              disabled={ehDiariaObra}
               onChange={(e) => setForm({ ...form, materialId: e.target.value })}
             >
               <option value="">Qualquer material</option>
@@ -215,7 +184,6 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
             <Label htmlFor="precoform-modo-de-servico">Modo de serviço</Label>
             <Select id="precoform-modo-de-servico"
               value={form.tipoServicoId}
-              disabled={ehDiariaObra}
               onChange={(e) => setForm({ ...form, tipoServicoId: e.target.value })}
             >
               <option value="">Qualquer modo</option>
@@ -226,9 +194,7 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
               ))}
             </Select>
             <p className="text-xs text-muted-foreground">
-              {ehDiariaObra
-                ? "A diária de obra não usa modo nem material: vale por empresa e dia."
-                : "Escolha só se a diária (ou outro modo) tiver preço próprio."}
+              Escolha só se o modo tiver preço próprio.
             </p>
           </div>
           <div className="space-y-2">
@@ -237,20 +203,13 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
               value={form.base}
               onChange={(e) => setForm({ ...form, base: e.target.value as BasePrecoTipo })}
             >
-              {BASES_PRECO.filter((b) =>
-                ehPeriodo ? b === "PERIODO" || b === "VIAGEM" : b !== "PERIODO",
-              ).map((b) => (
+              {BASES_PRECO.map((b) => (
                 <option key={b} value={b}>
                   {BASE_PRECO_LABEL[b].nome}
                 </option>
               ))}
             </Select>
             <p className="text-xs text-muted-foreground">{BASE_PRECO_AJUDA[form.base]}</p>
-            {ehPeriodo && (
-              <p className="text-xs text-muted-foreground">
-                Esse modo é medido por período, então não dá pra cobrar por tonelada.
-              </p>
-            )}
           </div>
         </div>
 
@@ -279,33 +238,31 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
           </div>
         </div>
 
-        {porFaixa && (
-          <div className="space-y-1">
-            <Label>Faixa de km rodado</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                inputMode="decimal"
-                placeholder="de (ex: 0)"
-                value={form.kmFaixaDe}
-                onChange={(e) => setForm({ ...form, kmFaixaDe: e.target.value })}
-                className="w-32"
-              />
-              <span className="text-sm text-muted-foreground">até</span>
-              <Input
-                inputMode="decimal"
-                placeholder="sem teto"
-                value={form.kmFaixaAte}
-                onChange={(e) => setForm({ ...form, kmFaixaAte: e.target.value })}
-                className="w-32"
-              />
-              <span className="text-sm text-muted-foreground">km</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Mesma regra dos mínimos: &quot;de&quot; incluído, &quot;até&quot; excluído. Deixe o
-              &quot;até&quot; vazio pra valer em qualquer distância.
-            </p>
+        <div className="space-y-1">
+          <Label>Faixa de km rodado</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              inputMode="decimal"
+              placeholder="de (ex: 0)"
+              value={form.kmFaixaDe}
+              onChange={(e) => setForm({ ...form, kmFaixaDe: e.target.value })}
+              className="w-32"
+            />
+            <span className="text-sm text-muted-foreground">até</span>
+            <Input
+              inputMode="decimal"
+              placeholder="sem teto"
+              value={form.kmFaixaAte}
+              onChange={(e) => setForm({ ...form, kmFaixaAte: e.target.value })}
+              className="w-32"
+            />
+            <span className="text-sm text-muted-foreground">km</span>
           </div>
-        )}
+          <p className="text-xs text-muted-foreground">
+            Mesma regra dos mínimos: &quot;de&quot; incluído, &quot;até&quot; excluído. Deixe o
+            &quot;até&quot; vazio pra valer em qualquer distância.
+          </p>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">

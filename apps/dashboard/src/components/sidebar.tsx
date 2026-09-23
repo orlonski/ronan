@@ -23,7 +23,6 @@ import {
   ChevronRight,
   ClipboardCheck,
   ClipboardList,
-  Construction,
   Clock,
   Columns3,
   FileCheck2,
@@ -242,31 +241,12 @@ const GRUPOS: Grupo[] = [
   },
   {
     /**
-     * QUEM A EMPRESA CONTRATA — por diária ou por carteira assinada.
-     *
-     * ⚠️ Antes eram duas coisas em dois lugares: "Obras e diárias" sozinha no
-     * meio do dia a dia, e "Ponto" como grupo inteiro. Quem contratava obra e
-     * diária via UM item aparecer; quem contratava ponto via SEIS. O cliente
-     * pagava dois adicionais e não reconhecia o que tinha comprado em nenhum
-     * dos dois.
-     *
-     * ⚠️ O grupo anterior era separado de propósito, com um argumento que eu
-     * mantenho onde ele vale: diária é de PARCEIRO AUTÔNOMO e jornada é de
-     * EMPREGADO REGISTRADO, e as duas coisas não podem virar uma na cabeça de
-     * quem opera. O que mudou é onde a separação é cobrada: o banco impede a
-     * mesma pessoa nos dois regimes (`RegimeVigente`), a ficha do motorista
-     * mostra qual é o dela, e os rótulos aqui dentro nunca se misturam.
-     * Separar no MENU cobrava esse imposto de quem só queria achar a tela — e
-     * não impedia nada, porque a confusão que importa é no dado, não no título.
+     * QUEM É REGISTRADO EM CARTEIRA: o ponto eletrônico. (Dividia o grupo com
+     * "Obras e diárias", que saiu do sistema em 22/09/2026.)
      */
-    titulo: "Mensalista",
+    titulo: "Registrados",
     coach: "grupo-mensalista",
     itens: [
-      // Ícone próprio: `HardHat` já era o de "Motoristas", e ícone repetido
-      // deixa de servir como pista de varredura — o arquivo inteiro segue essa
-      // regra ("um ícone, um conceito"). A repetição passava despercebida
-      // porque os dois viviam em grupos diferentes; agora um abre o grupo.
-      { href: "/obras", label: "Obras e diárias", icon: Construction, perm: "alocacoes.ver" },
       { href: "/ponto", label: "Ponto do dia", icon: Clock, perm: "ponto.ver" },
       { href: "/ponto/competencia", label: "Fechar o mês", icon: CalendarCheck, perm: "fechamento-ponto.ver" },
       { href: "/ponto/correcoes", label: "Acerto de ponto", icon: PenLine, perm: "correcoes-ponto.ver" },

@@ -98,12 +98,11 @@ export function fmtDataHora(iso: string): string {
   return `${dia}/${mes}/${d.getFullYear()} ${hora}:${min}`;
 }
 
-// ===== Diária (serviço medido por período) =====
-// A hora que aparece aqui é a MESMA que sai no painel e no comprovante do
-// cliente, então ela é ancorada no horário de Brasília — não no fuso do
-// aparelho. Celular com fuso torto acontece (já custou caro em outro ponto do
-// app, ver posicao-periodica.ts), e nesse caso a diária mostraria uma hora que
-// não bate com o que a empresa vê.
+// ===== Hora de Brasília =====
+// A hora que aparece aqui é a MESMA que sai no painel, então ela é ancorada no
+// horário de Brasília — não no fuso do aparelho. Celular com fuso torto
+// acontece (já custou caro em outro ponto do app, ver posicao-periodica.ts), e
+// nesse caso a tela mostraria uma hora que não bate com o que a empresa vê.
 //
 // O instante em si é sempre absoluto (Date.now()), então só a EXIBIÇÃO precisa
 // desse cuidado. -3h fixo: o Brasil não tem horário de verão desde 2019.
@@ -125,39 +124,6 @@ export function fmtHoraBR(iso: string | null | undefined): string {
   if (!iso) return "—";
   const p = partesBR(iso);
   return p ? `${p.hh}:${p.mm}` : "—";
-}
-
-/**
- * A saída caiu num dia diferente da entrada, em horário de BRASÍLIA?
- *
- * Comparar a parte de data do ISO não serve: entrada 22h e saída 06h no Brasil
- * podem cair no mesmo dia UTC, e a virada da noite passaria batida.
- */
-export function virouDiaBR(
-  entradaISO: string | null | undefined,
-  saidaISO: string | null | undefined,
-): boolean {
-  if (!entradaISO || !saidaISO) return false;
-  const e = partesBR(entradaISO);
-  const s = partesBR(saidaISO);
-  if (!e || !s) return false;
-  return e.dia !== s.dia || e.mes !== s.mes;
-}
-
-/**
- * "07:12 → 11:32" da diária, marcando a virada de dia. Sem o "+1d",
- * "22:10 → 06:30" parece erro em vez de uma diária de 8h.
- */
-export function fmtPeriodoBR(
-  entradaEm: string | null | undefined,
-  saidaEm: string | null | undefined,
-): string {
-  if (!entradaEm) return "—";
-  if (!saidaEm) return `${fmtHoraBR(entradaEm)} → em aberto`;
-  const e = partesBR(entradaEm);
-  const s = partesBR(saidaEm);
-  if (!e || !s) return "—";
-  return `${e.hh}:${e.mm} → ${s.hh}:${s.mm}${virouDiaBR(entradaEm, saidaEm) ? " (+1d)" : ""}`;
 }
 
 /**
@@ -185,5 +151,5 @@ export function minutosEntre(entradaISO: string, saidaISO: string): number | nul
   return Math.round((s - e) / 60000);
 }
 
-/** Um dia inteiro em ms — pra empurrar a saída da diária que virou a noite. */
+/** Um dia inteiro em ms — pra empurrar a hora que virou a noite. */
 export const UM_DIA_MS = 24 * 60 * 60 * 1000;

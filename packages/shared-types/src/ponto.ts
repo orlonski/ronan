@@ -3,12 +3,11 @@ import { z } from "zod";
 /**
  * PONTO ELETRÔNICO — o que o aparelho e o servidor compartilham.
  *
- * ⚠️ Este módulo é de FUNCIONÁRIO REGISTRADO EM CARTEIRA, e é separado do
- * "mensal" (obra e diária) por decisão jurídica: lá o motorista é parceiro
- * autônomo, e somar controle de jornada a pagamento por diária e habitualidade
- * desenha os elementos de vínculo dentro do produto. A mesma pessoa não pode
- * estar nos dois, e quem garante isso é o banco (`RegimeVigente`), não a boa
- * vontade de quem cadastra.
+ * ⚠️ Este módulo é de FUNCIONÁRIO REGISTRADO EM CARTEIRA. O motorista parceiro
+ * é autônomo, e somar controle de jornada a pagamento por produção e
+ * habitualidade desenha os elementos de vínculo dentro do produto. A mesma
+ * pessoa não pode ser as duas coisas, e quem garante isso é o banco
+ * (`RegimeVigente`), não a boa vontade de quem cadastra.
  *
  * ⚠️ A REGRA QUE DECIDE TODO O RESTO: o botão grava UM INSTANTE E UMA PESSOA.
  * Não grava "entrada", não grava "almoço", não grava "saída". Tipo de

@@ -34,7 +34,6 @@ type ViagemFull = Prisma.ViagemGetPayload<{
     cliente: true;
     material: true;
     // Necessário pro guarda de mínimo em aplicarMinimos (diária não tem mínimo).
-    tipoServico: { select: { medicao: true } };
     motorista: { select: { id: true; nome: true } };
     localCarga: { select: { nome: true; cidade: true; uf: true } };
     localDescarga: { select: { nome: true; cidade: true; uf: true } };
@@ -69,7 +68,6 @@ export class ExportFechamentoService {
                 veiculo: true,
                 cliente: true,
                 material: true,
-                tipoServico: { select: { medicao: true } },
                 motorista: { select: { id: true, nome: true } },
                 localCarga: { select: { nome: true, cidade: true, uf: true } },
                 localDescarga: { select: { nome: true, cidade: true, uf: true } },
@@ -180,7 +178,6 @@ export class ExportFechamentoService {
         veiculo: true,
         cliente: true,
         material: true,
-        tipoServico: { select: { medicao: true } },
         motorista: { select: { id: true, nome: true } },
         localCarga: { select: { nome: true, cidade: true, uf: true } },
         localDescarga: { select: { nome: true, cidade: true, uf: true } },

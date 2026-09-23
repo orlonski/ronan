@@ -35,7 +35,6 @@ function servico(over: {
   }[];
   assinaturas?: { tipoDocumento: string; modo: string; assinadoEm: Date; hashArquivo?: string }[];
   arquivoGuardado?: Buffer;
-  alocacao?: Record<string, unknown> | null;
   /** Vínculo vivo: contratado em carteira ou parceiro. */
   regime?: { id: string; regime: "PARCEIRO" | "EMPREGADO" } | null;
 } = {}) {
@@ -101,7 +100,6 @@ function servico(over: {
       },
       findMany: async () => [],
     },
-    alocacaoObra: { findFirst: async () => over.alocacao ?? null },
     documentoExigido: {
       // Respeita o filtro de público como o banco faz: é o que separa a
       // papelada de obra de quem só roda frete comum.
@@ -634,11 +632,10 @@ describe("o que o motorista vê no app", () => {
         { tipo: "CRLV", titulo: "Documento do caminhão", obrigatorio: true, empresaId: null },
       ],
       enviados: [{ tipo: "CNH" }],
-      alocacao: { cliente: { empresaId: "emp1", nome: "Obra Centro" } },
+      regime: { id: "r1", regime: "PARCEIRO" },
     });
     const r = await s.paraOMotorista("mot1");
 
-    expect(r.obra).toBe("Obra Centro");
     expect(r.total).toBe(2);
     // A CNH chegou mas ninguém conferiu: não é tarefa dele, e também não é
     // "pronto". São duas contas diferentes, e é essa distinção que impede a
@@ -659,9 +656,9 @@ describe("o que o motorista vê no app", () => {
       assinaturas: [
         { tipoDocumento: "OS", modo: "SIMPLES", assinadoEm: new Date(), hashArquivo: "abc" },
       ],
-      // Em obra: senão o filtro de público esconde a papelada de obra, que é
+      // Com vínculo: senão o filtro de público esconde a papelada, que é
       // justamente o comportamento testado no describe de baixo.
-      alocacao: { cliente: { empresaId: "emp1", nome: "Obra Centro" } },
+      regime: { id: "r1", regime: "PARCEIRO" },
     });
     const r = await s.paraOMotorista("mot1");
 
@@ -693,7 +690,7 @@ describe("o que o motorista vê no app", () => {
  * resolver. Decisão do dono (21/09/2026): documento de admissão é de
  * mensalista; o resto se marca na tela, um por um.
  */
-describe("quem não está em obra não é cobrado de papelada de obra", () => {
+describe("quem não tem vínculo não é cobrado de papelada de admissão", () => {
   const CATALOGO = [
     { tipo: "CNH", titulo: "CNH", obrigatorio: true, empresaId: null, publico: "TODOS" as const },
     {
@@ -705,16 +702,16 @@ describe("quem não está em obra não é cobrado de papelada de obra", () => {
     },
   ];
 
-  it("sem alocação, só o que vale pra frota inteira", async () => {
-    const { s } = servico({ exigidos: CATALOGO, alocacao: null });
+  it("sem vínculo, só o que vale pra frota inteira", async () => {
+    const { s } = servico({ exigidos: CATALOGO, regime: null });
     const r = await s.paraOMotorista("mot1");
     expect(r.documentos.map((d) => d.titulo)).toEqual(["CNH"]);
   });
 
-  it("com alocação, vem tudo", async () => {
+  it("com vínculo vivo, vem tudo", async () => {
     const { s } = servico({
       exigidos: CATALOGO,
-      alocacao: { cliente: { empresaId: "emp1", nome: "Obra Centro" } },
+      regime: { id: "r1", regime: "PARCEIRO" },
     });
     const r = await s.paraOMotorista("mot1");
     expect(r.documentos.map((d) => d.titulo)).toEqual(["CNH", "eSocial"]);
@@ -733,7 +730,7 @@ describe("quem não está em obra não é cobrado de papelada de obra", () => {
           publico: "MENSAL" as const,
         },
       ],
-      alocacao: null,
+      regime: null,
     });
     const r = await s.paraOMotorista("mot1");
     expect(r.total).toBe(0);
@@ -1003,20 +1000,18 @@ describe("quem tem vínculo manda documento, com ou sem obra", () => {
     },
   ];
 
-  it("contratado em carteira SEM obra nenhuma vê os documentos", async () => {
+  it("contratado em carteira vê os documentos", async () => {
     const { s } = servico({
       exigidos: SO_DO_MENSAL,
-      alocacao: null,
       regime: { id: "r1", regime: "EMPREGADO" },
     });
     const r = await s.paraOMotorista("mot1");
     expect(r.total).toBe(1);
   });
 
-  it("parceiro alocado numa obra também vê", async () => {
+  it("parceiro com regime vivo também vê", async () => {
     const { s } = servico({
       exigidos: SO_DO_MENSAL,
-      alocacao: { cliente: { empresaId: "emp1", nome: "Obra Centro" } },
       regime: { id: "r1", regime: "PARCEIRO" },
     });
     const r = await s.paraOMotorista("mot1");
@@ -1024,7 +1019,7 @@ describe("quem tem vínculo manda documento, com ou sem obra", () => {
   });
 
   it("motorista de frete comum, sem vínculo nenhum, continua sem ver nada", async () => {
-    const { s } = servico({ exigidos: SO_DO_MENSAL, alocacao: null, regime: null });
+    const { s } = servico({ exigidos: SO_DO_MENSAL, regime: null });
     const r = await s.paraOMotorista("mot1");
     expect(r.total).toBe(0);
   });

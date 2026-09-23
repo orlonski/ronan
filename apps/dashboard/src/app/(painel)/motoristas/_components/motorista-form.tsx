@@ -66,19 +66,16 @@ export type Motorista = {
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
   podeVerStories: boolean;
-  podeVerValorDiaria: boolean;
   podeVerTodosLocais: boolean;
   podeReferenciaKm: boolean;
   podeTelemetria: boolean;
   podeChat: boolean;
-  podeDiaria: boolean;
   receberResumoDiario: boolean;
   tipoRemuneracao: TipoRemuneracaoTipo | null;
   percentualFrete: string | null;
   valorPorViagem: string | null;
   valorPorTonelada: string | null;
   valorPorKm: string | null;
-  valorDiaria: string | null;
   chavePix: string | null;
 };
 
@@ -93,7 +90,6 @@ type FormShape = {
   /** "" = herda a régua da modalidade. */
   tipoRemuneracao: TipoRemuneracaoTipo | "";
   valorRemuneracao: string;
-  valorDiaria: string;
   telefone: string;
   email: string;
   placas: PlacaRow[];
@@ -110,7 +106,6 @@ const empty: FormShape = {
   chavePix: "",
   tipoRemuneracao: "",
   valorRemuneracao: "",
-  valorDiaria: "",
   telefone: "",
   email: "",
   placas: [],
@@ -154,12 +149,10 @@ type AcessosState = {
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
   podeVerStories: boolean;
-  podeVerValorDiaria: boolean;
   podeVerTodosLocais: boolean;
   podeReferenciaKm: boolean;
   podeTelemetria: boolean;
   podeChat: boolean;
-  podeDiaria: boolean;
   receberResumoDiario: boolean;
 };
 
@@ -176,13 +169,10 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
     podeLancarAbastecimento: initial?.podeLancarAbastecimento ?? true,
     podeUsarOcrTicket: initial?.podeUsarOcrTicket ?? true,
     podeVerStories: initial?.podeVerStories ?? true,
-    // Nasce desligada: é o dono que decide mostrar dinheiro pro motorista.
-    podeVerValorDiaria: initial?.podeVerValorDiaria ?? false,
     podeVerTodosLocais: initial?.podeVerTodosLocais ?? false,
     podeReferenciaKm: initial?.podeReferenciaKm ?? false,
     podeTelemetria: initial?.podeTelemetria ?? false,
     podeChat: initial?.podeChat ?? true,
-    podeDiaria: initial?.podeDiaria ?? true,
     receberResumoDiario: initial?.receberResumoDiario ?? true,
   });
   const token = useAuthToken();
@@ -242,7 +232,6 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
             initial.valorPorTonelada ??
             initial.valorPorKm ??
             "",
-          valorDiaria: initial.valorDiaria ?? "",
           placaDefault: initial.veiculoDefault?.placa ?? null,
         }
       : empty,
@@ -447,7 +436,6 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
       valorPorViagem: form.tipoRemuneracao === "VALOR_POR_VIAGEM" ? valorRem : null,
       valorPorTonelada: form.tipoRemuneracao === "VALOR_POR_TONELADA" ? valorRem : null,
       valorPorKm: form.tipoRemuneracao === "VALOR_POR_KM" ? valorRem : null,
-      valorDiaria: parseValorBR(form.valorDiaria),
       chavePix: form.chavePix.trim() || null,
       ...(motivoRegistrado.trim() ? { motivoPagamentoRegistrado: motivoRegistrado.trim() } : {}),
     };
@@ -695,16 +683,6 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
                 />
               </div>
             )}
-
-            <div className="space-y-2">
-              <Label htmlFor="motoristaf-valor-da-diaria-r">Valor da diária (R$)</Label>
-              <Input id="motoristaf-valor-da-diaria-r"
-                inputMode="decimal"
-                placeholder="herda da modalidade"
-                value={form.valorDiaria}
-                onChange={(e) => setForm({ ...form, valorDiaria: e.target.value })}
-              />
-            </div>
           </div>
 
           <div className="space-y-2">
@@ -856,16 +834,6 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
                 label="Chat com os outros motoristas (aba Conversas no app)"
                 active={acessos.podeChat}
                 onChange={(v) => alterarAcesso("podeChat", v)}
-              />
-              <AcessoRow
-                label="Escolher o modo de serviço no lançamento (diária). Desligue só pra quem não pode lançar diária — quando a empresa tem um modo só, o campo nem aparece pro motorista."
-                active={acessos.podeDiaria}
-                onChange={(v) => alterarAcesso("podeDiaria", v)}
-              />
-              <AcessoRow
-                label="Ver em R$ quanto as diárias de obra do mês valem pra ele (tela Minhas diárias). Ligue só quando o combinado com ele for claro — o valor mostrado é o dele, nunca o que a obra paga."
-                active={acessos.podeVerValorDiaria}
-                onChange={(v) => alterarAcesso("podeVerValorDiaria", v)}
               />
             </div>
 

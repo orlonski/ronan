@@ -17,10 +17,7 @@ function ymd(d: Date): Ymd {
 /**
  * O período de uma competência, pelo dia de fechamento da empresa.
  *
- * ⚠️ Mecânica DUPLICADA de `competenciaDe` (mensal) de propósito: os dois
- * módulos não compartilham domínio, e um import cruzado aqui seria o primeiro
- * fio ligando o ponto à diária. As duas armadilhas são as mesmas e continuam
- * pagas em teste:
+ * As duas armadilhas desta conta, pagas em teste:
  *
  * 1. O dia é limitado ANTES de virar Date. `Date.UTC(2026, 8, 31)` já rola pra
  *    outubro sozinho, então limitar depois corrige no mês errado.

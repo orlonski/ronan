@@ -243,8 +243,9 @@ function ComprovantesCard() {
           />
         </div>
         <p className="text-xs text-muted-foreground">
-          Material marcado como “não gera comprovante” (ex.: concreto) e diária ficam de
-          fora sozinhos — não dá pra cobrar foto de papel que não existe.
+          Material marcado como “não gera comprovante” (ex.: concreto) e modo de
+          serviço sem ticket ficam de fora sozinhos — não dá pra cobrar foto de
+          papel que não existe.
         </p>
       </div>
 

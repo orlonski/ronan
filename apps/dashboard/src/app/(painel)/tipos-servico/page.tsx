@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { Pencil, Plus, Star, Timer } from "lucide-react";
-import { BadgeMedicao } from "./_components/badge-medicao";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { Permitido } from "@/components/requer-tela";
@@ -26,7 +25,6 @@ type TipoServico = {
   ativo: boolean;
   padrao: boolean;
   ordem: number;
-  medicao: "PESO" | "PERIODO";
   exigeMaterial: boolean;
   exigeTicket: boolean;
   exigeLocalDescarga: boolean;
@@ -63,20 +61,13 @@ export default function TiposServicoPage() {
         ),
       },
       {
-        id: "medicao",
-        enableSorting: false,
-        size: 140,
-        header: "Medição",
-        cell: ({ row }) => <BadgeMedicao medicao={row.original.medicao} />,
-      },
-      {
         id: "exige",
         enableSorting: false,
         header: "Pede ao motorista",
         cell: ({ row }) => {
           const t = row.original;
           const itens = [
-            t.medicao === "PERIODO" ? "entrada/saída" : "peso",
+            "peso",
             t.exigeMaterial && "material",
             t.exigeTicket && "ticket",
             t.exigeLocalDescarga && "descarga",
@@ -139,8 +130,7 @@ export default function TiposServicoPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Como a viagem é cobrada</h1>
           <p className="text-sm text-muted-foreground">
-            Como a viagem é medida — por peso (frete) ou por período (diária) — e o que o
-            app pede ao motorista em cada caso.
+            O que o app pede ao motorista em cada modo de serviço.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -187,7 +177,7 @@ export default function TiposServicoPage() {
           <EstadoVazio
             icone={Timer}
             titulo="Nenhum modo de cobrança cadastrado"
-            descricao="Define se a viagem é medida por peso (frete) ou por período (diária). Com um só, o app nem mostra o seletor."
+            descricao="Define o que o app pede ao motorista em cada modo. Com um só, o app nem mostra o seletor."
             acaoHref="/tipos-servico/novo"
             acaoLabel="Criar modo de cobrança"
             perm="tipos-servico.criar"
@@ -207,7 +197,6 @@ export default function TiposServicoPage() {
                     </span>
                   )}
                 </div>
-                <BadgeMedicao medicao={t.medicao} />
               </div>
               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
                 <Permitido chave="tipos-servico.editar">

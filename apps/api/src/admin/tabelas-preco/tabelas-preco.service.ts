@@ -21,7 +21,7 @@ type ListParams = PaginationQuery & {
 const INCLUDE = {
   empresa: { select: { id: true, nome: true } },
   material: { select: { id: true, nome: true } },
-  tipoServico: { select: { id: true, nome: true, medicao: true } },
+  tipoServico: { select: { id: true, nome: true } },
 } satisfies Prisma.TabelaPrecoInclude;
 
 @Injectable()
@@ -258,19 +258,6 @@ export class TabelasPrecoService {
     if (data.tipoServicoId) {
       const t = await this.prisma.tipoServico.findUnique({ where: { id: data.tipoServicoId } });
       if (!t) throw new NotFoundException("Modo de serviço não encontrado");
-      // Casar base e medição aqui evita a linha que nunca vai casar com viagem
-      // nenhuma: uma diária com preço por tonelada é recusada no cálculo, e o
-      // usuário só descobriria isso pelo valor que não aparece.
-      if (t.medicao === "PERIODO" && data.base && data.base !== "PERIODO" && data.base !== "VIAGEM") {
-        throw new BadRequestException(
-          `"${t.nome}" é medido por período — o preço tem que ser por diária ou valor fechado.`,
-        );
-      }
-      if (t.medicao === "PESO" && data.base === "PERIODO") {
-        throw new BadRequestException(
-          `"${t.nome}" é medido por peso — preço por diária não se aplica.`,
-        );
-      }
     }
   }
 

@@ -16,7 +16,6 @@ import { z } from "zod";
 import {
   CriarViagemBase,
   CompletarPesoInput,
-  EncerrarDiariaInput,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -150,16 +149,6 @@ export class ViagensMotoristaController {
     return this.service.listarAguardandoPeso(user.id);
   }
 
-  /**
-   * Diárias abertas (status AGUARDANDO_SAIDA) — alimenta o card "Diária aberta"
-   * na home do app. Mesma regra de rota do aguardando-peso: antes do @Get(":id").
-   */
-  @Get("aguardando-saida")
-  @CapacidadeLivre("Ler o que já é dele: perder um acesso não apaga o histórico.")
-  aguardandoSaida(@CurrentUser() user: AuthMotorista) {
-    return this.service.listarAguardandoSaida(user.id);
-  }
-
   @Post()
   @AcessoMotorista("podeLancarViagem")
   create(
@@ -183,21 +172,6 @@ export class ViagensMotoristaController {
     body: z.infer<typeof CompletarPesoInput>,
   ) {
     return this.service.completarPeso(user.id, id, body);
-  }
-
-  /**
-   * Encerra uma diária aberta (AGUARDANDO_SAIDA): grava a hora de saída,
-   * calcula a duração e transiciona pra ENVIADA.
-   */
-  @Post(":id/encerrar-diaria")
-  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
-  encerrarDiaria(
-    @CurrentUser() user: AuthMotorista,
-    @Param("id") id: string,
-    @Body(new ZodValidationPipe(EncerrarDiariaInput))
-    body: z.infer<typeof EncerrarDiariaInput>,
-  ) {
-    return this.service.encerrarDiaria(user.id, id, body);
   }
 
   @Delete(":id")

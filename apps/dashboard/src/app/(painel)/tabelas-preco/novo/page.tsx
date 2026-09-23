@@ -10,7 +10,7 @@ export default function NovoPrecoPage() {
       <div className="space-y-6">
         <FormPageHeader
           title="Novo preço"
-          description="Quanto esta empresa paga por tonelada, km, viagem ou diária."
+          description="Quanto esta empresa paga por tonelada, km ou viagem."
           backHref="/tabelas-preco"
         />
         <PrecoForm />

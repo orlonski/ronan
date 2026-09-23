@@ -54,8 +54,7 @@ export function ViagemAguardandoInfo({ viagem: v }: { viagem: Viagem }) {
             ) : null}
           </Text>
         </View>
-        {/* Modo de serviço sem local de descarga (diária à disposição) não
-            tem a segunda linha — mostrar "—" com seta vermelha pareceria erro. */}
+        {/* Modo de serviço sem local de descarga não tem a segunda linha — mostrar "—" com seta vermelha pareceria erro. */}
         {v.localDescarga ? (
           <View className="flex-row items-center gap-2">
             <ArrowDown size={16} color="#dc2626" />
@@ -74,7 +73,7 @@ export function ViagemAguardandoInfo({ viagem: v }: { viagem: Viagem }) {
 
       {/* Stats: km · data · placa */}
       <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
-        {/* Diária pode não ter km (caminhão à disposição): "0,00 km" seria ruído. */}
+        {/* Modo sem km: "0,00 km" seria ruído. */}
         {v.km && Number(v.km) > 0 ? (
           <>
             <Stat>{fmtNum(v.km, 2)} km</Stat>

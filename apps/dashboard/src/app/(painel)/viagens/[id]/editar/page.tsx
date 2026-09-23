@@ -16,7 +16,7 @@ export default function EditarViagemPage({
   return (
     <div className="space-y-6">
       <FormPageHeader
-        // Diária não tem ticket — sem o fallback o título vira "Editar viagem null".
+        // Viagem sem ticket — sem o fallback o título vira "Editar viagem null".
         title={item.data?.ticket ? `Editar viagem ${item.data.ticket}` : "Editar viagem"}
         backHref="/viagens"
       />

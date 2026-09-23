@@ -8,7 +8,6 @@ export function usePending() {
     abastecimentos: 0,
     lifecycle: 0,
     completarPeso: 0,
-    encerrarDiaria: 0,
     outros: 0,
     ponto: 0,
     total: 0,

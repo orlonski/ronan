@@ -77,19 +77,14 @@ export const CriarViagemBase = z.object({
   veiculoId: z.string().uuid(),
   clienteId: z.string().uuid(),
   // Opcional no z.object, obrigatório no refine quando não há tipoServicoId
-  // (modo clássico). Um tipo de serviço com exigeMaterial=false (diária de
-  // caminhão à disposição) não tem material — quem decide é o backend.
+  // (modo clássico). Um tipo de serviço com exigeMaterial=false não tem
+  // material — quem decide é o backend.
   materialId: z.string().uuid().optional(),
-  // Modo de serviço (como a viagem é medida). Ausente = app antigo ou conta sem
-  // tipos cadastrados: o backend resolve pro tipo `padrao` da conta, que é PESO.
+  // Modo de serviço (o que o lançamento exige). Ausente = app antigo ou conta
+  // sem tipos cadastrados: o backend resolve pro tipo `padrao` da conta.
+  // `entradaEm`/`saidaEm` (da diária, que saiu) chegam de app antigo e o Zod
+  // descarta — nada a fazer aqui.
   tipoServicoId: z.string().uuid().optional(),
-  // Serviço medido por PERÍODO (diária): quando o caminhão entrou e saiu.
-  // Datas COMPLETAS (não hora do dia) pra diária que vira a noite fechar sozinha.
-  // Obrigatoriedade depende de TipoServico.medicao e é imposta no backend
-  // (autoritativo), igual à do ticket. `saidaEm` ausente = diária ainda aberta:
-  // o backend cria em AGUARDANDO_SAIDA.
-  entradaEm: z.coerce.date().optional(),
-  saidaEm: z.coerce.date().optional(),
   data: z.coerce.date(),
   // Opcional no schema por causa do modo "aguardando peso" (romaneio sai no fim
   // do dia): quando aguardandoPeso=true o motorista lança sem peso. Fora desse
@@ -180,13 +175,13 @@ export const CriarViagemBase = z.object({
 /**
  * O que o lançamento exige, de acordo com o modo de serviço.
  *
- * ⚠️ Esta função é a fronteira de compatibilidade da feature de diária. Quando
+ * ⚠️ Esta função é a fronteira de compatibilidade dos modos de serviço. Quando
  * `tipoServicoId` está AUSENTE — app antigo, conta sem tipos cadastrados, PWA —
  * ela se comporta exatamente como antes: peso, material, km e local de descarga
  * obrigatórios, com as mesmas mensagens. Nada muda pra quem lança por tonelada.
  *
  * Quando `tipoServicoId` está presente, quem manda é o cadastro do tipo
- * (medicao/exige*), que só o backend conhece — mesmo racional já usado pro
+ * (exige*), que só o backend conhece — mesmo racional já usado pro
  * ticket, que depende de Material.exigeTicket e é imposto lá. O app continua
  * validando pela UI (ele sabe as flags pelo catálogo); aqui a checagem afrouxa
  * pra não reprovar um payload legítimo antes de sair do celular.
@@ -241,15 +236,6 @@ export const CompletarPesoInput = z.object({
 });
 export type CompletarPesoInput = z.infer<typeof CompletarPesoInput>;
 
-// Encerrar uma diária que foi aberta em AGUARDANDO_SAIDA (motorista marcou a
-// entrada e seguiu à disposição). Espelha o CompletarPesoInput.
-// `saidaEm` é DateTime completo: o app carimba o relógio ou o motorista corrige
-// a hora, e a virada da noite fecha sozinha.
-export const EncerrarDiariaInput = z.object({
-  saidaEm: z.coerce.date(),
-});
-export type EncerrarDiariaInput = z.infer<typeof EncerrarDiariaInput>;
-
 // Edição admin: campos que motorista lança continuam editáveis. Imutáveis aqui:
 // id, clientId (idempotência), motoristaId, status, tracking GPS, fotos, timestamps.
 // `null` em valorPedagioTotal/observacao permite limpar o campo.
@@ -277,11 +263,6 @@ export const AtualizarViagemInput = z.object({
   materialId: z.string().uuid().optional(),
   data: z.coerce.date().optional(),
   toneladas: z.number().positive().max(MAX_TONELADAS, `Toneladas acima do limite (${MAX_TONELADAS}).`).optional(),
-  // Serviço medido por período (diária). O admin corrige a hora que o motorista
-  // errou, ou fecha a diária que ficou aberta. Gravar `saidaEm` numa viagem em
-  // AGUARDANDO_SAIDA a promove pra ENVIADA (backend).
-  entradaEm: z.coerce.date().optional(),
-  saidaEm: z.coerce.date().optional(),
   // nullable pra permitir limpar o ticket (material que não exige).
   ticket: z.string().max(50).nullable().optional(),
   km: z.number().nonnegative().max(MAX_KM, `Km acima do limite (${MAX_KM}).`).optional(),

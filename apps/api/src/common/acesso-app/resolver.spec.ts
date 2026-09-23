@@ -31,11 +31,11 @@ function conta(
   p: Partial<Omit<ContaAcessoCtx, "perfis">> & { perfis?: PerfilAcessoCtx[] } = {},
 ): ContaAcessoCtx {
   const perfis = p.perfis ?? [
-    perfil("frete", ["app.viagem.lancar", "app.pedagio.lancar", "app.chat.usar", "app.diaria.lancar"]),
+    perfil("frete", ["app.viagem.lancar", "app.pedagio.lancar", "app.chat.usar", "app.acertos.ver"]),
     perfil("registrado", ["app.ponto.bater", "app.ponto.espelho", "app.viagem.lancar"]),
   ];
   return {
-    modulos: p.modulos ?? new Set(["operacao", "comunicacao", "mensal", "ponto", "conferencia"]),
+    modulos: p.modulos ?? new Set(["operacao", "comunicacao", "financeiro", "ponto", "conferencia"]),
     rolloutsApp: p.rolloutsApp ?? new Set(),
     perfis: new Map(perfis.map((x) => [x.id, x])),
     regras: p.regras ?? [],
@@ -110,7 +110,7 @@ describe("base: fixado → regra → padrão", () => {
 
   it("regra por regime: CLT cai no perfil de registrado", () => {
     const c = conta({
-      perfis: [perfil("frete", ["app.diaria.lancar"]), perfil("clt-dirige", ["app.viagem.lancar"])],
+      perfis: [perfil("frete", ["app.acertos.ver"]), perfil("clt-dirige", ["app.viagem.lancar"])],
       regras: [regra({ perfilId: "clt-dirige", regime: "EMPREGADO" })],
     });
     expect(resolverAcessoApp(pessoa({ regime: "EMPREGADO" }), c, [], AGORA).base.motorista?.perfilId).toBe(
@@ -265,21 +265,21 @@ describe("cortes e sombra", () => {
     expect(r.explicacao["app.chat.usar"]!.cortes[0]).toMatchObject({ camada: "CONTRATO", sombra: true });
   });
 
-  it("empregado não recebe diária — com a camada ligada", () => {
+  it("empregado não recebe acerto — com a camada ligada", () => {
     const r = resolverAcessoApp(pessoa({ regime: "EMPREGADO" }), conta(), [], AGORA);
-    expect(r.efetivo).not.toContain("app.diaria.lancar");
+    expect(r.efetivo).not.toContain("app.acertos.ver");
     expect(r.efetivo).toContain("app.viagem.lancar"); // CLT que dirige lança, se o perfil deixar
   });
 
-  it("empregado com diária em SOMBRA continua com ela, e aparece no relatório", () => {
+  it("empregado com acerto em SOMBRA continua com ele, e aparece no relatório", () => {
     const r = resolverAcessoApp(
       pessoa({ regime: "EMPREGADO" }),
       conta({ camadasEmSombra: new Set(["REGIME"]) }),
       [],
       AGORA,
     );
-    expect(r.efetivo).toContain("app.diaria.lancar");
-    expect(r.sombra).not.toContain("app.diaria.lancar");
+    expect(r.efetivo).toContain("app.acertos.ver");
+    expect(r.sombra).not.toContain("app.acertos.ver");
   });
 
   it("cadastro não aprovado perde o que é de motorista", () => {
@@ -333,12 +333,12 @@ describe("dependências", () => {
 describe("com todas as camadas de hoje em sombra, o cálculo é o perfil", () => {
   it("não corta nada que o perfil dá (a garantia do dia 1)", () => {
     const tudo = conta({
-      perfis: [perfil("frete", ["app.viagem.guiada", "app.chat.usar", "app.diaria.lancar", "app.telemetria"])],
+      perfis: [perfil("frete", ["app.viagem.guiada", "app.chat.usar", "app.acertos.ver", "app.telemetria"])],
       modulos: new Set(["operacao"]),
       camadasEmSombra: new Set(["DEPENDENCIA", "REGIME", "PLATAFORMA", "CONTRATO"]),
     });
     const r = resolverAcessoApp(pessoa({ regime: "EMPREGADO" }), tudo, [], AGORA);
-    expect(r.efetivo).toEqual(["app.viagem.guiada", "app.diaria.lancar", "app.chat.usar", "app.telemetria"]);
+    expect(r.efetivo).toEqual(["app.viagem.guiada", "app.acertos.ver", "app.chat.usar", "app.telemetria"]);
     expect(r.sombra).toEqual([]);
   });
 });
@@ -350,7 +350,7 @@ describe("uma pessoa, um tipo: o motorista CLT recebe só o tipo do motorista", 
    * o "só bate ponto", desmarcar "Bater ponto" na coluna dele não tiraria nada.
    */
   const perfis = [
-    perfil("frete", ["app.viagem.lancar", "app.diaria.lancar", "app.ponto.bater"]),
+    perfil("frete", ["app.viagem.lancar", "app.acertos.ver", "app.ponto.bater"]),
     perfil("registrado", ["app.ponto.bater", "app.ponto.espelho"]),
   ];
   const ctx = conta({ perfis });
@@ -358,7 +358,7 @@ describe("uma pessoa, um tipo: o motorista CLT recebe só o tipo do motorista", 
 
   it("recebe exatamente o tipo do motorista, com o ponto que está nele", () => {
     const r = resolverAcessoApp(pessoa({ funcionario }), ctx, [], AGORA);
-    expect([...r.efetivo].sort()).toEqual(["app.diaria.lancar", "app.ponto.bater", "app.viagem.lancar"]);
+    expect([...r.efetivo].sort()).toEqual(["app.acertos.ver", "app.ponto.bater", "app.viagem.lancar"]);
   });
 
   it("o que só está no 'só bate ponto' não vem junto", () => {

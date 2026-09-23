@@ -3,14 +3,13 @@ import {
   calcularValorViagem,
   mudouInsumoDePreco,
   tabelaPrecoAplicada,
-  valorDaDiariaObra,
   type TabelaPrecoRow,
 } from "./viagem-preco";
 
 const EMPRESA = "emp-1";
 const BRITA = "mat-brita";
 const AREIA = "mat-areia";
-const DIARIA = "srv-diaria";
+const MODO = "srv-especifico";
 
 function linha(over: Partial<TabelaPrecoRow> = {}): TabelaPrecoRow {
   return {
@@ -73,13 +72,12 @@ describe("tabelaPrecoAplicada", () => {
   });
 
   it("modo de serviço específico vence até faixa mais estreita", () => {
-    // A linha genérica é mais estreita, mas cobrar diária por tonelada é o erro
-    // que esse desempate existe pra impedir.
+    // A linha genérica é mais estreita, mas a feita pra aquele modo vence.
     const t = [
       linha({ id: "frete-estreito", kmFaixaDe: 40 }),
-      linha({ id: "diaria", tipoServicoId: DIARIA, base: "PERIODO", kmFaixaDe: 0 }),
+      linha({ id: "do-modo", tipoServicoId: MODO, kmFaixaDe: 0 }),
     ];
-    expect(tabelaPrecoAplicada(t, { ...ARGS, tipoServicoId: DIARIA })?.id).toBe("diaria");
+    expect(tabelaPrecoAplicada(t, { ...ARGS, tipoServicoId: MODO })?.id).toBe("do-modo");
   });
 
   it("ignora linha fora da vigência", () => {
@@ -111,7 +109,6 @@ describe("calcularValorViagem", () => {
     data: "2026-06-15",
     valorPedagioTotal: "40",
     tipoServicoId: null,
-    tipoServico: { medicao: "PESO" as const },
   };
 
   it("multiplica o preço pela tonelada efetiva", () => {
@@ -192,41 +189,6 @@ describe("calcularValorViagem", () => {
     const r = calcularValorViagem(viagem, { empresaId: EMPRESA, materialId: BRITA, tabelas: [] });
     expect(r.motivo).toBe("SEM_TABELA");
   });
-
-  it("diária NUNCA é cobrada por tonelada", () => {
-    // Caminhão à disposição pode não sair do pátio: 0t vezes o preço seria zero,
-    // e 27t (o mínimo) vezes o preço seria dinheiro inventado. Recusa.
-    const r = calcularValorViagem(
-      { ...viagem, toneladas: "0", km: "0", tipoServico: { medicao: "PERIODO" }, tipoServicoId: DIARIA },
-      {
-        empresaId: EMPRESA,
-        materialId: null,
-        tabelas: [linha({ base: "TONELADA", tipoServicoId: DIARIA })],
-      },
-    );
-    expect(r.motivo).toBe("BASE_INCOMPATIVEL");
-  });
-
-  it("diária com preço de período vale o valor cheio, mesmo com 0t e 0km", () => {
-    const r = calcularValorViagem(
-      { ...viagem, toneladas: "0", km: "0", tipoServico: { medicao: "PERIODO" }, tipoServicoId: DIARIA },
-      {
-        empresaId: EMPRESA,
-        materialId: null,
-        tabelas: [linha({ base: "PERIODO", precoUnitario: 950, tipoServicoId: DIARIA })],
-      },
-    );
-    expect(r.valor?.valorFrete).toBe("950.00");
-  });
-
-  it("frete normal não usa preço de diária", () => {
-    const r = calcularValorViagem(viagem, {
-      empresaId: EMPRESA,
-      materialId: BRITA,
-      tabelas: [linha({ base: "PERIODO", precoUnitario: 950 })],
-    });
-    expect(r.motivo).toBe("BASE_INCOMPATIVEL");
-  });
 });
 
 describe("mudouInsumoDePreco", () => {
@@ -254,74 +216,5 @@ describe("mudouInsumoDePreco", () => {
     // edição — e escondia que a lista estava incompleta.
     expect(mudouInsumoDePreco({ observacao: "x", placa: "ABC1D23" })).toBe(false);
     expect(mudouInsumoDePreco({})).toBe(false);
-  });
-});
-
-/**
- * A diária de OBRA (o mensal). Parece a diária de viagem e não é — e o preço
- * de uma não pode ser cobrado pela outra.
- */
-describe("diária de obra", () => {
-  const diariaObra = (over: Partial<TabelaPrecoRow> = {}) =>
-    linha({ id: "obra", base: "DIARIA_OBRA", precoUnitario: 1100, ...over });
-
-  it("NUNCA casa com viagem, nem quando é a única linha da empresa", () => {
-    // O pior defeito possível de faturamento: a linha tem material nulo e
-    // faixa começando em zero, então casaria com qualquer viagem curta e
-    // cobraria frete a preço de diária — na fatura, parecendo certo.
-    const achada = tabelaPrecoAplicada([diariaObra()], ARGS);
-    expect(achada).toBeNull();
-  });
-
-  it("nem mesmo quando a viagem é de serviço medido por período", () => {
-    const r = calcularValorViagem(
-      { km: 50, toneladas: 30, tipoServico: { medicao: "PERIODO" }, tipoServicoId: DIARIA },
-      { empresaId: EMPRESA, materialId: BRITA, tabelas: [diariaObra()] },
-    );
-    expect(r.motivo).toBe("SEM_TABELA");
-  });
-
-  it("acha a linha da obra quando é ela que se pede", () => {
-    const r = valorDaDiariaObra({
-      tabelas: [linha(), diariaObra()],
-      empresaId: EMPRESA,
-      data: "2026-06-15",
-    });
-    expect(r.linha?.id).toBe("obra");
-  });
-
-  it("não pega a linha de frete da mesma empresa", () => {
-    const r = valorDaDiariaObra({
-      tabelas: [linha({ base: "VIAGEM", precoUnitario: 400 })],
-      empresaId: EMPRESA,
-      data: "2026-06-15",
-    });
-    expect(r.motivo).toBe("SEM_TABELA");
-  });
-
-  it("nem a diária de VIAGEM, que é outro serviço com outro preço", () => {
-    const r = valorDaDiariaObra({
-      tabelas: [linha({ base: "PERIODO", precoUnitario: 900, tipoServicoId: DIARIA })],
-      empresaId: EMPRESA,
-      data: "2026-06-15",
-    });
-    expect(r.motivo).toBe("SEM_TABELA");
-  });
-
-  it("reajuste no meio do mês vale a partir do dia em que entrou", () => {
-    // Resolver por mês em vez de por dia faria a competência inteira sair no
-    // preço velho (ou no novo), e a diferença some numa multiplicação.
-    const tabelas = [
-      diariaObra({ id: "velho", precoUnitario: 1000, vigenciaAte: new Date("2026-06-14") }),
-      diariaObra({ id: "novo", precoUnitario: 1100, vigenciaDe: new Date("2026-06-15") }),
-    ];
-    expect(valorDaDiariaObra({ tabelas, empresaId: EMPRESA, data: "2026-06-14" }).linha?.id).toBe("velho");
-    expect(valorDaDiariaObra({ tabelas, empresaId: EMPRESA, data: "2026-06-15" }).linha?.id).toBe("novo");
-  });
-
-  it("sem empresa não há de quem cobrar", () => {
-    expect(valorDaDiariaObra({ tabelas: [diariaObra()], empresaId: null, data: "2026-06-15" }).motivo).toBe(
-      "SEM_EMPRESA",
-    );
   });
 });

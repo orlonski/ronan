@@ -31,11 +31,10 @@ describe("dispensaConferencia", () => {
   });
 
   it("viagem que ainda não terminou nunca dispensa", () => {
-    // A aprovação vem quando ela se completar — completarPeso e encerrarDiaria
-    // passam por esta mesma regra de novo.
+    // A aprovação vem quando ela se completar — completarPeso passa por esta
+    // mesma regra de novo.
     for (const statusDesejado of [
       StatusViagem.AGUARDANDO_PESO,
-      StatusViagem.AGUARDANDO_SAIDA,
       StatusViagem.EM_ANDAMENTO,
     ]) {
       expect(dispensaConferencia({ materialDispensa: true, statusDesejado })).toBe(false);

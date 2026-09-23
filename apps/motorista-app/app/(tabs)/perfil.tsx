@@ -296,7 +296,7 @@ function PerfilDaEmpresa() {
               )}
               {/* ⚠️ SOME pra quem é registrado em carteira nesta empresa.
                   O acerto é o extrato do PARCEIRO — percentual, por viagem, por
-                  tonelada, por diária. Quem tem carteira assinada recebe por
+                  tonelada, por km. Quem tem carteira assinada recebe por
                   folha, e o servidor recusa gerar acerto pro período dele: a
                   tela abriria vazia na melhor hipótese e, na pior, mostraria
                   léxico de pagamento por produção pra quem tem salário. É o

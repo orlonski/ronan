@@ -61,8 +61,8 @@ describe("catálogo de capacidades", () => {
     for (const c of ACESSOS_APP_CHAVES) expect([c, escritores.get(c)]).toEqual([c, 1]);
   });
 
-  it("diária, obra e acertos proíbem EMPREGADO — o guarda-corpo jurídico não some", () => {
-    for (const c of ["app.diaria.lancar", "app.diaria.verValor", "app.obra.presenca", "app.acertos.ver"]) {
+  it("acertos proíbem EMPREGADO — o guarda-corpo jurídico não some", () => {
+    for (const c of ["app.acertos.ver"] as const) {
       expect(CAPACIDADES_APP.find((d) => d.chave === c)?.regimesProibidos).toContain("EMPREGADO");
     }
   });
@@ -92,7 +92,6 @@ describe("espelho do cadastro", () => {
         "app.acertos.ver",
         "app.posicao.compartilhar",
         "app.documentos.enviar",
-        "app.obra.presenca",
       ]),
     );
     expect(caps.some((c) => c.startsWith("app.ponto."))).toBe(false);

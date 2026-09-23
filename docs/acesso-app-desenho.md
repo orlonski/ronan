@@ -3,6 +3,12 @@
 > Desenhado por uma squad de 9 agentes em 22/09/2026 (mapa do backend, do app,
 > do painel e do mercado; 3 arquitetos; crítico adversarial; síntese).
 > **As decisões do dono abaixo VENCEM o texto original do desenho.**
+>
+> ⚠️ **Obra e diária saíram do sistema em 22/09/2026** (decisão do dono;
+> nenhuma empresa usava). As capacidades `app.diaria.lancar`,
+> `app.diaria.verValor` e `app.obra.presenca`, o módulo `mensal`, as rotas
+> `/m/obra/*` e `encerrar-diaria` não existem mais. Onde o texto abaixo cita
+> diária, obra, alocação ou `mensal`, é histórico do desenho.
 
 ## Decisões do dono (22/09/2026) — não reabrir sem ele
 
@@ -318,9 +324,6 @@ Legenda da coluna Gate: **S** = o servidor barra, **F** = o servidor filtra o da
 | `app.viagem.guiada` *(ROLLOUT, depende de `viagem.lancar`)* | Herói "Iniciar viagem", banner Retomar, `AnuncioIniciarViagem`, `/iniciar-viagem`, `/viagem-guiada`, `/finalizar-viagem`, `/editar-viagem-guiada` | `m/viagem/*` inteiro, incluindo os GETs `tipos-evento`, `tipos-ocorrencia` e `andamento`, hoje abertos. Fecha o R3 | Viagens | MOTORISTA · — · operacao* | S | | podeViagemLifecycle |
 | `app.viagem.gpsClassico` *(ROLLOUT)* | Botão "Iniciar viagem com GPS" (tracking legado), `/viagem-andamento` | `/m/tracking-config` | Viagens | MOTORISTA · — · operacao | S | | podeIniciarViagem (**rótulo corrigido**: não é "Navegação ao vivo", B10) |
 | `app.navegacao.aoVivo` | Navegação por voz (Valhalla) dentro da viagem | `POST /m/rotas/navegar` | Viagens | MOTORISTA · — · operacao | S | sim (Valhalla) | nova; backfill a partir de podeIniciarViagem |
-| `app.diaria.lancar` | Serviço "Diária" no seletor de `/nova-viagem` | Filtro de `tiposServico` em `/m/catalogos`; `POST /m/viagens` com medição diária | Obra e diária | MOTORISTA · **EMPREGADO** · mensal | S+F | | podeDiaria |
-| `app.obra.presenca` | BlocoObra, `/meus-dias-obra`, "cheguei" | `/m/obra/hoje`, `/m/obra/meus-dias`, `POST`/`DELETE /m/obra/cheguei` | Obra e diária | MOTORISTA · **EMPREGADO** · mensal | S | | nova; backfill: quem tem alocação |
-| `app.diaria.verValor` | Valor da diária em `/meus-dias-obra` | `/m/obra/meus-dias` devolve `null` | Obra e diária | MOTORISTA · **EMPREGADO** · mensal | F | | podeVerValorDiaria |
 | `app.pedagio.lancar` | Home "Pedágio", `/novo-pedagio` | `POST /m/pedagios`, `/m/pedagios-rodovia` | Gastos | MOTORISTA · — · operacao | S | | podeLancarPedagio |
 | `app.abastecimento.lancar` | Home "Abastecimento", `/novo-abastecimento` | `POST /m/abastecimentos`, `postos-recentes`, `POST /m/uploads/abastecimento` | Gastos | MOTORISTA · — · operacao | S | | podeLancarAbastecimento |
 | `app.ticket.ocr` *(depende de `viagem.lancar` ou `viagem.guiada`)* | Leitura automática do ticket em `/nova-viagem` | `/m/ia/ticket` | Viagens | MOTORISTA · — · conferencia (absorve `Conta.iaLeituraTicket`) | S | **sim** | podeUsarOcrTicket |
@@ -340,7 +343,7 @@ Legenda da coluna Gate: **S** = o servidor barra, **F** = o servidor filtra o da
 
 \* `torre` (guiada, programação) só passa a valer no app depois do relatório de sombra (§8 e §10).
 
-**Guarda-corpo de regime: só onde muda algo.** O EMPREGADO não recebe diária, obra, acertos nem valor de diária. Ponto não precisa de guarda-corpo por regime, porque ele **mora no vínculo `Funcionario`** e `contratar` já abre EMPREGADO na mesma transação (`ponto-admin.service.ts:266-278`). Um cadeado que não muda nada só confundiria.
+**Guarda-corpo de regime: só onde muda algo.** O EMPREGADO não recebe acertos. (Diária, obra e valor de diária também tinham o guarda-corpo; saíram do sistema em 22/09/2026 — ver a nota no topo.) Ponto não precisa de guarda-corpo por regime, porque ele **mora no vínculo `Funcionario`** e `contratar` já abre EMPREGADO na mesma transação (`ponto-admin.service.ts:266-278`). Um cadeado que não muda nada só confundiria.
 
 ### 4.3 O que fica fora do catálogo, sempre disponível e declarado
 
@@ -375,10 +378,9 @@ export const MENU_APP = {
 
 - Todo `modulo` existe em `MODULOS`, e toda `colunaLegada` existe no `Motorista`.
 - Toda chave começa com `app.` e não colide com `CATALOGO_PERMISSOES`.
-- Nenhuma capacidade de `diaria`, `obra` ou `acertos` deixa de proibir EMPREGADO.
+- `app.acertos.ver` não deixa de proibir EMPREGADO.
 - Toda rota em `apps/motorista-app/app/**` aparece em `MENU_APP.rotas` ou em `ROTAS_LIVRES`. Isso fecha o B8 em tempo de build.
 - Nenhum arquivo fora de `common/acesso-app/acesso-app.service.ts` escreve `pode[A-Z]\w*:` dentro de `data:` nem `acessoEfetivoApp.(create|update|upsert|delete)`. É a garantia do escritor único, e a lista de exceções só encolhe.
-- `PerfilAcessoAppModelo` não junta `app.ponto.*` com `app.diaria.*`.
 
 ## 5. Como o efetivo é calculado e como a API checa
 

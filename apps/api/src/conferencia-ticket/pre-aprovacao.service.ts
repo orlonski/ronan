@@ -134,7 +134,7 @@ export class PreAprovacaoService {
           AND v.id <> ${excluirViagemId}
           AND v."valorPedagioTotal" IS NOT NULL AND v."valorPedagioTotal" > 0
           AND v.data >= ${desde}
-          AND v.status::text NOT IN ('RASCUNHO_OFFLINE','EM_ANDAMENTO','AGUARDANDO_PESO','AGUARDANDO_SAIDA','INCOMPLETA','DIVERGENTE')
+          AND v.status::text NOT IN ('RASCUNHO_OFFLINE','EM_ANDAMENTO','AGUARDANDO_PESO','INCOMPLETA','DIVERGENTE')
           AND NOT EXISTS (SELECT 1 FROM trechos_viagem t WHERE t."viagemId" = v.id)
       `;
       const r = rows[0];
