@@ -36,6 +36,7 @@ export function TetoDialog({
     id: string;
     nome: string;
     permissoesPermitidas?: string[];
+    permissoesExtras?: string[];
     ehPlataforma?: boolean;
   } | null;
   /** true = editando o teto PADRÃO (vale pra toda empresa sem teto próprio). */
@@ -45,6 +46,9 @@ export function TetoDialog({
 }) {
   const token = useAuthToken();
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
+  // O que a empresa tem ALÉM do padrão, sem sair dele (tela nova do padrão
+  // continua chegando). Só vale com "Usar o conjunto padrão" marcado.
+  const [extras, setExtras] = useState<Set<string>>(new Set());
   const [usarPadrao, setUsarPadrao] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
@@ -54,11 +58,11 @@ export function TetoDialog({
     queryFn: () => fetchApi<PermissaoRow[]>("/admin/permissoes", { token }),
   });
 
-  // O teto padrão da plataforma: só carregado quando é ele que está sendo
-  // editado, e é a lista que o dialog mostra marcada.
+  // O teto padrão da plataforma: é a lista marcada quando é ele que está
+  // sendo editado, e define o que conta como "além do padrão" numa empresa.
   const tetoPadrao = useQuery({
     queryKey: ["/admin/permissoes/teto-padrao"],
-    enabled: !!token && aberto && !!padrao,
+    enabled: !!token && aberto,
     queryFn: () => fetchApi<{ permissoes: string[] }>("/admin/permissoes/teto-padrao", { token }),
   });
 
@@ -74,17 +78,25 @@ export function TetoDialog({
     const atual = conta.permissoesPermitidas ?? [];
     setUsarPadrao(atual.length === 0);
     setMarcadas(new Set(atual));
+    setExtras(new Set(conta.permissoesExtras ?? []));
   }, [aberto, conta, padrao, tetoPadrao.data]);
 
+  const noPadrao = useMemo(() => new Set(tetoPadrao.data?.permissoes ?? []), [tetoPadrao.data]);
+  // Com o padrão ligado, a lista mostra só o que está FORA dele: é isso que dá
+  // pra liberar a mais.
+  const soExtras = !padrao && usarPadrao;
   const grupos = useMemo(() => {
     const map = new Map<string, PermissaoRow[]>();
     for (const p of catalogo.data ?? []) {
+      if (soExtras && noPadrao.has(p.chave)) continue;
       const arr = map.get(p.modulo) ?? [];
       arr.push(p);
       map.set(p.modulo, arr);
     }
     return [...map.entries()];
-  }, [catalogo.data]);
+  }, [catalogo.data, soExtras, noPadrao]);
+  const selecionadas = soExtras ? extras : marcadas;
+  const setSelecionadas = soExtras ? setExtras : setMarcadas;
 
   async function salvar() {
     if (!padrao && !conta) return;
@@ -103,7 +115,10 @@ export function TetoDialog({
           token,
           // "Usar o padrão" = lista vazia. Quem traduz isso pro conjunto de
           // verdade é o backend, pra régua viver num lugar só.
-          body: JSON.stringify({ permissoes: usarPadrao ? [] : [...marcadas] }),
+          body: JSON.stringify({
+            permissoes: usarPadrao ? [] : [...marcadas],
+            extras: usarPadrao ? [...extras] : [],
+          }),
         });
         toast.success(
           usarPadrao
@@ -161,7 +176,13 @@ export function TetoDialog({
         </label>
         )}
 
-        {!usarPadrao && (
+        {soExtras && (
+          <p className="text-sm text-muted-foreground">
+            Liberar também, além do padrão:
+          </p>
+        )}
+
+        {(!usarPadrao || soExtras) && (
           <div className="space-y-4">
             {catalogo.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
             {grupos.map(([modulo, itens]) => (
@@ -176,9 +197,9 @@ export function TetoDialog({
                       <label key={p.chave} className="flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
-                          checked={marcadas.has(p.chave)}
+                          checked={selecionadas.has(p.chave)}
                           onChange={() =>
-                            setMarcadas((s) => {
+                            setSelecionadas((s) => {
                               const novo = new Set(s);
                               if (novo.has(p.chave)) novo.delete(p.chave);
                               else novo.add(p.chave);

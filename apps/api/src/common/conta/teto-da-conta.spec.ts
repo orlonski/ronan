@@ -21,7 +21,7 @@ const TODOS_MODULOS = MODULOS.map((m) => ({
  * de um banco antes do primeiro boot com o recurso.
  */
 function prismaCom(
-  conta: { ehPlataforma: boolean; permissoesPermitidas: string[] } | null,
+  conta: { ehPlataforma: boolean; permissoesPermitidas: string[]; permissoesExtras?: string[] } | null,
   padrao: string[] | null = null,
   modulos: { chave: string; vigenteDe: Date | null; vigenteAte: Date | null }[] = TODOS_MODULOS,
 ) {
@@ -69,6 +69,32 @@ describe("tetoDaConta", () => {
       "x",
     );
     expect([...teto].sort()).toEqual(["viagens.ver", liberada].sort());
+  });
+
+  it("extras somam ao padrão sem congelá-lo", async () => {
+    // O padrão continua vindo do banco: chave que entrar nele amanhã chega
+    // também a quem tem extra.
+    const extra = CHAVES_PLATAFORMA[0]!;
+    const teto = await tetoDaConta(
+      prismaCom({ ehPlataforma: false, permissoesPermitidas: [], permissoesExtras: [extra] }, [
+        "viagens.ver",
+        "torre.ver",
+      ]),
+      "x",
+    );
+    expect([...teto].sort()).toEqual(["viagens.ver", "torre.ver", extra].sort());
+  });
+
+  it("lista própria preenchida ignora as extras (ela já diz tudo)", async () => {
+    const teto = await tetoDaConta(
+      prismaCom({
+        ehPlataforma: false,
+        permissoesPermitidas: ["viagens.ver"],
+        permissoesExtras: ["torre.ver"],
+      }),
+      "x",
+    );
+    expect([...teto]).toEqual(["viagens.ver"]);
   });
 
   it("chave que saiu do catálogo não volta à vida por estar guardada no banco", async () => {

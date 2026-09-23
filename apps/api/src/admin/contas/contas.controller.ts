@@ -201,7 +201,7 @@ export class ContasController {
     @Param("id") id: string,
     @Body(new ZodValidationPipe(TetoDaContaInput)) body: TetoDaContaInput,
   ) {
-    return this.service.definirTeto(id, body.permissoes);
+    return this.service.definirTeto(id, body.permissoes, body.extras);
   }
 
   /**

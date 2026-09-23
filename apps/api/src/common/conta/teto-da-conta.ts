@@ -12,8 +12,12 @@ type ClienteConta = {
   conta: {
     findUnique: (args: {
       where: { id: string };
-      select: { ehPlataforma: true; permissoesPermitidas: true };
-    }) => Promise<{ ehPlataforma: boolean; permissoesPermitidas: string[] } | null>;
+      select: { ehPlataforma: true; permissoesPermitidas: true; permissoesExtras: true };
+    }) => Promise<{
+      ehPlataforma: boolean;
+      permissoesPermitidas: string[];
+      permissoesExtras?: string[];
+    } | null>;
   };
   configuracaoPermissoes: {
     findUnique: (args: {
@@ -94,7 +98,13 @@ export async function tetoPadrao(prisma: ClienteConta): Promise<string[]> {
  *    a plataforma abrindo ou fechando caso a caso (liberar uma tela que custa
  *    dinheiro pra um cliente, fechar uma que ele não contratou).
  * 3. Vazio cai no TETO PADRÃO, que também é dado editável (ver `tetoPadrao`) —
- *    e não uma constante de código.
+ *    e não uma constante de código — somado às `permissoesExtras` da conta.
+ *
+ * As extras existem pra empresa que precisa de ALGO além do padrão (a Schaba
+ * usa Conferência de ticket e Praças de pedágio) sem congelar o resto: com a
+ * lista fechada do caso 2, toda tela nova do padrão passava longe dela. Foi
+ * assim que a Schaba chegou a 23/09/2026 sem 73 chaves que qualquer conta nova
+ * tem.
  *
  * O caso 3 é o que mantém o comportamento de antes do teto existir, e é por isso
  * que "vazio" significa o padrão em vez de "nada": um teto vazio interpretado ao
@@ -103,7 +113,7 @@ export async function tetoPadrao(prisma: ClienteConta): Promise<string[]> {
 export async function tetoDaConta(prisma: ClienteConta, contaId: string): Promise<Set<string>> {
   const conta = await prisma.conta.findUnique({
     where: { id: contaId },
-    select: { ehPlataforma: true, permissoesPermitidas: true },
+    select: { ehPlataforma: true, permissoesPermitidas: true, permissoesExtras: true },
   });
 
   if (conta?.ehPlataforma) return new Set(TODAS_AS_CHAVES);
@@ -111,7 +121,7 @@ export async function tetoDaConta(prisma: ClienteConta, contaId: string): Promis
   const chaves =
     conta && conta.permissoesPermitidas.length > 0
       ? conta.permissoesPermitidas
-      : await tetoPadrao(prisma);
+      : [...(await tetoPadrao(prisma)), ...(conta?.permissoesExtras ?? [])];
 
   // Interseção com o catálogo: chave que saiu do código não volta à vida por
   // estar guardada no banco.

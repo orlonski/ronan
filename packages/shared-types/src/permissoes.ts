@@ -396,6 +396,8 @@ export type CriarPapelDoModeloInput = z.infer<typeof CriarPapelDoModeloInput>;
  */
 export const TetoDaContaInput = z.object({
   permissoes: z.array(z.string()),
+  /** Além do padrão (só vale com `permissoes` vazio). Ausente = não mexe. */
+  extras: z.array(z.string()).optional(),
 });
 export type TetoDaContaInput = z.infer<typeof TetoDaContaInput>;
 

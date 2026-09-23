@@ -45,6 +45,7 @@ type Conta = {
   codigoConvite: string | null;
   /** Teto da empresa. Vazio = conjunto padrão. */
   permissoesPermitidas?: string[];
+  permissoesExtras?: string[];
   criadaEm: string;
   usuarios: number;
   motoristas: number;

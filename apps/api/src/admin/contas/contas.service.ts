@@ -307,6 +307,7 @@ export class ContasService implements OnModuleInit {
         // Vazio = conjunto padrão. A tela precisa saber pra abrir o editor de
         // teto já no estado certo.
         permissoesPermitidas: true,
+        permissoesExtras: true,
         criadaEm: true,
         _count: { select: { users: true, motoristas: true, viagens: true } },
       },
@@ -1045,15 +1046,20 @@ export class ContasService implements OnModuleInit {
    * varre os papéis da empresa e remove o que passou a ser proibido. Isso é
    * proposital — teto que só vale pra papel novo não é teto.
    */
-  async definirTeto(id: string, permissoes: string[]) {
+  async definirTeto(id: string, permissoes: string[], extras?: string[]) {
     const validas = new Set(TODAS_AS_CHAVES);
     const chaves = [...new Set(permissoes.filter((c) => validas.has(c)))];
+    const extrasValidas =
+      extras === undefined ? undefined : [...new Set(extras.filter((c) => validas.has(c)))];
 
     const conta = await comoSistema(() =>
       this.prisma.conta.update({
         where: { id },
-        data: { permissoesPermitidas: chaves },
-        select: { id: true, nome: true, permissoesPermitidas: true },
+        data: {
+          permissoesPermitidas: chaves,
+          ...(extrasValidas !== undefined ? { permissoesExtras: extrasValidas } : {}),
+        },
+        select: { id: true, nome: true, permissoesPermitidas: true, permissoesExtras: true },
       }),
     );
 

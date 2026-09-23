@@ -384,6 +384,10 @@ model Conta {
   /// `tetoDaConta()`; o teto vale na criação de papel, na cópia de modelo e no
   /// seed do Administrador.
   permissoesPermitidas   String[]  @default([])
+  /// Chaves ALÉM do teto padrão, pra conta que usa o padrão (lista acima
+  /// vazia) mas precisa de algo a mais. Somam ao padrão sem congelá-lo: tela
+  /// nova do padrão continua chegando. Ignorado quando a lista acima tem algo.
+  permissoesExtras       String[]  @default([])
   /// Código que o motorista digita no app pra dizer de qual empresa ele é.
   /// Direciona o cadastro, NÃO autoriza: o motorista continua entrando como
   /// PENDENTE_APROVACAO e é a empresa que decide. Por isso código vazado não é
