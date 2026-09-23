@@ -104,6 +104,15 @@ type Item = {
    * nascer no primeiro item que SOBREVIVER.
    */
   secao?: string;
+  /**
+   * A outra aba do mesmo item: quem não tem `perm` mas tem `ou.perm` vê o
+   * item abrindo `ou.href`, e o item fica aceso nas duas rotas.
+   *
+   * Existe por "Papéis e permissões": o painel e o app do motorista são duas
+   * abas da mesma tela, mas com permissões diferentes. Eram dois itens no
+   * menu, e o dono perguntou por que dois (23/09/2026).
+   */
+  ou?: { href: string; perm: string };
 };
 
 type Grupo = {
@@ -290,10 +299,16 @@ const GRUPOS: Grupo[] = [
       // assinar e negar a cópia.
       { href: "/configuracoes/contrato", label: "Contrato", icon: FileText, secao: "Sua conta" },
       { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver", secao: "Sua conta" },
-      { href: "/configuracoes/permissoes", label: "Papéis e permissões", icon: ShieldCheck, perm: "permissoes.gerenciar", secao: "Sua conta" },
-      // O app do motorista é a outra metade de "Papéis e permissões" (abas no
-      // topo das duas telas). Item próprio porque a permissão é outra.
-      { href: "/acesso-app", label: "Permissões do app", icon: SlidersHorizontal, perm: "perfis-acesso.ver", secao: "Sua conta" },
+      // Um item só pras duas abas (painel do escritório e app do motorista).
+      // Quem só pode ver a do app cai direto nela.
+      {
+        href: "/configuracoes/permissoes",
+        label: "Papéis e permissões",
+        icon: ShieldCheck,
+        perm: "permissoes.gerenciar",
+        ou: { href: "/acesso-app", perm: "perfis-acesso.ver" },
+        secao: "Sua conta",
+      },
       { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver", secao: "Sua conta" },
 
       { href: "/configuracoes/campos-layout", label: "Colunas da planilha do cliente", icon: Columns3, perm: "config-campos-layout.ver", secao: "Como o sistema se comporta" },
@@ -352,6 +367,11 @@ export function isRotaAtiva(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/** O item acende na rota dele e na da outra aba (`ou`), quando tem. */
+function itemAtivo(pathname: string, item: Pick<Item, "href" | "ou">): boolean {
+  return isRotaAtiva(pathname, item.href) || (!!item.ou && isRotaAtiva(pathname, item.ou.href));
+}
+
 export function Sidebar({
   mobileOpen = false,
   onMobileClose,
@@ -371,7 +391,12 @@ export function Sidebar({
       // Menu não é vitrine: item de módulo não contratado SOME, não fica cinza.
       // O upsell mora na tela de quem chegou por URL direta e no ponto de dor
       // dentro de um módulo que a empresa já tem.
-      itens: g.itens.filter((i) => !i.perm || (temPermissao(i.perm) && temModulo(i.perm))),
+      itens: g.itens.flatMap((i) => {
+        if (!i.perm || (temPermissao(i.perm) && temModulo(i.perm))) return [i];
+        // Sem a principal, mas com a outra aba: o item abre direto nela.
+        if (i.ou && temPermissao(i.ou.perm) && temModulo(i.ou.perm)) return [{ ...i, href: i.ou.href }];
+        return [];
+      }),
     }))
     .filter((g) => g.itens.length > 0);
 
@@ -387,7 +412,7 @@ export function Sidebar({
   // Se a rota atual pertence a outro grupo, abre esse grupo
   useEffect(() => {
     for (const grupo of GRUPOS) {
-      if (grupo.itens.some((i) => isRotaAtiva(pathname, i.href))) {
+      if (grupo.itens.some((i) => itemAtivo(pathname, i))) {
         if (grupoAberto !== grupo.titulo) setGrupoAberto(grupo.titulo);
         return;
       }
@@ -555,8 +580,8 @@ export function Sidebar({
                   )}
                 </button>
                 {aberto &&
-                  grupo.itens.map(({ href, label, icon: Icon, secao }, i) => {
-                    const active = isRotaAtiva(pathname, href);
+                  grupo.itens.map(({ href, label, icon: Icon, secao, ou }, i) => {
+                    const active = itemAtivo(pathname, { href, ou });
                     /**
                      * O rótulo da seção sai no PRIMEIRO item dela que
                      * sobreviveu ao filtro de permissão.
