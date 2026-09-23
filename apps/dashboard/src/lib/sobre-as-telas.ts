@@ -1008,7 +1008,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "lançamento do motorista que não subiu",
-      vaEm: "Lançamentos que não subiram",
+      vaEm: "Viagens › Não chegaram",
       href: "/lancamentos-travados",
     },
   },

@@ -33,7 +33,6 @@ import {
   Instagram,
   Landmark,
   LayoutDashboard,
-  LifeBuoy,
   Lightbulb,
   ListChecks,
   LogOut,
@@ -45,7 +44,6 @@ import {
   PenLine,
   Radio,
   Ruler,
-  ScanEye,
   Send,
   ShieldCheck,
   SlidersHorizontal,
@@ -186,10 +184,19 @@ const GRUPOS: Grupo[] = [
     titulo: "Lançamentos",
     coach: "grupo-lancamentos",
     itens: [
-      { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "viagens.ver", ou: [{ href: "/configuracoes/km-atipico", perm: "config-km-atipico.ver" }] },
+      {
+        href: "/viagens",
+        label: "Viagens",
+        icon: ClipboardCheck,
+        perm: "viagens.ver",
+        // Abas: Conferir tickets, Não chegaram e ⚙ Km fora do padrão.
+        ou: [
+          { href: "/conferencias", perm: "conferencia-ticket.ver" },
+          { href: "/lancamentos-travados", perm: "lancamentos-resgatados.ver" },
+          { href: "/configuracoes/km-atipico", perm: "config-km-atipico.ver" },
+        ],
+      },
       { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel, perm: "abastecimentos.ver" },
-      { href: "/conferencias", label: "Conferência de ticket", icon: ScanEye, perm: "conferencia-ticket.ver" },
-      { href: "/lancamentos-travados", label: "Lançamentos que não subiram", icon: LifeBuoy, perm: "lancamentos-resgatados.ver" },
     ],
   },
   {

@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { LoadingCard } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { ErroCard } from "@/components/erro-estado";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type Status = "abertos" | "resolvidos" | "todos";
 
@@ -73,10 +74,11 @@ export default function LancamentosTravadosPage() {
 
   return (
     <div className="space-y-4">
+      <AbasDaTela grupo="viagens" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <LifeBuoy size={24} /> Lançamentos que não subiram
+            <LifeBuoy size={24} /> Lançamentos que não chegaram
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Cópia de segurança do que o app do motorista não conseguiu enviar. O

@@ -12,6 +12,7 @@ import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import { humanizarErroConferencia } from "@/lib/conferencia-erro";
 import { ErroCard } from "@/components/erro-estado";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type Divergencia = {
   campo: string;
@@ -169,10 +170,11 @@ export default function ConferenciasPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="viagens" />
       <header>
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
           <ScanEye className="h-6 w-6" />
-          Conferência de ticket
+          Conferir tickets
         </h1>
         <p className="text-sm text-muted-foreground">
           O que a leitura automática viu na foto, comparado com o que o motorista lançou.

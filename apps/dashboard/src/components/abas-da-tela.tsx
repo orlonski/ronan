@@ -5,6 +5,7 @@ import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { Settings } from "lucide-react";
 import { usePermissoes } from "@/lib/permissoes";
+import { useApiQuery } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,8 +22,18 @@ import { cn } from "@/lib/utils";
  *
  * `config: true` põe a engrenagem na aba — avisa, antes do clique, que ali é
  * ajuste de comportamento e não a lista do dia a dia (pedido do dono).
+ *
+ * `contador` mostra, na própria aba, quantos casos esperam alguém — só onde o
+ * número é exatamente "o que precisa de você" (um contador que conta outra
+ * coisa é pior que nenhum).
  */
-type Aba = { href: string; label: string; perm: string | null; config?: boolean };
+type Aba = {
+  href: string;
+  label: string;
+  perm: string | null;
+  config?: boolean;
+  contador?: { path: string; ler: (dados: unknown) => number };
+};
 
 export const ABAS = {
   permissoes: [
@@ -48,6 +59,16 @@ export const ABAS = {
   ],
   viagens: [
     { href: "/viagens", label: "Viagens", perm: "viagens.ver" },
+    { href: "/conferencias", label: "Conferir tickets", perm: "conferencia-ticket.ver" },
+    {
+      href: "/lancamentos-travados",
+      label: "Não chegaram",
+      perm: "lancamentos-resgatados.ver",
+      contador: {
+        path: "/admin/lancamentos-resgatados?status=abertos&limit=300",
+        ler: (d) => (Array.isArray(d) ? d.length : 0),
+      },
+    },
     { href: "/configuracoes/km-atipico", label: "Km fora do padrão", perm: "config-km-atipico.ver", config: true },
   ],
 } satisfies Record<string, Aba[]>;
@@ -62,24 +83,33 @@ export function AbasDaTela({ grupo }: { grupo: keyof typeof ABAS }) {
   if (abas.length < 2) return null;
   return (
     <div className="flex gap-1 overflow-x-auto border-b border-border">
-      {abas.map((a) => {
-        const ativa = path === a.href || path.startsWith(`${a.href}/`);
-        return (
-          <Link
-            key={a.href}
-            href={a.href as Route}
-            className={cn(
-              "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors",
-              ativa
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {a.config && <Settings className="h-3.5 w-3.5" aria-hidden />}
-            {a.label}
-          </Link>
-        );
-      })}
+      {abas.map((a) => (
+        <AbaLink key={a.href} aba={a} ativa={path === a.href || path.startsWith(`${a.href}/`)} />
+      ))}
     </div>
+  );
+}
+
+function AbaLink({ aba, ativa }: { aba: Aba; ativa: boolean }) {
+  const dados = useApiQuery<unknown>(aba.contador?.path, { staleTime: 60_000 });
+  const n = aba.contador && dados.data !== undefined ? aba.contador.ler(dados.data) : 0;
+  return (
+    <Link
+      href={aba.href as Route}
+      className={cn(
+        "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors",
+        ativa
+          ? "border-primary text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {aba.config && <Settings className="h-3.5 w-3.5" aria-hidden />}
+      {aba.label}
+      {n > 0 && (
+        <span className="rounded-full bg-destructive px-1.5 text-[11px] font-semibold leading-5 text-white">
+          {n}
+        </span>
+      )}
+    </Link>
   );
 }
