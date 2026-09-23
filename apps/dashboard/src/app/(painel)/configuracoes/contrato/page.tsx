@@ -5,6 +5,7 @@ import { FileText } from "lucide-react";
 import type { ReciboAceite, StatusAceite } from "@ronan/shared-types";
 import { Card } from "@/components/ui/card";
 import { fetchApi } from "@/lib/client-api";
+import { AbasMinhaEmpresa } from "@/components/abas-minha-empresa";
 
 /**
  * O contrato do cliente, do ponto de vista dele.
@@ -33,6 +34,7 @@ export default function ContratoPage() {
 
   return (
     <div className="space-y-6">
+      <AbasMinhaEmpresa />
       <div>
         <h1 className="text-2xl font-semibold">Contrato</h1>
         <p className="mt-1 text-sm text-muted-foreground">

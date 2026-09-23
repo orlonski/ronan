@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { RequerTela } from "@/components/requer-tela";
+import { AbasMinhaEmpresa } from "@/components/abas-minha-empresa";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -101,31 +102,35 @@ function Conteudo() {
   return (
     <div className="space-y-4 p-4 md:p-6">
       <ConfirmDialog />
+      <AbasMinhaEmpresa />
       <div>
         <h1 className="flex items-center gap-2 text-xl font-semibold">
           <Building2 className="h-5 w-5" />
           Minha empresa
         </h1>
         <p className="text-sm text-muted-foreground">
-          A logo aparece no menu do painel, pra quem trabalha aqui dentro.
+          Tudo da sua transportadora num lugar: marca, código dos motoristas, comprovantes, dados fiscais, emissor de CT-e e contrato.
         </p>
       </div>
 
-      <Card className="max-w-xl space-y-4 p-5">
-        <div>
-          <p className="text-sm font-medium">{conta?.nome ?? "—"}</p>
-          <p className="text-xs text-muted-foreground">Nome exibido no painel.</p>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Logo</p>
-          <div className="flex min-h-24 items-center justify-center rounded-md border border-dashed bg-muted/30 p-4">
+      {/* Logo e código lado a lado: eram um cartão estreito só, e a tela
+          parecia minúscula ao lado da identidade fiscal, que usa a largura
+          toda (o dono reparou em 23/09/2026). */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="space-y-4 p-5">
+          <div>
+            <p className="text-sm font-medium">Logo</p>
+            <p className="text-xs text-muted-foreground">
+              Aparece no menu do painel de <strong>{conta?.nome ?? "—"}</strong>.
+            </p>
+          </div>
+          <div className="flex min-h-28 items-center justify-center rounded-md border border-dashed bg-muted/30 p-4">
             {conta?.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={`${API_URL}${conta.logoUrl}`}
                 alt={conta.nome}
-                className="max-h-16 object-contain"
+                className="max-h-20 object-contain"
               />
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -137,49 +142,52 @@ function Conteudo() {
             PNG, JPG ou WEBP, até 2 MB. Fundo transparente fica melhor: o menu muda de cor
             entre o tema claro e o escuro.
           </p>
-        </div>
+          <div className="flex gap-2">
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const arquivo = e.target.files?.[0];
+                if (arquivo) void enviar(arquivo);
+              }}
+            />
+            <Button onClick={() => inputRef.current?.click()} disabled={enviando}>
+              <Upload className="mr-2 h-4 w-4" />
+              {enviando ? "Enviando…" : conta?.logoUrl ? "Trocar logo" : "Enviar logo"}
+            </Button>
+            {conta?.logoUrl && (
+              <Button variant="outline" onClick={remover} disabled={enviando}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Remover
+              </Button>
+            )}
+          </div>
+        </Card>
 
-        <div className="space-y-2 rounded-md border bg-muted/20 p-4">
-          <p className="text-sm font-medium">Código para os motoristas se cadastrarem</p>
-          <p className="font-mono text-lg tracking-wider">{conta?.codigoConvite ?? "—"}</p>
+        <Card className="space-y-4 p-5">
+          <div>
+            <p className="text-sm font-medium">Código para os motoristas se cadastrarem</p>
+            <p className="text-xs text-muted-foreground">
+              Passe este código para os seus motoristas. Eles digitam no app ao criar a conta, e
+              é assim que o cadastro chega até você — sem ele, ninguém entra. Ele só direciona:
+              o motorista continua aparecendo aqui para você aprovar.
+            </p>
+          </div>
+          <div className="flex min-h-28 items-center justify-center rounded-md border bg-muted/20 p-4">
+            <p className="font-mono text-2xl tracking-widest">{conta?.codigoConvite ?? "—"}</p>
+          </div>
           <p className="text-xs text-muted-foreground">
-            Passe este código para os seus motoristas. Eles digitam no app ao criar a conta, e é
-            assim que o cadastro chega até você — sem ele, ninguém entra. Ele só direciona: o
-            motorista continua aparecendo aqui para você aprovar.
+            Ao gerar um novo, o antigo para de funcionar na hora. Use se ele foi parar em quem
+            não devia.
           </p>
-          <Button variant="outline" size="sm" onClick={trocarCodigo} disabled={enviando}>
+          <Button variant="outline" onClick={trocarCodigo} disabled={enviando}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Gerar um código novo
           </Button>
-          <p className="text-xs text-muted-foreground">
-            Ao gerar um novo, o antigo para de funcionar na hora. Use se ele foi parar em quem não
-            devia.
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              const arquivo = e.target.files?.[0];
-              if (arquivo) void enviar(arquivo);
-            }}
-          />
-          <Button onClick={() => inputRef.current?.click()} disabled={enviando}>
-            <Upload className="mr-2 h-4 w-4" />
-            {enviando ? "Enviando…" : conta?.logoUrl ? "Trocar logo" : "Enviar logo"}
-          </Button>
-          {conta?.logoUrl && (
-            <Button variant="outline" onClick={remover} disabled={enviando}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              Remover
-            </Button>
-          )}
-        </div>
-      </Card>
+        </Card>
+      </div>
 
       <ComprovantesCard />
       <IdentidadeFiscalCard />
@@ -222,7 +230,7 @@ function ComprovantesCard() {
   });
 
   return (
-    <Card className="max-w-xl space-y-4 p-5">
+    <Card className="space-y-4 p-5">
       <div>
         <p className="text-sm font-medium">Comprovantes</p>
         <p className="text-xs text-muted-foreground">
@@ -232,31 +240,39 @@ function ComprovantesCard() {
         </p>
       </div>
 
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-medium">Foto do ticket na viagem</span>
-          <StatusToggle
-            active={config.data?.exigeFotoViagem ?? false}
-            onChange={(next) => salvar.mutate({ exigeFotoViagem: next })}
-            size="sm"
-            disabled={config.isLoading || salvar.isPending}
-          />
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-1 rounded-md border p-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium">Foto do ticket na viagem</span>
+            <StatusToggle
+              active={config.data?.exigeFotoViagem ?? false}
+              onChange={(next) => salvar.mutate({ exigeFotoViagem: next })}
+              size="sm"
+              disabled={config.isLoading || salvar.isPending}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Material marcado como “não gera comprovante” (ex.: concreto) e modo de
+            serviço sem ticket ficam de fora sozinhos — não dá pra cobrar foto de
+            papel que não existe.
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Material marcado como “não gera comprovante” (ex.: concreto) e modo de
-          serviço sem ticket ficam de fora sozinhos — não dá pra cobrar foto de
-          papel que não existe.
-        </p>
-      </div>
 
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium">Foto do cupom no abastecimento</span>
-        <StatusToggle
-          active={config.data?.exigeFotoAbastecimento ?? false}
-          onChange={(next) => salvar.mutate({ exigeFotoAbastecimento: next })}
-          size="sm"
-          disabled={config.isLoading || salvar.isPending}
-        />
+        <div className="space-y-1 rounded-md border p-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium">Foto do cupom no abastecimento</span>
+            <StatusToggle
+              active={config.data?.exigeFotoAbastecimento ?? false}
+              onChange={(next) => salvar.mutate({ exigeFotoAbastecimento: next })}
+              size="sm"
+              disabled={config.isLoading || salvar.isPending}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            O cupom do posto, com litros e valor. Sem ele o abastecimento chega só com o
+            que o motorista digitou.
+          </p>
+        </div>
       </div>
     </Card>
   );

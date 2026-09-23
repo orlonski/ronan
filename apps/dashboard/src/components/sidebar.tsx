@@ -26,7 +26,6 @@ import {
   Columns3,
   FileCheck2,
   FileSpreadsheet,
-  FileText,
   Fuel,
   Gauge,
   SignalHigh,
@@ -52,7 +51,6 @@ import {
   ScanEye,
   Search,
   Send,
-  Settings,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -105,14 +103,16 @@ type Item = {
    */
   secao?: string;
   /**
-   * A outra aba do mesmo item: quem não tem `perm` mas tem `ou.perm` vê o
-   * item abrindo `ou.href`, e o item fica aceso nas duas rotas.
+   * As outras abas do mesmo item, em ordem: quem não tem `perm` cai na
+   * primeira aba que pode ver (`perm` ausente = qualquer um), e o item fica
+   * aceso em todas as rotas.
    *
-   * Existe por "Papéis e permissões": o painel e o app do motorista são duas
-   * abas da mesma tela, mas com permissões diferentes. Eram dois itens no
-   * menu, e o dono perguntou por que dois (23/09/2026).
+   * Existe porque telas-irmãs viraram abas de um item só (23/09/2026): Papéis
+   * e permissões (painel + app do motorista) e Minha empresa (dados + emissor
+   * de CT-e + contrato). Eram itens separados no menu, com permissões
+   * diferentes cada um.
    */
-  ou?: { href: string; perm: string };
+  ou?: { href: string; perm?: string }[];
 };
 
 type Grupo = {
@@ -291,13 +291,19 @@ const GRUPOS: Grupo[] = [
     titulo: "Ajustes",
     coach: "grupo-ajustes",
     itens: [
-      { href: "/configuracoes/empresa", label: "Minha empresa", icon: Landmark, perm: "minha-empresa.editar", secao: "Sua conta" },
-      // SEM permissão, de propósito. O modal de aceite bloqueia TODO usuário
-      // do painel — ele não pode ser gateado, senão quem não tem a chave
-      // ficaria preso nele pra sempre. Se a pessoa é obrigada a aceitar, ela
-      // tem que conseguir reler o que aceitou; esconder isso seria obrigar a
-      // assinar e negar a cópia.
-      { href: "/configuracoes/contrato", label: "Contrato", icon: FileText, secao: "Sua conta" },
+      // Três abas num item: dados da empresa, emissor de CT-e e contrato.
+      // O Contrato é a última alternativa e SEM permissão, de propósito: o
+      // modal de aceite bloqueia TODO usuário do painel, e quem é obrigado a
+      // aceitar tem que conseguir reler o que aceitou — por isso o item
+      // aparece pra todo mundo, abrindo no Contrato quem não vê as outras.
+      {
+        href: "/configuracoes/empresa",
+        label: "Minha empresa",
+        icon: Landmark,
+        perm: "minha-empresa.editar",
+        ou: [{ href: "/configuracoes/cte", perm: "cte.ver" }, { href: "/configuracoes/contrato" }],
+        secao: "Sua conta",
+      },
       { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver", secao: "Sua conta" },
       // Um item só pras duas abas (painel do escritório e app do motorista).
       // Quem só pode ver a do app cai direto nela.
@@ -306,13 +312,12 @@ const GRUPOS: Grupo[] = [
         label: "Papéis e permissões",
         icon: ShieldCheck,
         perm: "permissoes.gerenciar",
-        ou: { href: "/acesso-app", perm: "perfis-acesso.ver" },
+        ou: [{ href: "/acesso-app", perm: "perfis-acesso.ver" }],
         secao: "Sua conta",
       },
       { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver", secao: "Sua conta" },
 
       { href: "/configuracoes/campos-layout", label: "Colunas da planilha do cliente", icon: Columns3, perm: "config-campos-layout.ver", secao: "Como o sistema se comporta" },
-      { href: "/configuracoes/cte", label: "Configurar emissor de CT-e", icon: Settings, perm: "cte.ver", secao: "Como o sistema se comporta" },
       { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Satellite, perm: "config-tracking.ver", secao: "Como o sistema se comporta" },
       { href: "/configuracoes/busca-locais", label: "Busca de locais", icon: Search, perm: "config-busca-locais.ver", secao: "Como o sistema se comporta" },
       { href: "/configuracoes/km-atipico", label: "Alerta de km fora do padrão", icon: Gauge, perm: "config-km-atipico.ver", secao: "Como o sistema se comporta" },
@@ -369,7 +374,7 @@ export function isRotaAtiva(pathname: string, href: string): boolean {
 
 /** O item acende na rota dele e na da outra aba (`ou`), quando tem. */
 function itemAtivo(pathname: string, item: Pick<Item, "href" | "ou">): boolean {
-  return isRotaAtiva(pathname, item.href) || (!!item.ou && isRotaAtiva(pathname, item.ou.href));
+  return isRotaAtiva(pathname, item.href) || (item.ou ?? []).some((o) => isRotaAtiva(pathname, o.href));
 }
 
 export function Sidebar({
@@ -394,7 +399,8 @@ export function Sidebar({
       itens: g.itens.flatMap((i) => {
         if (!i.perm || (temPermissao(i.perm) && temModulo(i.perm))) return [i];
         // Sem a principal, mas com a outra aba: o item abre direto nela.
-        if (i.ou && temPermissao(i.ou.perm) && temModulo(i.ou.perm)) return [{ ...i, href: i.ou.href }];
+        const aba = (i.ou ?? []).find((o) => !o.perm || (temPermissao(o.perm) && temModulo(o.perm)));
+        if (aba) return [{ ...i, href: aba.href }];
         return [];
       }),
     }))

@@ -75,7 +75,7 @@ function checarParticipante(p: Participante, papel: string, erros: Achado[]): vo
       campo: papel,
       mensagem:
         papel === "emitente"
-          ? "Falta a inscrição estadual da empresa. Quem emite CT-e é contribuinte de ICMS, e a SEFAZ exige a IE. Está em Configurações → Minha empresa."
+          ? "Falta a inscrição estadual da empresa. Quem emite CT-e é contribuinte de ICMS, e a SEFAZ exige a IE. Está em Minha empresa → Dados da empresa."
           : `O ${papel} está marcado como contribuinte de ICMS e não tem inscrição estadual — preencha a IE no cadastro dele, ou marque que não é contribuinte.`,
     });
   }
@@ -99,7 +99,7 @@ export function validarCte(e: EntradaCte): Validacao {
   if (!soDigitos(e.emitente.rntrc)) {
     erros.push({
       campo: "rntrc",
-      mensagem: "Sem RNTRC não dá pra emitir CT-e rodoviário. Está em Configurações → Minha empresa.",
+      mensagem: "Sem RNTRC não dá pra emitir CT-e rodoviário. Está em Minha empresa → Dados da empresa.",
     });
   }
   if (!["1", "2", "3"].includes(e.emitente.crt)) {

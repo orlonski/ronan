@@ -159,7 +159,7 @@ export class CteService {
         return { tipo: "90", aliquota: aliq, reducaoBase: red || undefined };
       default:
         throw new BadRequestException(
-          "Falta configurar o ICMS do CT-e em Configurações → Emissão de CT-e. O sistema não escolhe tributo.",
+          "Falta configurar o ICMS do CT-e em Minha empresa → Emissor de CT-e. O sistema não escolhe tributo.",
         );
     }
   }
@@ -195,12 +195,12 @@ export class CteService {
 
     if (!conta.cnpj) {
       throw new BadRequestException(
-        "A empresa está sem CNPJ. Preencha em Configurações → Minha empresa antes de emitir.",
+        "A empresa está sem CNPJ. Preencha em Minha empresa → Dados da empresa antes de emitir.",
       );
     }
     if (!conta.cteNaturezaCfop || !conta.cteNaturezaOperacao) {
       throw new BadRequestException(
-        "Falta configurar o CFOP e a natureza da operação em Configurações → Emissão de CT-e.",
+        "Falta configurar o CFOP e a natureza da operação em Minha empresa → Emissor de CT-e.",
       );
     }
 
@@ -351,7 +351,7 @@ export class CteService {
     });
     if (!linha) {
       throw new BadRequestException(
-        "Nenhum certificado digital cadastrado. Suba o A1 em Configurações → Emissão de CT-e.",
+        "Nenhum certificado digital cadastrado. Suba o A1 em Minha empresa → Emissor de CT-e.",
       );
     }
     if (linha.validoAte.getTime() < Date.now()) {
