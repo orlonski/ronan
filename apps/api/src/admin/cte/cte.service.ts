@@ -22,6 +22,7 @@ import { GatewayCte, SefazDireto, SimuladorCte, type EmissorCte } from "./emisso
 import { cifrar, decifrar, lerCertificado } from "../../common/cte/assinatura";
 import { MODELO_CTE } from "../../common/cte/chave";
 import { gerarDacte } from "../../common/cte/dacte";
+import { escolherTomador } from "../../common/cte/tomador";
 
 /**
  * Emitir o CT-e de uma viagem.
@@ -178,7 +179,8 @@ export class CteService {
         localCarga: true,
         localDescarga: true,
         material: true,
-        cliente: true,
+        // A obra e o cliente que paga: o tomador sai de um dos dois.
+        cliente: { include: { empresa: true } },
         valor: true,
       },
     });
@@ -231,39 +233,14 @@ export class CteService {
     const remetente = this.participanteDoLocal(viagem.localCarga, "carga");
     const destinatario = this.participanteDoLocal(viagem.localDescarga, "descarga");
 
-    // O tomador: por ora, quem contratou o frete (o Cliente da viagem) quando
-    // ele tem cadastro fiscal; senão, o destinatário — que é o caso mais comum
-    // em agregados, com a obra pagando o frete.
-    let papelTomador: PapelTomador = "DESTINATARIO";
-    let tomadorOutro: Participante | null = null;
-    const cli = viagem.cliente;
-    if (cli?.cnpjCpf) {
-      const doc = soDigitos(cli.cnpjCpf);
-      if (doc === soDigitos(remetente.cnpjCpf)) papelTomador = "REMETENTE";
-      else if (doc === soDigitos(destinatario.cnpjCpf)) papelTomador = "DESTINATARIO";
-      else {
-        papelTomador = "OUTRO";
-        tomadorOutro = {
-          cnpjCpf: doc,
-          // Mesma regra do local: a razão social do cadastro fiscal manda, e o
-          // nome comercial só entra quando ela está em branco.
-          razaoSocial: cli.razaoSocialFiscal?.trim() || cli.nome,
-          inscricaoEstadual: cli.inscricaoEstadual,
-          indicadorIe: (cli.indicadorIe as "1" | "2" | "9") ?? "9",
-          endereco: {
-            logradouro: cli.logradouro ?? "",
-            numero: cli.numeroEndereco ?? "S/N",
-            bairro: cli.bairro ?? "",
-            codigoMunicipio: cli.codigoMunicipioIbge ?? "",
-            municipio: cli.municipio ?? "",
-            cep: cli.cep,
-            uf: cli.uf ?? "",
-          },
-          telefone: cli.telefone,
-          email: cli.email,
-        };
-      }
-    }
+    // O tomador — quem paga. A regra (obra com CNPJ próprio, senão o cliente
+    // que paga, senão o destinatário) mora em common/cte/tomador.ts.
+    const { papelTomador, tomadorOutro } = escolherTomador({
+      obra: viagem.cliente,
+      pagador: viagem.cliente?.empresa ?? null,
+      remetente,
+      destinatario,
+    });
 
     const config: ConfigFiscal = {
       naturezaCfop: conta.cteNaturezaCfop,

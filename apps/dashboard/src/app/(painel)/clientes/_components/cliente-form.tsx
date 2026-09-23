@@ -37,9 +37,9 @@ export type Cliente = {
   empresa: Empresa;
   empresaId: string;
   apelidos: string[];
-  // --- fiscais: o cliente é quem CONTRATA o frete, então é ele que vira o
-  // tomador do CT-e quando não é nem o remetente nem o destinatário. Tomador
-  // decide CFOP e ICMS — não é campo decorativo.
+  // --- fiscais: este cadastro é a OBRA (na tela). Só vira tomador do CT-e
+  // quando tem CNPJ próprio (filial, consórcio, SPE); senão o tomador é o
+  // cliente que paga. Tomador decide CFOP e ICMS — não é campo decorativo.
   cnpjCpf: string | null;
   razaoSocialFiscal: string | null;
   inscricaoEstadual: string | null;
@@ -146,14 +146,14 @@ export function ClienteForm({ initial }: Props) {
             achar a obra quando ele escreve diferente do cadastro.
           </p>
         </div>
-        {/* O cliente é quem CONTRATA o frete. Quando ele não é o remetente nem
-            o destinatário, é ele que vira o tomador do CT-e — e tomador decide
-            CFOP e ICMS. Recolhido porque nem todo cliente entra em documento. */}
+        {/* O tomador do CT-e é o cliente que paga. A obra só entra no lugar dele
+            quando tem CNPJ próprio (filial, consórcio, SPE) — ver
+            common/cte/tomador.ts. Recolhido porque quase nenhuma obra tem. */}
         <details className="rounded-md border border-border" open={temFiscal}>
           <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium">
             Dados fiscais{" "}
             <span className="font-normal text-muted-foreground">
-              — preencha se esta obra vai ser o tomador do CT-e
+              — só se esta obra tem CNPJ próprio (filial, consórcio, SPE); senão o CT-e usa o do cliente
             </span>
           </summary>
           <div className="space-y-3 border-t border-border p-3">
@@ -162,7 +162,7 @@ export function ClienteForm({ initial }: Props) {
               onChange={setFiscal}
               uf={endereco.uf}
               prefixo="clienteform"
-              papel="tomador — quem paga o frete"
+              papel="tomador no lugar do cliente, quando a obra tem CNPJ próprio"
             />
 
             <EnderecoCadastro
