@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
+import { Settings } from "lucide-react";
 import { usePermissoes } from "@/lib/permissoes";
 import { cn } from "@/lib/utils";
 
@@ -17,8 +18,11 @@ import { cn } from "@/lib/utils";
  *
  * Cada aba mantém a permissão (e o módulo) que a tela já tinha. `perm: null`
  * = qualquer um (o Contrato: quem é obrigado a aceitar tem que poder reler).
+ *
+ * `config: true` põe a engrenagem na aba — avisa, antes do clique, que ali é
+ * ajuste de comportamento e não a lista do dia a dia (pedido do dono).
  */
-type Aba = { href: string; label: string; perm: string | null };
+type Aba = { href: string; label: string; perm: string | null; config?: boolean };
 
 export const ABAS = {
   permissoes: [
@@ -27,24 +31,24 @@ export const ABAS = {
   ],
   "minha-empresa": [
     { href: "/configuracoes/empresa", label: "Dados da empresa", perm: "minha-empresa.editar" },
-    { href: "/configuracoes/cte", label: "Emissor de CT-e", perm: "cte.ver" },
+    { href: "/configuracoes/cte", label: "Emissor de CT-e", perm: "cte.ver", config: true },
     { href: "/configuracoes/contrato", label: "Contrato", perm: null },
   ],
   locais: [
     { href: "/locais", label: "Locais", perm: "locais.ver" },
-    { href: "/configuracoes/busca-locais", label: "Como o app acha o local", perm: "config-busca-locais.ver" },
+    { href: "/configuracoes/busca-locais", label: "Como o app acha o local", perm: "config-busca-locais.ver", config: true },
   ],
   mapa: [
     { href: "/mapa", label: "Mapa", perm: "mapa.ver" },
-    { href: "/configuracoes/tracking", label: "Posição durante a viagem", perm: "config-tracking.ver" },
+    { href: "/configuracoes/tracking", label: "Posição durante a viagem", perm: "config-tracking.ver", config: true },
   ],
   torre: [
     { href: "/torre", label: "Torre de controle", perm: "programacao.ver" },
-    { href: "/configuracoes/torre", label: "Quando avisar", perm: "programacao.ver" },
+    { href: "/configuracoes/torre", label: "Quando avisar", perm: "programacao.ver", config: true },
   ],
   viagens: [
     { href: "/viagens", label: "Viagens", perm: "viagens.ver" },
-    { href: "/configuracoes/km-atipico", label: "Km fora do padrão", perm: "config-km-atipico.ver" },
+    { href: "/configuracoes/km-atipico", label: "Km fora do padrão", perm: "config-km-atipico.ver", config: true },
   ],
 } satisfies Record<string, Aba[]>;
 
@@ -65,12 +69,13 @@ export function AbasDaTela({ grupo }: { grupo: keyof typeof ABAS }) {
             key={a.href}
             href={a.href as Route}
             className={cn(
-              "-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors",
+              "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors",
               ativa
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
+            {a.config && <Settings className="h-3.5 w-3.5" aria-hidden />}
             {a.label}
           </Link>
         );
