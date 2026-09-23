@@ -26,7 +26,6 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.viagem.lancar",
   "app.viagem.guiada",
   "app.viagem.gpsClassico",
-  "app.navegacao.aoVivo",
   "app.ticket.ocr",
   "app.km.referencia",
   "app.locais.verTodos",
@@ -149,7 +148,9 @@ const DEFS: CapacidadeAppDef[] = [
   {
     chave: "app.viagem.gpsClassico",
     label: "Iniciar viagem com GPS",
-    efeito: "Botão pra começar a viagem com o GPS acompanhando o trajeto até o fim.",
+    // Inclui a navegação por voz, que era item à parte e não existe fora
+    // desta viagem (decisão do dono, 22/09/2026: "um completa o outro").
+    efeito: "O GPS acompanha o trajeto, com mapa e voz guiando até o destino.",
     grupo: "Viagens",
     tipo: "ROLLOUT",
     vinculo: "MOTORISTA",
@@ -157,17 +158,6 @@ const DEFS: CapacidadeAppDef[] = [
     gate: "SERVIDOR",
     aoPerder: "VALA",
     colunaLegada: { coluna: "podeIniciarViagem", espelha: true },
-  },
-  {
-    chave: "app.navegacao.aoVivo",
-    label: "Navegação por voz",
-    efeito: "Mapa e voz guiando até o destino. Só funciona junto com \"Iniciar viagem com GPS\".",
-    grupo: "Viagens",
-    tipo: "EMPRESA",
-    vinculo: "MOTORISTA",
-    modulo: "operacao",
-    gate: "SERVIDOR",
-    aoPerder: "RECUSAR",
   },
   {
     chave: "app.ticket.ocr",

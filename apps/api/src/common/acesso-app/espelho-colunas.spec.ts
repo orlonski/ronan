@@ -88,7 +88,6 @@ describe("espelho do cadastro", () => {
     const caps = capacidadesDasColunas(todasColunas(false));
     expect(caps).toEqual(
       expect.arrayContaining([
-        "app.navegacao.aoVivo",
         "app.programacao.ver",
         "app.acertos.ver",
         "app.posicao.compartilhar",

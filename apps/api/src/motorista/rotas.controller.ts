@@ -69,7 +69,7 @@ export class RotasMotoristaController {
    * viagem com GPS" usa. É recalculado quando o motorista sai da rota (nova chamada).
    */
   @Post("navegar")
-  @RequerCapacidade("app.navegacao.aoVivo")
+  @RequerCapacidade("app.viagem.gpsClassico")
   navegar(
     @Body(new ZodValidationPipe(NavegarInput))
     body: z.infer<typeof NavegarInput>,
