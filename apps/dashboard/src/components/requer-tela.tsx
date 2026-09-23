@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { MODULOS_POR_CHAVE, moduloDaChave } from "@ronan/shared-types";
-import { permDaRota, usePermissoes } from "@/lib/permissoes";
+import { permDaRota, rotaAberta, usePermissoes } from "@/lib/permissoes";
 
 const AcessoRestrito = () => (
   <div className="rounded-md border bg-muted/30 p-6">
@@ -80,7 +80,9 @@ export function Permitido({ chave, children }: { chave: string; children: ReactN
 
 /**
  * Gate central por rota (usado no shell do painel). Lê a permissão exigida pela
- * URL atual e bloqueia se o papel não tiver. Rotas sem permissão mapeada passam.
+ * URL atual e bloqueia se o papel não tiver. Rota sem permissão mapeada só passa
+ * se estiver em ROTAS_ABERTAS — o resto é barrado (fail-closed): tela nova
+ * esquecida fica fechada, não aberta pra todo mundo.
  * Salvaguarda: usuário sem papel (permissoes vazias) mas perfil ADMIN é liberado
  * pra não trancar um admin mal-configurado.
  */
@@ -89,7 +91,7 @@ export function TelaGuard({ children }: { children: ReactNode }) {
   const { temPermissao, temModulo, isLoading } = usePermissoes();
 
   const perm = permDaRota(pathname);
-  if (!perm) return <>{children}</>;
+  if (!perm) return rotaAberta(pathname) ? <>{children}</> : <AcessoRestrito />;
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando…</p>;
   // Módulo primeiro: quem não contratou não deve nem saber que falta permissão.
   if (!temModulo(perm)) return <ModuloNaoContratado chave={perm} />;

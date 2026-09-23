@@ -161,7 +161,34 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/diagnosticos", perm: "diagnosticos.ver" },
 ];
 
-/** Permissão exigida pela rota (ou null se livre). */
+/**
+ * TELAS ABERTAS DE PROPÓSITO — as únicas que não pedem permissão.
+ *
+ * ⚠️ Tela que não está em ROTA_PERM nem aqui é BARRADA (TelaGuard mostra
+ * "acesso restrito"). Até 23/09/2026 era o contrário: rota esquecida abria pra
+ * todo mundo, sem aviso. Abrir uma tela pra todos agora é decisão escrita, com
+ * o porquê — e o spec rotas-com-permissao.spec.ts falha se aparecer tela nova
+ * fora das duas listas, então ela nunca nasce errada.
+ */
+export const ROTAS_ABERTAS: { rota: string; porque: string }[] = [
+  { rota: "/", porque: "Início: é onde todo usuário do painel cai ao entrar." },
+  { rota: "/comecar", porque: "Primeiros passos: cada passo já some pra quem não tem a permissão dele." },
+  {
+    rota: "/configuracoes/contrato",
+    porque: "O aceite dos termos bloqueia todo usuário; quem é obrigado a aceitar tem que conseguir reler.",
+  },
+  { rota: "/inbox", porque: "Caixa do sininho: os avisos da própria pessoa." },
+  { rota: "/contas", porque: "Assinantes: só da plataforma — a própria tela checa `plataforma`, fora da matriz de papéis." },
+];
+
+/** A rota está entre as abertas de propósito? "/" só vale exata. */
+export function rotaAberta(pathname: string): boolean {
+  return ROTAS_ABERTAS.some(
+    ({ rota }) => pathname === rota || (rota !== "/" && pathname.startsWith(`${rota}/`)),
+  );
+}
+
+/** Permissão exigida pela rota (ou null se a rota não está mapeada). */
 export function permDaRota(pathname: string): string | null {
   const hit = ROTA_PERM.find((r) => pathname === r.prefixo || pathname.startsWith(`${r.prefixo}/`));
   return hit?.perm ?? null;
