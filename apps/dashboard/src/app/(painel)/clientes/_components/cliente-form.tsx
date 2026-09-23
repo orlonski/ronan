@@ -19,8 +19,13 @@ import {
   fiscalDe,
   fiscalParaEnvio,
   temDadoFiscal,
-  useConsultaCep,
 } from "@/components/campos-fiscais";
+import {
+  EnderecoCadastro,
+  enderecoDe,
+  enderecoParaEnvio,
+  temEndereco,
+} from "@/components/endereco-cadastro";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
@@ -57,17 +62,6 @@ type Props = { initial?: Cliente };
 
 type ClienteBody = Record<string, unknown>;
 
-type Endereco = {
-  logradouro: string;
-  numeroEndereco: string;
-  bairro: string;
-  cep: string;
-  municipio: string;
-  uf: string;
-  telefone: string;
-  email: string;
-};
-
 export function ClienteForm({ initial }: Props) {
   const router = useRouter();
   const empresas = useResourceOptions<Empresa>(EMPRESAS_PATH);
@@ -80,38 +74,11 @@ export function ClienteForm({ initial }: Props) {
     apelidos: initial?.apelidos ?? ([] as string[]),
   });
   const [fiscal, setFiscal] = useState(fiscalDe(initial));
-  const [endereco, setEndereco] = useState<Endereco>({
-    logradouro: initial?.logradouro ?? "",
-    numeroEndereco: initial?.numeroEndereco ?? "",
-    bairro: initial?.bairro ?? "",
-    cep: initial?.cep ?? "",
-    municipio: initial?.municipio ?? "",
-    uf: initial?.uf ?? "",
-    telefone: initial?.telefone ?? "",
-    email: initial?.email ?? "",
-  });
-  const cep = useConsultaCep();
-
-  async function buscarCep(valor: string) {
-    const res = await cep.consultar(valor);
-    if (!res) return;
-    setEndereco((e) => ({
-      ...e,
-      logradouro: res.logradouro ?? e.logradouro,
-      bairro: res.bairro ?? e.bairro,
-      municipio: res.cidade,
-      uf: res.uf,
-      cep: res.cep ?? valor,
-    }));
-    // O código do IBGE vem de carona na consulta de CEP.
-    if (res.codigoMunicipioIbge) {
-      setFiscal((x) => ({ ...x, codigoMunicipioIbge: res.codigoMunicipioIbge! }));
-    }
-  }
+  const [endereco, setEndereco] = useState(enderecoDe(initial));
 
   // Abre já expandido quando tem conteúdo: esconder o que está preenchido faz
   // o usuário achar que perdeu o dado.
-  const temFiscal = temDadoFiscal(fiscal) || Object.values(endereco).some((x) => x.trim() !== "");
+  const temFiscal = temDadoFiscal(fiscal) || temEndereco(endereco);
 
   // Sair de um cadastro longo descartava tudo em silêncio.
   const sujo = useSujo({ ...form, ...fiscal, ...endereco });
@@ -129,16 +96,7 @@ export function ClienteForm({ initial }: Props) {
       empresaId: form.empresaId,
       apelidos: form.apelidos,
       ...fiscalParaEnvio(fiscal),
-      // Endereço em branco vai como null pelo mesmo motivo dos fiscais: o CT-e
-      // olha o null, e "" seria um endereço vazio de verdade no documento.
-      logradouro: endereco.logradouro.trim() || null,
-      numeroEndereco: endereco.numeroEndereco.trim() || null,
-      bairro: endereco.bairro.trim() || null,
-      cep: endereco.cep.replace(/\D/g, "") || null,
-      municipio: endereco.municipio.trim() || null,
-      uf: endereco.uf.trim().toUpperCase() || null,
-      telefone: endereco.telefone.replace(/\D/g, "") || null,
-      email: endereco.email.trim() || null,
+      ...enderecoParaEnvio(endereco, { comTelefone: true }),
     };
     if (initial) {
       await update.mutateAsync({ id: initial.id, body });
@@ -207,101 +165,12 @@ export function ClienteForm({ initial }: Props) {
               papel="tomador — quem paga o frete"
             />
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="clienteform-cep">CEP</Label>
-                <Input
-                  id="clienteform-cep"
-                  value={endereco.cep}
-                  onChange={(e) => setEndereco({ ...endereco, cep: e.target.value })}
-                  onBlur={(e) => void buscarCep(e.target.value)}
-                  placeholder="00000-000"
-                  inputMode="numeric"
-                  autoComplete="off"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {cep.buscando
-                    ? "Buscando…"
-                    : cep.naoEncontrado
-                      ? "CEP não encontrado — preencha à mão."
-                      : "Preenche o endereço e o código do município."}
-                </p>
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="clienteform-logradouro">Logradouro</Label>
-                <Input
-                  id="clienteform-logradouro"
-                  value={endereco.logradouro}
-                  onChange={(e) => setEndereco({ ...endereco, logradouro: e.target.value })}
-                  autoComplete="off"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div className="space-y-2">
-                <Label htmlFor="clienteform-numero">Número</Label>
-                <Input
-                  id="clienteform-numero"
-                  value={endereco.numeroEndereco}
-                  onChange={(e) => setEndereco({ ...endereco, numeroEndereco: e.target.value })}
-                  autoComplete="off"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="clienteform-bairro">Bairro</Label>
-                <Input
-                  id="clienteform-bairro"
-                  value={endereco.bairro}
-                  onChange={(e) => setEndereco({ ...endereco, bairro: e.target.value })}
-                  autoComplete="off"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="clienteform-municipio">Município</Label>
-                <Input
-                  id="clienteform-municipio"
-                  value={endereco.municipio}
-                  onChange={(e) => setEndereco({ ...endereco, municipio: e.target.value })}
-                  autoComplete="off"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="clienteform-uf">UF</Label>
-                <Input
-                  id="clienteform-uf"
-                  value={endereco.uf}
-                  onChange={(e) =>
-                    setEndereco({ ...endereco, uf: e.target.value.toUpperCase().slice(0, 2) })
-                  }
-                  maxLength={2}
-                  autoComplete="off"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="clienteform-telefone">Telefone</Label>
-                <Input
-                  id="clienteform-telefone"
-                  value={endereco.telefone}
-                  onChange={(e) => setEndereco({ ...endereco, telefone: e.target.value })}
-                  inputMode="tel"
-                  autoComplete="off"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="clienteform-email">E-mail</Label>
-                <Input
-                  id="clienteform-email"
-                  type="email"
-                  value={endereco.email}
-                  onChange={(e) => setEndereco({ ...endereco, email: e.target.value })}
-                  autoComplete="off"
-                />
-              </div>
-            </div>
+            <EnderecoCadastro
+              valor={endereco}
+              onChange={setEndereco}
+              prefixo="clienteform"
+              onCodigoIbge={(codigo) => setFiscal((x) => ({ ...x, codigoMunicipioIbge: codigo }))}
+            />
           </div>
         </details>
 

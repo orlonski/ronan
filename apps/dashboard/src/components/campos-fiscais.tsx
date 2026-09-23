@@ -116,6 +116,7 @@ export function CamposFiscais({
   uf,
   prefixo,
   papel,
+  mostrarDocumento = true,
 }: {
   valor: ValorFiscal;
   onChange: (v: ValorFiscal) => void;
@@ -125,6 +126,8 @@ export function CamposFiscais({
   prefixo: string;
   /** O que este cadastro vira no documento. Muda só o texto. */
   papel: string;
+  /** Falso quando o cadastro já pede o CNPJ em outro lugar (o de cliente pede no topo). */
+  mostrarDocumento?: boolean;
 }) {
   const set = (p: Partial<ValorFiscal>) => onChange({ ...valor, ...p });
   const semIe = valor.indicadorIe === "2" || valor.indicadorIe === "9";
@@ -139,6 +142,7 @@ export function CamposFiscais({
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        {mostrarDocumento && (
         <div className="space-y-2">
           <Label htmlFor={`${prefixo}-cnpj`}>CNPJ ou CPF</Label>
           <Input
@@ -150,6 +154,7 @@ export function CamposFiscais({
             autoComplete="off"
           />
         </div>
+        )}
         <div className="space-y-2">
           <Label htmlFor={`${prefixo}-razao`}>Razão social</Label>
           <Input
