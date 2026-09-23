@@ -82,7 +82,7 @@ type Config = {
 
 export default function ConfigCtePage() {
   return (
-    <RequerTela chave="cte.ver">
+    <RequerTela chave="config-cte.ver">
       <Conteudo />
     </RequerTela>
   );
@@ -638,7 +638,7 @@ function Conteudo() {
       )}
 
       <div className="flex items-center gap-3">
-        <Permitido chave="cte.emitir">
+        <Permitido chave="config-cte.editar">
           <Button onClick={() => void salvar()} disabled={salvando} variant="success">
             <ShieldCheck className="h-4 w-4" />
             {salvando ? "Salvando…" : "Salvar configuração"}

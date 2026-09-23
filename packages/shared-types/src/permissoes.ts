@@ -84,6 +84,10 @@ const ACAO_TITULO_POR_RECURSO: Record<string, string> = {
   "pedagios.importar": "Importar praças de base pública (OSM)",
   "funcionarios.importar": "Importar funcionários por planilha",
   "prospeccao.importar": "Importar a base da ANTT",
+  "ao-vivo.editar": "Fechar ou apagar viagem presa",
+  "torre.resolver": "Resolver alerta e registrar ocorrência",
+  "config-torre.editar": "Mudar quando avisar",
+  "config-cte.editar": "Configurar emissor, certificado e emitir teste",
 };
 
 type ResourceDef = { recurso: string; label: string; modulo: string; acoes: string[] };
@@ -98,7 +102,12 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // "compartilhar" gera link público do comprovante pro cliente. Exige TAMBÉM
   // "ver-comercial" no endpoint: o comprovante mostra km/toneladas faturados,
   // então quem não enxerga isso no painel não pode gerar link que mostre.
-  { recurso: "viagens", label: "Viagens (lista e ao vivo)", modulo: "Operação", acoes: ["ver", "ver-comercial", "editar", "excluir", "validar", "compartilhar", "alterar-valor"] },
+  { recurso: "viagens", label: "Viagens", modulo: "Operação", acoes: ["ver", "ver-comercial", "editar", "excluir", "validar", "compartilhar", "alterar-valor"] },
+  // "Ao vivo" era `viagens.ver`: quem via a lista via o acompanhamento, e não
+  // dava pra liberar um sem o outro (decisão do dono, 23/09/2026: toda tela do
+  // menu tem chave própria). `editar` aqui é fechar ou apagar a viagem presa em
+  // andamento — o resgate que só essa tela faz.
+  { recurso: "ao-vivo", label: "Ao vivo", modulo: "Operação", acoes: ["ver", "editar"] },
   { recurso: "abastecimentos", label: "Abastecimentos", modulo: "Operação", acoes: ["ver", "editar", "excluir"] },
   { recurso: "fechamentos", label: "Fechamento com o cliente — conferir a planilha dele", modulo: "Operação", acoes: ["ver", "criar", "conferir", "exportar", "excluir"] },
   { recurso: "envios", label: "Fechamento com o cliente — mandar a minha planilha", modulo: "Operação", acoes: ["ver", "criar", "excluir"] },
@@ -153,7 +162,13 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "pneus", label: "Pneus", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "multas", label: "Multas", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "documentos-veiculo", label: "Documentos do veículo", modulo: "Cadastros", acoes: ["ver", "editar"] },
-  { recurso: "programacao", label: "Torre de controle, programação e alertas", modulo: "Operação", acoes: ["ver", "editar", "publicar"] },
+  // Torre, programação e a régua da torre eram UMA chave (`programacao`) — dar
+  // a programação do dia a alguém entregava junto os alertas e a régua de
+  // quando avisar. Separadas em 23/09/2026: cada tela do menu, uma chave. O
+  // `modulo` das três continua "Operação" (o Operador tinha as três).
+  { recurso: "torre", label: "Torre de controle", modulo: "Operação", acoes: ["ver", "resolver"] },
+  { recurso: "config-torre", label: "Torre de controle — quando avisar", modulo: "Operação", acoes: ["ver", "editar"] },
+  { recurso: "programacao", label: "Programação do dia", modulo: "Operação", acoes: ["ver", "editar", "publicar"] },
   // Relatório de produção por período. Agrupar por cliente/empresa (ou filtrar
   // por eles) exige TAMBÉM "viagens.ver-comercial" no endpoint: o agrupamento
   // por cliente É a carteira, e as colunas de km/toneladas faturados são as
@@ -225,7 +240,11 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // Emitir documento fiscal é ato com consequência jurídica: quem lança uma
   // viagem não deveria, por isso, poder emitir em nome da empresa. Cancelar é
   // ação à parte porque tem prazo legal e é contada pela SEFAZ.
-  { recurso: "cte", label: "CT-e (emitidos e configuração do emissor)", modulo: "Sistema", acoes: ["ver", "emitir", "cancelar"] },
+  { recurso: "cte", label: "CT-e emitidos", modulo: "Sistema", acoes: ["ver", "emitir", "cancelar"] },
+  // O emissor (certificado A1, série, ambiente) era `cte.ver`/`cte.emitir`:
+  // quem conferia os CT-e emitidos via a configuração, e quem emitia trocava o
+  // certificado. Chave própria desde 23/09/2026.
+  { recurso: "config-cte", label: "Emissor de CT-e", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "whatsapp", label: "WhatsApp", modulo: "Sistema", acoes: ["ver", "gerenciar"] },
   { recurso: "erros", label: "Erros", modulo: "Sistema", acoes: ["ver", "resolver"] },
   { recurso: "diagnosticos", label: "Diagnóstico do app", modulo: "Sistema", acoes: ["ver"] },

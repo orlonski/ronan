@@ -20,7 +20,7 @@ type NavItem = {
 const ITENS: NavItem[] = [
   { href: "/", label: "Início", icon: Home, exact: true },
   { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "viagens.ver" },
-  { href: "/viagens-andamento", label: "Ao vivo", icon: Radio, perm: "viagens.ver" },
+  { href: "/viagens-andamento", label: "Ao vivo", icon: Radio, perm: "ao-vivo.ver" },
   { href: "/motoristas", label: "Motoristas", icon: HardHat, perm: "motoristas.ver" },
 ];
 

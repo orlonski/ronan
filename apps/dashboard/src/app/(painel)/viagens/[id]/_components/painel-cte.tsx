@@ -143,9 +143,12 @@ export function PainelCte({ viagemId }: { viagemId: string }) {
           <FileCheck2 className="h-4 w-4" />
           CT-e
         </h3>
-        <Link href="/configuracoes/cte" className="text-xs text-muted-foreground underline">
-          Configuração
-        </Link>
+        {/* O emissor é outra tela, com chave própria (config-cte). */}
+        <Permitido chave="config-cte.ver">
+          <Link href="/configuracoes/cte" className="text-xs text-muted-foreground underline">
+            Configuração
+          </Link>
+        </Permitido>
       </div>
 
       {/* --- já tem documento --- */}

@@ -77,6 +77,9 @@ export const MODULOS: ModuloDef[] = [
     nucleo: true,
     recursos: [
       "viagens",
+      // A tela "Ao vivo" era `viagens.ver` — fica no núcleo, onde já estava:
+      // mandá-la pra "torre" tiraria o ao vivo de quem não contratou a torre.
+      "ao-vivo",
       "abastecimentos",
       // O molde de acessos do app é do núcleo: quem tem motorista tem app, e
       // quem tem app precisa dizer o que cada tipo de pessoa faz nele.
@@ -142,7 +145,7 @@ export const MODULOS: ModuloDef[] = [
     chave: "torre",
     nome: "Torre de controle",
     pitch: "Pedido do cliente, programação do dia e a viagem acompanhada ao vivo.",
-    recursos: ["pedidos", "programacao"],
+    recursos: ["pedidos", "programacao", "torre", "config-torre"],
   },
   {
     chave: "fiscal",
@@ -150,7 +153,7 @@ export const MODULOS: ModuloDef[] = [
     adicional: true,
     pitch:
       "O CT-e sai daqui, com os dados da viagem que já estão no sistema. Acaba a digitação dupla no emissor.",
-    recursos: ["cte"],
+    recursos: ["cte", "config-cte"],
   },
   {
     chave: "comunicacao",

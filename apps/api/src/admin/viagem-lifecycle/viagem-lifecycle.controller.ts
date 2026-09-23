@@ -56,6 +56,9 @@ export class TiposEventoViagemController {
 /**
  * Viagens em andamento ao vivo (dashboard). Path dedicado pra não colidir com
  * as rotas `admin/viagens/:id`.
+ *
+ * Chave própria (`ao-vivo`) desde 23/09/2026 — era `viagens.ver`/`viagens.editar`,
+ * e liberar a lista de viagens liberava junto o acompanhamento ao vivo.
  */
 @ApiTags("admin/viagens-andamento")
 @ApiBearerAuth()
@@ -66,7 +69,7 @@ export class ViagensAndamentoAdminController {
   constructor(private readonly service: ViagemLifecycleAdminService) {}
 
   @EscopoPor("viagem")
-  @RequerPermissao("viagens.ver")
+  @RequerPermissao("ao-vivo.ver")
   @Get()
   list(@CurrentUser() user: AuthAdminUser) {
     return this.service.viagensEmAndamento(user.escopo);
@@ -74,10 +77,10 @@ export class ViagensAndamentoAdminController {
 
   /**
    * Cancela (apaga) uma viagem em andamento presa. Sem @EscopoPor de propósito:
-   * é rescue de admin (o gestor restrito é só leitura e nem tem viagens.editar),
+   * é rescue de admin (o gestor restrito é só leitura e nem tem ao-vivo.editar),
    * então não há recorte por frota aqui — o acesso é da matriz de papéis.
    */
-  @RequerPermissao("viagens.editar")
+  @RequerPermissao("ao-vivo.editar")
   @Delete(":id")
   cancelar(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.cancelarEmAndamento(id, user.id);
@@ -89,7 +92,7 @@ export class ViagensAndamentoAdminController {
    * ("confira o que ela tem e feche na mão") e que não existia — a única saída
    * pelo painel era apagar, jogando fora eventos, GPS e fotos.
    */
-  @RequerPermissao("viagens.editar")
+  @RequerPermissao("ao-vivo.editar")
   @Post(":id/fechar")
   fechar(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.fecharEmAndamento(id, user.id);

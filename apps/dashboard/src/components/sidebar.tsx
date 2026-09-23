@@ -166,9 +166,9 @@ const GRUPOS: Grupo[] = [
     titulo: "Dia a dia",
     coach: "grupo-dia-a-dia",
     itens: [
-      { href: "/torre", label: "Torre de controle", icon: TowerControl, perm: "programacao.ver", ou: [{ href: "/configuracoes/torre", perm: "programacao.ver" }] },
+      { href: "/torre", label: "Torre de controle", icon: TowerControl, perm: "torre.ver", ou: [{ href: "/configuracoes/torre", perm: "config-torre.ver" }] },
       { href: "/programacao", label: "Programação do dia", icon: CalendarDays, perm: "programacao.ver" },
-      { href: "/viagens-andamento", label: "Ao vivo", icon: Radio, perm: "viagens.ver" },
+      { href: "/viagens-andamento", label: "Ao vivo", icon: Radio, perm: "ao-vivo.ver" },
       { href: "/mapa", label: "Mapa", icon: Map, perm: "mapa.ver", ou: [{ href: "/configuracoes/tracking", perm: "config-tracking.ver" }] },
       { href: "/pedidos", label: "Pedidos do cliente", icon: ClipboardList, perm: "pedidos.ver" },
     ],
@@ -314,7 +314,7 @@ const GRUPOS: Grupo[] = [
         icon: Landmark,
         perm: "minha-empresa.editar",
         ou: [
-          { href: "/configuracoes/cte", perm: "cte.ver" },
+          { href: "/configuracoes/cte", perm: "config-cte.ver" },
           { href: "/documentos-exigidos", perm: "documentos-exigidos.ver" },
           { href: "/configuracoes/contrato" },
         ],

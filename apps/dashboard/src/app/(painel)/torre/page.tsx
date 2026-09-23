@@ -118,7 +118,7 @@ function desde(iso: string): string {
 
 export default function TorrePage() {
   return (
-    <RequerTela chave="programacao.ver">
+    <RequerTela chave="torre.ver">
       <Conteudo />
     </RequerTela>
   );
@@ -236,7 +236,7 @@ function Conteudo() {
             </span>
           )}
           {/* Quem atende "quebrei na BR-376" precisa registrar sem sair daqui. */}
-          <Permitido chave="programacao.editar">
+          <Permitido chave="torre.resolver">
             <Button onClick={() => setAbrindo(true)} disabled={emCurso.length === 0}>
               <Plus className="h-4 w-4" /> Registrar ocorrência
             </Button>
@@ -316,7 +316,7 @@ function Conteudo() {
                       Sem valor/hora
                     </Badge>
                   )}
-                  <Permitido chave="programacao.editar">
+                  <Permitido chave="torre.resolver">
                     <Button size="sm" variant="success" onClick={() => void encerrar(o.id)}>
                       <Check className="h-3.5 w-3.5" /> Encerrar
                     </Button>
@@ -393,7 +393,7 @@ function Conteudo() {
                         </Button>
                       </Link>
                     ))}
-                  <Permitido chave="programacao.editar">
+                  <Permitido chave="torre.resolver">
                     <Button size="sm" variant="ghost" onClick={() => void resolver(a.id)}>
                       <Check className="h-3.5 w-3.5" /> Resolvido
                     </Button>

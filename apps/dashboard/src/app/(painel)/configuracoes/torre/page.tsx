@@ -30,7 +30,7 @@ const PATH = "/admin/torre/config";
 
 export default function TorreConfigPage() {
   return (
-    <RequerTela chave="programacao.ver">
+    <RequerTela chave="config-torre.ver">
       <Conteudo />
     </RequerTela>
   );
@@ -40,7 +40,7 @@ function Conteudo() {
   const token = useAuthToken();
   const qc = useQueryClient();
   const { temPermissao } = usePermissoes();
-  const podeEditar = temPermissao("programacao.editar");
+  const podeEditar = temPermissao("config-torre.editar");
 
   const cfg = useQuery({
     queryKey: [PATH],

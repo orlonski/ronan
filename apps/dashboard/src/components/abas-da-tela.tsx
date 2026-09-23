@@ -48,7 +48,7 @@ export const ABAS = {
   ],
   "minha-empresa": [
     { href: "/configuracoes/empresa", label: "Dados da empresa", perm: "minha-empresa.editar" },
-    { href: "/configuracoes/cte", label: "Emissor de CT-e", perm: "cte.ver", config: true },
+    { href: "/configuracoes/cte", label: "Emissor de CT-e", perm: "config-cte.ver", config: true },
     // O que a transportadora pede de documento (ao motorista, ao registrado,
     // ou em nome de um cliente). A lista geral mora aqui; a de cada cliente
     // aparece também na página dele.
@@ -82,8 +82,8 @@ export const ABAS = {
     { href: "/regras-minimo", label: "Mínimo (km e tonelada)", perm: "regras-minimo.ver" },
   ],
   torre: [
-    { href: "/torre", label: "Torre de controle", perm: "programacao.ver" },
-    { href: "/configuracoes/torre", label: "Quando avisar", perm: "programacao.ver", config: true },
+    { href: "/torre", label: "Torre de controle", perm: "torre.ver" },
+    { href: "/configuracoes/torre", label: "Quando avisar", perm: "config-torre.ver", config: true },
   ],
   viagens: [
     { href: "/viagens", label: "Viagens", perm: "viagens.ver" },

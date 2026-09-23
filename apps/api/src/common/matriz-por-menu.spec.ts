@@ -103,21 +103,41 @@ describe("matriz de papéis agrupada pelo menu", () => {
   });
 
   it("todo item do menu vira linha, mesmo dividindo a permissão com outro", () => {
-    // Torre de controle e Programação do dia usam a mesma chave (programacao):
-    // as duas têm que aparecer, cada uma no seu lugar, apontando uma pra outra.
-    // Até 23/09/2026 só a Programação aparecia e o dono não achou a Torre.
-    const linhas = agruparRecursosPorMenu(menuDoSidebar(), RECURSOS).flatMap((s) => s.linhas);
-    const torre = linhas.find((l) => l.rotulo === "Torre de controle")!;
-    expect(torre.recurso).toBe("programacao");
-    expect(torre.tambemEm.some((t) => t.includes("Programação"))).toBe(true);
-    const viagens = linhas.find((l) => l.rotulo === "Viagens")!;
-    expect(viagens.tambemEm.some((t) => t.includes("Ao vivo"))).toBe(true);
-    expect(linhas.find((l) => l.rotulo === "Ao vivo")?.recurso).toBe("viagens");
+    // O menu real não divide mais chave (ver menu-matriz.spec.ts), mas o
+    // agrupamento continua cobrindo o caso: se um dia voltar, as duas telas
+    // aparecem, cada uma no seu lugar, apontando uma pra outra — em vez de uma
+    // sumir, que foi o que fez o dono não achar a Torre.
+    const menu: MenuDescricao = [
+      { titulo: "A", itens: [{ label: "Um", href: "/um", perm: "x.ver", abas: [] }] },
+      { titulo: "B", itens: [{ label: "Dois", href: "/dois", perm: "x.ver", abas: [] }] },
+    ];
+    const linhas = agruparRecursosPorMenu(menu, ["x"]).flatMap((s) => s.linhas);
+    expect(linhas.map((l) => [l.rotulo, l.tambemEm])).toEqual([
+      ["Um", ["B › Dois"]],
+      ["Dois", ["A › Um"]],
+    ]);
   });
 
   it("aba que repete a chave do próprio item não vira linha (é a mesma tela)", () => {
+    const menu: MenuDescricao = [
+      { titulo: "A", itens: [{ label: "Um", href: "/um", perm: "x.ver", abas: [{ href: "/um/cfg", perm: "x.editar" }] }] },
+    ];
+    const linhas = agruparRecursosPorMenu(menu, ["x"]).flatMap((s) => s.linhas);
+    expect(linhas.map((l) => l.rotulo)).toEqual(["Um"]);
+  });
+
+  it("no menu real, nenhuma linha anota \"mesma permissão de…\"", () => {
     const linhas = agruparRecursosPorMenu(menuDoSidebar(), RECURSOS).flatMap((s) => s.linhas);
-    expect(linhas.find((l) => l.rotulo === "Torre de controle › Quando avisar")).toBeUndefined();
+    expect(linhas.filter((l) => l.tambemEm.length > 0).map((l) => `${l.rotulo} ↔ ${l.tambemEm.join(", ")}`)).toEqual([]);
+    // As telas separadas em 23/09/2026 têm, cada uma, a sua linha.
+    const rec = (rotulo: string) => linhas.find((l) => l.rotulo === rotulo)?.recurso;
+    expect(rec("Torre de controle")).toBe("torre");
+    expect(rec("Programação do dia")).toBe("programacao");
+    expect(rec("Ao vivo")).toBe("ao-vivo");
+    expect(rec("Viagens")).toBe("viagens");
+    expect(rec("CT-e emitidos")).toBe("cte");
+    expect(linhas.find((l) => l.recurso === "config-torre")?.aba).toBe(true);
+    expect(linhas.find((l) => l.recurso === "config-cte")?.aba).toBe(true);
   });
 
   it("recurso fora do catálogo desta pessoa não vira linha; o que o menu não alcança vai pro fim", () => {

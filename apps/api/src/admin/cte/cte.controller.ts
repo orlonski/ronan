@@ -59,6 +59,10 @@ const CancelarInput = z.object({
  * Recurso próprio na matriz, e não `viagens.editar`: emitir documento fiscal é
  * ato com consequência jurídica — quem lança uma viagem não deveria, por isso,
  * poder emitir em nome da empresa.
+ *
+ * O EMISSOR (config, certificado, testar conexão, emitir teste) é outra tela e
+ * outra chave, `config-cte`, desde 23/09/2026: quem confere os CT-e emitidos
+ * não precisa, por isso, enxergar nem trocar o certificado A1 da empresa.
  */
 @ApiTags("admin/cte")
 @ApiBearerAuth()
@@ -89,13 +93,13 @@ export class CteController {
    * A configuração de emissão. Declarada ANTES de `:id` — senão a rota
    * `/admin/cte/config` cairia no detalhe de um documento chamado "config".
    */
-  @RequerPermissao("cte.ver")
+  @RequerPermissao("config-cte.ver")
   @Get("config")
   config() {
     return this.service.configuracao();
   }
 
-  @RequerPermissao("cte.emitir")
+  @RequerPermissao("config-cte.editar")
   @Patch("config")
   salvarConfig(
     @Body(new ZodValidationPipe(ConfigInput)) body: z.infer<typeof ConfigInput>,
@@ -105,7 +109,7 @@ export class CteController {
   }
 
   /** O certificado que está guardado. Nunca o arquivo, nunca a senha. */
-  @RequerPermissao("cte.ver")
+  @RequerPermissao("config-cte.ver")
   @Get("certificado")
   certificado() {
     return this.service.certificadoResumo();
@@ -118,7 +122,7 @@ export class CteController {
    * qualquer um seria a brecha pra cadastrar o certificado de uma empresa
    * dizendo que é de outra.
    */
-  @RequerPermissao("cte.emitir")
+  @RequerPermissao("config-cte.editar")
   @HttpCode(200)
   @Post("certificado")
   // 512 KB: um A1 tem uns poucos KB, e o teto evita que um arquivo trocado por
@@ -140,7 +144,7 @@ export class CteController {
    * que se faz: prova certificado, cadeia, credenciamento e rede de uma vez,
    * sem arriscar um CT-e nem queimar um número da série.
    */
-  @RequerPermissao("cte.ver")
+  @RequerPermissao("config-cte.ver")
   @HttpCode(200)
   @Post("testar-conexao")
   testarConexao() {
@@ -158,7 +162,7 @@ export class CteController {
    * Série 999, reservada: passa pelo mesmo caminho da emissão real sem gastar
    * número da numeração fiscal de verdade.
    */
-  @RequerPermissao("cte.emitir")
+  @RequerPermissao("config-cte.editar")
   @HttpCode(200)
   @Post("emitir-teste")
   emitirTeste(@CurrentUser() user: AuthAdminUser) {

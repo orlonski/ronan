@@ -54,14 +54,16 @@ function recursoDe(perm: string | undefined): string | null {
  *
  * - Uma seção por grupo do menu, na ordem do menu; uma linha por item, e logo
  *   abaixo uma sub-linha por aba.
- * - TODO item do menu vira linha, mesmo quando divide a permissão com outro
- *   (Torre de controle e Programação do dia usam `programacao`): a tela tem que
- *   refletir o menu, e quem procura "Torre de controle" tem que achar. A linha
- *   que divide a chave anota os outros lugares em `tambemEm` — marcar numa
- *   marca na outra, porque é a mesma chave. (Até 23/09/2026 a chave aparecia uma
- *   vez só e a Torre sumia da tela; o dono foi procurar e não achou.)
- * - A aba que repete a chave do próprio item (Torre › Quando avisar) não vira
- *   linha: é a mesma tela.
+ * - TODO item do menu vira linha, mesmo quando divide a permissão com outro: a
+ *   tela tem que refletir o menu, e quem procura o nome do menu tem que achar.
+ *   A linha que divide a chave anota os outros lugares em `tambemEm` — marcar
+ *   numa marca na outra, porque é a mesma chave.
+ *   ⚠️ No menu real isso NÃO acontece mais: desde 23/09/2026 cada item e cada
+ *   aba tem chave própria (Torre e Programação dividiam `programacao`, Ao vivo
+ *   e Viagens dividiam `viagens`), e o menu-matriz.spec.ts barra o retorno. O
+ *   caminho fica aqui como rede, pra matriz não esconder uma tela se a regra um
+ *   dia ganhar exceção.
+ * - A aba que repete a chave do próprio item não vira linha: é a mesma tela.
  * - Recurso do catálogo que o menu não alcança vai pra seção final
  *   "Sem item próprio no menu", na ordem do catálogo.
  * - Recurso do menu que não está em `recursos` (o catálogo que ESTA pessoa

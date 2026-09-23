@@ -496,7 +496,7 @@ export class TorreService {
           : { viagemIds: alertas.map((a) => a.viagemId) },
         // Alerta operacional é trabalho de quem opera a torre. Mandar pro
         // financeiro é ruído por construção — e ele nem consegue abrir a tela.
-        permissao: "programacao.ver",
+        permissao: "torre.ver",
       });
     } catch (e) {
       this.log.warn(`torre: notificação não saiu: ${(e as Error).message}`);

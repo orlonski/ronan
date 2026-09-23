@@ -99,9 +99,9 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/configuracoes/campos-layout", perm: "config-campos-layout.ver" },
   { prefixo: "/configuracoes/forca-atualizacao", perm: "config-forca-atualizacao.ver" },
   { prefixo: "/configuracoes/km-atipico", perm: "config-km-atipico.ver" },
-  // A régua da torre fica sob `programacao` — é a mesma pessoa que monta o dia e
-  // acompanha o dia, e criar chave própria só multiplicaria a matriz.
-  { prefixo: "/configuracoes/torre", perm: "programacao.ver" },
+  // A régua da torre ficava sob `programacao`. Desde 23/09/2026 toda tela do
+  // menu (item ou aba) tem chave própria — o escritório libera uma sem a outra.
+  { prefixo: "/configuracoes/torre", perm: "config-torre.ver" },
   // Mais específico ANTES do genérico: `find` pega o primeiro que casa, e
   // "/ponto" sozinho engoliria "/ponto/funcionarios".
   { prefixo: "/ponto/competencia", perm: "fechamento-ponto.ver" },
@@ -113,7 +113,7 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/ponto", perm: "ponto.ver" },
   { prefixo: "/relatorios", perm: "relatorios.ver" },
   { prefixo: "/pedagios-rodovia", perm: "pedagios.ver" },
-  { prefixo: "/viagens-andamento", perm: "viagens.ver" },
+  { prefixo: "/viagens-andamento", perm: "ao-vivo.ver" },
   { prefixo: "/viagens", perm: "viagens.ver" },
   { prefixo: "/tipos-evento-viagem", perm: "tipos-evento-viagem.ver" },
   { prefixo: "/abastecimentos", perm: "abastecimentos.ver" },
@@ -140,10 +140,10 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   // com RequerTela; aqui é pra o TelaGuard dizer "acesso restrito" também.
   { prefixo: "/documentos-exigidos", perm: "documentos-exigidos.ver" },
   { prefixo: "/programacao", perm: "programacao.ver" },
-  { prefixo: "/torre", perm: "programacao.ver" },
+  { prefixo: "/torre", perm: "torre.ver" },
   { prefixo: "/importacao", perm: "importacao.ver" },
   { prefixo: "/cte", perm: "cte.ver" },
-  { prefixo: "/configuracoes/cte", perm: "cte.ver" },
+  { prefixo: "/configuracoes/cte", perm: "config-cte.ver" },
   { prefixo: "/pedidos", perm: "pedidos.ver" },
   { prefixo: "/prospeccao", perm: "prospeccao.ver" },
   { prefixo: "/conferencias", perm: "conferencia-ticket.ver" },

@@ -179,11 +179,11 @@ function ViagemCard({ v, agora }: { v: ViagemAndamento; agora: number }) {
             <Clock className="mr-1 h-3 w-3" />
             {tempoRelativo(v.iniciadoEm, agora)}
           </Badge>
-          <Permitido chave="viagens.editar">
+          <Permitido chave="ao-vivo.editar">
             <FecharButton id={v.id} temEventos={eventos.length > 0} />
           </Permitido>
           <ExcluirButton
-            perm="viagens.editar"
+            perm="ao-vivo.editar"
             path={PATH}
             id={v.id}
             nomeRecurso="esta viagem em andamento"
@@ -308,7 +308,7 @@ export default function ViagensAndamentoPage() {
   const viagens = list.data ?? [];
 
   return (
-    <RequerTela chave="viagens.ver">
+    <RequerTela chave="ao-vivo.ver">
       <div className="space-y-6">
         <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>

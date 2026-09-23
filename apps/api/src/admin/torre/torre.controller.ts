@@ -37,9 +37,10 @@ const RegistrarOcorrenciaInput = z.object({
 /**
  * A torre: o que está fora do esperado agora.
  *
- * Fica sob `programacao` porque é a mesma pessoa que monta o dia e acompanha o
- * dia — criar uma chave própria só multiplicaria a matriz sem separar trabalho
- * nenhum.
+ * Ficava sob `programacao`, "porque é a mesma pessoa que monta o dia e
+ * acompanha o dia". Nem sempre é — e o escritório não tinha como dar uma tela
+ * sem a outra. Desde 23/09/2026 cada tela do menu tem chave própria: `torre`
+ * pros alertas e ocorrências, `config-torre` pra régua (a aba "Quando avisar").
  */
 @ApiTags("admin/torre")
 @ApiBearerAuth()
@@ -50,19 +51,19 @@ export class TorreController {
   constructor(private readonly service: TorreService) {}
 
   @EscopoPor("motorista")
-  @RequerPermissao("programacao.ver")
+  @RequerPermissao("torre.ver")
   @Get()
   alertas(@CurrentUser() user: AuthAdminUser) {
     return this.service.alertas(user.escopo);
   }
 
-  @RequerPermissao("programacao.ver")
+  @RequerPermissao("config-torre.ver")
   @Get("config")
   config() {
     return this.service.config();
   }
 
-  @RequerPermissao("programacao.editar")
+  @RequerPermissao("config-torre.editar")
   @Put("config")
   atualizarConfig(
     @Body(new ZodValidationPipe(AtualizarConfigTorreSchema))
@@ -72,7 +73,7 @@ export class TorreController {
     return this.service.atualizarConfig(body, user.id);
   }
 
-  @RequerPermissao("programacao.editar")
+  @RequerPermissao("torre.resolver")
   @Post("alertas/:id/resolver")
   resolver(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.resolverAlerta(id, user.id);
@@ -81,7 +82,7 @@ export class TorreController {
   // O supervisor que atende a ligação "quebrei na BR-376" precisa registrar
   // pelo painel — antes disso, o único ponto que criava evento exigia token de
   // motorista e viagem com lifecycle aberto.
-  @RequerPermissao("programacao.editar")
+  @RequerPermissao("torre.resolver")
   @Post("ocorrencias")
   registrar(
     @Body(new ZodValidationPipe(RegistrarOcorrenciaInput))
@@ -91,7 +92,7 @@ export class TorreController {
     return this.service.registrarOcorrencia({ ...body, usuarioId: user.id });
   }
 
-  @RequerPermissao("programacao.editar")
+  @RequerPermissao("torre.resolver")
   @Post("ocorrencias/:id/encerrar")
   encerrar(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.encerrarOcorrencia(id, user.id);
