@@ -43,7 +43,7 @@ export const MENU_APP: readonly ItemMenuApp[] = [
   { id: "inicio.bater-ponto", label: "Bater ponto", onde: "inicio", requer: ["app.ponto.bater"] },
   { id: "inicio.obra", label: "Presença na obra", onde: "inicio", requer: ["app.obra.presenca"] },
   { id: "inicio.iniciar-viagem", label: "Iniciar viagem (guiada)", onde: "inicio", requer: ["app.viagem.guiada"] },
-  { id: "inicio.nova-viagem", label: "Nova viagem", onde: "inicio", requer: ["app.viagem.lancar"] },
+  { id: "inicio.nova-viagem", label: "Lançar viagem feita", onde: "inicio", requer: ["app.viagem.lancar"] },
   { id: "inicio.gps", label: "Iniciar viagem com GPS", onde: "inicio", requer: ["app.viagem.gpsClassico"] },
   { id: "inicio.pedagio", label: "Pedágio", onde: "inicio", requer: ["app.pedagio.lancar"] },
   { id: "inicio.abastecimento", label: "Abastecimento", onde: "inicio", requer: ["app.abastecimento.lancar"] },

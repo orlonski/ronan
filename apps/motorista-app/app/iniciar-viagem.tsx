@@ -142,7 +142,7 @@ export default function IniciarViagem() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScreenHeader title="Iniciar viagem" />
+      <ScreenHeader title="Começar viagem" />
 
       {!cat.data ? (
         <SemCatalogo carregando={cat.isFetching} aoBaixar={() => void cat.refetch()} />

@@ -559,7 +559,7 @@ export function LocalPorGps({
           </Text>
           <Text className="text-sm text-muted-foreground">
             A carga precisa ser um local já cadastrado do cliente. Fale com o escritório pra
-            cadastrar o local de carga, ou use o menu <Text className="font-semibold">Nova viagem</Text>.
+            cadastrar o local de carga, ou use o <Text className="font-semibold">Lançar viagem feita</Text>.
           </Text>
           <View className="flex-row gap-2">
             <Button variant="outline" className="flex-1" onPress={() => setEstado({ tipo: "vazio" })}>

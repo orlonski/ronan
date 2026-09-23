@@ -123,8 +123,8 @@ export type CapacidadeAppDef = {
 const DEFS: CapacidadeAppDef[] = [
   {
     chave: "app.viagem.lancar",
-    label: "Lançar viagem",
-    efeito: "O botão \"Nova viagem\" na tela inicial.",
+    label: "Lançar viagem feita",
+    efeito: "Pra viagem que já aconteceu: ele registra carga, descarga e a foto depois.",
     grupo: "Viagens",
     tipo: "EMPRESA",
     vinculo: "MOTORISTA",
@@ -135,8 +135,8 @@ const DEFS: CapacidadeAppDef[] = [
   },
   {
     chave: "app.viagem.guiada",
-    label: "Viagem guiada",
-    efeito: "O app acompanha a viagem do início ao fim, e é o que alimenta a torre de controle.",
+    label: "Começar viagem",
+    efeito: "Pra viagem que ele vai fazer agora: o app acompanha do início ao fim, e é o que alimenta a torre de controle.",
     grupo: "Viagens",
     tipo: "ROLLOUT",
     vinculo: "MOTORISTA",
@@ -161,7 +161,7 @@ const DEFS: CapacidadeAppDef[] = [
   {
     chave: "app.navegacao.aoVivo",
     label: "Navegação por voz",
-    efeito: "Mapa e voz guiando até o destino durante a viagem.",
+    efeito: "Mapa e voz guiando até o destino. Só funciona junto com \"Iniciar viagem com GPS\".",
     grupo: "Viagens",
     tipo: "EMPRESA",
     vinculo: "MOTORISTA",

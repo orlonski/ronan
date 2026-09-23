@@ -57,7 +57,7 @@ export function AnuncioIniciarViagem({ podeLifecycle }: { podeLifecycle: boolean
               Chegou um jeito mais fácil! 🎉
             </Text>
             <Text className="mt-1 text-center text-base text-muted-foreground">
-              Agora tem o <Text className="font-bold text-foreground">Iniciar viagem</Text>
+              Agora tem o <Text className="font-bold text-foreground">Começar viagem</Text>
             </Text>
           </View>
 
@@ -77,8 +77,8 @@ export function AnuncioIniciarViagem({ podeLifecycle }: { podeLifecycle: boolean
           </View>
 
           <Text className="mt-4 text-sm text-muted-foreground">
-            O <Text className="font-semibold text-foreground">Nova viagem</Text> continua aí
-            por enquanto, mas vai sair em breve.
+            Viagem que você já fez continua indo por{" "}
+            <Text className="font-semibold text-foreground">Lançar viagem feita</Text>.
           </Text>
 
           <View className="mt-6 gap-2">

@@ -20,7 +20,6 @@ import {
   Scale,
   Trash2,
   Truck,
-  Wallet,
   WifiOff,
 } from "lucide-react-native";
 import { fmtHoraBR } from "@/lib/datetime";
@@ -573,8 +572,8 @@ function HomeDaEmpresa() {
               </Pressable>
             )}
 
-            {/* Botão Hero "Iniciar viagem" (lifecycle guiado, NOVO). É o
-                destaque e vem primeiro. Escondido enquanto há viagem em
+            {/* "Começar viagem" (lifecycle guiado): pra viagem que ele vai
+                fazer agora. Vem primeiro. Escondido enquanto há viagem em
                 andamento (o banner "Retomar" cobre). */}
             {me.data?.podeViagemLifecycle && temLifecycle === false && (
               <Pressable
@@ -588,12 +587,11 @@ function HomeDaEmpresa() {
                   <View className="flex-1">
                     <View className="flex-row items-center gap-2">
                       <Text className="text-2xl font-extrabold text-primary-foreground">
-                        Iniciar viagem
+                        Começar viagem
                       </Text>
-                      <Badge variant="success">Novo</Badge>
                     </View>
                     <Text className="mt-0.5 text-base font-medium text-primary-foreground/85">
-                      O app te guia: carga → descarga → fim
+                      O app acompanha: carga → descarga → fim
                     </Text>
                   </View>
                   <Play size={26} color="white" strokeWidth={2.5} fill="white" />
@@ -601,9 +599,10 @@ function HomeDaEmpresa() {
               </Pressable>
             )}
 
-            {/* "Nova viagem": herói quando é o único fluxo; rebaixado a
-                secundário quando o motorista já tem o "Iniciar viagem" novo
-                (sinaliza que vai sair em breve). */}
+            {/* "Lançar viagem feita": pra viagem que JÁ aconteceu. Herói quando
+                é o único jeito; secundário quando ele também tem o "Começar
+                viagem". Os dois ficam — tem motorista que usa os dois, então
+                nada de "novo" nem "sai em breve" (decisão do dono, 22/09/2026). */}
             {me.data?.podeLancarViagem && (
               <CoachTarget id="coach-nova-viagem" className="rounded-2xl">
               {podeLifecycle ? (
@@ -617,12 +616,11 @@ function HomeDaEmpresa() {
                   <View className="flex-1">
                     <View className="flex-row items-center gap-2">
                       <Text className="text-lg font-bold text-foreground">
-                        Nova viagem
+                        Lançar viagem feita
                       </Text>
-                      <Badge variant="warning">Sai em breve</Badge>
                     </View>
                     <Text className="text-sm text-muted-foreground">
-                      Jeito antigo de lançar — vai sair em breve
+                      Já fez? Registre carga, descarga e a foto
                     </Text>
                   </View>
                 </Pressable>
@@ -637,10 +635,10 @@ function HomeDaEmpresa() {
                     </View>
                     <View className="flex-1">
                       <Text className="text-2xl font-extrabold text-primary-foreground">
-                        Nova viagem
+                        Lançar viagem feita
                       </Text>
                       <Text className="mt-0.5 text-base font-medium text-primary-foreground/85">
-                        Lançar carga, descarga e foto
+                        Já fez? Registre carga, descarga e a foto
                       </Text>
                     </View>
                     <Plus size={28} color="white" strokeWidth={2.5} />
@@ -717,23 +715,6 @@ function HomeDaEmpresa() {
               </Pressable>
               </CoachTarget>
             )}
-
-            {/* O caderninho dele. Sem feature flag: não é lançamento da empresa,
-                é o dinheiro do próprio bolso — não é a empresa que libera. */}
-            <Pressable
-              onPress={() => router.push("/meus-gastos")}
-              className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
-            >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
-                <Wallet size={26} color="#13316b" strokeWidth={2.5} />
-              </View>
-              <View className="flex-1">
-                <Text className="text-lg font-bold text-foreground">Meu caderno</Text>
-                <Text className="text-sm text-muted-foreground">
-                  Seus fretes e gastos por conta própria
-                </Text>
-              </View>
-            </Pressable>
 
             {/* Empty state se todas as 4 funcionalidades estão desabilitadas */}
             {me.data &&
@@ -818,7 +799,7 @@ function HomeDaEmpresa() {
             <EmptyState
               icon={Truck}
               title="Nenhuma viagem ainda"
-              description='Toque em "Nova viagem" pra começar.'
+              description='Toque em "Lançar viagem feita" pra começar.'
             />
           )
         }

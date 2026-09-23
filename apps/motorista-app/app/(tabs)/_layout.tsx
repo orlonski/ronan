@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Calendar, Clock, House, MessageCircle, User } from "lucide-react-native";
+import { Calendar, Clock, House, MessageCircle, NotebookPen, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBadgeChat } from "@/lib/chat";
 import { useMe } from "@/lib/queries";
@@ -74,6 +74,17 @@ export default function TabsLayout() {
           title: "Ponto",
           href: ehFuncionario ? undefined : null,
           tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
+        }}
+      />
+      {/* CADERNO: o dinheiro dele por fora, que a empresa não vê. Não tem
+          liberação — é dele. Some pra quem não tem empresa porque, pra ele,
+          o Histórico já é o caderno. */}
+      <Tabs.Screen
+        name="caderno"
+        options={{
+          title: "Caderno",
+          href: visao === "empresa" || visao === "registrado" ? undefined : null,
+          tabBarIcon: ({ color, size }) => <NotebookPen color={color} size={size} />,
         }}
       />
       <Tabs.Screen

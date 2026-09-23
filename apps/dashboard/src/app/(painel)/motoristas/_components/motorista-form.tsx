@@ -803,7 +803,7 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
             </div>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               <AcessoRow
-                label="Nova viagem"
+                label="Lançar viagem feita"
                 active={acessos.podeLancarViagem}
                 onChange={(v) => alterarAcesso("podeLancarViagem", v)}
               />
@@ -813,7 +813,7 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
                 onChange={(v) => alterarAcesso("podeIniciarViagem", v)}
               />
               <AcessoRow
-                label="Viagem guiada (início → eventos → fim)"
+                label="Começar viagem (o app acompanha: carga → descarga → fim)"
                 active={acessos.podeViagemLifecycle}
                 onChange={(v) => alterarAcesso("podeViagemLifecycle", v)}
               />
@@ -848,7 +848,7 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
                 onChange={(v) => alterarAcesso("podeReferenciaKm", v)}
               />
               <AcessoRow
-                label="Telemetria de diagnóstico (grava o que ele buscou/selecionou na Nova viagem)"
+                label="Telemetria de diagnóstico (grava o que ele buscou/selecionou no Lançar viagem feita)"
                 active={acessos.podeTelemetria}
                 onChange={(v) => alterarAcesso("podeTelemetria", v)}
               />

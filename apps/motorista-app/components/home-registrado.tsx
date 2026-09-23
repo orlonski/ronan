@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { useState, useSyncExternalStore } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowRight, Building2, CalendarDays, Check, Clock, FileText, Receipt } from "lucide-react-native";
+import { ArrowRight, Building2, CalendarDays, Check, Clock, FileText } from "lucide-react-native";
 import { useDocumentosDaObra, usePontoHoje } from "@/lib/queries";
 import { BlocoDocumentos } from "@/components/bloco-documentos";
 import { hojeISO } from "@/lib/datetime";
@@ -150,15 +150,6 @@ export function HomeRegistrado() {
             onPress={() => router.push("/documentos-da-obra")}
           />
         )}
-
-        {/* O caderno é DELE, não da empresa: gasto do próprio bolso não deixa
-            de existir porque a pessoa tem carteira assinada. */}
-        <Atalho
-          icone={<Receipt size={22} color="#13316b" />}
-          titulo="Meu caderno"
-          descricao="Seus gastos e recebimentos por fora"
-          onPress={() => router.push("/meus-gastos")}
-        />
 
         {/* Ele pode ser convidado como motorista por outra empresa — e aí passa
             a ter as duas coisas. O banner é o mesmo da home de quem não tem

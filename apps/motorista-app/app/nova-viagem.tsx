@@ -1906,7 +1906,7 @@ export default function NovaViagem() {
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <ScreenHeader title={modoEdit ? "Editar viagem pendente" : "Nova viagem"} />
+      <ScreenHeader title={modoEdit ? "Editar viagem pendente" : "Lançar viagem feita"} />
 
       {(hidratando || ((cat.isLoading || me.isLoading) && !cat.data && !me.data)) && (
         <View className="items-center py-8">

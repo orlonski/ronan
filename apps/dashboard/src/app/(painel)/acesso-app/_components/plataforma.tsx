@@ -37,7 +37,7 @@ const CAMADAS: { chave: CamadaCorte; label: string; efeito: string }[] = [
   {
     chave: "DEPENDENCIA",
     label: "Dependências",
-    efeito: "Viagem guiada e leitura de ticket exigem poder lançar viagem.",
+    efeito: "Começar viagem e leitura de ticket exigem Lançar viagem feita.",
   },
   {
     chave: "APROVACAO",

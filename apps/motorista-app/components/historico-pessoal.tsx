@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { router, useFocusEffect } from "expo-router";
 import { Pressable, RefreshControl, ScrollView, Share, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -53,7 +53,14 @@ type Linha =
  * aba estava o que procura, quando o que ele quer é ver o dia — o frete e o
  * diesel daquele frete, um embaixo do outro.
  */
-export function HistoricoPessoal() {
+export function HistoricoPessoal({
+  titulo = "Histórico",
+  acoes,
+}: {
+  titulo?: string;
+  /** Na aba Caderno, os botões de anotar vêm antes da lista. */
+  acoes?: ReactNode;
+} = {}) {
   const meses = useMemo(() => ultimosMeses(6), []);
   const [mes, setMes] = useState(mesAtual());
   const [viagens, setViagens] = useState<ItemViagem[]>([]);
@@ -148,7 +155,7 @@ export function HistoricoPessoal() {
       <SafeAreaView edges={["top"]} className="bg-brand">
         <View className="px-4 pb-4 pt-2">
           <Text className="mb-3 text-2xl font-extrabold tracking-tight text-white">
-            Histórico
+            {titulo}
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-1">
             {meses.map((m) => (
@@ -181,6 +188,8 @@ export function HistoricoPessoal() {
           />
         }
       >
+        {acoes}
+
         {resumo && (
           <View className="rounded-2xl border-2 border-border bg-card p-4">
             <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">

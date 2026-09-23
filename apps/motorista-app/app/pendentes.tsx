@@ -418,7 +418,7 @@ function LifecycleTripCard({
     <View className="rounded-2xl border-2 border-border bg-card p-4">
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
-          <Badge variant="outline">Viagem guiada</Badge>
+          <Badge variant="outline">Começar viagem</Badge>
           <Text className="mt-1.5 text-lg font-bold text-foreground">
             Viagem em andamento
           </Text>
