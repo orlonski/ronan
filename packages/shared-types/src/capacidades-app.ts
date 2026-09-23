@@ -538,13 +538,13 @@ export function capacidadeNaConta(
 
 /**
  * A TABELA DE ACESSO: o que cada tipo de pessoa vê no celular. O tipo é a
- * MODALIDADE do motorista (dado da empresa, tela Vínculos do motorista), mais
+ * MODALIDADE do motorista (dado da empresa, tela Motoristas › Modalidades), mais
  * "sem modalidade" e "só bate ponto".
  */
 export const SalvarTabelaAppInput = z.object({
   /**
    * `chave`: "SEM_MODALIDADE" (motorista sem modalidade), "SO_PONTO" (CLT sem
-   * cadastro de motorista) ou o id de uma modalidade (Vínculos do motorista).
+   * cadastro de motorista) ou o id de uma modalidade (Motoristas › Modalidades).
    */
   colunas: z
     .array(z.object({ chave: z.string().min(1).max(64), capacidades: z.array(CapacidadeAppSchema) }))

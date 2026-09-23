@@ -40,6 +40,7 @@ import { usePaginatedList, useUpdateResource, useApiQuery } from "@/lib/client-a
 import { usePermissoes } from "@/lib/permissoes";
 import { EstadoVazio } from "@/components/estado-vazio";
 import { AcessoEmLote, type PerfilOpcao } from "./_components/acesso-em-lote";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type DocumentoResumo = { tipo: TipoDocumentoMotorista; validade: string | null };
@@ -490,6 +491,7 @@ export default function MotoristasPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="motoristas" />
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Motoristas</h1>

@@ -19,7 +19,7 @@ export type PainelAcessoApp = {
   perfilPadraoMotoristaId: string | null;
   perfilPadraoFuncionarioId: string | null;
   /**
-   * As colunas da tabela: uma por modalidade (Vínculos do motorista), mais
+   * As colunas da tabela: uma por modalidade (Motoristas › Modalidades), mais
    * "SEM_MODALIDADE" e "SO_PONTO". `herda` = a modalidade ainda não tem
    * configuração própria e recebe o mesmo que "sem modalidade".
    */

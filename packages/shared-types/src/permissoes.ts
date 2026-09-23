@@ -198,7 +198,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "pedagios", label: "Praças de pedágio", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "importar"] },
   { recurso: "materiais", label: "Materiais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "tipos-servico", label: "Como a viagem é cobrada", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
-  { recurso: "modalidades", label: "Vínculos do motorista", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "modalidades", label: "Motoristas — modalidades", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // O molde de acessos do app. `aplicar` é chave à parte de `editar` porque
   // aplicar reescreve TRINTA pessoas de uma vez: é poder de outra ordem que
   // corrigir o nome do perfil.

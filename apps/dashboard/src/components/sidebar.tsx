@@ -28,7 +28,6 @@ import {
   Fuel,
   HandCoins,
   HardHat,
-  IdCard,
   Instagram,
   Landmark,
   LayoutDashboard,
@@ -237,7 +236,7 @@ const GRUPOS: Grupo[] = [
     titulo: "Frota e pessoas",
     coach: "grupo-frota-e-pessoas",
     itens: [
-      { href: "/motoristas", label: "Motoristas", icon: HardHat, perm: "motoristas.ver" },
+      { href: "/motoristas", label: "Motoristas", icon: HardHat, perm: "motoristas.ver", ou: [{ href: "/modalidades", perm: "modalidades.ver" }] },
       { href: "/veiculos", label: "Veículos", icon: Truck, perm: "veiculos.ver" },
       { href: "/frota", label: "Manutenção e vencimentos do caminhão", icon: Wrench, perm: "manutencao.ver" },
       { href: "/transportadoras", label: "Transportadoras", icon: Building, perm: "transportadoras.ver" },
@@ -291,7 +290,6 @@ const GRUPOS: Grupo[] = [
       { href: "/locais", label: "Locais", icon: MapPin, perm: "locais.ver", ou: [{ href: "/configuracoes/busca-locais", perm: "config-busca-locais.ver" }] },
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },
       { href: "/tipos-servico", label: "Como a viagem é cobrada", icon: Timer, perm: "tipos-servico.ver" },
-      { href: "/modalidades", label: "Vínculos do motorista", icon: IdCard, perm: "modalidades.ver" },
       // Fica em Cadastros, não em Frota e pessoas: é tabela que se preenche uma
       // vez e vale pra todo mundo, como as outras deste grupo.
       { href: "/tipos-evento-viagem", label: "Paradas e ocorrências", icon: ListChecks, perm: "tipos-evento-viagem.ver" },

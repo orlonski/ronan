@@ -28,7 +28,7 @@ export type ColunasAcesso = Partial<Record<AcessoAppChave, boolean>>;
  * antigos continuam reconhecidos (`NOMES_ANTIGOS_HERDADOS`) pra renomear o
  * que já existe sem criar um grupo duplicado.
  */
-/** O motorista que ainda não tem modalidade (tela Vínculos do motorista). */
+/** O motorista que ainda não tem modalidade (tela Motoristas › Modalidades). */
 export const PERFIL_HERDADO_MOTORISTA = "Sem modalidade";
 /** O CLT sem cadastro de motorista (mecânico, escritório). */
 export const PERFIL_HERDADO_FUNCIONARIO = "Só bate ponto";

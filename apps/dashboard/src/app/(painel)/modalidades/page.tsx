@@ -17,6 +17,7 @@ import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 import { EstadoVazio } from "@/components/estado-vazio";
 import { usePermissoes } from "@/lib/permissoes";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type Modalidade = {
   id: string;
@@ -121,9 +122,10 @@ export default function ModalidadesPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="motoristas" />
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Vínculos do motorista</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Modalidades</h1>
           <p className="text-sm text-muted-foreground">
             O vínculo de cada motorista (próprio, agregado, terceiro…) e o que o app
             exige de foto no abastecimento em cada um. Motorista sem modalidade segue

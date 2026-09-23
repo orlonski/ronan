@@ -36,6 +36,12 @@ type Aba = {
 };
 
 export const ABAS = {
+  // A modalidade só existe pra classificar o motorista (como é pago, que
+  // fotos o app pede, o que ele vê no app): ajuste de Motoristas.
+  motoristas: [
+    { href: "/motoristas", label: "Motoristas", perm: "motoristas.ver" },
+    { href: "/modalidades", label: "Modalidades", perm: "modalidades.ver", config: true },
+  ],
   permissoes: [
     { href: "/configuracoes/permissoes", label: "Painel do escritório", perm: "permissoes.gerenciar" },
     { href: "/acesso-app", label: "App do motorista", perm: "perfis-acesso.ver" },

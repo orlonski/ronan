@@ -119,7 +119,7 @@ function Conteudo() {
               <p className="mt-2">
                 Esta empresa ainda não tem modalidades. Cadastre em{" "}
                 <Link href="/modalidades" className="underline">
-                  Vínculos do motorista
+                  Motoristas › Modalidades
                 </Link>{" "}
                 (por exemplo: Autônomo (TAC), Agregado, Empregado CLT) e cada uma aparece aqui.
               </p>
@@ -127,7 +127,7 @@ function Conteudo() {
               <p className="mt-2">
                 As modalidades ficam em{" "}
                 <Link href="/modalidades" className="underline">
-                  Vínculos do motorista
+                  Motoristas › Modalidades
                 </Link>
                 .
               </p>
