@@ -54,6 +54,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import type { MenuDescricao } from "@ronan/shared-types";
 import { cn } from "@/lib/utils";
 import { usePermissoes } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
@@ -365,6 +366,33 @@ const GRUPOS: Grupo[] = [
     ],
   },
 ];
+
+/**
+ * O menu sem ícones, na ordem em que aparece — pra matriz de papéis
+ * (/configuracoes/permissoes) se agrupar por ele. Derivado de GRUPOS: mover um
+ * item de grupo ou transformá-lo em aba aqui já muda a matriz.
+ *
+ * Relatórios entra como seção própria (é item solto no menu). Dashboard e
+ * Começar não entram: não têm permissão, não há o que marcar.
+ */
+export function estruturaDoMenu(): MenuDescricao {
+  return [
+    {
+      titulo: RELATORIOS_ITEM.label,
+      itens: [{ label: RELATORIOS_ITEM.label, href: RELATORIOS_ITEM.href, perm: RELATORIOS_ITEM.perm, abas: [] }],
+    },
+    ...GRUPOS.map((g) => ({
+      titulo: g.titulo,
+      soPlataforma: g.soPlataforma,
+      itens: g.itens.map((i) => ({
+        label: i.label,
+        href: i.href,
+        perm: i.perm,
+        abas: (i.ou ?? []).map((o) => ({ href: o.href, perm: o.perm })),
+      })),
+    })),
+  ];
+}
 
 /**
  * Item do menu está ativo? Prefixo cru não serve: `/viagens-andamento` começa

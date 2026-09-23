@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RECURSOS_LABEL } from "@ronan/shared-types";
+import { RECURSOS_LABEL, agruparRecursosPorMenu } from "@ronan/shared-types";
+import { estruturaDoMenu } from "@/components/sidebar";
+import { ABAS } from "@/components/abas-da-tela";
+import { usePermissoes } from "@/lib/permissoes";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { RequerTela } from "@/components/requer-tela";
 import { PublicarModelo, UsarModelo } from "./_components/modelos";
@@ -40,18 +43,12 @@ type Papel = {
 const PATH_PAPEIS = "/admin/papeis";
 const PATH_PERM = "/admin/permissoes";
 
-// Agrupa as permissões de um módulo por recurso (parte antes do "."), mantendo
-// a ordem de chegada. Cada linha da matriz é um recurso com suas ações.
-function agruparPorRecurso(itens: PermissaoRow[]): [string, PermissaoRow[]][] {
-  const map = new Map<string, PermissaoRow[]>();
-  for (const it of itens) {
-    const recurso = it.chave.split(".")[0] ?? it.chave;
-    const arr = map.get(recurso) ?? [];
-    arr.push(it);
-    map.set(recurso, arr);
-  }
-  return [...map.entries()];
-}
+// Rótulo de cada aba pelo href, das abas da própria tela (abas-da-tela.tsx).
+const ROTULO_ABA: Record<string, string> = Object.fromEntries(
+  Object.values(ABAS).flatMap((abas) => abas.map((a) => [a.href, a.label] as const)),
+);
+
+type LinhaRecurso = { recurso: string; rotulo: string; aba: boolean; tambemEm: string[]; acoes: PermissaoRow[] };
 
 export default function PermissoesPage() {
   return (
@@ -116,16 +113,45 @@ function PermissoesInner() {
     });
   }
 
-  // Catálogo agrupado por módulo, preservando a ordem do backend.
+  const { plataforma } = usePermissoes();
+
+  // Catálogo agrupado PELO MENU (ver shared-types/matriz-por-menu.ts): cada
+  // grupo do menu vira uma seção, cada item uma linha e cada aba uma sub-linha.
+  // O que o menu não alcança cai em "Sem item próprio no menu". As ações de
+  // cada recurso seguem na ordem do backend.
   const grupos = useMemo(() => {
-    const map = new Map<string, PermissaoRow[]>();
+    const acoesPorRecurso = new Map<string, PermissaoRow[]>();
     for (const p of catalogo.data ?? []) {
-      const arr = map.get(p.modulo) ?? [];
+      const recurso = p.chave.split(".")[0] ?? p.chave;
+      const arr = acoesPorRecurso.get(recurso) ?? [];
       arr.push(p);
-      map.set(p.modulo, arr);
+      acoesPorRecurso.set(recurso, arr);
     }
-    return [...map.entries()];
-  }, [catalogo.data]);
+    const recursos = [...acoesPorRecurso.keys()];
+    const menu = estruturaDoMenu().filter((g) => !g.soPlataforma || plataforma);
+    const secoes = agruparRecursosPorMenu(menu, recursos, {
+      aba: (href) => ROTULO_ABA[href],
+      recurso: (r) => RECURSOS_LABEL[r],
+    });
+
+    if (process.env.NODE_ENV !== "production") {
+      // Nenhum recurso do catálogo pode sumir da matriz, nem sair duas vezes.
+      const vistos = secoes.flatMap((s) => s.linhas.map((l) => l.recurso));
+      const faltando = recursos.filter((r) => !vistos.includes(r));
+      const repetidos = vistos.filter((r, i) => vistos.indexOf(r) !== i);
+      if (faltando.length || repetidos.length) {
+        console.error("[permissoes] matriz fora do catálogo", { faltando, repetidos });
+      }
+    }
+
+    return secoes.map((s) => {
+      const linhas: LinhaRecurso[] = s.linhas.map((l) => ({
+        ...l,
+        acoes: acoesPorRecurso.get(l.recurso) ?? [],
+      }));
+      return { titulo: s.titulo, linhas, itens: linhas.flatMap((l) => l.acoes) };
+    });
+  }, [catalogo.data, plataforma]);
 
   function toggleGrupo(itens: PermissaoRow[], marcar: boolean) {
     setForm((f) => {
@@ -271,14 +297,14 @@ function PermissoesInner() {
           )}
 
           <div className="space-y-4">
-            {grupos.map(([modulo, itens]) => {
+            {grupos.map(({ titulo, linhas, itens }) => {
               const marcados = itens.filter((i) => form.permissoes.has(i.chave)).length;
               const todos = marcados === itens.length;
               return (
-                <div key={modulo} className="rounded-lg border">
+                <div key={titulo} className="rounded-lg border">
                   <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
                     <span className="text-sm font-semibold">
-                      {modulo}{" "}
+                      {titulo}{" "}
                       <span className="text-xs font-normal text-muted-foreground">
                         ({marcados}/{itens.length})
                       </span>
@@ -293,13 +319,24 @@ function PermissoesInner() {
                     </button>
                   </div>
                   <div className="divide-y">
-                    {agruparPorRecurso(itens).map(([recurso, acoes]) => (
+                    {linhas.map(({ recurso, rotulo, aba, tambemEm, acoes }) => (
                       <div
                         key={recurso}
                         className="flex flex-col gap-1 p-3 sm:flex-row sm:items-center sm:gap-3"
                       >
-                        <span className="w-44 shrink-0 text-sm font-medium">
-                          {RECURSOS_LABEL[recurso] ?? recurso}
+                        <span
+                          title={RECURSOS_LABEL[recurso]}
+                          className={cn(
+                            "w-44 shrink-0 text-sm",
+                            aba ? "pl-3 text-muted-foreground" : "font-medium",
+                          )}
+                        >
+                          {rotulo}
+                          {tambemEm.length > 0 && (
+                            <span className="block text-[11px] font-normal text-muted-foreground">
+                              também em {tambemEm.join(", ")}
+                            </span>
+                          )}
                         </span>
                         <div className="flex flex-wrap gap-x-4 gap-y-1">
                           {acoes.map((it) => (
