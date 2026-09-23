@@ -42,7 +42,6 @@ import {
   Radio,
   ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
   Target,
   TowerControl,
   TrafficCone,
@@ -231,8 +230,8 @@ const GRUPOS: Grupo[] = [
      *
      * "Comunicação" era um grupo de três itens raros, e grupo raro custa uma
      * linha de menu o tempo todo pra ser aberto uma vez por mês. Chat e avisos
-     * são sobre os motoristas: moram com eles. O WhatsApp foi pra "Ajustes",
-     * que é onde se liga e desliga integração.
+     * são sobre os motoristas: moram com eles. O WhatsApp é da plataforma e
+     * mora no grupo "Movatruck".
      */
     titulo: "Frota e pessoas",
     coach: "grupo-frota-e-pessoas",
@@ -318,9 +317,8 @@ const GRUPOS: Grupo[] = [
           { href: "/documentos-exigidos", perm: "documentos-exigidos.ver" },
           { href: "/configuracoes/contrato" },
         ],
-        secao: "Sua conta",
       },
-      { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver", secao: "Sua conta" },
+      { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver" },
       // Um item só pras duas abas (painel do escritório e app do motorista).
       // Quem só pode ver a do app cai direto nela.
       {
@@ -329,22 +327,8 @@ const GRUPOS: Grupo[] = [
         icon: ShieldCheck,
         perm: "permissoes.gerenciar",
         ou: [{ href: "/acesso-app", perm: "perfis-acesso.ver" }],
-        secao: "Sua conta",
       },
-      { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver", secao: "Sua conta" },
-
-      /**
-       * Chaves de `RECURSOS_PLATAFORMA`: a empresa não as recebe, então na
-       * prática esta seção só existe pra nós.
-       *
-       * ⚠️ NÃO foram pro grupo "Movatruck", e isso é decisão: a chave PODE ser
-       * concedida a um cliente caso a caso pela matriz (está escrito lá), e num
-       * grupo `soPlataforma` ele receberia a permissão e continuaria sem o
-       * menu. A seção rotula sem esconder.
-       */
-      { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, perm: "whatsapp.ver", secao: "Ferramentas da Movatruck" },
-      { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, perm: "config-ia.ver", secao: "Ferramentas da Movatruck" },
-      { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: Bot, perm: "config-agente.ver", secao: "Ferramentas da Movatruck" },
+      { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver" },
     ],
   },
   {
@@ -369,6 +353,15 @@ const GRUPOS: Grupo[] = [
       { href: "/erros", label: "Erros", icon: AlertCircle, perm: "erros.ver" },
       { href: "/diagnosticos", label: "Diagnóstico do app", icon: Activity, perm: "diagnosticos.ver" },
       { href: "/configuracoes/forca-atualizacao", label: "Força-atualização do app", icon: ArrowUpCircle, perm: "config-forca-atualizacao.ver" },
+      /**
+       * Chaves que nunca são concedidas a cliente: o número de WhatsApp é um
+       * só, dividido por todas as empresas, e o agente está desligado de
+       * propósito. (Os modelos de IA de cada empresa moram em Assinantes — o
+       * modelo e o custo são decisão da plataforma.) Se um dia uma dessas
+       * chaves for dada a um cliente, o item volta pra "Ajustes".
+       */
+      { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, perm: "whatsapp.ver" },
+      { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: Bot, perm: "config-agente.ver" },
     ],
   },
 ];

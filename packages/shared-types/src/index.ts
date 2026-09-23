@@ -45,6 +45,7 @@ export * from "./resumo";
 export * from "./push";
 export * from "./notificacao";
 export * from "./ia-ticket";
+export * from "./ia-config";
 export * from "./evento-motorista";
 export * from "./posicao-motorista";
 export * from "./versao-app";

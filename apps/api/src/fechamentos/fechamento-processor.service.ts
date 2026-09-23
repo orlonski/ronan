@@ -741,7 +741,7 @@ export class FechamentoProcessorService {
     viagensPeriodo: { id: string; data: Date | null; ticket: string | null; km: Prisma.Decimal | null; toneladas: Prisma.Decimal | null; veiculo: { placa: string } }[],
     stats: { matchIa: number; divergencia: number },
   ) {
-    // Lê config dinâmica (atualizável via /configuracoes/ia no dashboard).
+    // Lê config dinâmica (a plataforma ajusta em Assinantes → Modelos de IA).
     const cfg = await this.prisma.configuracaoIa
       .upsert({
         where: { contaId: contaIdAtual() },

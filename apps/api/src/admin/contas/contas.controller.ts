@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -15,7 +16,11 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
-import { AtualizarMinhaEmpresaInput, TetoDaContaInput } from "@ronan/shared-types";
+import {
+  AtualizarIaConfigInput,
+  AtualizarMinhaEmpresaInput,
+  TetoDaContaInput,
+} from "@ronan/shared-types";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { PlataformaGuard } from "../../auth/guards/plataforma.guard";
@@ -209,6 +214,26 @@ export class ContasController {
     @Body(new ZodValidationPipe(RecursosIaBody)) body: z.infer<typeof RecursosIaBody>,
   ) {
     return this.service.definirRecursosIa(id, body);
+  }
+
+  /**
+   * Os modelos de IA da empresa: quem lê a foto do ticket, quem casa com a
+   * planilha do cliente, e o limiar do fechamento automático. Era tela de
+   * Ajustes; é decisão da plataforma, porque a chave de API e a fatura são
+   * dela. A leitura já traz o histórico de `confidence` pro simulador.
+   */
+  @Get(":id/ia-config")
+  lerIaConfig(@Param("id") id: string) {
+    return this.service.lerIaConfig(id);
+  }
+
+  @Put(":id/ia-config")
+  definirIaConfig(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(AtualizarIaConfigInput)) body: AtualizarIaConfigInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.definirIaConfig(id, body, user.id);
   }
 
   @Post(":id/logo")

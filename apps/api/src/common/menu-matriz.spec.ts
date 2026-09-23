@@ -57,6 +57,6 @@ describe("menu e matriz de permissões", () => {
   it("o teste está mesmo lendo o menu (senão ele passaria vazio pra sempre)", () => {
     // Um regex que para de casar vira suíte verde sobre nada. O número não
     // precisa ser exato; precisa ser grande o bastante pra provar que leu.
-    expect(itensDoMenu().length).toBeGreaterThan(40);
+    expect(itensDoMenu().length).toBeGreaterThan(35);
   });
 });

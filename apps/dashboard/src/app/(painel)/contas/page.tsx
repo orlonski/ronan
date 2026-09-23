@@ -20,6 +20,7 @@ import { fmtDataHoraSP } from "@/lib/datetime-br";
 import { maskDocumento } from "@ronan/shared-types";
 import { TetoDialog } from "./_components/teto-dialog";
 import { ModulosDialog } from "./_components/modulos-dialog";
+import { IaConfigDialog } from "./_components/ia-config-dialog";
 import { PortaCadastro } from "./_components/porta-cadastro";
 import { AtendimentoSdr } from "./_components/atendimento-sdr";
 import { TabelaPreco } from "./_components/tabela-preco";
@@ -61,6 +62,7 @@ export default function ContasPage() {
   const [abrirNova, setAbrirNova] = useState(false);
   const [contaDoTeto, setContaDoTeto] = useState<Conta | null>(null);
   const [contaDosModulos, setContaDosModulos] = useState<Conta | null>(null);
+  const [contaDaIa, setContaDaIa] = useState<Conta | null>(null);
   const [editandoPadrao, setEditandoPadrao] = useState(false);
   const [excluindo, setExcluindo] = useState<Conta | null>(null);
   const [confirmacao, setConfirmacao] = useState("");
@@ -323,6 +325,9 @@ export default function ContasPage() {
                   <Button variant="outline" size="sm" onClick={() => setContaDosModulos(conta)}>
                     Módulos
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => setContaDaIa(conta)}>
+                    Modelos de IA
+                  </Button>
                   {!conta.permiteAutoCadastro && (
                     <Button variant="outline" size="sm" onClick={() => definirAutoCadastro(conta)}>
                       Receber cadastro pelo app
@@ -416,6 +421,12 @@ export default function ContasPage() {
         conta={contaDosModulos}
         aberto={contaDosModulos !== null}
         onFechar={() => setContaDosModulos(null)}
+      />
+
+      <IaConfigDialog
+        conta={contaDaIa}
+        aberto={contaDaIa !== null}
+        onFechar={() => setContaDaIa(null)}
       />
 
       <Dialog open={abrirNova} onOpenChange={setAbrirNova}>

@@ -231,6 +231,9 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "diagnosticos", label: "Diagnóstico do app", modulo: "Sistema", acoes: ["ver"] },
   { recurso: "config-tracking", label: "Tracking GPS", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-busca-locais", label: "Busca de locais", modulo: "Sistema", acoes: ["ver", "editar"] },
+  // Não gateia mais tela nenhuma: os modelos de IA de cada empresa são editados
+  // em Assinantes, atrás da flag `plataforma`. A chave fica pra não mexer nos
+  // papéis que já a têm (e no módulo "conferencia", que é dono do recurso).
   { recurso: "config-ia", label: "Inteligência Artificial", modulo: "Sistema", acoes: ["ver", "editar"] },
   // A tela que mostra o que o robô leu de cada ticket, o custo por leitura e a
   // fila do worker. Estava gateada por `viagens.ver`, que todo mundo tem — daí

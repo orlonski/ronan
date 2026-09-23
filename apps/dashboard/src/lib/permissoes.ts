@@ -95,7 +95,6 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/configuracoes/empresa", perm: "minha-empresa.editar" },
   { prefixo: "/configuracoes/tracking", perm: "config-tracking.ver" },
   { prefixo: "/configuracoes/busca-locais", perm: "config-busca-locais.ver" },
-  { prefixo: "/configuracoes/ia", perm: "config-ia.ver" },
   { prefixo: "/configuracoes/agente-whatsapp", perm: "config-agente.ver" },
   { prefixo: "/configuracoes/campos-layout", perm: "config-campos-layout.ver" },
   { prefixo: "/configuracoes/forca-atualizacao", perm: "config-forca-atualizacao.ver" },

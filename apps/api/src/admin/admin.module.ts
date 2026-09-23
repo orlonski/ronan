@@ -27,7 +27,6 @@ import { LocaisModule } from "./locais/locais.module";
 import { ViagensAdminModule } from "./viagens/viagens.module";
 import { AbastecimentosAdminModule } from "./abastecimentos/abastecimentos.module";
 import { TrackingConfigModule } from "./tracking-config/tracking-config.module";
-import { IaConfigModule } from "./ia-config/ia-config.module";
 import { AgenteConfigModule } from "./agente-config/agente-config.module";
 import { BuscaLocaisConfigModule } from "./busca-locais-config/busca-locais-config.module";
 import { KmAtipicoConfigModule } from "./km-atipico-config/km-atipico-config.module";
@@ -78,7 +77,6 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     ViagensAdminModule,
     AbastecimentosAdminModule,
     TrackingConfigModule,
-    IaConfigModule,
     AgenteConfigModule,
     BuscaLocaisConfigModule,
     KmAtipicoConfigModule,

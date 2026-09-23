@@ -904,24 +904,6 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
-  "/configuracoes/ia": {
-    oQue:
-      "Qual modelo lê o ticket e casa a viagem com a planilha do cliente, e o " +
-      "quanto ele pode decidir sozinho antes de mandar pra revisão humana (as " +
-      "chaves de API ficam no servidor, fora desta tela).",
-    faz: [
-      "Escolher o modelo do casamento com a planilha e o que lê a foto do ticket, com o custo por chamada à vista",
-      "Subir ou baixar a certeza mínima pra fechar sozinho: mais alta, menos erro e mais coisa pra revisar na mão",
-      "Ampliar ou apertar a janela de dias em que ele procura a viagem correspondente",
-      "Ver, nas últimas sugestões reais, quantas cada escolha teria fechado sozinha",
-    ],
-    naoEAqui: {
-      procurando: "ligar ou desligar a IA de uma empresa específica",
-      vaEm: "Assinantes",
-      href: "/contas",
-    },
-  },
-
   "/configuracoes/agente-whatsapp": {
     oQue:
       "Se a IA responde ou não quem escreve no WhatsApp da plataforma, e com qual " +
@@ -946,6 +928,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Criar uma empresa nova já pronta pra usar, com o primeiro acesso dela",
       "Acompanhar a assinatura de cada uma: valor, vencimento, quem está em atraso e a régua de cobrança",
       "Ligar e desligar, por empresa, os recursos de IA que cobram por uso — a leitura do ticket no app e a conferência automática",
+      "Escolher os modelos de IA de cada empresa — quem lê a foto do ticket e quem casa a viagem com a planilha do cliente — e o quanto o fechamento pode decidir sozinho",
       "Definir os módulos contratados e o teto de permissões de cada uma, e suspender ou excluir quem sair",
     ],
     naoEAqui: {

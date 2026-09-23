@@ -1,13 +1,19 @@
 import {
   BadRequestException,
   ConflictException,
+  NotFoundException,
   Injectable,
   Logger,
   type OnModuleInit,
 } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 import { Prisma } from "@prisma/client";
-import { CODIGO_UF_IBGE, motivoMunicipioNaoBate, TODAS_AS_CHAVES } from "@ronan/shared-types";
+import {
+  CODIGO_UF_IBGE,
+  motivoMunicipioNaoBate,
+  TODAS_AS_CHAVES,
+  type AtualizarIaConfigInput,
+} from "@ronan/shared-types";
 import { comConta, comoSistema } from "../../common/conta/conta-context";
 import { MOTIVO_TESTE_TERMINOU } from "../../common/conta/estado-da-conta";
 import { ConfigService } from "@nestjs/config";
@@ -761,6 +767,68 @@ export class ContasService implements OnModuleInit {
         },
       }),
     );
+  }
+
+  /**
+   * Os modelos de IA da empresa (`ConfiguracaoIa`). Era uma tela de Ajustes que
+   * só a plataforma enxergava; mora aqui porque quem paga a IA é a plataforma,
+   * e é ela quem escolhe o modelo de cada cliente.
+   *
+   * Roda DENTRO da conta (`comConta`): o model é escopado, e a trava preenche o
+   * `contaId` do upsert. A existência da conta é conferida antes — senão um id
+   * errado na URL criaria configuração pra conta que não existe.
+   */
+  async lerIaConfig(contaId: string) {
+    await this.exigirConta(contaId);
+    return comConta(contaId, async () => {
+      const cfg = await this.prisma.configuracaoIa.upsert({
+        where: { contaId },
+        update: {},
+        create: {},
+      });
+      return { ...cfg, historicoSugestoes: await this.historicoSugestoesIa() };
+    });
+  }
+
+  async definirIaConfig(contaId: string, input: AtualizarIaConfigInput, usuarioId: string) {
+    await this.exigirConta(contaId);
+    // Os caches de modelo (IaService e o worker da conferência) são por conta e
+    // duram 30s: a troca vale nas próximas chamadas sem precisar invalidar.
+    return comConta(contaId, () =>
+      this.prisma.configuracaoIa.upsert({
+        where: { contaId },
+        update: { ...input, alteradoPorId: usuarioId },
+        create: { ...input, alteradoPorId: usuarioId },
+      }),
+    );
+  }
+
+  /**
+   * Últimas N sugestões da IA no fechamento, só a `confidence` — alimenta o
+   * simulador do limiar na tela. Nada da viagem sai daqui.
+   */
+  private async historicoSugestoesIa(): Promise<number[]> {
+    const linhas = await this.prisma.fechamentoLinha.findMany({
+      where: { sugestaoIa: { not: null as unknown as undefined } },
+      select: { sugestaoIa: true },
+      orderBy: { id: "desc" },
+      take: 100,
+    });
+    const out: number[] = [];
+    for (const l of linhas) {
+      const s = l.sugestaoIa as { confidence?: number } | null;
+      if (s && typeof s.confidence === "number" && Number.isFinite(s.confidence)) {
+        out.push(s.confidence);
+      }
+    }
+    return out;
+  }
+
+  private async exigirConta(contaId: string): Promise<void> {
+    const conta = await comoSistema(() =>
+      this.prisma.conta.findUnique({ where: { id: contaId }, select: { id: true } }),
+    );
+    if (!conta) throw new NotFoundException("Empresa não encontrada.");
   }
 
   /**
