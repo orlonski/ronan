@@ -52,6 +52,7 @@ import type { LocalMapa } from "@/components/mapa-locais";
 import type { LocalDupMapa } from "@/components/mapa-duplicata";
 import { CORES as DUP_CORES } from "@/components/mapa-duplicata";
 import { EstadoVazio } from "@/components/estado-vazio";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 // Leaflet quebra em SSR (acessa window). Import dinâmico igual PontoMap.
 const MapaLocais = dynamic(
@@ -559,6 +560,7 @@ export default function LocaisPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="locais" />
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Locais</h1>

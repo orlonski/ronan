@@ -44,6 +44,7 @@ import { fmtBR, fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
 import { InfoIcone } from "@/components/info-icone";
 import { STATUS_VIAGEM_COLOR, STATUS_VIAGEM_LABEL } from "@/lib/status-viagem";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type Viagem = {
   id: string;
@@ -370,6 +371,7 @@ export default function ViagensPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="viagens" />
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Viagens</h1>

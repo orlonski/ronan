@@ -27,8 +27,6 @@ import {
   FileCheck2,
   FileSpreadsheet,
   Fuel,
-  Gauge,
-  SignalHigh,
   HandCoins,
   HardHat,
   IdCard,
@@ -47,9 +45,7 @@ import {
   PenLine,
   Radio,
   Ruler,
-  Satellite,
   ScanEye,
-  Search,
   Send,
   ShieldCheck,
   SlidersHorizontal,
@@ -179,10 +175,10 @@ const GRUPOS: Grupo[] = [
     titulo: "Dia a dia",
     coach: "grupo-dia-a-dia",
     itens: [
-      { href: "/torre", label: "Torre de controle", icon: TowerControl, perm: "programacao.ver" },
+      { href: "/torre", label: "Torre de controle", icon: TowerControl, perm: "programacao.ver", ou: [{ href: "/configuracoes/torre", perm: "programacao.ver" }] },
       { href: "/programacao", label: "Programação do dia", icon: CalendarDays, perm: "programacao.ver" },
       { href: "/viagens-andamento", label: "Ao vivo", icon: Radio, perm: "viagens.ver" },
-      { href: "/mapa", label: "Mapa", icon: Map, perm: "mapa.ver" },
+      { href: "/mapa", label: "Mapa", icon: Map, perm: "mapa.ver", ou: [{ href: "/configuracoes/tracking", perm: "config-tracking.ver" }] },
       { href: "/pedidos", label: "Pedidos do cliente", icon: ClipboardList, perm: "pedidos.ver" },
     ],
   },
@@ -190,7 +186,7 @@ const GRUPOS: Grupo[] = [
     titulo: "Lançamentos",
     coach: "grupo-lancamentos",
     itens: [
-      { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "viagens.ver" },
+      { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "viagens.ver", ou: [{ href: "/configuracoes/km-atipico", perm: "config-km-atipico.ver" }] },
       { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel, perm: "abastecimentos.ver" },
       { href: "/conferencias", label: "Conferência de ticket", icon: ScanEye, perm: "conferencia-ticket.ver" },
       { href: "/lancamentos-travados", label: "Lançamentos que não subiram", icon: LifeBuoy, perm: "lancamentos-resgatados.ver" },
@@ -272,7 +268,7 @@ const GRUPOS: Grupo[] = [
       // dentro da página do cliente — "Obras" solto no menu era o mesmo nome
       // digitado duas vezes em 33 de 34 casos. /clientes continua abrindo.
       { href: "/empresas", label: "Clientes", icon: Building2, perm: "empresas.ver" },
-      { href: "/locais", label: "Locais", icon: MapPin, perm: "locais.ver" },
+      { href: "/locais", label: "Locais", icon: MapPin, perm: "locais.ver", ou: [{ href: "/configuracoes/busca-locais", perm: "config-busca-locais.ver" }] },
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },
       { href: "/tipos-servico", label: "Como a viagem é cobrada", icon: Timer, perm: "tipos-servico.ver" },
       { href: "/modalidades", label: "Vínculos do motorista", icon: IdCard, perm: "modalidades.ver" },
@@ -318,10 +314,6 @@ const GRUPOS: Grupo[] = [
       { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver", secao: "Sua conta" },
 
       { href: "/configuracoes/campos-layout", label: "Colunas da planilha do cliente", icon: Columns3, perm: "config-campos-layout.ver", secao: "Como o sistema se comporta" },
-      { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Satellite, perm: "config-tracking.ver", secao: "Como o sistema se comporta" },
-      { href: "/configuracoes/busca-locais", label: "Busca de locais", icon: Search, perm: "config-busca-locais.ver", secao: "Como o sistema se comporta" },
-      { href: "/configuracoes/km-atipico", label: "Alerta de km fora do padrão", icon: Gauge, perm: "config-km-atipico.ver", secao: "Como o sistema se comporta" },
-      { href: "/configuracoes/torre", label: "Alertas da torre", icon: SignalHigh, perm: "programacao.ver", secao: "Como o sistema se comporta" },
 
       /**
        * Chaves de `RECURSOS_PLATAFORMA`: a empresa não as recebe, então na

@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type ConfigTracking = {
   id: string;
@@ -66,8 +67,9 @@ export default function TrackingConfigPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="mapa" />
       <div>
-        <h1 className="text-2xl font-bold">Configuração do tracking GPS</h1>
+        <h1 className="text-2xl font-bold">Posição durante a viagem</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Ajustes globais aplicados a todos os motoristas. Mudanças entram em
           vigor na próxima viagem que cada motorista iniciar.

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 const MapaGeral = dynamic(
   () => import("@/components/mapa-geral").then((m) => m.MapaGeral),
@@ -60,6 +61,7 @@ export default function MapaGeralPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="mapa" />
       <header className="flex items-start gap-3">
         <MapPin className="mt-1 h-6 w-6 text-muted-foreground" />
         <div className="flex-1">

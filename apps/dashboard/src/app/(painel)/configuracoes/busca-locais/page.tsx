@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type ConfigBuscaLocais = {
   id: string;
@@ -64,8 +65,9 @@ export default function BuscaLocaisConfigPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="locais" />
       <div>
-        <h1 className="text-2xl font-bold">Busca de local de descarga</h1>
+        <h1 className="text-2xl font-bold">Como o app acha o local</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Quando o motorista clica em “Estou no local de descarga”, o app procura
           locais cadastrados em duas etapas. Primeiro no raio inicial (apertado);

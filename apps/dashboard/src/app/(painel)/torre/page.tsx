@@ -32,6 +32,7 @@ import { ErroCard } from "@/components/erro-estado";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type Alerta = {
   id: string;
@@ -208,6 +209,7 @@ function Conteudo() {
 
   return (
     <div className="space-y-5">
+      <AbasDaTela grupo="torre" />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Torre de controle</h1>

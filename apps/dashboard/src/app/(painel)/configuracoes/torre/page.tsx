@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type ConfigTorre = {
   id: string;
@@ -78,8 +79,9 @@ function Conteudo() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="torre" />
       <div>
-        <h1 className="text-2xl font-bold">Régua da torre de controle</h1>
+        <h1 className="text-2xl font-bold">Quando a torre avisa</h1>
         <p className="mt-1 max-w-prose text-sm text-muted-foreground">
           Quando uma viagem em curso vira alerta, e quando o alerta vira aviso na
           sua caixa. Pedreira e obra não têm o mesmo relógio — 2h na fila de uma

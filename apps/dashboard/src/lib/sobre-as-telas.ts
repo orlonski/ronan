@@ -643,7 +643,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "mudar a distância que o app aceita pra dizer que o motorista chegou no local",
-      vaEm: "Busca de locais",
+      vaEm: "Locais › Como o app acha o local",
       href: "/configuracoes/busca-locais",
     },
   },

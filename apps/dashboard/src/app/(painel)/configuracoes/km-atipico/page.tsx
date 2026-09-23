@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type ConfigKmAtipico = {
   id: string;
@@ -90,8 +91,9 @@ export default function KmAtipicoConfigPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="viagens" />
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Alerta de km fora do padrão</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Km fora do padrão</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           O sistema compara o km de cada viagem com o que a frota já rodou no mesmo
           trajeto (carga → descarga) e marca quando foge do padrão. Aqui você regula
