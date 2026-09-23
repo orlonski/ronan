@@ -63,7 +63,7 @@ const CAMPOS: { chave: string; leituraChave: string; rotulo: string }[] = [
   { chave: "toneladas", leituraChave: "toneladas", rotulo: "Toneladas" },
   { chave: "data", leituraChave: "data", rotulo: "Data" },
   { chave: "placa", leituraChave: "placa", rotulo: "Placa" },
-  { chave: "clienteNome", leituraChave: "clienteNome", rotulo: "Cliente" },
+  { chave: "clienteNome", leituraChave: "clienteNome", rotulo: "Obra" },
   { chave: "materialNome", leituraChave: "materialNome", rotulo: "Material" },
 ];
 

@@ -76,7 +76,7 @@ function Conteudo() {
   const empresas = useResourceOptions<{ id: string; nome: string }>("/admin/empresas");
   const nomeEmpresa = useMemo(() => {
     const m = new Map((empresas.data ?? []).map((e) => [e.id, e.nome]));
-    return (id: string | null) => (id ? (m.get(id) ?? "Contratante") : "Todas as obras");
+    return (id: string | null) => (id ? (m.get(id) ?? "Cliente") : "Todos os clientes");
   }, [empresas.data]);
 
   const ativos = (lista.data ?? []).filter((e) => e.ativo);
@@ -92,7 +92,7 @@ function Conteudo() {
             Documentos exigidos pela obra
           </h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            O que o contratante pede antes do caminhão entrar. É essa lista que o link de coleta
+            O que o cliente pede antes do caminhão entrar na obra. É essa lista que o link de coleta
             mostra pro motorista ou pro dono do caminhão.
           </p>
         </div>
@@ -114,15 +114,15 @@ function Conteudo() {
       ) : (
         <>
           <Grupo
-            titulo="Vale pra todas as obras"
-            descricao="Exigência da transportadora, independente de quem é o contratante."
+            titulo="Vale pra todos os clientes"
+            descricao="Exigência da transportadora, independente de quem é o cliente."
             itens={gerais}
             nomeEmpresa={nomeEmpresa}
             onMudou={() => void qc.invalidateQueries({ queryKey: [PATH] })}
           />
           {porContratante.length > 0 && (
             <Grupo
-              titulo="Por contratante"
+              titulo="Por cliente"
               descricao="Aparecem no link de coleta; no app do motorista vale só o que é da transportadora inteira."
               itens={porContratante}
               nomeEmpresa={nomeEmpresa}
@@ -284,13 +284,13 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
         <div>
           <p className="text-lg font-semibold">Exigir um documento</p>
           <p className="text-sm text-muted-foreground">
-            Escreva o nome do jeito que o contratante pede. O sistema não inventa nome de
+            Escreva o nome do jeito que o cliente pede. O sistema não inventa nome de
             documento.
           </p>
         </div>
 
         <div>
-          <Label>Como o contratante chama</Label>
+          <Label>Como o cliente chama</Label>
           <Input
             value={titulo}
             onChange={(e) => setTitulo(e.target.value)}
@@ -324,22 +324,22 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
           </Select>
           <p className="mt-1 text-xs text-muted-foreground">
             É onde o arquivo fica no cadastro do motorista, e o que faz ele sair no pacote do
-            contratante. Pode repetir a gaveta em mais de um documento — cada um guarda o
+            cliente. Pode repetir a gaveta em mais de um documento — cada um guarda o
             arquivo dele.
           </p>
         </div>
 
         {publico !== "REGISTRADOS" && (
         <div>
-          <Label>De qual contratante</Label>
+          <Label>De qual cliente</Label>
           <Combobox
             value={empresaId}
             onChange={setEmpresaId}
-            placeholder="Todas as obras"
+            placeholder="Todos os clientes"
             options={(empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome }))}
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            Vazio = vale em qualquer obra. Com contratante, só na obra dele.
+            Vazio = vale pra qualquer cliente. Com cliente, só nas obras dele.
           </p>
         </div>
         )}
@@ -403,7 +403,7 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
             {comoAssinar === "NAO"
               ? "Só mandar o arquivo. É o caso de cópia de documento."
               : comoAssinar === "NO_APP"
-                ? "Aceite eletrônico: o motorista lê o papel na tela e confirma. Fica gravado quem, quando, de onde e o hash do arquivo. Não substitui firma reconhecida quando o contratante exige."
+                ? "Aceite eletrônico: o motorista lê o papel na tela e confirma. Fica gravado quem, quando, de onde e o hash do arquivo. Não substitui firma reconhecida quando o cliente exige."
                 : "Ele assina fora e manda o papel assinado — foto do cartório ou PDF do gov.br. O sistema registra qual dos dois chegou."}
           </p>
         </div>
@@ -420,7 +420,7 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
             </label>
             <p className="text-xs text-muted-foreground">
               {exigeIcpBrasil
-                ? "Só aceita arquivo com assinatura digital dentro (gov.br ou certificado A1/A3). A foto do papel com firma reconhecida é RECUSADA na hora do envio — marque só se o contratante exigir isso mesmo."
+                ? "Só aceita arquivo com assinatura digital dentro (gov.br ou certificado A1/A3). A foto do papel com firma reconhecida é RECUSADA na hora do envio — marque só se o cliente exigir isso mesmo."
                 : "Aceita os dois: a foto do papel com firma reconhecida e o PDF assinado pelo gov.br. Quando vier digital, o sistema detecta sozinho; quando vier foto, ela fica marcada pra conferência de vocês."}
             </p>
           </div>

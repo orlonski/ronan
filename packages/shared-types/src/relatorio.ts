@@ -32,8 +32,8 @@ export type AgruparPorRelatorio = (typeof AgruparPorRelatorio)[keyof typeof Agru
 
 export const AGRUPAR_POR_LABEL: Record<AgruparPorRelatorio, string> = {
   MOTORISTA: "Motorista",
-  CLIENTE: "Cliente",
-  EMPRESA: "Empresa",
+  CLIENTE: "Obra",
+  EMPRESA: "Cliente",
   MATERIAL: "Material",
   LOCAL_CARGA: "Local de carga",
   LOCAL_DESCARGA: "Local de descarga",

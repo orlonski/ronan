@@ -9,8 +9,8 @@ export default function NovoClientePage() {
     <RequerTela chave="clientes.criar">
       <div className="space-y-6">
         <FormPageHeader
-          title="Novo cliente"
-          description="Cliente vinculado a uma empresa."
+          title="Nova obra"
+          description="Onde se trabalha, vinculada a um cliente."
           backHref="/clientes"
         />
         <ClienteForm />

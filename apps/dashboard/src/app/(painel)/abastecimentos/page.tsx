@@ -104,7 +104,7 @@ export default function AbastecimentosPage() {
   const empresaOptions = useMemo(
     () => [
       ...(empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome })),
-      { value: "__sem__", label: "— sem empresa —" },
+      { value: "__sem__", label: "— sem cliente —" },
     ],
     [empresas.data],
   );
@@ -144,7 +144,7 @@ export default function AbastecimentosPage() {
       {
         id: "empresa",
         accessorKey: "empresa.nome",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Empresa" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Cliente" />,
         cell: ({ row }) =>
           row.original.empresa ? (
             <span className="text-sm">{row.original.empresa.nome}</span>
@@ -263,7 +263,7 @@ export default function AbastecimentosPage() {
         toolbar={
           <DataTableToolbar
             state={tableState}
-            searchPlaceholder="Buscar por posto, motorista, placa, empresa, obs…"
+            searchPlaceholder="Buscar por posto, motorista, placa, cliente, obs…"
             filters={
               <>
                 <Combobox
@@ -296,7 +296,7 @@ export default function AbastecimentosPage() {
                       tableState.setFilter("semEmpresa", undefined);
                     }
                   }}
-                  placeholder="Empresa"
+                  placeholder="Cliente"
                   options={empresaOptions}
                 />
                 )}

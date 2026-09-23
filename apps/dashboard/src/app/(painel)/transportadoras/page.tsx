@@ -140,7 +140,7 @@ export default function TransportadorasPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Transportadoras</h1>
           <p className="text-sm text-muted-foreground">
             As frotas donas dos caminhões e dos motoristas — a nossa e as que rodam pra
-            gente. Não confundir com Empresas-cliente, que é pra quem prestamos serviço.
+            gente. Não confundir com Clientes, que é pra quem prestamos serviço.
           </p>
         </div>
         <div className="flex items-center gap-2">

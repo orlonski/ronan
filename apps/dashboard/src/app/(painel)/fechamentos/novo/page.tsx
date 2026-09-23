@@ -62,7 +62,7 @@ export default function NovoFechamentoPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Novo fechamento</h1>
           <p className="text-sm text-muted-foreground">
-            Suba a planilha (Excel, CSV ou PDF) que a empresa enviou. A IA vai inferir
+            Suba a planilha (Excel, CSV ou PDF) que o cliente enviou. A IA vai inferir
             o layout, extrair as viagens e fazer o match automático.
           </p>
         </div>
@@ -71,7 +71,7 @@ export default function NovoFechamentoPage() {
       <form onSubmit={onSubmit}>
         <Card className="space-y-5 p-6">
           <div className="space-y-2">
-            <Label htmlFor="page-empresa">Empresa *</Label>
+            <Label htmlFor="page-empresa">Cliente *</Label>
             <Select id="page-empresa" required value={empresaId} onChange={(e) => setEmpresaId(e.target.value)}>
               <option value="">— escolha —</option>
               {empresas.data
@@ -87,7 +87,7 @@ export default function NovoFechamentoPage() {
                 ))}
             </Select>
             <p className="text-xs text-muted-foreground">
-              Só lista empresas que enviam fechamento pra gente.
+              Só lista clientes que enviam fechamento pra gente.
             </p>
           </div>
 

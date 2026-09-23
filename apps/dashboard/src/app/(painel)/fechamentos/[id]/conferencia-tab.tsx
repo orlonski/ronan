@@ -195,7 +195,7 @@ function LinhaViagemCard({
             <Field label="Toneladas" value={fmtNum(linha.toneladas, 3)} />
             <Field label="Km" value={fmtNum(linha.km, 2)} />
             <Field label="Valor" value={fmtBRL(linha.valor)} />
-            {linha.clienteTexto && <Field label="Cliente (texto)" value={linha.clienteTexto} />}
+            {linha.clienteTexto && <Field label="Obra (texto)" value={linha.clienteTexto} />}
           </dl>
         </div>
 

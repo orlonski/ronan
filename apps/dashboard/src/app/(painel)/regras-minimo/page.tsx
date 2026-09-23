@@ -56,7 +56,7 @@ export default function RegrasMinimoPage() {
       {
         id: "empresa",
         enableSorting: false,
-        header: "Empresa",
+        header: "Cliente",
         cell: ({ row }) => <span className="font-medium">{row.original.empresa.nome}</span>,
       },
       {
@@ -143,7 +143,7 @@ export default function RegrasMinimoPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Mínimo faturado por km</h1>
           <p className="text-sm text-muted-foreground">
-            Km/toneladas mínimos faturados por empresa, material e faixa de km rodado.
+            Km/toneladas mínimos faturados por cliente, material e faixa de km rodado.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -171,12 +171,12 @@ export default function RegrasMinimoPage() {
         toolbar={
           <DataTableToolbar
             state={tableState}
-            searchPlaceholder="Buscar por empresa ou material…"
+            searchPlaceholder="Buscar por cliente ou material…"
             filters={
               <Combobox
                 value={tableState.filters.empresaId}
                 onChange={(v) => tableState.setFilter("empresaId", v)}
-                placeholder="Empresa"
+                placeholder="Cliente"
                 options={empresaOptions}
               />
             }
@@ -186,7 +186,7 @@ export default function RegrasMinimoPage() {
           <EstadoVazio
             icone={Ruler}
             titulo="Nenhum mínimo cadastrado"
-            descricao="Serve pra cobrar 10 km quando a viagem teve 4. Sem regra, vale o mínimo do cliente — o km do motorista nunca muda."
+            descricao="Serve pra cobrar 10 km quando a viagem teve 4. Sem regra, vale o mínimo da obra — o km do motorista nunca muda."
             acaoHref="/regras-minimo/novo"
             acaoLabel="Criar regra de mínimo"
             perm="regras-minimo.criar"

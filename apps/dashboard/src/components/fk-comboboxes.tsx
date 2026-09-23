@@ -161,7 +161,7 @@ export function ClienteCombobox(props: SingleProps) {
       path="/admin/clientes"
       mapOption={clienteOption}
       searchPlaceholder="Buscar por nome…"
-      emptyMessage="Nenhum cliente encontrado."
+      emptyMessage="Nenhuma obra encontrada."
       placeholder={props.placeholder ?? "Selecione"}
     />
   );
@@ -186,7 +186,7 @@ export function ClienteComboboxMulti({
       path="/admin/clientes"
       mapOption={clienteOption}
       searchPlaceholder="Buscar por nome…"
-      emptyMessage="Nenhum cliente encontrado."
+      emptyMessage="Nenhuma obra encontrada."
       placeholder={placeholder ?? "Selecione…"}
     />
   );

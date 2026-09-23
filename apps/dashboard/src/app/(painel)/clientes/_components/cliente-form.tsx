@@ -163,7 +163,7 @@ export function ClienteForm({ initial }: Props) {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="clientefor-empresa">Empresa</Label>
+          <Label htmlFor="clientefor-empresa">Cliente</Label>
           <Select id="clientefor-empresa"
             required
             value={form.empresaId}
@@ -181,11 +181,11 @@ export function ClienteForm({ initial }: Props) {
           <TagInput
             value={form.apelidos}
             onChange={(arr) => setForm({ ...form, apelidos: arr })}
-            placeholder='ex: "cliente do beto", "shopping novo"'
+            placeholder='ex: "obra do beto", "shopping novo"'
           />
           <p className="text-xs text-muted-foreground">
             Como o motorista chama no WhatsApp/áudio. O agente IA usa pra
-            achar o cliente quando ele escreve diferente do cadastro.
+            achar a obra quando ele escreve diferente do cadastro.
           </p>
         </div>
         {/* O cliente é quem CONTRATA o frete. Quando ele não é o remetente nem
@@ -195,7 +195,7 @@ export function ClienteForm({ initial }: Props) {
           <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium">
             Dados fiscais{" "}
             <span className="font-normal text-muted-foreground">
-              — preencha se este cliente vai ser o tomador do CT-e
+              — preencha se esta obra vai ser o tomador do CT-e
             </span>
           </summary>
           <div className="space-y-3 border-t border-border p-3">

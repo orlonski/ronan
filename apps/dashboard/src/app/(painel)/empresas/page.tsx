@@ -130,7 +130,7 @@ export default function EmpresasPage() {
               <ExcluirButton perm="empresas.excluir"
                 path="/admin/empresas"
                 id={e.id}
-                nomeRecurso={`a empresa "${e.nome}"`}
+                nomeRecurso={`o cliente "${e.nome}"`}
               />
             </div>
           );
@@ -144,9 +144,9 @@ export default function EmpresasPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Empresas-cliente</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
           <p className="text-sm text-muted-foreground">
-            Quem contrata o frete e recebe a planilha de fechamento. Não confundir com
+            Quem contrata o frete, paga e recebe a planilha de fechamento. Não confundir com
             Transportadoras, que são as donas dos caminhões.
           </p>
         </div>
@@ -155,7 +155,7 @@ export default function EmpresasPage() {
           <Permitido chave="empresas.criar">
             <Link href="/empresas/novo">
               <Button>
-                <Plus className="h-4 w-4" /> Nova empresa
+                <Plus className="h-4 w-4" /> Novo cliente
               </Button>
             </Link>
           </Permitido>
@@ -195,8 +195,8 @@ export default function EmpresasPage() {
                   placeholder="Status"
                   showSearch={false}
                   options={[
-                    { value: "true", label: "Ativas" },
-                    { value: "false", label: "Inativas" },
+                    { value: "true", label: "Ativos" },
+                    { value: "false", label: "Inativos" },
                   ]}
                 />
               </>
@@ -206,10 +206,10 @@ export default function EmpresasPage() {
         emptyMessage={
           <EstadoVazio
             icone={Building2}
-            titulo="Nenhuma empresa-cliente cadastrada"
-            descricao="É quem te contrata e recebe o fechamento. Os clientes ficam dentro dela, então ela vem antes."
+            titulo="Nenhum cliente cadastrado"
+            descricao="É quem te contrata, paga e recebe o fechamento. As obras ficam dentro dele, então ele vem antes."
             acaoHref="/empresas/novo"
-            acaoLabel="Cadastrar empresa-cliente"
+            acaoLabel="Cadastrar cliente"
             perm="empresas.criar"
             temPermissao={temPermissao}
           />
@@ -270,7 +270,7 @@ export default function EmpresasPage() {
                 <ExcluirButton perm="empresas.excluir"
                   path="/admin/empresas"
                   id={e.id}
-                  nomeRecurso={`a empresa "${e.nome}"`}
+                  nomeRecurso={`o cliente "${e.nome}"`}
                 />
               </div>
             </div>

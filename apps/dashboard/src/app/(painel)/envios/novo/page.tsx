@@ -115,8 +115,8 @@ export default function NovoEnvioPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Novo envio</h1>
           <p className="text-sm text-muted-foreground">
-            Gera uma planilha XLSX no layout configurado da empresa, com todas as
-            viagens dos clientes dela no período.
+            Gera uma planilha XLSX no layout configurado do cliente, com todas as
+            viagens das obras dele no período.
           </p>
         </div>
       </header>
@@ -124,7 +124,7 @@ export default function NovoEnvioPage() {
       <form onSubmit={onSubmit}>
         <Card className="space-y-5 p-6">
           <div className="space-y-2">
-            <Label htmlFor="page-empresa">Empresa *</Label>
+            <Label htmlFor="page-empresa">Cliente *</Label>
             <Select id="page-empresa" required value={empresaId} onChange={(e) => setEmpresaId(e.target.value)}>
               <option value="">— escolha —</option>
               {empresas.data
@@ -140,14 +140,14 @@ export default function NovoEnvioPage() {
                 ))}
             </Select>
             <p className="text-xs text-muted-foreground">
-              Só lista empresas que recebem planilha da gente.
+              Só lista clientes que recebem planilha da gente.
             </p>
           </div>
 
           {empresaId && clientesAtivas.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Clientes</Label>
+                <Label>Obras</Label>
                 <div className="flex gap-2 text-xs">
                   <button
                     type="button"
@@ -193,8 +193,8 @@ export default function NovoEnvioPage() {
               </div>
               <p className="text-xs text-muted-foreground">
                 {todasSelecionadas
-                  ? `Todos os ${clientesAtivas.length} cliente(s) ativo(s) serão incluídos.`
-                  : `${clienteIds.length} cliente(s) selecionado(s).`}
+                  ? `Todas as ${clientesAtivas.length} obra(s) ativa(s) serão incluídas.`
+                  : `${clienteIds.length} obra(s) selecionada(s).`}
               </p>
             </div>
           )}
@@ -224,7 +224,7 @@ export default function NovoEnvioPage() {
             <Label>Layout de envio</Label>
             {empresaId === "" && (
               <p className="text-xs text-muted-foreground">
-                Escolha uma empresa primeiro pra ver os layouts dela.
+                Escolha um cliente primeiro pra ver os layouts dele.
               </p>
             )}
             {empresaId && layouts.isLoading && (
@@ -232,7 +232,7 @@ export default function NovoEnvioPage() {
             )}
             {semLayout && empresaSelecionada && (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                Esta empresa ainda não tem layout de envio configurado.{" "}
+                Este cliente ainda não tem layout de envio configurado.{" "}
                 <Link
                   href={`/empresas/${empresaSelecionada.id}/layout-envio`}
                   className="underline font-medium"
@@ -258,7 +258,7 @@ export default function NovoEnvioPage() {
               <div>
                 <p className="font-medium">O que vai ser incluído</p>
                 <p className="mt-1 text-muted-foreground">
-                  Todas as viagens dos clientes dessa empresa no período, com status
+                  Todas as viagens das obras desse cliente no período, com status
                   conferida/OK/ajustada. As colunas, formato de data e totais seguem o layout
                   selecionado. Após gerar, você pode marcar como enviado e o sistema guarda o
                   registro com data e canal.

@@ -192,8 +192,8 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // `expurgar` apaga posições de GPS com mais de 90 dias — é destrutivo, então
   // não pode viver sob a chave de leitura (foi o que aconteceu e virou furo).
   { recurso: "mapa", label: "Mapa", modulo: "Cadastros", acoes: ["ver", "expurgar"] },
-  { recurso: "empresas", label: "Empresas-cliente", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "layouts"] },
-  { recurso: "clientes", label: "Clientes", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "empresas", label: "Clientes", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "layouts"] },
+  { recurso: "clientes", label: "Obras", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "locais", label: "Locais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "homologar"] },
   { recurso: "pedagios", label: "Praças de pedágio", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "importar"] },
   { recurso: "materiais", label: "Materiais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },

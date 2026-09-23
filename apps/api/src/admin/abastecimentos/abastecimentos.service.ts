@@ -358,7 +358,7 @@ const LABEL_CAMPO_ABA: Record<string, string> = {
   tanqueCheio: "Tanque cheio",
   observacao: "Observação",
   veiculoId: "Veículo",
-  empresaId: "Empresa",
+  empresaId: "Cliente",
 };
 
 type DiffCampoAba = { campo: string; label: string; antes: unknown; depois: unknown };

@@ -333,7 +333,7 @@ export function LocalForm({ initial }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Clientes (opcional)</Label>
+            <Label>Obras (opcional)</Label>
             <ClienteComboboxMulti
               value={form.clienteIds}
               onChange={(ids) => setForm({ ...form, clienteIds: ids })}
@@ -341,10 +341,10 @@ export function LocalForm({ initial }: Props) {
                 value: c.id,
                 label: c.nome,
               }))}
-              placeholder="Sem cliente vinculado"
+              placeholder="Sem obra vinculada"
             />
             <p className="text-xs text-muted-foreground">
-              Sem cliente vinculado = local genérico, aparece pra qualquer viagem.
+              Sem obra vinculada = local genérico, aparece pra qualquer viagem.
             </p>
           </div>
         </div>

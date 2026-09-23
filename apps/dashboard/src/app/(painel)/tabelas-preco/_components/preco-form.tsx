@@ -109,7 +109,7 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
     const kmAte = parseDecimalBR(form.kmFaixaAte);
     const preco = parseDecimalBR(form.precoUnitario);
 
-    if (!form.empresaId) return setErro("Escolha a empresa.");
+    if (!form.empresaId) return setErro("Escolha o cliente.");
     if (preco == null) return setErro("Informe o preço.");
     if (!Number.isFinite(kmDe) || kmDe < 0) return setErro("Faixa 'de' inválida.");
     if (kmAte != null && kmAte <= kmDe) return setErro("A faixa 'até' precisa ser maior que o 'de'.");
@@ -147,14 +147,14 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="precoform-empresa-que-paga">Empresa que paga</Label>
+            <Label htmlFor="precoform-empresa-que-paga">Cliente que paga</Label>
             <Select id="precoform-empresa-que-paga"
               required
               value={form.empresaId}
               onChange={(e) => setForm({ ...form, empresaId: e.target.value })}
             >
               <option value="" disabled>
-                Escolha a empresa
+                Escolha o cliente
               </option>
               {empresas.data?.map((e) => (
                 <option key={e.id} value={e.id}>
@@ -233,7 +233,7 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
                 onChange={(e) => setForm({ ...form, repassaPedagio: e.target.checked })}
                 className="h-4 w-4"
               />
-              A empresa devolve o pedágio por fora do frete
+              O cliente devolve o pedágio por fora do frete
             </label>
           </div>
         </div>

@@ -249,7 +249,7 @@ export class TabelasPrecoService {
   }) {
     if (data.empresaId) {
       const e = await this.prisma.empresa.findUnique({ where: { id: data.empresaId } });
-      if (!e) throw new NotFoundException("Empresa não encontrada");
+      if (!e) throw new NotFoundException("Cliente não encontrado");
     }
     if (data.materialId) {
       const m = await this.prisma.material.findUnique({ where: { id: data.materialId } });

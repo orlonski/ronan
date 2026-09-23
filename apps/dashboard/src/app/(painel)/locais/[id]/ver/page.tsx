@@ -198,7 +198,7 @@ export default function VisualizarLocalPage({
               <InfoLinha rotulo="Ponto de referência">
                 {l.pontoReferencia || "—"}
               </InfoLinha>
-              <InfoLinha rotulo="Clientes">
+              <InfoLinha rotulo="Obras">
                 {l.clientes.length
                   ? l.clientes.map((c) => c.nome).join(", ")
                   : "Genérico (todos)"}

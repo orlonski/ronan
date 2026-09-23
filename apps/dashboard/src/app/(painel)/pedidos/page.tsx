@@ -263,7 +263,7 @@ function Conteudo() {
                 <Combobox
                   value={tableState.filters.empresaId}
                   onChange={(v) => tableState.setFilter("empresaId", v)}
-                  placeholder="Empresa"
+                  placeholder="Cliente"
                   options={empresaOptions}
                 />
                 <Combobox

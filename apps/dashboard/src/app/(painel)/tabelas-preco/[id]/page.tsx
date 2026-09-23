@@ -15,7 +15,7 @@ export default function EditarPrecoPage({ params }: { params: Promise<{ id: stri
       <div className="space-y-6">
         <FormPageHeader
           title="Editar preço"
-          description="Mudar o preço reprecifica as viagens da empresa que estão dentro da vigência."
+          description="Mudar o preço reprecifica as viagens do cliente que estão dentro da vigência."
           backHref="/tabelas-preco"
         />
         {item.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}

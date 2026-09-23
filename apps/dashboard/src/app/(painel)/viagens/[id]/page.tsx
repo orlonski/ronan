@@ -694,16 +694,16 @@ export default function ViagemDetalhePage({
               value={v.material?.nome ?? "—"}
               fromAi={v.ocrCampos?.includes("materialId")}
             />
-            {/* Cliente/Empresa são da relação comercial Schaba↔cliente: o
+            {/* Obra/Cliente são da relação comercial Schaba↔cliente: o
                 backend omite do payload sem `viagens.ver-comercial`. */}
             {v.cliente && (
               <>
                 <CampoTile
-                  label="Cliente"
+                  label="Obra"
                   value={v.cliente.nome}
                   fromAi={v.ocrCampos?.includes("clienteId")}
                 />
-                <CampoTile label="Empresa" value={v.cliente.empresa.nome} />
+                <CampoTile label="Cliente" value={v.cliente.empresa.nome} />
               </>
             )}
             <CampoTile
@@ -788,7 +788,7 @@ export default function ViagemDetalhePage({
                   >
                     O número{" "}
                     <span className="font-mono font-medium">{v.ticket ?? "—"}</span> já
-                    tinha sido lançado nesta empresa em{" "}
+                    tinha sido lançado neste cliente em{" "}
                     <Link
                       href={`/viagens/${v.ticketDuplicadoDe.id}`}
                       className="font-medium underline hover:no-underline"
@@ -1732,7 +1732,7 @@ const CAMPO_LABEL: Record<string, string> = {
   observacao: "Observação",
   valorPedagioTotal: "Pedágio",
   veiculoId: "Veículo",
-  clienteId: "Cliente",
+  clienteId: "Obra",
   materialId: "Material",
   localCargaId: "Local de carga",
   localDescargaId: "Local de descarga",

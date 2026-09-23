@@ -166,7 +166,7 @@ export class ImportacaoService {
 
     switch (entidade.chave) {
       case "clientes": {
-        if (!args.empresaId) throw new BadRequestException("Escolha a empresa dos clientes.");
+        if (!args.empresaId) throw new BadRequestException("Escolha o cliente dessas obras.");
         const nome = String(v.nome);
         // Casa por nome NORMALIZADO: "Pedreira Norte" e "PEDREIRA NORTE  " são
         // o mesmo cliente, e importar os dois é o começo de uma base suja que
@@ -318,13 +318,13 @@ export class ImportacaoService {
     // com cliente em branco continua valendo pro km e pro peso do histórico, e
     // perder a linha inteira por causa de um nome escrito diferente seria pior.
     for (const [campo, valor, resolvido] of [
-      ["cliente", v.cliente, dados.clienteId],
+      ["obra", v.cliente, dados.clienteId],
       ["material", v.material, dados.materialId],
       ["local de carga", v.origem, dados.localCargaId],
       ["local de descarga", v.destino, dados.localDescargaId],
     ] as const) {
       if (valor !== undefined && resolvido === null) {
-        avisos.push(`Linha ${linha.numero}: ${campo} "${valor}" não está cadastrado — ficou em branco.`);
+        avisos.push(`Linha ${linha.numero}: ${campo} "${valor}" não tem cadastro — ficou em branco.`);
       }
     }
 

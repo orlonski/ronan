@@ -213,7 +213,7 @@ export class LayoutImportService {
       where: { id },
       select: { id: true, papel: true, ativa: true },
     });
-    if (!e) throw new NotFoundException("Empresa não encontrada");
+    if (!e) throw new NotFoundException("Cliente não encontrado");
     if (e.papel === "RECEBE_PLANILHA") {
       throw new ForbiddenException(
         "Esta empresa não envia fechamento — configurar layout de importação não se aplica.",

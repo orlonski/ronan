@@ -91,7 +91,7 @@ export function RegraForm({ initial }: Props) {
     const kmMin = parseDecimalBR(form.kmMinimo);
     const tonMin = parseDecimalBR(form.toneladasMinimo);
 
-    if (!form.empresaId) return setErro("Escolha a empresa.");
+    if (!form.empresaId) return setErro("Escolha o cliente.");
     if (!Number.isFinite(kmDe) || kmDe < 0) return setErro("Faixa 'de' inválida.");
     if (kmAte != null && kmAte <= kmDe) return setErro("A faixa 'até' precisa ser maior que o 'de'.");
     if (kmMin == null && tonMin == null) {
@@ -126,14 +126,14 @@ export function RegraForm({ initial }: Props) {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="regraform-empresa">Empresa</Label>
+            <Label htmlFor="regraform-empresa">Cliente</Label>
             <Select id="regraform-empresa"
               required
               value={form.empresaId}
               onChange={(e) => setForm({ ...form, empresaId: e.target.value })}
             >
               <option value="" disabled>
-                Escolha a empresa
+                Escolha o cliente
               </option>
               {empresas.data?.map((e) => (
                 <option key={e.id} value={e.id}>
@@ -205,8 +205,8 @@ export function RegraForm({ initial }: Props) {
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Informe pelo menos um dos dois. Quando a viagem casa (empresa + material + km na
-          faixa), esse mínimo vence o mínimo do cliente.
+          Informe pelo menos um dos dois. Quando a viagem casa (cliente + material + km na
+          faixa), esse mínimo vence o mínimo da obra.
         </p>
 
         {erro && <p className="text-sm text-destructive">{erro}</p>}

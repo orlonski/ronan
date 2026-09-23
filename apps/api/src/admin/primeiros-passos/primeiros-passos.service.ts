@@ -148,16 +148,16 @@ export class PrimeirosPassosService {
       // isso no meio do formulário.
       {
         chave: "empresa",
-        titulo: "Cadastre a empresa que te contrata",
+        titulo: "Cadastre o cliente que te contrata",
         descricao:
-          "É quem manda a planilha ou recebe o fechamento. Os clientes ficam dentro dela, então ela vem antes.",
+          "É quem paga o frete e manda a planilha ou recebe o fechamento. As obras ficam dentro dele, então ele vem antes.",
         rota: "/empresas/novo",
         cumprido: empresas > 0,
       },
       {
         chave: "cliente",
-        titulo: "Cadastre um cliente",
-        descricao: "Dentro da empresa acima. É pra quem você fatura no fim do mês.",
+        titulo: "Cadastre uma obra",
+        descricao: "Dentro do cliente acima. É onde se trabalha — o que o motorista escolhe no app.",
         rota: "/clientes/novo",
         cumprido: clientes > 0,
       },

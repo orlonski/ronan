@@ -128,7 +128,7 @@ function AlertasBadges({ v }: { v: Viagem }) {
       <Badge
         key="ticket-dup"
         className="gap-1 border-rose-300 bg-rose-100 text-rose-800"
-        title="Já existe outra viagem desta empresa com o mesmo número de ticket"
+        title="Já existe outra viagem deste cliente com o mesmo número de ticket"
       >
         <Copy className="h-3 w-3" /> Ticket repetido
       </Badge>,
@@ -236,7 +236,7 @@ export default function ViagensPage() {
         id: "cliente",
         accessorKey: "cliente.nome",
         enableSorting: false,
-        header: verComercial ? "Material / Cliente" : "Material",
+        header: verComercial ? "Material / Obra" : "Material",
         cell: ({ row }) => (
           <div className="text-sm">
             <div className="flex items-center gap-1.5">
@@ -395,7 +395,7 @@ export default function ViagensPage() {
             state={tableState}
             searchPlaceholder={
               verComercial
-                ? "Buscar por ticket, motorista, placa, cliente…"
+                ? "Buscar por ticket, motorista, placa, obra…"
                 : "Buscar por ticket, motorista, placa…"
             }
             filters={
@@ -458,7 +458,7 @@ export default function ViagensPage() {
                   <ClienteCombobox
                     value={tableState.filters.clienteId}
                     onChange={(v) => tableState.setFilter("clienteId", v)}
-                    placeholder="Cliente"
+                    placeholder="Obra"
                   />
                 )}
                 <ToolbarFilterDateRange state={tableState} label="Período" />
@@ -471,7 +471,7 @@ export default function ViagensPage() {
                       { value: "status", label: "Status" },
                       { value: "motorista", label: "Motorista" },
                       { value: "placa", label: "Placa" },
-                      ...(verComercial ? [{ value: "cliente", label: "Cliente" }] : []),
+                      ...(verComercial ? [{ value: "cliente", label: "Obra" }] : []),
                       { value: "toneladas", label: "Toneladas" },
                       { value: "km", label: "Km" },
                       { value: "ticket", label: "Ticket" },

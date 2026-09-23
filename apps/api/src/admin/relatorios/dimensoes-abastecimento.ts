@@ -77,7 +77,7 @@ const DIMENSOES: Record<AgruparPorAbastecimento, Dimensao> = {
     chaveDe: (l) => l.empresaId,
     // Abastecimento sem empresa existe: o app deixa lançar antes de escolher o
     // tomador. É justamente a linha que o financeiro precisa enxergar.
-    rotuloSemValor: "(sem empresa)",
+    rotuloSemValor: "(sem cliente)",
     resolverNomes: async (prisma, ids) => {
       const rows = await prisma.empresa.findMany({
         where: { id: { in: ids } },

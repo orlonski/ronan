@@ -84,7 +84,7 @@ export class EmpresasService {
 
   private async ensureExists(id: string) {
     const e = await this.prisma.empresa.findUnique({ where: { id } });
-    if (!e) throw new NotFoundException("Empresa não encontrada");
+    if (!e) throw new NotFoundException("Cliente não encontrado");
     return e;
   }
 }

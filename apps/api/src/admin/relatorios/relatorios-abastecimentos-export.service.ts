@@ -147,7 +147,7 @@ export class RelatoriosAbastecimentosExportService {
       { header: "Data", largura: 17 },
       { header: "Motorista", largura: 24 },
       { header: "Placa", largura: 11 },
-      { header: "Empresa", largura: 22 },
+      { header: "Cliente", largura: 22 },
       { header: "Combustível", largura: 14 },
       { header: "Posto", largura: 24 },
       { header: "Litros", largura: 12, fmt: FMT_LITROS },

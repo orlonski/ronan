@@ -47,7 +47,7 @@ const CAMPO_LABEL: Record<string, string> = {
   tanqueCheio: "Tanque cheio",
   observacao: "Observação",
   veiculoId: "Veículo",
-  empresaId: "Empresa",
+  empresaId: "Cliente",
 };
 const labelForCampoAbastecimento = (campo: string) => CAMPO_LABEL[campo] ?? campo;
 
@@ -265,7 +265,7 @@ export default function AbastecimentoDetalhePage({
               {x.veiculo.modelo ? ` · ${x.veiculo.modelo}` : ""}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Empresa: {x.empresa?.nome ?? "—"}
+              Cliente: {x.empresa?.nome ?? "—"}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               Sincronizado em {fmtDataHora(x.sincronizadoEm)}

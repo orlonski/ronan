@@ -249,18 +249,18 @@ export class PedidosService {
   }) {
     if (data.empresaId) {
       const e = await this.prisma.empresa.findUnique({ where: { id: data.empresaId } });
-      if (!e) throw new NotFoundException("Empresa não encontrada");
+      if (!e) throw new NotFoundException("Cliente não encontrado");
     }
     if (data.clienteId) {
       const c = await this.prisma.cliente.findUnique({
         where: { id: data.clienteId },
         select: { empresaId: true },
       });
-      if (!c) throw new NotFoundException("Cliente não encontrado");
+      if (!c) throw new NotFoundException("Obra não encontrada");
       // Cliente de outra empresa no pedido faria o abatimento nunca casar —
       // o filtro exige as duas coisas ao mesmo tempo.
       if (data.empresaId && c.empresaId !== data.empresaId) {
-        throw new BadRequestException("Esse cliente é de outra empresa.");
+        throw new BadRequestException("Essa obra é de outro cliente.");
       }
     }
     for (const [campo, id] of [

@@ -212,7 +212,7 @@ function Conteudo() {
                   value={f.empresaId ?? ""}
                   onChange={(v) => state.setFilter("empresaId", v || undefined)}
                   options={opcoesEmpresa}
-                  placeholder="Empresa"
+                  placeholder="Cliente"
                   className="w-[180px]"
                 />
               )}

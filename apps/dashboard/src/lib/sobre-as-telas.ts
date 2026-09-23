@@ -112,7 +112,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "balança. É daqui que sai o que se cobra do cliente.",
     faz: [
       "Conferir o que o motorista mandou e corrigir o que veio errado",
-      "Achar viagem por motorista, cliente ou período, ou digitar o ticket, a placa ou o material na busca",
+      "Achar viagem por motorista, obra ou período, ou digitar o ticket, a placa ou o material na busca",
       "Abrir uma viagem pra ver a foto do ticket e o caminho que ela fez",
     ],
     naoEAqui: {
@@ -148,7 +148,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Ver a curva de viagens dos últimos 14 dias",
       "Ver o mês até aqui: faturamento, peso carregado e gasto com combustível",
       "Ir direto no que está parado: viagem sem peso, viagem que não bateu, planilha esperando revisão",
-      "Ver quem mais rodou no mês — motoristas, clientes e materiais",
+      "Ver quem mais rodou no mês — motoristas, obras e materiais",
     ],
     naoEAqui: {
       procurando: "os números de um período fechado, somados por motorista ou por cliente",
@@ -160,7 +160,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
   "/relatorios": {
     oQue:
       "Os números de um período somados do jeito que você precisa olhar — por " +
-      "motorista, cliente, empresa, material, local de carga ou descarga, " +
+      "motorista, obra, cliente, material, local de carga ou descarga, " +
       "caminhão ou frota.",
     faz: [
       "Escolher o período e agrupar a produção do jeito que interessa na hora",
@@ -188,7 +188,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "O que o cliente combinou receber — quanto, pra onde e até quando — e " +
       "quanto disso já foi entregue.",
     faz: [
-      "Cadastrar o combinado: cliente, material, destino, quantidade e prazo",
+      "Cadastrar o combinado: cliente, obra, material, destino, quantidade e prazo",
       "Acompanhar quanto já entregou e quanto falta, somado das viagens que aconteceram de verdade",
       "Ver quais pedidos estão apertados ou já passaram do prazo, e quanto precisa sair por dia",
     ],
@@ -205,7 +205,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "valor, posto e odômetro, com a foto de quando tem.",
     faz: [
       "Ver o que foi abastecido no período, com o total de litros e de dinheiro",
-      "Filtrar por tipo de combustível, motorista, empresa e período, ou digitar o posto e a placa na busca",
+      "Filtrar por tipo de combustível, motorista, cliente e período, ou digitar o posto e a placa na busca",
       "Abrir um abastecimento pra ver a foto e o odômetro que o motorista anotou",
     ],
     naoEAqui: {
@@ -271,7 +271,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "A planilha que você manda pro cliente no fim do período, no formato que ele " +
       "pede, com o registro de quando e por onde foi.",
     faz: [
-      "Gerar o arquivo de um período no layout daquela empresa — o que ainda está em conferência ou divergente não entra",
+      "Gerar o arquivo de um período no layout daquele cliente — o que ainda está em conferência ou divergente não entra",
       "Baixar e marcar como enviado, dizendo por onde foi (WhatsApp, e-mail, entregue em mãos)",
       "Achar depois qual arquivo foi mandado, quando e com quantas linhas — quando o cliente disser que não recebeu",
     ],
@@ -284,13 +284,13 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/tabelas-preco": {
     oQue:
-      "Quanto cada empresa paga pelo frete: por tonelada, por quilômetro ou por " +
+      "Quanto cada cliente paga pelo frete: por tonelada, por quilômetro ou por " +
       "viagem fechada. Sem preço aqui, a viagem não tem valor.",
     faz: [
-      "Cadastrar o preço por empresa, material, modo de serviço e faixa de km rodado",
+      "Cadastrar o preço por cliente, material, modo de serviço e faixa de km rodado",
       "Marcar se o pedágio vem por fora do frete",
       "Reajustar sem mexer no que já passou: cada preço vale de uma data até outra, e a viagem usa o preço do dia dela",
-      "Escolher a empresa no filtro e refazer o preço de todas as viagens dela depois de corrigir a tabela — valor que alguém alterou à mão não é tocado",
+      "Escolher o cliente no filtro e refazer o preço de todas as viagens dele depois de corrigir a tabela — valor que alguém alterou à mão não é tocado",
     ],
     naoEAqui: {
       procurando: "o km ou o peso mínimo que se cobra numa viagem curta",
@@ -301,10 +301,10 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/regras-minimo": {
     oQue:
-      "O piso combinado com a empresa: quando o km (ou o peso) da viagem fica " +
+      "O piso combinado com o cliente: quando o km (ou o peso) da viagem fica " +
       "abaixo dele, o que se fatura é o mínimo.",
     faz: [
-      "Cadastrar o mínimo por empresa, material e faixa de km rodado — o \"de\" entra na faixa, o \"até\" não",
+      "Cadastrar o mínimo por cliente, material e faixa de km rodado — o \"de\" entra na faixa, o \"até\" não",
       "Informar km mínimo, toneladas mínimas, ou os dois",
       "Desligar uma regra que não vale mais, sem apagar o histórico",
     ],
@@ -372,12 +372,12 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "sobe a planilha de um cliente.",
     faz: [
       "Criar uma coluna que os seus clientes usam e o sistema ainda não conhece (ex.: número da NF-e)",
-      "Mudar o nome, a descrição e a ordem em que ela aparece na hora de montar a leitura da empresa",
+      "Mudar o nome, a descrição e a ordem em que ela aparece na hora de montar a leitura do cliente",
       "Desligar uma coluna que não se usa mais — as de cadeado vêm de fábrica e não podem ser apagadas, e algumas delas são as que o sistema usa pra casar linha com viagem",
     ],
     naoEAqui: {
       procurando: "escolher as colunas da planilha que você manda pro cliente",
-      vaEm: "Empresas-cliente",
+      vaEm: "Clientes",
       href: "/empresas",
     },
   },
@@ -452,11 +452,11 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/documentos-exigidos": {
     oQue:
-      "O que o contratante pede antes do caminhão entrar na obra. É esta lista que " +
+      "O que o cliente pede antes do caminhão entrar na obra. É esta lista que " +
       "o link de coleta mostra pro motorista — lista vazia, link que não pede nada.",
     faz: [
-      "Escrever cada exigência com o nome que o contratante usa, não com o nosso",
-      "Separar o que vale pra toda obra do que só um contratante pede",
+      "Escrever cada exigência com o nome que o cliente usa, não com o nosso",
+      "Separar o que vale pra todos os clientes do que só um cliente pede",
       "Marcar o que é obrigatório e o que precisa vir assinado",
     ],
     naoEAqui: {
@@ -617,12 +617,13 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/empresas": {
     oQue:
-      "Quem te contrata pra rodar — a construtora, a mineradora, o dono da " +
-      "carga. É de quem você cobra no fim do mês, e é dentro dela que ficam as obras.",
+      "Quem te contrata e paga o frete — a construtora, a mineradora, o dono da " +
+      "carga. Recebe a planilha no fim do mês, tem o preço e o mínimo dele, e é " +
+      "dentro dele que ficam as obras.",
     faz: [
       "Cadastrar quem contrata o frete, com CNPJ e quem é o contato lá dentro",
-      "Ensinar o sistema a ler a planilha que ela te manda e a montar a planilha que você manda pra ela",
-      "Na leitura da planilha dela, dizer quanta diferença de km e de tonelada é aceitável antes de a linha virar divergência",
+      "Ensinar o sistema a ler a planilha que ele te manda e a montar a planilha que você manda pra ele",
+      "Na leitura da planilha dele, dizer quanta diferença de km e de tonelada é aceitável antes de a linha virar divergência",
     ],
     naoEAqui: {
       procurando: "as donas dos caminhões que rodam pra você",
@@ -633,16 +634,17 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/clientes": {
     oQue:
-      "As obras, lojas e canteiros de cada empresa-cliente — é o que diz, na " +
-      "viagem, pra quem aquela carga foi.",
+      "Onde se trabalha — a obra, a loja, o canteiro de cada cliente. É o que o " +
+      "motorista escolhe no app, é onde ficam os locais, e é o que diz, na viagem, " +
+      "pra onde aquela carga foi.",
     faz: [
-      "Cadastrar cada obra dentro da empresa que contratou o frete",
+      "Cadastrar cada obra dentro do cliente que contratou o frete",
       "Preencher CNPJ, inscrição estadual e endereço, que é o que o CT-e exige de remetente e destinatário",
       "Guardar os apelidos do dia a dia (\"obra do Beto\") pra busca achar mesmo escrito de outro jeito",
     ],
     naoEAqui: {
-      procurando: "quem assina o contrato e recebe a fatura",
-      vaEm: "Empresas-cliente",
+      procurando: "quem paga, recebe a planilha e tem o preço combinado",
+      vaEm: "Clientes",
       href: "/empresas",
     },
   },
@@ -745,8 +747,8 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Preencher CNPJ, inscrição estadual, RNTRC e endereço, que é de onde sai o emitente do CT-e",
     ],
     naoEAqui: {
-      procurando: "a pedreira ou a obra pra quem você presta serviço",
-      vaEm: "Empresas-cliente",
+      procurando: "o cliente pra quem você presta serviço",
+      vaEm: "Clientes",
       href: "/empresas",
     },
   },
@@ -955,8 +957,8 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Definir os módulos contratados e o teto de permissões de cada uma, e suspender ou excluir quem sair",
     ],
     naoEAqui: {
-      procurando: "as pedreiras e obras que são clientes de uma transportadora",
-      vaEm: "Empresas-cliente",
+      procurando: "os clientes de uma transportadora, que pagam o frete",
+      vaEm: "Clientes",
       href: "/empresas",
     },
   },

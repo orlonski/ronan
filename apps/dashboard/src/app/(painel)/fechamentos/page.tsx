@@ -46,7 +46,7 @@ export default function FechamentosPage() {
       {
         id: "empresa",
         accessorKey: "empresa.nome",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Empresa" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Cliente" />,
         cell: ({ row }) => (
           <span className="font-medium">{row.original.empresa.nome}</span>
         ),
@@ -138,7 +138,7 @@ export default function FechamentosPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Planilhas dos clientes</h1>
           <p className="text-sm text-muted-foreground">
-            Conferências de planilhas que as empresas enviam — extração + match automático com IA.
+            Conferências de planilhas que os clientes enviam — extração + match automático com IA.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -164,13 +164,13 @@ export default function FechamentosPage() {
         toolbar={
           <DataTableToolbar
             state={tableState}
-            searchPlaceholder="Buscar por nome do arquivo ou empresa…"
+            searchPlaceholder="Buscar por nome do arquivo ou cliente…"
             filters={
               <>
                 <Combobox
                   value={tableState.filters.empresaId}
                   onChange={(v) => tableState.setFilter("empresaId", v)}
-                  placeholder="Empresa"
+                  placeholder="Cliente"
                   options={empresaOptions}
                 />
                 <Combobox

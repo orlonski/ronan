@@ -73,7 +73,7 @@ const DIMENSOES: Record<AgruparPorRelatorio, Dimensao> = {
 
   CLIENTE: {
     chaveDe: (l) => l.clienteId,
-    rotuloSemValor: "(sem cliente)",
+    rotuloSemValor: "(sem obra)",
     resolverNomes: async (prisma, ids) => {
       const rows = await prisma.cliente.findMany({
         where: { id: { in: ids } },
@@ -88,7 +88,7 @@ const DIMENSOES: Record<AgruparPorRelatorio, Dimensao> = {
   EMPRESA: {
     chaveDe: (l, empresaPorCliente) =>
       l.clienteId ? (empresaPorCliente.get(l.clienteId) ?? null) : null,
-    rotuloSemValor: "(sem empresa)",
+    rotuloSemValor: "(sem cliente)",
     resolverNomes: async (prisma, ids) => {
       const rows = await prisma.empresa.findMany({
         where: { id: { in: ids } },

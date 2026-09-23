@@ -33,7 +33,7 @@ const CAMPOS_SISTEMA: { slug: string; label: string; ordem: number; tipo: string
   { slug: "ticket", label: "Ticket", ordem: 30, tipo: "TEXTO", descricao: "Número do ticket (chave de match)" },
   { slug: "toneladas", label: "Toneladas", ordem: 40, tipo: "NUMERO", descricao: "Toneladas transportadas (entra em comparação)" },
   { slug: "km", label: "Km", ordem: 50, tipo: "NUMERO", descricao: "Quilômetros rodados (entra em comparação)" },
-  { slug: "cliente", label: "Cliente", ordem: 60, tipo: "TEXTO", descricao: "Nome do cliente (referência, não comparado)" },
+  { slug: "cliente", label: "Obra", ordem: 60, tipo: "TEXTO", descricao: "Nome do cliente (referência, não comparado)" },
   { slug: "material", label: "Material", ordem: 70, tipo: "TEXTO", descricao: "Material transportado (referência)" },
   { slug: "fornecedor", label: "Fornecedor", ordem: 80, tipo: "TEXTO", descricao: "Fornecedor da carga (referência)" },
   { slug: "unidade", label: "Unidade", ordem: 90, tipo: "TEXTO", descricao: "Unidade de medida (TON, M3, etc)" },

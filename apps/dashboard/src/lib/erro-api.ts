@@ -60,8 +60,8 @@ export function mensagemPorStatus(status: number): string {
  * propriedade (`empresaId`, `itens.0.quantidade`), que não é o rótulo do form.
  */
 const ROTULOS: Record<string, string> = {
-  empresaId: "Empresa",
-  clienteId: "Cliente",
+  empresaId: "Cliente",
+  clienteId: "Obra",
   motoristaId: "Motorista",
   veiculoId: "Veículo",
   materialId: "Material",

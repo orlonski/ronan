@@ -107,7 +107,7 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
     setErro(null);
 
     const qtd = Number(form.quantidadeAlvo.replace(/\./g, "").replace(",", "."));
-    if (!form.empresaId) return setErro("Escolha a empresa.");
+    if (!form.empresaId) return setErro("Escolha o cliente.");
     if (!Number.isFinite(qtd) || qtd <= 0) return setErro("Informe quanto foi pedido.");
     if (form.prazoEm && form.prazoEm < form.inicioEm) {
       return setErro("O prazo não pode ser antes do início.");
@@ -144,14 +144,14 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="pedidoform-empresa-que-pediu">Empresa que pediu</Label>
+            <Label htmlFor="pedidoform-empresa-que-pediu">Cliente que pediu</Label>
             <Select id="pedidoform-empresa-que-pediu"
               required
               value={form.empresaId}
               onChange={(e) => setForm({ ...form, empresaId: e.target.value, clienteId: undefined })}
             >
               <option value="" disabled>
-                Escolha a empresa
+                Escolha o cliente
               </option>
               {empresas.data?.map((e) => (
                 <option key={e.id} value={e.id}>
@@ -161,7 +161,7 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Obra / frente</Label>
+            <Label>Obra</Label>
             <ClienteCombobox
               value={form.clienteId}
               onChange={(v) => setForm({ ...form, clienteId: v })}
@@ -169,7 +169,7 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
               initialOption={initial?.cliente ? clienteOption(initial.cliente) : undefined}
             />
             <p className="text-xs text-muted-foreground">
-              Deixe vazio se o pedido vale pra qualquer obra dessa empresa.
+              Deixe vazio se o pedido vale pra qualquer obra desse cliente.
             </p>
           </div>
         </div>

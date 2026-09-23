@@ -45,7 +45,7 @@ export class FinanceiroService {
       where: { id: input.empresaId },
       select: { id: true, nome: true, prazoPagamentoDias: true },
     });
-    if (!empresa) throw new NotFoundException("Empresa não encontrada");
+    if (!empresa) throw new NotFoundException("Cliente não encontrado");
 
     const inicio = diaUtc(input.periodoInicio);
     const fim = diaUtc(input.periodoFim);

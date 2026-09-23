@@ -56,7 +56,7 @@ const CAMPOS_FALLBACK: CampoLayoutDef[] = [
   ["ticket", "Ticket", 30],
   ["toneladas", "Toneladas", 40],
   ["km", "Km", 50],
-  ["cliente", "Cliente", 60],
+  ["cliente", "Obra", 60],
   ["material", "Material", 70],
   ["fornecedor", "Fornecedor", 80],
   ["unidade", "Unidade", 90],
@@ -390,11 +390,11 @@ export default function LayoutImportPage({
       <div className="space-y-4">
       <ConfirmDialog />
         <Link href="/empresas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Empresas
+          <ArrowLeft className="h-4 w-4" /> Clientes
         </Link>
         <Card className="p-6">
           <p className="text-sm">
-            Esta empresa só recebe planilhas (não envia fechamento), então não
+            Este cliente só recebe planilhas (não envia fechamento), então não
             precisa configurar layout de importação.
           </p>
         </Card>
@@ -416,7 +416,7 @@ export default function LayoutImportPage({
           </Button>
         ) : (
           <Button variant="ghost" size="icon" asChild>
-              <Link href="/empresas" aria-label="Voltar para Empresas-cliente">
+              <Link href="/empresas" aria-label="Voltar para Clientes">
               <ArrowLeft className="h-5 w-5" />
               </Link>
             </Button>
@@ -459,7 +459,7 @@ export default function LayoutImportPage({
             <div className="flex-1">
               <h2 className="font-semibold">Configure o layout de importação</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Suba uma planilha de exemplo (XLSX, CSV ou PDF) que esta empresa
+                Suba uma planilha de exemplo (XLSX, CSV ou PDF) que este cliente
                 costuma mandar. Vou ler o conteúdo e sugerir o mapeamento. Você
                 confere e corrige antes de salvar.
               </p>
@@ -773,7 +773,7 @@ export default function LayoutImportPage({
                 ✓ Layout salvo
               </h2>
               <p className="text-sm">
-                Reprocessar fechamentos antigos desta empresa com o novo layout?
+                Reprocessar fechamentos antigos deste cliente com o novo layout?
               </p>
               {fechamentos.data && fechamentos.data.length > 0 ? (
                 <div className="space-y-2">

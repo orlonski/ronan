@@ -210,7 +210,7 @@ function Conteudo() {
                 <ClienteCombobox
                   value={f.clienteId}
                   onChange={(v) => state.setFilter("clienteId", v)}
-                  placeholder="Cliente"
+                  placeholder="Obra"
                 />
               )}
               <Combobox

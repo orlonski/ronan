@@ -259,11 +259,11 @@ const GRUPOS: Grupo[] = [
     titulo: "Cadastros",
     coach: "grupo-cadastros",
     itens: [
-      // "Empresas" nomeava DUAS entidades diferentes em dois itens de menu
-      // adjacentes. Este é o tomador do serviço — e é o nome que a própria tela
-      // sempre usou no h1.
-      { href: "/empresas", label: "Empresas-cliente", icon: Building2, perm: "empresas.ver" },
-      { href: "/clientes", label: "Clientes", icon: Boxes, perm: "clientes.ver" },
+      // Nomes decididos em 23/09/2026: o model `Empresa` é o CLIENTE (quem
+      // paga) e o model `Cliente` é a OBRA (onde se trabalha). Só a palavra
+      // mudou — href, permissão e coach seguem os antigos.
+      { href: "/empresas", label: "Clientes", icon: Building2, perm: "empresas.ver" },
+      { href: "/clientes", label: "Obras", icon: Boxes, perm: "clientes.ver" },
       { href: "/locais", label: "Locais", icon: MapPin, perm: "locais.ver" },
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },
       { href: "/tipos-servico", label: "Como a viagem é cobrada", icon: Timer, perm: "tipos-servico.ver" },

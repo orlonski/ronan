@@ -71,7 +71,7 @@ export class RegrasMinimoService {
   }
   private async ensureEmpresa(id: string) {
     const e = await this.prisma.empresa.findUnique({ where: { id } });
-    if (!e) throw new NotFoundException("Empresa não encontrada");
+    if (!e) throw new NotFoundException("Cliente não encontrado");
   }
   private async ensureMaterial(id: string) {
     const m = await this.prisma.material.findUnique({ where: { id } });

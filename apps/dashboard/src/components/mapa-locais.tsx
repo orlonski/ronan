@@ -333,7 +333,7 @@ export function MapaLocais({
                   <span className="font-medium">{LABEL_POR_TIPO[l.tipo]}</span>
                 </p>
                 <p className="text-xs">
-                  <span className="text-muted-foreground">Cliente: </span>
+                  <span className="text-muted-foreground">Obra: </span>
                   {l.clientes.length === 0
                     ? "—"
                     : l.clientes.map((c) => c.nome).join(", ")}

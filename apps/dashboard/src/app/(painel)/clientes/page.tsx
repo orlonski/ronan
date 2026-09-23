@@ -59,7 +59,7 @@ export default function ClientesPage() {
       {
         id: "empresa",
         accessorKey: "empresa.nome",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Empresa" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Cliente" />,
         cell: ({ row }) => row.original.empresa.nome,
       },
       {
@@ -105,7 +105,7 @@ export default function ClientesPage() {
             <ExcluirButton perm="clientes.excluir"
               path="/admin/clientes"
               id={row.original.id}
-              nomeRecurso={`o cliente "${row.original.nome}"`}
+              nomeRecurso={`a obra "${row.original.nome}"`}
             />
           </div>
         ),
@@ -118,10 +118,10 @@ export default function ClientesPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Obras</h1>
           <p className="text-sm text-muted-foreground">
-            Quem recebe a carga na ponta — a obra, a loja, o canteiro. Cada empresa-cliente
-            pode ter vários.
+            Onde se trabalha — a obra, a loja, o canteiro. É o que o motorista escolhe no
+            app. Cada cliente pode ter várias.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -129,7 +129,7 @@ export default function ClientesPage() {
           <Permitido chave="clientes.criar">
             <Link href="/clientes/novo">
               <Button disabled={!empresas.data?.length}>
-                <Plus className="h-4 w-4" /> Novo cliente
+                <Plus className="h-4 w-4" /> Nova obra
               </Button>
             </Link>
           </Permitido>
@@ -138,7 +138,7 @@ export default function ClientesPage() {
 
       {empresas.data?.length === 0 && (
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          Cadastre uma empresa antes de criar clientes.
+          Cadastre um cliente antes de criar obras.
         </p>
       )}
 
@@ -155,13 +155,13 @@ export default function ClientesPage() {
         toolbar={
           <DataTableToolbar
             state={tableState}
-            searchPlaceholder="Buscar por nome ou empresa…"
+            searchPlaceholder="Buscar por nome ou cliente…"
             filters={
               <>
                 <Combobox
                   value={tableState.filters.empresaId}
                   onChange={(v) => tableState.setFilter("empresaId", v)}
-                  placeholder="Empresa"
+                  placeholder="Cliente"
                   options={empresaOptions}
                 />
                 <Combobox
@@ -170,8 +170,8 @@ export default function ClientesPage() {
                   placeholder="Status"
                   showSearch={false}
                   options={[
-                    { value: "true", label: "Ativos" },
-                    { value: "false", label: "Inativos" },
+                    { value: "true", label: "Ativas" },
+                    { value: "false", label: "Inativas" },
                   ]}
                 />
               </>
@@ -181,10 +181,10 @@ export default function ClientesPage() {
         emptyMessage={
           <EstadoVazio
             icone={Boxes}
-            titulo="Nenhum cliente cadastrado"
-            descricao="Quem recebe a carga na ponta — a obra, a loja, o canteiro. Cada cliente fica dentro de uma empresa-cliente."
+            titulo="Nenhuma obra cadastrada"
+            descricao="Onde se trabalha — a obra, a loja, o canteiro. É o que o motorista escolhe no app. Cada obra fica dentro de um cliente."
             acaoHref="/clientes/novo"
-            acaoLabel="Cadastrar cliente"
+            acaoLabel="Cadastrar obra"
             perm="clientes.criar"
             temPermissao={temPermissao}
           />
@@ -228,7 +228,7 @@ export default function ClientesPage() {
                 <ExcluirButton perm="clientes.excluir"
                   path="/admin/clientes"
                   id={c.id}
-                  nomeRecurso={`o cliente "${c.nome}"`}
+                  nomeRecurso={`a obra "${c.nome}"`}
                 />
               </div>
             </div>

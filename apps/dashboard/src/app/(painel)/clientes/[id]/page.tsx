@@ -18,7 +18,7 @@ export default function EditarClientePage({
     <RequerTela chave="clientes.editar">
       <div className="space-y-6">
         <FormPageHeader
-          title={item.data ? `Editar ${item.data.nome}` : "Editar cliente"}
+          title={item.data ? `Editar ${item.data.nome}` : "Editar obra"}
           backHref="/clientes"
         />
         {item.isLoading && (

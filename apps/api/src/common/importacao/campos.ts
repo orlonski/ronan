@@ -68,9 +68,9 @@ const CIDADE: CampoImportavel = {
 export const ENTIDADES: EntidadeImportavel[] = [
   {
     chave: "clientes",
-    rotulo: "Clientes",
+    rotulo: "Obras",
     descricao:
-      "Quem contrata o frete. Sobe só o nome — é por ele que a importação sabe se o cliente já existe, então subir de novo corrige em vez de duplicar.",
+      "Onde se trabalha — a obra, a loja, o canteiro de cada cliente. Sobe só o nome — é por ele que a importação sabe se a obra já existe, então subir de novo corrige em vez de duplicar.",
     chaveNatural: "nome",
     permissao: "clientes.criar",
     campos: [
@@ -273,7 +273,7 @@ export const VIAGENS: EntidadeImportavel = {
     },
     {
       chave: "cliente",
-      rotulo: "Cliente",
+      rotulo: "Obra",
       tipo: "texto",
       obrigatorio: false,
       sinonimos: ["cliente", "tomador", "contratante", "obra cliente"],

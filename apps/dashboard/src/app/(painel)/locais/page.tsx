@@ -405,7 +405,7 @@ export default function LocaisPage() {
       {
         id: "cliente",
         enableSorting: false,
-        header: "Cliente",
+        header: "Obra",
         cell: ({ row }) => {
           const cs = row.original.clientes;
           const primeiro = cs[0];
@@ -534,7 +534,7 @@ export default function LocaisPage() {
         <ClienteCombobox
           value={tableState.filters.clienteId}
           onChange={(v) => tableState.setFilter("clienteId", v)}
-          placeholder="Cliente"
+          placeholder="Obra"
         />
       )}
       <Combobox

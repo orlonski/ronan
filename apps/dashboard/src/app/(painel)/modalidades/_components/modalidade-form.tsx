@@ -194,7 +194,7 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
                   onChange={(e) => setForm({ ...form, percentualFrete: e.target.value })}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Precisa de preço cadastrado pra empresa — sem valor na viagem não há de
+                  Precisa de preço cadastrado pro cliente — sem valor na viagem não há de
                   que tirar porcentagem.
                 </p>
               </div>

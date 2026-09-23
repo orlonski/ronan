@@ -186,7 +186,7 @@ export default function FechamentoDetalhePage({
               </p>
               <p className="text-sm text-amber-800">
                 Os cabeçalhos das colunas no arquivo enviado não batem com o
-                layout que você tem salvo pra esta empresa. O processamento
+                layout que você tem salvo pra este cliente. O processamento
                 continuou com o layout antigo, mas pode ter perdido dados ou
                 gerado divergências.
               </p>

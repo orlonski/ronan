@@ -28,7 +28,7 @@ export type AgruparPorAbastecimento =
 export const AGRUPAR_POR_ABASTECIMENTO_LABEL: Record<AgruparPorAbastecimento, string> = {
   MOTORISTA: "Motorista",
   VEICULO: "Veículo",
-  EMPRESA: "Empresa",
+  EMPRESA: "Cliente",
   POSTO: "Posto",
   TIPO: "Combustível",
   TRANSPORTADORA: "Frota",

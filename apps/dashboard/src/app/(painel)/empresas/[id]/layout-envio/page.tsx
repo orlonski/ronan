@@ -32,7 +32,7 @@ const CAMPOS_DISPONIVEIS: Array<{ campo: string; defaultHeader: string; formato?
   { campo: "modelo", defaultHeader: "Modelo do veículo" },
   { campo: "motorista", defaultHeader: "Motorista" },
   { campo: "ticket", defaultHeader: "Ticket" },
-  { campo: "cliente", defaultHeader: "Cliente" },
+  { campo: "cliente", defaultHeader: "Obra" },
   { campo: "material", defaultHeader: "Material" },
   { campo: "toneladas", defaultHeader: "Toneladas", formato: "decimal_br" },
   { campo: "km", defaultHeader: "Distância (Km)", formato: "decimal_br" },
@@ -68,7 +68,7 @@ export default function LayoutEnvioPage({
     <ConfirmDialog />
       <header className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
-            <Link href={`/empresas`} aria-label="Voltar para Empresas-cliente">
+            <Link href={`/empresas`} aria-label="Voltar para Clientes">
             <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
@@ -77,7 +77,7 @@ export default function LayoutEnvioPage({
             Layout de envio — {empresa.data?.nome}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Configure como a planilha de fechamento deve sair pra esta empresa receber. Você pode
+            Configure como a planilha de fechamento deve sair pra este cliente receber. Você pode
             ter múltiplos modelos (viagens, pedágios, consolidado).
           </p>
         </div>
@@ -96,8 +96,8 @@ export default function LayoutEnvioPage({
             )}
             {layouts.data?.length === 0 && (
               <Card className="p-8 text-center text-sm text-muted-foreground">
-                Esta empresa ainda não tem layout configurado. Crie um modelo pra poder exportar
-                planilhas pra ela.
+                Este cliente ainda não tem layout configurado. Crie um modelo pra poder exportar
+                planilhas pra ele.
               </Card>
             )}
             {layouts.data?.map((l) => (
@@ -358,7 +358,7 @@ function Editor({
                 setConfig({ ...(config ?? {}), incluiCabecalhoEmpresa: e.target.checked })
               }
             />
-            Incluir cabeçalho da empresa no topo (nome + período)
+            Incluir cabeçalho do cliente no topo (nome + período)
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -376,7 +376,7 @@ function Editor({
               checked={padrao}
               onChange={(e) => setPadrao(e.target.checked)}
             />
-            Marcar como modelo padrão da empresa
+            Marcar como modelo padrão do cliente
           </label>
         </div>
 
@@ -477,7 +477,7 @@ function preset(): LayoutEnvio["colunas"] {
     { campo: "data", header: "Data", ordem: 0 },
     { campo: "placa", header: "Placa", ordem: 1 },
     { campo: "ticket", header: "Ticket", ordem: 2 },
-    { campo: "cliente", header: "Cliente", ordem: 3 },
+    { campo: "cliente", header: "Obra", ordem: 3 },
     { campo: "material", header: "Material", ordem: 4 },
     { campo: "toneladas", header: "Toneladas", ordem: 5, formato: "decimal_br" },
     { campo: "km", header: "Distância (Km)", ordem: 6, formato: "decimal_br" },

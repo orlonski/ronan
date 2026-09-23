@@ -179,7 +179,7 @@ export function CompartilharViagemModal({ viagemId }: { viagemId: string }) {
             <p>
               Quem tiver este link vê o comprovante <strong>sem login</strong>: data, trajeto,
               placa, motorista, peso, km, fotos do ticket e valores de pedágio. Não expõe
-              cliente/empresa, observações internas nem o GPS do motorista.
+              obra/cliente, observações internas nem o GPS do motorista.
             </p>
           </div>
 

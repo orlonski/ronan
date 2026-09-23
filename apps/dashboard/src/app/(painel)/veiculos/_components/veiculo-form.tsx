@@ -78,7 +78,7 @@ export function VeiculoForm({ initial }: Props) {
             {placaTravada && (
               <p className="text-xs text-muted-foreground">
                 A placa não muda depois de cadastrada — é ela que casa a viagem com o
-                fechamento da empresa.
+                fechamento do cliente.
               </p>
             )}
           </div>

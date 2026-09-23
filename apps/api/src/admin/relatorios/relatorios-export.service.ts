@@ -168,7 +168,7 @@ export class RelatoriosExportService {
       { header: "Motorista", largura: 24 },
       { header: "Placa", largura: 11 },
       { header: "Ticket", largura: 14 },
-      ...(comercial ? [{ header: "Cliente", largura: 24 }] : []),
+      ...(comercial ? [{ header: "Obra", largura: 24 }] : []),
       { header: "Material", largura: 20 },
       { header: "Carga", largura: 22 },
       { header: "Descarga", largura: 22 },
@@ -324,7 +324,7 @@ export class RelatoriosExportService {
         { header: "Data", peso: 1, alinhar: "left" },
         { header: "Motorista", peso: 2.2, alinhar: "left" },
         { header: "Placa", peso: 1, alinhar: "left" },
-        ...(comercial ? [{ header: "Cliente", peso: 2, alinhar: "left" } as ColunaPdf] : []),
+        ...(comercial ? [{ header: "Obra", peso: 2, alinhar: "left" } as ColunaPdf] : []),
         { header: "Material", peso: 1.8, alinhar: "left" },
         { header: "Descarga", peso: 2, alinhar: "left" },
         { header: "Ton.", peso: 1, alinhar: "right" },
@@ -354,8 +354,8 @@ export class RelatoriosExportService {
 function descreverFiltros(q: RelatorioViagensExportQuery): string {
   const partes: string[] = [];
   if (q.motoristaId) partes.push("motorista");
-  if (q.clienteId) partes.push("cliente");
-  if (q.empresaId) partes.push("empresa");
+  if (q.clienteId) partes.push("obra");
+  if (q.empresaId) partes.push("cliente");
   if (q.materialId) partes.push("material");
   if (q.localCargaId) partes.push("local de carga");
   if (q.localDescargaId) partes.push("local de descarga");

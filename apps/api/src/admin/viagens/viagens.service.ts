@@ -476,7 +476,7 @@ export class ViagensAdminService {
           where: { id: novoClienteId },
           select: { empresaId: true },
         });
-        if (!cliente) throw new NotFoundException("Cliente não encontrado");
+        if (!cliente) throw new NotFoundException("Obra não encontrada");
         const dup = await this.prisma.viagem.findFirst({
           where: {
             id: { not: id },
@@ -1644,12 +1644,12 @@ const LABEL_CAMPO: Record<string, string> = {
   observacao: "Observação",
   valorPedagioTotal: "Valor pedágio",
   valorCarga: "Valor da carga",
-  cliente: "Cliente",
+  cliente: "Obra",
   material: "Material",
   veiculo: "Veículo",
   localCarga: "Local de carga",
   localDescarga: "Local de descarga",
-  clienteId: "Cliente",
+  clienteId: "Obra",
   materialId: "Material",
   veiculoId: "Veículo",
   localCargaId: "Local de carga",

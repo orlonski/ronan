@@ -249,12 +249,12 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
             />
           </div>
           <div className="space-y-2">
-            <Label>Empresa pagadora</Label>
+            <Label>Cliente que paga</Label>
             <Combobox
               value={form.empresaId}
               onChange={(v) => setForm({ ...form, empresaId: v ?? "" })}
-              options={[{ value: "", label: "— sem empresa —" }, ...empresaOptions]}
-              placeholder="— sem empresa —"
+              options={[{ value: "", label: "— sem cliente —" }, ...empresaOptions]}
+              placeholder="— sem cliente —"
             />
           </div>
           <div className="flex flex-col justify-end gap-2">

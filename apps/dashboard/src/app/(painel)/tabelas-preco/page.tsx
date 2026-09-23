@@ -89,7 +89,7 @@ export default function TabelasPrecoPage() {
       {
         id: "empresa",
         enableSorting: false,
-        header: "Empresa",
+        header: "Cliente",
         cell: ({ row }) => <span className="font-medium">{row.original.empresa.nome}</span>,
       },
       {
@@ -212,7 +212,7 @@ export default function TabelasPrecoPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Tabela de preços</h1>
           <p className="text-sm text-muted-foreground">
-            Quanto cada empresa paga por tonelada, km ou viagem. O preço multiplica a
+            Quanto cada cliente paga por tonelada, km ou viagem. O preço multiplica a
             quantidade já com o mínimo aplicado.
           </p>
         </div>
@@ -245,12 +245,12 @@ export default function TabelasPrecoPage() {
         toolbar={
           <DataTableToolbar
             state={tableState}
-            searchPlaceholder="Buscar por empresa ou material…"
+            searchPlaceholder="Buscar por cliente ou material…"
             filters={
               <Combobox
                 value={tableState.filters.empresaId}
                 onChange={(v) => tableState.setFilter("empresaId", v)}
-                placeholder="Empresa"
+                placeholder="Cliente"
                 options={empresaOptions}
               />
             }
@@ -328,7 +328,7 @@ function BotaoRecalcular({ empresaId, nomeEmpresa }: { empresaId?: string; nomeE
   async function recalcular() {
     const ok = await confirmar({
       variant: "warning",
-      title: `Refazer o preço das viagens de ${nomeEmpresa ?? "esta empresa"}?`,
+      title: `Refazer o preço das viagens de ${nomeEmpresa ?? "este cliente"}?`,
       description:
         "Vale pras viagens fechadas que ainda não têm valor ou cujo valor veio da tabela. Valor alterado à mão não é tocado.",
       confirmLabel: "Refazer os preços",

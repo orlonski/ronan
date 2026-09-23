@@ -351,7 +351,7 @@ function BlocoMes({ d }: { d: Snapshot }) {
           value={fmtBRL(d.mes.faturamento)}
           info={
             d.mes.viagensPrecificadas < d.mes.viagens
-              ? `${d.mes.viagens - d.mes.viagensPrecificadas} viagem(ns) deste mês ainda estão sem preço. Cadastre a tabela de preços da empresa pra elas entrarem na conta.`
+              ? `${d.mes.viagens - d.mes.viagensPrecificadas} viagem(ns) deste mês ainda estão sem preço. Cadastre a tabela de preços do cliente pra elas entrarem na conta.`
               : "Soma do valor de todas as viagens deste mês, já com o mínimo por faixa aplicado."
           }
           tone="default"
@@ -461,9 +461,9 @@ function BlocoRankings({ d }: { d: Snapshot }) {
         />
         <RankingCard
           icon={Building2}
-          titulo="Clientes"
+          titulo="Obras"
           subtitulo="por viagens"
-          info="Os 5 clientes que mais receberam viagens neste mês."
+          info="As 5 obras que mais receberam viagens neste mês."
           itens={d.rankings.clientes.map((c) => ({
             nome: c.nome,
             valor: `${c.viagens} viagens`,

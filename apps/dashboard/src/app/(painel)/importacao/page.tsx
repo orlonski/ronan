@@ -247,7 +247,7 @@ function Conteudo() {
             Perguntar aqui é melhor que aceitar o arquivo e falhar em cada linha. */}
         {precisaEmpresa && (
           <div className="space-y-1.5">
-            <Label htmlFor="imp-empresa">2. De qual empresa são esses clientes</Label>
+            <Label htmlFor="imp-empresa">2. De qual cliente são essas obras</Label>
             <Select
               id="imp-empresa"
               value={empresaId ?? ""}

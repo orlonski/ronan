@@ -77,7 +77,7 @@ export function ViagensDoLocal({
       {
         id: "cliente",
         accessorKey: "cliente.nome",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Cliente" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Obra" />,
         cell: ({ row }) => (
           <span className="text-sm">{row.original.cliente?.nome ?? "—"}</span>
         ),

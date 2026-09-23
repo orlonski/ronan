@@ -368,7 +368,7 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
-            <Label>Cliente</Label>
+            <Label>Obra</Label>
             <ClienteCombobox
               value={form.clienteId}
               onChange={(v) => setForm({ ...form, clienteId: v ?? "" })}

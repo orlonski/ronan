@@ -10,7 +10,7 @@ export default function NovaRegraMinimoPage() {
       <div className="space-y-6">
         <FormPageHeader
           title="Nova regra de mínimo"
-          description="Mínimo faturado por empresa, material e faixa de km rodado."
+          description="Mínimo faturado por cliente, material e faixa de km rodado."
           backHref="/regras-minimo"
         />
         <RegraForm />
