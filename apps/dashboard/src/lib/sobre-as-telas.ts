@@ -298,7 +298,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "o km ou o peso mínimo que se cobra numa viagem curta",
-      vaEm: "Preço e mínimo › Mínimo (km e tonelada)",
+      vaEm: "Clientes › Mínimo (km e tonelada)",
       href: "/regras-minimo",
     },
   },
@@ -314,7 +314,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "quanto vale o que foi contado",
-      vaEm: "Preço e mínimo",
+      vaEm: "Clientes › Preço",
       href: "/tabelas-preco",
     },
   },
@@ -667,7 +667,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "o mínimo de tonelada ou de km que se fatura por material",
-      vaEm: "Preço e mínimo › Mínimo (km e tonelada)",
+      vaEm: "Clientes › Mínimo (km e tonelada)",
       href: "/regras-minimo",
     },
   },
@@ -682,7 +682,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "quanto vale a tonelada ou o km",
-      vaEm: "Preço e mínimo",
+      vaEm: "Clientes › Preço",
       href: "/tabelas-preco",
     },
   },
@@ -753,7 +753,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "o preço que você cobra dos seus clientes",
-      vaEm: "Preço e mínimo",
+      vaEm: "Clientes › Preço",
       href: "/tabelas-preco",
     },
   },

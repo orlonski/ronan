@@ -68,7 +68,10 @@ export const ABAS = {
   // Mínimo é quanto se CONTA, preço é quanto vale o que foi contado — duas
   // regras que a pessoa procura juntas quando pensa "quanto cobro deste
   // cliente". Continuam com chaves separadas (ver permissoes.ts).
-  preco: [
+  // Preço e mínimo são regras DO CLIENTE (cada cliente paga diferente), então
+  // moram junto do cadastro de clientes, não em Minha empresa nem em Dinheiro.
+  clientes: [
+    { href: "/empresas", label: "Clientes", perm: "empresas.ver" },
     { href: "/tabelas-preco", label: "Preço", perm: "tabelas-preco.ver" },
     { href: "/regras-minimo", label: "Mínimo (km e tonelada)", perm: "regras-minimo.ver" },
   ],

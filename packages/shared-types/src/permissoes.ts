@@ -203,12 +203,12 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // aplicar reescreve TRINTA pessoas de uma vez: é poder de outra ordem que
   // corrigir o nome do perfil.
   { recurso: "perfis-acesso", label: "Permissões do app", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "aplicar", "excluir"] },
-  { recurso: "regras-minimo", label: "Preço e mínimo — mínimo por viagem (km e tonelada)", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "regras-minimo", label: "Clientes — mínimo por viagem (km e tonelada)", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // Quanto cada empresa paga por tonelada/km/viagem. Chave própria e separada de
   // `regras-minimo` porque são decisões diferentes: mínimo é quanto se CONTA
   // (operacional, quem confere mexe), preço é quanto se COBRA (comercial, nem
   // todo mundo que confere viagem pode mexer no preço do contrato).
-  { recurso: "tabelas-preco", label: "Preço e mínimo — preço", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "tabelas-preco", label: "Clientes — preço", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "tipos-evento-viagem", label: "Paradas e ocorrências", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // ---- Sistema ----
   { recurso: "usuarios", label: "Usuários", modulo: "Sistema", acoes: ["ver", "criar", "editar", "excluir"] },

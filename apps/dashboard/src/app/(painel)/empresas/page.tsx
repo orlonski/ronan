@@ -29,6 +29,7 @@ import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 import { formatDocumento } from "@ronan/shared-types";
 import { EstadoVazio } from "@/components/estado-vazio";
 import { usePermissoes } from "@/lib/permissoes";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type Papel = "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
 type Empresa = {
@@ -142,6 +143,7 @@ export default function EmpresasPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="clientes" />
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>

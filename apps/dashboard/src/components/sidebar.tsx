@@ -45,7 +45,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
-  Tag,
   Target,
   Timer,
   TowerControl,
@@ -221,13 +220,6 @@ const GRUPOS: Grupo[] = [
         ],
       },
       // Abas: preço e mínimo (km e tonelada).
-      {
-        href: "/tabelas-preco",
-        label: "Preço e mínimo",
-        icon: Tag,
-        perm: "tabelas-preco.ver",
-        ou: [{ href: "/regras-minimo", perm: "regras-minimo.ver" }],
-      },
       { href: "/cte", label: "CT-e emitidos", icon: FileCheck2, perm: "cte.ver" },
       { href: "/financeiro", label: "Contas a pagar e receber", icon: Wallet, perm: "financeiro.ver" },
       { href: "/acertos", label: "Acertos com motorista", icon: HandCoins, perm: "acertos.ver" },
@@ -285,7 +277,17 @@ const GRUPOS: Grupo[] = [
       // paga) e o model `Cliente` é a OBRA (onde se trabalha). As obras moram
       // dentro da página do cliente — "Obras" solto no menu era o mesmo nome
       // digitado duas vezes em 33 de 34 casos. /clientes continua abrindo.
-      { href: "/empresas", label: "Clientes", icon: Building2, perm: "empresas.ver" },
+      {
+        href: "/empresas",
+        label: "Clientes",
+        icon: Building2,
+        perm: "empresas.ver",
+        // Abas: Preço e Mínimo (km e tonelada) — regras de cada cliente.
+        ou: [
+          { href: "/tabelas-preco", perm: "tabelas-preco.ver" },
+          { href: "/regras-minimo", perm: "regras-minimo.ver" },
+        ],
+      },
       { href: "/locais", label: "Locais", icon: MapPin, perm: "locais.ver", ou: [{ href: "/configuracoes/busca-locais", perm: "config-busca-locais.ver" }] },
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },
       { href: "/tipos-servico", label: "Como a viagem é cobrada", icon: Timer, perm: "tipos-servico.ver" },

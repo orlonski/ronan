@@ -140,7 +140,7 @@ export default function RegrasMinimoPage() {
 
   return (
     <div className="space-y-6">
-      <AbasDaTela grupo="preco" />
+      <AbasDaTela grupo="clientes" />
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Mínimo por viagem (km e tonelada)</h1>
