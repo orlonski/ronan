@@ -1003,6 +1003,9 @@ export class MotoristaService {
           exigeTicket: true,
           exigeLocalDescarga: true,
           exigeKm: true,
+          // O app esconde o campo de pedágio quando false. Cache antigo sem o
+          // campo vale true (ver regrasDoModo em shared-types).
+          mostraPedagio: true,
         },
         orderBy: [{ ordem: "asc" }, { nome: "asc" }],
       }),

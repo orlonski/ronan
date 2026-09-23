@@ -197,7 +197,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "locais", label: "Locais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "homologar"] },
   { recurso: "pedagios", label: "Praças de pedágio", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "importar"] },
   { recurso: "materiais", label: "Materiais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
-  { recurso: "tipos-servico", label: "Como a viagem é cobrada", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "tipos-servico", label: "Viagens — campos da viagem no app", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "modalidades", label: "Motoristas — modalidades", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // O molde de acessos do app. `aplicar` é chave à parte de `editar` porque
   // aplicar reescreve TRINTA pessoas de uma vez: é poder de outra ordem que
@@ -209,7 +209,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // (operacional, quem confere mexe), preço é quanto se COBRA (comercial, nem
   // todo mundo que confere viagem pode mexer no preço do contrato).
   { recurso: "tabelas-preco", label: "Clientes — preço", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
-  { recurso: "tipos-evento-viagem", label: "Paradas e ocorrências", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "tipos-evento-viagem", label: "Viagens — paradas e imprevistos", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // ---- Sistema ----
   { recurso: "usuarios", label: "Usuários", modulo: "Sistema", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "permissoes", label: "Papéis e permissões", modulo: "Sistema", acoes: ["gerenciar"] },

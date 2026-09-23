@@ -97,6 +97,10 @@ export const ABAS = {
         ler: (d) => (Array.isArray(d) ? d.length : 0),
       },
     },
+    // As engrenagens juntas no fim: o que o app pede, o que o motorista pode
+    // avisar no caminho e o alerta de km — ajustes da viagem, não trabalho do dia.
+    { href: "/tipos-servico", label: "Campos no app", perm: "tipos-servico.ver", config: true },
+    { href: "/tipos-evento-viagem", label: "Paradas e imprevistos", perm: "tipos-evento-viagem.ver", config: true },
     { href: "/configuracoes/km-atipico", label: "Km fora do padrão", perm: "config-km-atipico.ver", config: true },
   ],
 } satisfies Record<string, Aba[]>;

@@ -83,6 +83,12 @@ export type LifecycleLocal = {
   veiculoId: string;
   clienteId: string;
   clienteNome?: string;
+  /**
+   * Modo de serviço escolhido no começo — diz o que o finalizar pede.
+   * Ausente em espelho gravado por versão antiga do app (ou conta sem modo):
+   * aí vale o padrão da conta pelo catálogo, o mesmo que o servidor usa.
+   */
+  tipoServicoId?: string;
   iniciadoEm: string; // ISO
   localCargaId?: string;
   localCargaNome?: string;
@@ -195,6 +201,7 @@ type ServerAndamento = {
     veiculoId: string;
     clienteId: string | null;
     cliente: { id: string; nome: string } | null;
+    tipoServico?: { id: string; nome: string } | null;
     iniciadoEm: string | null;
     localCarga: { id: string; nome: string } | null;
     eventosViagem: {
@@ -266,6 +273,7 @@ export async function hidratarViagemDoServidor(): Promise<LifecycleLocal | null>
       veiculoId: v.veiculoId,
       clienteId: v.clienteId ?? "",
       clienteNome: v.cliente?.nome,
+      tipoServicoId: v.tipoServico?.id ?? undefined,
       iniciadoEm: v.iniciadoEm ?? nowIso(),
       localCargaId: v.localCarga?.id,
       localCargaNome: v.localCarga?.nome,
@@ -347,6 +355,8 @@ export async function iniciarViagemGuiada(input: {
   veiculoPlaca?: string;
   clienteId: string;
   clienteNome?: string;
+  /** Modo de serviço que valeu na tela (escolhido ou padrão). Ausente = conta sem modo. */
+  tipoServicoId?: string;
   coords?: { lat: number; lng: number; precisao?: number; fonte?: FonteGps };
   localCarga?: { id: string; nome: string; lat?: number; lng?: number; criarOffline?: boolean };
   // Captura da escolha do local de carga: GPS REAL do motorista + distância/raio
@@ -391,6 +401,7 @@ export async function iniciarViagemGuiada(input: {
     clientId,
     veiculoId: input.veiculoId,
     clienteId: input.clienteId,
+    ...(input.tipoServicoId ? { tipoServicoId: input.tipoServicoId } : {}),
     iniciadoEm,
     lat: input.coords?.lat,
     lng: input.coords?.lng,
@@ -414,6 +425,7 @@ export async function iniciarViagemGuiada(input: {
     veiculoId: input.veiculoId,
     clienteId: input.clienteId,
     clienteNome: input.clienteNome,
+    tipoServicoId: input.tipoServicoId,
     iniciadoEm,
     localCargaId: lc?.id,
     localCargaNome: lc?.nome,
@@ -570,12 +582,13 @@ export async function encerrarOcorrenciaGuiada(eventoId: string): Promise<void> 
 /** Finaliza: enfileira o POST /finalizar e limpa o espelho local. */
 export async function finalizarViagemGuiada(input: {
   clienteId: string;
-  materialId: string;
+  // Opcionais: o modo de serviço pode não pedir material, km ou descarga.
+  materialId?: string;
   data: string; // ISO ou YYYY-MM-DD
   // Opcional no modo "aguardando peso" (romaneio no fim do dia).
   toneladas?: number;
   aguardandoPeso?: boolean;
-  km: number;
+  km?: number;
   kmCalculado?: number;
   kmEditadoManual?: boolean;
   kmFonte?: KmFonte;
@@ -585,7 +598,7 @@ export async function finalizarViagemGuiada(input: {
   rotaGeometria?: string;
   trechos?: TrechoViagemInput[];
   ticket?: string;
-  localDescargaId: string;
+  localDescargaId?: string;
   localDescargaDados?: LocalSnapshotLifecycle;
   descargaLat?: number;
   descargaLng?: number;

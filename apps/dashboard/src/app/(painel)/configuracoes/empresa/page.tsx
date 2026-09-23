@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Building2, RefreshCw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -196,23 +197,26 @@ function Conteudo() {
 }
 
 /**
- * Regras de comprovante da transportadora — política DELA, não da contraparte.
+ * Regra de comprovante do ABASTECIMENTO — política da transportadora, não da
+ * contraparte.
  *
  * Mora aqui e não em Cadastros → Empresas de propósito: "Empresa" ali é a
  * pedreira/obra que manda ou recebe planilha de fechamento. As duas se chamando
  * "empresa" já confundiu uma vez.
+ *
+ * A foto do ticket da VIAGEM saiu daqui em 23/09/2026 e foi pra "Campos da
+ * viagem no app", junto do resto do que o app pede na viagem. Mesmo campo
+ * (`Conta.exigeFotoViagem`), mesmo endpoint — só mudou de tela.
  */
 function ComprovantesCard() {
   const token = useAuthToken();
   const queryClient = useQueryClient();
+  const { temPermissao } = usePermissoes();
   const config = useQuery({
     queryKey: [PATH_MINHA_EMPRESA],
     enabled: !!token,
     queryFn: () =>
-      fetchApi<{ exigeFotoViagem: boolean; exigeFotoAbastecimento: boolean }>(
-        PATH_MINHA_EMPRESA,
-        { token },
-      ),
+      fetchApi<{ exigeFotoAbastecimento: boolean }>(PATH_MINHA_EMPRESA, { token }),
   });
 
   const salvar = useMutation({
@@ -231,49 +235,32 @@ function ComprovantesCard() {
 
   return (
     <Card className="space-y-4 p-5">
-      <div>
-        <p className="text-sm font-medium">Comprovantes</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Foto do cupom no abastecimento</p>
+          <p className="text-xs text-muted-foreground">
+            O cupom do posto, com litros e valor. Quando ligado, o app não deixa o
+            motorista salvar o abastecimento sem a foto — se ele não conseguir
+            fotografar, precisa escrever o motivo, e o abastecimento aparece marcado
+            como “sem foto” pra você cobrar.
+          </p>
+        </div>
+        <StatusToggle
+          active={config.data?.exigeFotoAbastecimento ?? false}
+          onChange={(next) => salvar.mutate({ exigeFotoAbastecimento: next })}
+          size="sm"
+          disabled={config.isLoading || salvar.isPending}
+        />
+      </div>
+      {temPermissao("tipos-servico.ver") ? (
         <p className="text-xs text-muted-foreground">
-          Quando ligado, o app não deixa o motorista salvar sem a foto. Se ele não
-          conseguir fotografar, precisa escrever o motivo — e o lançamento aparece na
-          lista marcado como “sem foto”, pra você cobrar.
+          A foto do ticket na viagem fica em{" "}
+          <Link href="/tipos-servico" className="font-medium text-primary hover:underline">
+            Campos da viagem no app
+          </Link>
+          , junto do resto do que o app pede na viagem.
         </p>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="space-y-1 rounded-md border p-4">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-medium">Foto do ticket na viagem</span>
-            <StatusToggle
-              active={config.data?.exigeFotoViagem ?? false}
-              onChange={(next) => salvar.mutate({ exigeFotoViagem: next })}
-              size="sm"
-              disabled={config.isLoading || salvar.isPending}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Material marcado como “não gera comprovante” (ex.: concreto) e modo de
-            serviço sem ticket ficam de fora sozinhos — não dá pra cobrar foto de
-            papel que não existe.
-          </p>
-        </div>
-
-        <div className="space-y-1 rounded-md border p-4">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-medium">Foto do cupom no abastecimento</span>
-            <StatusToggle
-              active={config.data?.exigeFotoAbastecimento ?? false}
-              onChange={(next) => salvar.mutate({ exigeFotoAbastecimento: next })}
-              size="sm"
-              disabled={config.isLoading || salvar.isPending}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            O cupom do posto, com litros e valor. Sem ele o abastecimento chega só com o
-            que o motorista digitou.
-          </p>
-        </div>
-      </div>
+      ) : null}
     </Card>
   );
 }

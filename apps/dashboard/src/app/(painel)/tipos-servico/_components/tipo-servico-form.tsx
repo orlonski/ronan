@@ -23,6 +23,8 @@ export type TipoServico = {
   exigeTicket: boolean;
   exigeLocalDescarga: boolean;
   exigeKm: boolean;
+  /** Ausente em API anterior à coluna — vale true (mostra). */
+  mostraPedagio?: boolean;
 };
 
 const PATH = "/admin/tipos-servico";
@@ -35,6 +37,7 @@ type TipoServicoBody = {
   exigeTicket: boolean;
   exigeLocalDescarga: boolean;
   exigeKm: boolean;
+  mostraPedagio: boolean;
   ordem: number;
 };
 
@@ -48,6 +51,7 @@ export function TipoServicoForm({ initial }: Props) {
     exigeTicket: initial?.exigeTicket ?? true,
     exigeLocalDescarga: initial?.exigeLocalDescarga ?? true,
     exigeKm: initial?.exigeKm ?? true,
+    mostraPedagio: initial?.mostraPedagio ?? true,
     ordem: initial?.ordem ?? 0,
   });
 
@@ -81,12 +85,30 @@ export function TipoServicoForm({ initial }: Props) {
             autoFocus
           />
           <p className="text-xs text-muted-foreground">
-            É o que o motorista lê no app na hora de escolher o tipo de serviço.
+            É o que o motorista lê no app na hora de escolher o tipo de viagem.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="ordem">Ordem</Label>
+          <Input
+            id="ordem"
+            type="number"
+            min={0}
+            max={999}
+            className="w-32"
+            value={form.ordem}
+            onChange={(e) =>
+              setForm({ ...form, ordem: Math.max(0, Math.min(999, Number(e.target.value) || 0)) })
+            }
+          />
+          <p className="text-xs text-muted-foreground">
+            Posição na lista que o motorista vê no app (menor primeiro).
           </p>
         </div>
 
         <div className="space-y-3 rounded-lg border p-3">
-          <Label>O que esse serviço pede</Label>
+          <Label>O que o app pede nesse tipo de viagem</Label>
           <LinhaFlag
             titulo="Material"
             hint="Desligue pro serviço que não carrega um material específico."
@@ -110,6 +132,12 @@ export function TipoServicoForm({ initial }: Props) {
             hint="Desligue pra serviço em que o caminhão fica à disposição e o km não é o que se cobra."
             active={form.exigeKm}
             onChange={(next) => setForm({ ...form, exigeKm: next })}
+          />
+          <LinhaFlag
+            titulo="Mostrar o pedágio"
+            hint="Desligado, o app esconde o campo de pedágio e não avisa quando a rota passa por um."
+            active={form.mostraPedagio}
+            onChange={(next) => setForm({ ...form, mostraPedagio: next })}
           />
         </div>
 

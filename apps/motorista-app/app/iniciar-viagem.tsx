@@ -24,6 +24,7 @@ import { humanizeApiError } from "@/lib/api";
 import { hidratarViagemDoServidor, iniciarViagemGuiada } from "@/lib/lifecycle";
 import { useCatalogos, useMe } from "@/lib/queries";
 import { pagadorSeDiferente } from "@/lib/utils";
+import { escolherModoDaLista } from "@ronan/shared-types";
 
 /**
  * Passo 1 do lifecycle guiado: escolher a placa e (opcional) marcar o local
@@ -36,6 +37,9 @@ export default function IniciarViagem() {
   const qc = useQueryClient();
   const [veiculoId, setVeiculoId] = useState("");
   const [clienteId, setClienteId] = useState("");
+  // Modo de serviço escolhido. "" = o padrão da conta (o caso de quem tem um
+  // modo só, que nem vê a pergunta).
+  const [tipoServicoId, setTipoServicoId] = useState("");
   const [localCarga, setLocalCarga] = useState<SelecaoLocal | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -80,6 +84,15 @@ export default function IniciarViagem() {
     label: c.nome,
     sublabel: pagadorSeDiferente(c.nome, c.empresa?.nome),
   }));
+  // Mesmo seletor da "Lançar viagem feita": só aparece com mais de um modo
+  // ativo. O modo decide o que o finalizar vai pedir, por isso é escolhido aqui.
+  const tiposServico = useMemo(() => cat.data?.tiposServico ?? [], [cat.data?.tiposServico]);
+  const mostrarSeletorServico = tiposServico.length > 1;
+  const modo = useMemo(
+    () => escolherModoDaLista(tiposServico, tipoServicoId),
+    [tiposServico, tipoServicoId],
+  );
+
   const clienteNome = useMemo(
     () => cat.data?.clientes.find((c) => c.id === clienteId)?.nome,
     [cat.data?.clientes, clienteId],
@@ -102,6 +115,9 @@ export default function IniciarViagem() {
         veiculoPlaca: veiculoOptions.find((o) => o.value === veiculoId)?.label,
         clienteId,
         clienteNome,
+        // O modo que valeu na tela (escolhido ou padrão). Sem modo no catálogo
+        // vai sem, e o servidor grava o padrão da conta.
+        tipoServicoId: modo?.id,
         coords: localCarga?.lat != null && localCarga?.lng != null
           ? { lat: localCarga.lat, lng: localCarga.lng, precisao: localCarga.precisao ?? undefined, fonte: localCarga.fonte }
           : undefined,
@@ -189,6 +205,22 @@ export default function IniciarViagem() {
             />
             {v.erroDe("cliente") ? <ErroCampo msg={v.erroDe("cliente")!} /> : null}
           </View>
+
+          {mostrarSeletorServico ? (
+            <View className="gap-2">
+              <Label>Tipo de serviço</Label>
+              <Select
+                value={modo?.id ?? ""}
+                onChange={(x) => {
+                  v.limpar();
+                  setTipoServicoId(x);
+                }}
+                options={tiposServico.map((t) => ({ value: t.id, label: t.nome }))}
+                placeholder="Escolha o tipo de serviço"
+                title="Tipo de serviço"
+              />
+            </View>
+          ) : null}
 
           {/* Local de carga — só depois do cliente (busca só locais dele/perto). */}
           {clienteId ? (

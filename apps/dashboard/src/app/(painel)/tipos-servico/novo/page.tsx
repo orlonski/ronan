@@ -9,8 +9,8 @@ export default function NovoTipoServicoPage() {
     <RequerTela chave="tipos-servico.criar">
       <div className="space-y-6">
         <FormPageHeader
-          title="Novo modo de serviço"
-          description="Como a viagem é medida e o que o app pede ao motorista."
+          title="Novo tipo de viagem"
+          description="O que o app pede ao motorista quando ele escolhe este tipo."
           backHref="/tipos-servico"
         />
         <TipoServicoForm />

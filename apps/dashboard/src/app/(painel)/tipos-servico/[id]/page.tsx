@@ -18,7 +18,7 @@ export default function EditarTipoServicoPage({
     <RequerTela chave="tipos-servico.editar">
       <div className="space-y-6">
         <FormPageHeader
-          title={item.data ? `Editar ${item.data.nome}` : "Editar modo de serviço"}
+          title={item.data ? `Editar ${item.data.nome}` : "Editar tipo de viagem"}
           backHref="/tipos-servico"
         />
         {item.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}

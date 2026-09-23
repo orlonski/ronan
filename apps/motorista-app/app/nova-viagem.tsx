@@ -33,7 +33,14 @@ import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import { reportarEvento } from "@/lib/event-reporter";
 import { criarTelemetriaViagem } from "@/lib/telemetria-viagem";
 import { humanizeZodError } from "@/lib/validation";
-import { avaliarKm, CriarViagemInput, formatarNomeLocal, type KmFonte } from "@ronan/shared-types";
+import {
+  avaliarKm,
+  criarViagemInputDoModo,
+  escolherModoDaLista,
+  formatarNomeLocal,
+  regrasDoModo,
+  type KmFonte,
+} from "@ronan/shared-types";
 import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoordsPrecisa, pegarCoordsRapido } from "@/lib/geo";
 import { simplificarPontos } from "@/lib/polyline";
 import { listPendingViagens, type PendingViagem } from "@/db/database";
@@ -519,20 +526,21 @@ export default function NovaViagem() {
   );
   const mostrarSeletorServico = tiposServico.length > 1;
 
-  // Modo escolhido — ou o padrão da conta quando não escolheu.
-  const modo = useMemo(() => {
-    if (!tiposServico.length) return null;
-    return (
-      tiposServico.find((t) => t.id === form.tipoServicoId) ??
-      tiposServico.find((t) => t.padrao) ??
-      null
-    );
-  }, [tiposServico, form.tipoServicoId]);
+  // Modo que vale: o escolhido — ou o padrão da conta quando não escolheu (o
+  // caso de quem tem um modo só). Nenhum → clássico. Mesma resolução da API.
+  const modo = useMemo(
+    () => escolherModoDaLista(tiposServico, form.tipoServicoId),
+    [tiposServico, form.tipoServicoId],
+  );
 
-  // Defaults seguros: sem modo resolvido, tudo se comporta como frete.
-  const exigeMaterial = modo?.exigeMaterial ?? true;
-  const exigeLocalDescarga = modo?.exigeLocalDescarga ?? true;
-  const exigeKm = modo?.exigeKm ?? true;
+  // Regras do modo, com compat on-read: catálogo em cache sem algum campo vale
+  // o clássico (tudo exigido, pedágio à mostra). É a MESMA régua que valida o
+  // payload antes de enfileirar e que a API usa pra carimbar o que falta.
+  const regras = useMemo(() => regrasDoModo(modo), [modo]);
+  const exigeMaterial = regras.exigeMaterial;
+  const exigeLocalDescarga = regras.exigeLocalDescarga;
+  const exigeKm = regras.exigeKm;
+  const mostraPedagio = regras.mostraPedagio;
 
   /**
    * A transportadora exige a FOTO do comprovante?
@@ -545,9 +553,9 @@ export default function NovaViagem() {
     if (cat.data?.config?.exigeFotoViagem !== true) return false;
     const m = cat.data?.materiais.find((x) => x.id === form.materialId);
     if (m?.temComprovanteFoto === false) return false; // concreto não gera papel
-    if (modo?.exigeTicket === false) return false; // modo sem ticket
+    if (!regras.exigeTicket) return false; // modo sem ticket
     return true;
-  }, [cat.data?.config?.exigeFotoViagem, cat.data?.materiais, form.materialId, modo?.exigeTicket]);
+  }, [cat.data?.config?.exigeFotoViagem, cat.data?.materiais, form.materialId, regras.exigeTicket]);
 
   // Alguns materiais não exigem ticket (ex: concreto) — o admin configura isso.
   // Default true: se o catálogo é antigo (sem o campo) ou o material não foi
@@ -555,8 +563,8 @@ export default function NovaViagem() {
   // basta um dos dois pra o campo sumir.
   const exigeTicket = useMemo(() => {
     const m = cat.data?.materiais.find((x) => x.id === form.materialId);
-    return (m?.exigeTicket ?? true) && (modo?.exigeTicket ?? true);
-  }, [cat.data?.materiais, form.materialId, modo?.exigeTicket]);
+    return (m?.exigeTicket ?? true) && regras.exigeTicket;
+  }, [cat.data?.materiais, form.materialId, regras.exigeTicket]);
 
   // Material libera "voltar pro bota-fora" (limpeza)? Só então mostra a pergunta.
   const permiteBotaFora = useMemo(() => {
@@ -875,7 +883,8 @@ export default function NovaViagem() {
     // Skip silencioso se a query ainda não respondeu ou veio vazia.
     const pedagioNum = parseFloat(form.valorPedagio.replace(",", "."));
     const semValorPedagio = !form.valorPedagio.trim() || !(pedagioNum > 0);
-    if (semValorPedagio && (pedagiosNaRota.data?.length ?? 0) > 0) {
+    // Modo que não mostra o pedágio não pergunta dele.
+    if (mostraPedagio && semValorPedagio && (pedagiosNaRota.data?.length ?? 0) > 0) {
       const lista = pedagiosNaRota
         .data!.slice(0, 5)
         .map((p) => `• ${p.nome}`)
@@ -972,9 +981,10 @@ export default function NovaViagem() {
         clienteId: form.clienteId,
         // Modo que não exige material vai sem material.
         materialId: exigeMaterial ? form.materialId : undefined,
-        // Só manda quando a conta tem mais de um modo: assim o payload de quem
-        // só faz frete continua idêntico ao de antes da feature.
-        tipoServicoId: mostrarSeletorServico ? (modo?.id ?? undefined) : undefined,
+        // Sempre o modo que valeu na tela (o escolhido ou o padrão da conta):
+        // assim o servidor cobra exatamente o que o app pediu. Sem modo nenhum
+        // no catálogo vai sem — o servidor resolve o padrão, como sempre fez.
+        tipoServicoId: modo?.id ?? undefined,
         data: dataFinal,
         // Aguardando peso: lança sem toneladas/ticket (romaneio no fim do dia)
         // e completa depois.
@@ -1074,9 +1084,10 @@ export default function NovaViagem() {
         ...preservaTracking,
       };
 
-      // Validação local: roda o mesmo schema do servidor antes de enfileirar
-      // pra evitar pendentes inválidos (ex: toneladas > 9999).
-      const parsed = CriarViagemInput.safeParse(payload);
+      // Validação local antes de enfileirar (ex: toneladas > 9999), com a régua
+      // do modo que valeu na tela — a mesma que a API usa. Validar pelo
+      // clássico cobrava campo que o modo escondeu, e o salvar travava.
+      const parsed = criarViagemInputDoModo(regras).safeParse(payload);
       if (!parsed.success) {
         setErro(humanizeZodError(parsed.error));
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -1673,16 +1684,18 @@ export default function NovaViagem() {
             editado={kmEditadoManual}
           />
         </View>
-        <View className="flex-1 gap-2">
-          <Label>Pedágio (R$)</Label>
-          <Input
-            value={form.valorPedagio}
-            onChangeText={(v) => update("valorPedagio", v)}
-            keyboardType="decimal-pad"
-            placeholder="opcional"
-            maxLength={10}
-          />
-        </View>
+        {mostraPedagio ? (
+          <View className="flex-1 gap-2">
+            <Label>Pedágio (R$)</Label>
+            <Input
+              value={form.valorPedagio}
+              onChangeText={(v) => update("valorPedagio", v)}
+              keyboardType="decimal-pad"
+              placeholder="opcional"
+              maxLength={10}
+            />
+          </View>
+        ) : null}
       </View>
       {/* Aviso SEM INTERNET em LINHA INTEIRA (haversine OU cache local). Some
           quando a sugestão do histórico está visível — ela absorve o recado de

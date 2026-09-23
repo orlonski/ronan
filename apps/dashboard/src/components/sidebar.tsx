@@ -32,7 +32,6 @@ import {
   Landmark,
   LayoutDashboard,
   Lightbulb,
-  ListChecks,
   LogOut,
   Map,
   MapPin,
@@ -45,7 +44,6 @@ import {
   SlidersHorizontal,
   Sparkles,
   Target,
-  Timer,
   TowerControl,
   TrafficCone,
   Truck,
@@ -184,10 +182,13 @@ const GRUPOS: Grupo[] = [
         label: "Viagens",
         icon: ClipboardCheck,
         perm: "viagens.ver",
-        // Abas: Conferir tickets, Não chegaram e ⚙ Km fora do padrão.
+        // Abas: Conferir tickets, Não chegaram e as engrenagens ⚙ Campos no
+        // app, ⚙ Paradas e imprevistos e ⚙ Km fora do padrão.
         ou: [
           { href: "/conferencias", perm: "conferencia-ticket.ver" },
           { href: "/lancamentos-travados", perm: "lancamentos-resgatados.ver" },
+          { href: "/tipos-servico", perm: "tipos-servico.ver" },
+          { href: "/tipos-evento-viagem", perm: "tipos-evento-viagem.ver" },
           { href: "/configuracoes/km-atipico", perm: "config-km-atipico.ver" },
         ],
       },
@@ -289,10 +290,6 @@ const GRUPOS: Grupo[] = [
       },
       { href: "/locais", label: "Locais", icon: MapPin, perm: "locais.ver", ou: [{ href: "/configuracoes/busca-locais", perm: "config-busca-locais.ver" }] },
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },
-      { href: "/tipos-servico", label: "Como a viagem é cobrada", icon: Timer, perm: "tipos-servico.ver" },
-      // Fica em Cadastros, não em Frota e pessoas: é tabela que se preenche uma
-      // vez e vale pra todo mundo, como as outras deste grupo.
-      { href: "/tipos-evento-viagem", label: "Paradas e ocorrências", icon: ListChecks, perm: "tipos-evento-viagem.ver" },
     ],
   },
   {

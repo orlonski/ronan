@@ -95,6 +95,10 @@ export const IniciarViagemInput = z.object({
   veiculoId: z.string().uuid(),
   // Cliente é escolhido no início (filtra os locais de carga possíveis).
   clienteId: z.string().uuid(),
+  // Modo de serviço da viagem, escolhido no começo (é ele que diz o que o
+  // finalizar vai pedir). Opcional: app antigo não manda, e aí o servidor grava
+  // o padrão da conta.
+  tipoServicoId: z.string().uuid().optional(),
   iniciadoEm: z.coerce.date(),
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),

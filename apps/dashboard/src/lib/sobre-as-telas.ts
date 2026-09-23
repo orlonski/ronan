@@ -674,16 +674,18 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/tipos-servico": {
     oQue:
-      "O que o lançamento da viagem exige em cada modo de serviço — e é isso " +
-      "que muda o que o app pergunta ao motorista.",
+      "Decide o que o app pergunta ao motorista quando ele lança ou finaliza " +
+      "uma viagem — e o que ele pode deixar em branco.",
     faz: [
-      "Escolher o que cada modo exige: material, ticket, local de descarga, km",
-      "Ver qual modo vale pras viagens que não escolhem nenhum; com um modo só, o app nem mostra a pergunta",
+      "Ligar ou desligar os campos que o app pede: material, ticket, local de descarga, km e pedágio",
+      "Exigir (ou não) a foto do ticket: sem foto, o motorista precisa escrever o motivo e a viagem entra marcada",
+      "Ver os campos que o app sempre pede — placa, data, cliente, local de carga — e por quê",
+      "Criar mais de um tipo de viagem, quando precisar que o motorista escolha entre eles",
     ],
     naoEAqui: {
-      procurando: "quanto vale a tonelada ou o km",
-      vaEm: "Clientes › Preço",
-      href: "/tabelas-preco",
+      procurando: "o material que dispensa ticket ou libera bota-fora",
+      vaEm: "Materiais",
+      href: "/materiais",
     },
   },
 
@@ -728,12 +730,12 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
   "/configuracoes/empresa": {
     oQue:
       "Os dados da sua transportadora: a logo que aparece no painel, o código que " +
-      "os motoristas usam pra se cadastrar, o que o app exige de foto e os dados " +
+      "os motoristas usam pra se cadastrar, a foto do cupom no abastecimento e os dados " +
       "que vão no CT-e.",
     faz: [
       "Trocar a logo que aparece no menu do painel",
       "Ver e renovar o código que o motorista digita no app — é por ele que o cadastro chega até você",
-      "Exigir (ou não) a foto do ticket e a do cupom de combustível: sem foto, o motorista precisa escrever o motivo e o lançamento entra marcado",
+      "Exigir (ou não) a foto do cupom de combustível: sem foto, o motorista precisa escrever o motivo e o abastecimento entra marcado",
       "Preencher CNPJ, inscrição estadual, RNTRC e endereço, que é de onde sai o emitente do CT-e",
     ],
     naoEAqui: {

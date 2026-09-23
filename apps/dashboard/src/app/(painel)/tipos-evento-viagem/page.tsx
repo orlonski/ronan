@@ -34,6 +34,7 @@ import {
 import { useApiQuery, useUpdateResource } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { TipoEventoDialog } from "./_components/tipo-evento-dialog";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 const PATH = "/admin/tipos-evento-viagem";
 
@@ -150,9 +151,10 @@ export default function TiposEventoViagemPage() {
   return (
     <RequerTela chave="tipos-evento-viagem.ver">
       <div className="space-y-6">
+        <AbasDaTela grupo="viagens" />
         <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Paradas e ocorrências</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Paradas e imprevistos</h1>
             <p className="text-sm text-muted-foreground">
               Eventos <strong>extras</strong> que o motorista registra no meio da viagem (parada,
               balança, abastecimento…). A ordem define a sequência guiada no app.

@@ -90,6 +90,8 @@ export type TipoServico = {
   exigeTicket?: boolean;
   exigeLocalDescarga?: boolean;
   exigeKm?: boolean;
+  /** false = esconde o campo de pedágio. Ausente (cache antigo) = mostra. */
+  mostraPedagio?: boolean;
 };
 
 export type EmpresaDoCliente = {

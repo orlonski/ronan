@@ -25,7 +25,7 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { hojeISO } from "@/lib/datetime";
-import { avaliarKm, type KmFonte } from "@ronan/shared-types";
+import { avaliarKm, escolherModoDaLista, regrasDoModo, type KmFonte } from "@ronan/shared-types";
 import {
   finalizarViagemGuiada,
   getLifecycleLocal,
@@ -126,6 +126,18 @@ export default function FinalizarViagem() {
   );
 
   /**
+   * Modo de serviço da viagem: o escolhido no "Começar viagem", ou o padrão da
+   * conta (viagem aberta por versão antiga do app, ou conta com um modo só).
+   * Nenhum → clássico. O servidor resolve igual, então os dois cobram os
+   * mesmos campos — e a tela só mostra o que o modo pede.
+   */
+  const regras = useMemo(
+    () => regrasDoModo(escolherModoDaLista(cat.data?.tiposServico, ciclo?.tipoServicoId)),
+    [cat.data?.tiposServico, ciclo?.tipoServicoId],
+  );
+  const { exigeMaterial, exigeLocalDescarga, exigeKm, mostraPedagio } = regras;
+
+  /**
    * A transportadora exige a foto do comprovante? Roda offline (vem no bloco
    * `config` do catálogo). Defaults seguros: ausência nunca exige.
    */
@@ -133,22 +145,25 @@ export default function FinalizarViagem() {
     if (cat.data?.config?.exigeFotoViagem !== true) return false;
     const m = cat.data?.materiais.find((x) => x.id === materialId);
     if (m?.temComprovanteFoto === false) return false;
+    if (!regras.exigeTicket) return false; // modo sem ticket
     return true;
-  }, [cat.data?.config?.exigeFotoViagem, cat.data?.materiais, materialId]);
+  }, [cat.data?.config?.exigeFotoViagem, cat.data?.materiais, materialId, regras.exigeTicket]);
 
   // Material que não exige ticket (ex: concreto) esconde o campo. Default true.
+  // O modo também pode dispensar: basta um dos dois.
   const exigeTicket = useMemo(() => {
     const m = cat.data?.materiais.find((x) => x.id === materialId);
-    return m?.exigeTicket ?? true;
-  }, [cat.data?.materiais, materialId]);
+    return (m?.exigeTicket ?? true) && regras.exigeTicket;
+  }, [cat.data?.materiais, materialId, regras.exigeTicket]);
 
   // Material libera "voltar pro bota-fora" (limpeza)? Só então mostra a pergunta.
   const permiteBotaFora = useMemo(() => {
     const m = cat.data?.materiais.find((x) => x.id === materialId);
     return m?.permiteBotaFora ?? false;
   }, [cat.data?.materiais, materialId]);
-  // Efetivo: só conta se o material permite E o motorista marcou.
-  const botaFora = permiteBotaFora && teveBotaFora;
+  // Efetivo: só conta se o material permite E o motorista marcou — e se o modo
+  // pede km (o bota-fora só existe como km a mais).
+  const botaFora = exigeKm && permiteBotaFora && teveBotaFora;
 
   // KM auto via OSRM entre local de carga (se cadastrado) e descarga.
   const localCargaId = ciclo?.localCargaId ?? "";
@@ -344,11 +359,12 @@ export default function FinalizarViagem() {
   // Valida tudo que NÃO é peso/ticket (esses podem ficar pra depois, no modo
   // "aguardando peso"). Aponta o 1º campo faltando na ordem da tela.
   function validarBase(): boolean {
-    if (!localDescargaId) {
+    // O modo de serviço decide o que é obrigatório: descarga, material e km.
+    if (exigeLocalDescarga && !localDescargaId) {
       val.apontar("descarga", "Marque o local de descarga");
       return false;
     }
-    if (!materialId) {
+    if (exigeMaterial && !materialId) {
       val.apontar("material", "Escolha o material");
       return false;
     }
@@ -356,11 +372,11 @@ export default function FinalizarViagem() {
     // pegou — nada vem marcado. Com uma opção só não há o que escolher, e
     // offline nem chega alternativa. Se ele já assumiu o km por outro caminho
     // (digitou na mão ou pegou a sugestão da frota), não cobra a estrada também.
-    if (temMapa && rotasAtivas.length > 1 && rotaIdx < 0 && !kmEditadoManual) {
+    if (exigeKm && temMapa && rotasAtivas.length > 1 && rotaIdx < 0 && !kmEditadoManual) {
       val.apontar("rota", "Escolha a estrada que você pegou");
       return false;
     }
-    if (!km.trim()) {
+    if (exigeKm && !km.trim()) {
       val.apontar("km", "Informe os km rodados");
       return false;
     }
@@ -448,6 +464,7 @@ export default function FinalizarViagem() {
     // Km fora do padrão: avisa uma vez; se insistir, exige a explicação na
     // observação. Pula quando a observação já foi preenchida (não cobra 2x).
     if (
+      exigeKm &&
       kmForaDoPadrao &&
       avaliacao &&
       !exigirJustificativa &&
@@ -490,7 +507,8 @@ export default function FinalizarViagem() {
           : "Esse km foi calculado automático pela rota. Se você rodou diferente, toque em Alterar e corrija — o que você confirmar é o que vale.";
     // Km fora do padrão já passou pelo pop-up próprio (+ justificativa) — não
     // repete a confirmação genérica.
-    const kmConfirmado = kmForaDoPadrao
+    // Modo que não pede km: não há o que confirmar.
+    const kmConfirmado = kmForaDoPadrao || !exigeKm
       ? true
       : await showConfirm({
           title:
@@ -519,7 +537,8 @@ export default function FinalizarViagem() {
 
       await finalizarViagemGuiada({
         clienteId,
-        materialId,
+        // Campo que o modo não pede nem aparece na tela: vai sem.
+        materialId: exigeMaterial ? materialId || undefined : undefined,
         justificativaSemFoto:
           exigeFoto && !foto ? justificativaSemFoto.trim() || undefined : undefined,
         data: hojeISO(),
@@ -528,7 +547,7 @@ export default function FinalizarViagem() {
           ? undefined
           : parseFloat(toneladas.replace(",", ".")),
         aguardandoPeso,
-        km: kmTotalNum,
+        km: exigeKm ? kmTotalNum : undefined,
         // Quando o seletor governa, é o km da opção escolhida (== km) → sem divergência.
         // Bota-fora: só manda kmCalculado (ida+volta) quando as DUAS pernas vieram
         // de rota real; senão fica undefined pro backend reprocessar.
@@ -552,17 +571,16 @@ export default function FinalizarViagem() {
             ? [{ tipo: "RETORNO_BOTA_FORA", localId: localCargaId, km: kmVolta }]
             : undefined,
         ticket: aguardandoPeso ? undefined : exigeTicket ? ticket.trim() : undefined,
-        localDescargaId,
-        localDescargaDados,
+        localDescargaId: exigeLocalDescarga ? localDescargaId || undefined : undefined,
+        localDescargaDados: exigeLocalDescarga ? localDescargaDados : undefined,
         descargaLat: descargaCaptura?.lat,
         descargaLng: descargaCaptura?.lng,
         descargaPrecisao: descargaCaptura?.precisao ?? undefined,
         descargaFonte: descargaCaptura?.fonte,
         descargaRaioUsadoM: descargaCaptura?.raioUsadoM,
         descargaDistanciaMetros: descargaCaptura?.distanciaMetros ?? undefined,
-        valorPedagioTotal: valorPedagio
-          ? parseFloat(valorPedagio.replace(",", "."))
-          : undefined,
+        valorPedagioTotal:
+          mostraPedagio && valorPedagio ? parseFloat(valorPedagio.replace(",", ".")) : undefined,
         observacao: observacao.trim() || undefined,
         foto: foto ? { uri: foto.uri, mime: foto.mime } : undefined,
       });
@@ -609,36 +627,39 @@ export default function FinalizarViagem() {
             keyboardShouldPersistTaps="handled"
           >
             {/* 1) Onde descarregou — captura já dispara sozinha ao abrir a tela
-                   (o motorista veio do "Finalizar viagem" acabando de descarregar). */}
-            <View
-              className={
-                val.erroDe("descarga")
-                  ? "rounded-2xl border-2 border-destructive bg-destructive/5 p-3"
-                  : undefined
-              }
-              onLayout={val.onLayoutCampo("descarga")}
-            >
-              <DescargaPorGps
-                autoIniciar={!localDescargaId}
-                clienteId={clienteId || null}
-                value={localDescargaId}
-                onChange={(x) => {
-                  val.limpar();
-                  setLocalDescargaId(x);
-                  // Marca quando a descarga foi escolhida (pra mostrar data/hora
-                  // no espelho, igual à carga). Limpa se desmarcou.
-                  setDescargaEm(x ? new Date().toISOString() : undefined);
-                  // Nova descarga = nova rota; zera a escolha (nada marcado).
-                  setRotaGeometriaEscolhida(null);
-                  setRotaIdx(-1);
-                  setKmEditadoManual(false);
-                }}
-                onCaptura={setDescargaCaptura}
-                nomeSelecionadoFallback={nomeDescargaSelecionado}
-                localCargaCoords={localCargaCoords}
-              />
-              {val.erroDe("descarga") ? <ErroCampo msg={val.erroDe("descarga")!} /> : null}
-            </View>
+                   (o motorista veio do "Finalizar viagem" acabando de descarregar).
+                   Só quando o modo de serviço pede o local de descarga. */}
+            {exigeLocalDescarga ? (
+              <View
+                className={
+                  val.erroDe("descarga")
+                    ? "rounded-2xl border-2 border-destructive bg-destructive/5 p-3"
+                    : undefined
+                }
+                onLayout={val.onLayoutCampo("descarga")}
+              >
+                <DescargaPorGps
+                  autoIniciar={!localDescargaId}
+                  clienteId={clienteId || null}
+                  value={localDescargaId}
+                  onChange={(x) => {
+                    val.limpar();
+                    setLocalDescargaId(x);
+                    // Marca quando a descarga foi escolhida (pra mostrar data/hora
+                    // no espelho, igual à carga). Limpa se desmarcou.
+                    setDescargaEm(x ? new Date().toISOString() : undefined);
+                    // Nova descarga = nova rota; zera a escolha (nada marcado).
+                    setRotaGeometriaEscolhida(null);
+                    setRotaIdx(-1);
+                    setKmEditadoManual(false);
+                  }}
+                  onCaptura={setDescargaCaptura}
+                  nomeSelecionadoFallback={nomeDescargaSelecionado}
+                  localCargaCoords={localCargaCoords}
+                />
+                {val.erroDe("descarga") ? <ErroCampo msg={val.erroDe("descarga")!} /> : null}
+              </View>
+            ) : null}
 
             {/* 2) Cliente (já escolhido no início) + material */}
             <View className="gap-1.5">
@@ -650,30 +671,32 @@ export default function FinalizarViagem() {
               </View>
             </View>
 
-            <View className="gap-2" onLayout={val.onLayoutCampo("material")}>
-              <Label error={!!val.erroDe("material")}>Material</Label>
-              <Select
-                value={materialId}
-                onChange={(x) => {
-                  val.limpar();
-                  setMaterialId(x);
-                }}
-                options={materialOptions}
-                placeholder="Escolha o material"
-                searchable
-                error={!!val.erroDe("material")}
-              />
-              {val.erroDe("material") ? (
-                <ErroCampo msg={val.erroDe("material")!} />
-              ) : !exigeTicket && materialId ? (
-                <Text className="text-xs text-muted-foreground">
-                  Esse material não exige ticket — pode lançar sem número.
-                </Text>
-              ) : null}
-            </View>
+            {exigeMaterial ? (
+              <View className="gap-2" onLayout={val.onLayoutCampo("material")}>
+                <Label error={!!val.erroDe("material")}>Material</Label>
+                <Select
+                  value={materialId}
+                  onChange={(x) => {
+                    val.limpar();
+                    setMaterialId(x);
+                  }}
+                  options={materialOptions}
+                  placeholder="Escolha o material"
+                  searchable
+                  error={!!val.erroDe("material")}
+                />
+                {val.erroDe("material") ? (
+                  <ErroCampo msg={val.erroDe("material")!} />
+                ) : !exigeTicket && materialId ? (
+                  <Text className="text-xs text-muted-foreground">
+                    Esse material não exige ticket — pode lançar sem número.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
 
             {/* Sugestão do histórico da frota — no topo da seção de km. */}
-            {mostrarSugestao && sugestaoKm ? (
+            {exigeKm && mostrarSugestao && sugestaoKm ? (
               <SugestaoKmHistorico
                 km={sugestaoKm.km}
                 amostra={sugestaoKm.amostra}
@@ -686,7 +709,7 @@ export default function FinalizarViagem() {
             ) : null}
 
             {/* Seletor de estrada (escolha da rota no mapa) */}
-            {temMapa ? (
+            {exigeKm && temMapa ? (
               <View ref={val.refCampo("rota")} onLayout={val.onLayoutCampo("rota")}>
                 <SeletorRotas
                   rotas={rotasAtivas}
@@ -697,63 +720,70 @@ export default function FinalizarViagem() {
               </View>
             ) : null}
 
-            {/* 3) Km e pedágio */}
-            <View className="gap-2" onLayout={val.onLayoutCampo("km")}>
-              <View className="flex-row gap-3">
-                <View className="flex-1 gap-2">
-                  <Label error={!!val.erroDe("km")}>Km rodados</Label>
-                  <Input
-                    value={km}
-                    onChangeText={(v) => {
-                      val.limpar();
-                      setKmEditadoManual(true);
-                      setKmFonte("MANUAL");
-                      setKm(v);
-                    }}
-                    keyboardType="decimal-pad"
-                    placeholder="0,00"
-                    maxLength={8}
-                    error={!!val.erroDe("km")}
-                  />
-                  {rota.isFetching && !kmEditadoManual ? (
-                    <Text className="text-xs text-muted-foreground">Calculando rota…</Text>
-                  ) : rota.data &&
-                    "km" in rota.data &&
-                    rota.data.km &&
-                    !kmEditadoManual &&
-                    (rota.data.fonte === "osrm" ||
-                      rota.data.fonte === "cache_server") ? (
-                    <Text className="text-xs font-medium text-success">
-                      ✓ Calculado ({rota.data.km} km)
-                    </Text>
+            {/* 3) Km e pedágio — cada um só quando o modo pede/mostra */}
+            {exigeKm || mostraPedagio ? (
+              <View className="gap-2" onLayout={val.onLayoutCampo("km")}>
+                <View className="flex-row gap-3">
+                  {exigeKm ? (
+                    <View className="flex-1 gap-2">
+                      <Label error={!!val.erroDe("km")}>Km rodados</Label>
+                      <Input
+                        value={km}
+                        onChangeText={(v) => {
+                          val.limpar();
+                          setKmEditadoManual(true);
+                          setKmFonte("MANUAL");
+                          setKm(v);
+                        }}
+                        keyboardType="decimal-pad"
+                        placeholder="0,00"
+                        maxLength={8}
+                        error={!!val.erroDe("km")}
+                      />
+                      {rota.isFetching && !kmEditadoManual ? (
+                        <Text className="text-xs text-muted-foreground">Calculando rota…</Text>
+                      ) : rota.data &&
+                        "km" in rota.data &&
+                        rota.data.km &&
+                        !kmEditadoManual &&
+                        (rota.data.fonte === "osrm" ||
+                          rota.data.fonte === "cache_server") ? (
+                        <Text className="text-xs font-medium text-success">
+                          ✓ Calculado ({rota.data.km} km)
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+                  {mostraPedagio ? (
+                    <View className="flex-1 gap-2">
+                      <Label>Pedágio (R$)</Label>
+                      <Input
+                        value={valorPedagio}
+                        onChangeText={setValorPedagio}
+                        keyboardType="decimal-pad"
+                        placeholder="opcional"
+                        maxLength={10}
+                      />
+                    </View>
                   ) : null}
                 </View>
-                <View className="flex-1 gap-2">
-                  <Label>Pedágio (R$)</Label>
-                  <Input
-                    value={valorPedagio}
-                    onChangeText={setValorPedagio}
-                    keyboardType="decimal-pad"
-                    placeholder="opcional"
-                    maxLength={10}
-                  />
-                </View>
+                {exigeKm &&
+                !mostrarSugestao &&
+                rota.data &&
+                "km" in rota.data &&
+                rota.data.km &&
+                !kmEditadoManual &&
+                (rota.data.fonte === "estimado_haversine" ||
+                  rota.data.fonte === "cache_local") ? (
+                  <AvisoKmEstimado km={rota.data.km} fonte={rota.data.fonte} />
+                ) : null}
+                {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
+                {exigeKm ? bannerKmForaDoPadrao : null}
               </View>
-              {!mostrarSugestao &&
-              rota.data &&
-              "km" in rota.data &&
-              rota.data.km &&
-              !kmEditadoManual &&
-              (rota.data.fonte === "estimado_haversine" ||
-                rota.data.fonte === "cache_local") ? (
-                <AvisoKmEstimado km={rota.data.km} fonte={rota.data.fonte} />
-              ) : null}
-              {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
-              {bannerKmForaDoPadrao}
-            </View>
+            ) : null}
 
             {/* Bota-fora (limpeza): só quando o material permite */}
-            {permiteBotaFora ? (
+            {exigeKm && permiteBotaFora ? (
               <PerguntaBotaFora
                 valor={teveBotaFora}
                 onMudar={setTeveBotaFora}

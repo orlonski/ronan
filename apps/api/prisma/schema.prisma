@@ -2327,6 +2327,9 @@ model TipoServico {
   exigeTicket        Boolean  @default(true)
   exigeLocalDescarga Boolean  @default(true)
   exigeKm            Boolean  @default(true)
+  /// false = o app esconde o campo de pedágio (e o aviso de pedágio na rota).
+  /// Só muda o formulário; não apaga pedágio de ninguém.
+  mostraPedagio      Boolean  @default(true)
   criadoEm           DateTime @default(now())
   alteradoEm         DateTime @updatedAt
   criadoPor          User?    @relation("CriouTipoServico", fields: [criadoPorId], references: [id], onDelete: SetNull)

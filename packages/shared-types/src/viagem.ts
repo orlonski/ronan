@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FonteGps } from "./enums";
 import { KmFonte } from "./km-atipico";
+import { REGRAS_MODO_CLASSICO, type RegrasDoModo } from "./tipo-servico";
 
 export const ViagemPontoInput = z.object({
   lat: z.number().min(-90).max(90),
@@ -172,59 +173,84 @@ export const CriarViagemBase = z.object({
   justificativaSemFoto: z.string().min(10).max(500).optional(),
 });
 
+/** Campo do lançamento que o modo de serviço pode exigir. */
+export type CampoExigidoPeloModo = "toneladas" | "materialId" | "km" | "localDescargaId";
+
 /**
- * O que o lançamento exige, de acordo com o modo de serviço.
+ * O que falta no lançamento, pela régua do modo de serviço.
  *
- * ⚠️ Esta função é a fronteira de compatibilidade dos modos de serviço. Quando
- * `tipoServicoId` está AUSENTE — app antigo, conta sem tipos cadastrados, PWA —
- * ela se comporta exatamente como antes: peso, material, km e local de descarga
- * obrigatórios, com as mesmas mensagens. Nada muda pra quem lança por tonelada.
+ * ⚠️ UMA régua pra dois lados: o app valida com ela antes de enfileirar, e a
+ * API usa ela pra decidir o que carimbar como FALTA_* ao receber. Quem exige
+ * o que o modo não pede prende o motorista num campo que a tela nem mostra —
+ * foi assim que conta com um modo só sem km ficou sem conseguir salvar.
  *
- * Quando `tipoServicoId` está presente, quem manda é o cadastro do tipo
- * (exige*), que só o backend conhece — mesmo racional já usado pro
- * ticket, que depende de Material.exigeTicket e é imposto lá. O app continua
- * validando pela UI (ele sabe as flags pelo catálogo); aqui a checagem afrouxa
- * pra não reprovar um payload legítimo antes de sair do celular.
- *
- * Reusado no payload do controller do backend (mesma regra na borda da API).
+ * Peso não depende do modo: toda viagem é por peso (sem peso só no fluxo
+ * "aguardando peso", que completa depois). Ticket também fica de fora — a
+ * exigência dele combina modo E material, e o catálogo de material só o
+ * backend e a tela conhecem por inteiro.
  */
-export function checarObrigatoriosDoModo(
+export function camposFaltandoPeloModo(
   val: {
     aguardandoPeso?: boolean;
-    toneladas?: number;
-    tipoServicoId?: string;
-    materialId?: string;
-    km?: number;
-    localDescargaId?: string;
+    toneladas?: number | null;
+    materialId?: string | null;
+    km?: number | null;
+    localDescargaId?: string | null;
   },
+  regras: Pick<RegrasDoModo, "exigeMaterial" | "exigeKm" | "exigeLocalDescarga">,
+): { campo: CampoExigidoPeloModo; mensagem: string }[] {
+  const falta: { campo: CampoExigidoPeloModo; mensagem: string }[] = [];
+  if (!val.aguardandoPeso && (val.toneladas == null || val.toneladas <= 0)) {
+    falta.push({ campo: "toneladas", mensagem: "Informe as toneladas." });
+  }
+  if (regras.exigeMaterial && !val.materialId) {
+    falta.push({ campo: "materialId", mensagem: "Escolha o material." });
+  }
+  if (regras.exigeKm && val.km == null) {
+    falta.push({ campo: "km", mensagem: "Informe o km rodado." });
+  }
+  if (regras.exigeLocalDescarga && !val.localDescargaId) {
+    falta.push({ campo: "localDescargaId", mensagem: "Escolha o local de descarga." });
+  }
+  return falta;
+}
+
+function refinarPeloModo(regras: RegrasDoModo) {
+  return (
+    val: Parameters<typeof camposFaltandoPeloModo>[0],
+    ctx: z.RefinementCtx,
+  ): void => {
+    for (const f of camposFaltandoPeloModo(val, regras)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [f.campo], message: f.mensagem });
+    }
+  };
+}
+
+/**
+ * O que o lançamento exige quando o chamador NÃO sabe o modo.
+ *
+ * ⚠️ Fronteira de compatibilidade: sem `tipoServicoId` vale o clássico (tudo
+ * obrigatório, mensagens de sempre); com ele, afrouxa — quem tem as flags é o
+ * backend. Quem SABE o modo (o app, pelo catálogo) usa `criarViagemInputDoModo`
+ * com as regras dele, que é a validação que conta.
+ */
+export function checarObrigatoriosDoModo(
+  val: Parameters<typeof camposFaltandoPeloModo>[0] & { tipoServicoId?: string },
   ctx: z.RefinementCtx,
 ): void {
-  // Modo de serviço explícito: o backend é a autoridade (ele tem as flags).
   if (val.tipoServicoId) return;
-
-  if (!val.aguardandoPeso && (val.toneladas == null || val.toneladas <= 0)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["toneladas"],
-      message: "Informe as toneladas.",
-    });
-  }
-  if (!val.materialId) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["materialId"], message: "Escolha o material." });
-  }
-  if (val.km == null) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["km"], message: "Informe o km rodado." });
-  }
-  if (!val.localDescargaId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["localDescargaId"],
-      message: "Escolha o local de descarga.",
-    });
-  }
+  refinarPeloModo(REGRAS_MODO_CLASSICO)(val, ctx);
 }
 
 export const CriarViagemInput = CriarViagemBase.superRefine(checarObrigatoriosDoModo);
+
+/**
+ * O schema do lançamento com a régua de UM modo conhecido — o que o app usa
+ * antes de enfileirar. `regrasDoModo(null)` = clássico.
+ */
+export function criarViagemInputDoModo(regras: RegrasDoModo) {
+  return CriarViagemBase.superRefine(refinarPeloModo(regras));
+}
 export type CriarViagemInput = z.infer<typeof CriarViagemInput>;
 
 // Completar o peso + ticket de uma viagem que foi lançada em AGUARDANDO_PESO

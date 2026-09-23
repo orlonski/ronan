@@ -1,3 +1,5 @@
+import { MotivoDivergencia } from "@prisma/client";
+import { camposFaltandoPeloModo, type CampoExigidoPeloModo } from "@ronan/shared-types";
 import type { PrismaService } from "../prisma/prisma.service";
 import { ItemInexistenteException } from "./item-inexistente";
 
@@ -71,4 +73,26 @@ export async function resolverModoServico(
   // que não passou pelo backfill) cai no clássico — nunca num erro.
   const padrao = await prisma.tipoServico.findFirst({ where: { padrao: true }, select });
   return padrao ?? MODO_CLASSICO;
+}
+
+const MOTIVO_DA_FALTA: Record<CampoExigidoPeloModo, MotivoDivergencia> = {
+  toneladas: MotivoDivergencia.FALTA_TONELADAS,
+  materialId: MotivoDivergencia.FALTA_MATERIAL,
+  km: MotivoDivergencia.FALTA_KM,
+  localDescargaId: MotivoDivergencia.FALTA_LOCAL_DESCARGA,
+};
+
+/**
+ * Carimba o que falta no lançamento do motorista, pela régua do modo.
+ *
+ * É a mesma função (`camposFaltandoPeloModo`, shared-types) que o app roda
+ * antes de enfileirar — o servidor não pode cobrar um campo que o app escondeu.
+ * Nunca recusa: o lançamento entra e a falta vai pro painel.
+ */
+export function carimbarFaltasDoModo(
+  divs: { add: (motivo: MotivoDivergencia) => unknown },
+  val: Parameters<typeof camposFaltandoPeloModo>[0],
+  modo: Pick<ModoServico, "exigeMaterial" | "exigeKm" | "exigeLocalDescarga">,
+): void {
+  for (const f of camposFaltandoPeloModo(val, modo)) divs.add(MOTIVO_DA_FALTA[f.campo]);
 }

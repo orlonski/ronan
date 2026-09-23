@@ -20,7 +20,7 @@ import { garantirCadastro, ItemInexistenteException } from "../common/item-inexi
 import { aplicarDivergencias, Divergencias } from "../common/divergencias";
 import { resolverTransportadora } from "../common/transportadora";
 import { contaIdAtual } from "../common/conta/conta-context";
-import { resolverModoServico } from "../common/tipo-servico";
+import { carimbarFaltasDoModo, resolverModoServico } from "../common/tipo-servico";
 import { exigeFotoDaViagem, resolverJustificativaSemFoto } from "../common/exige-foto";
 import {
   carimbosDaDispensa,
@@ -1245,12 +1245,10 @@ export class ViagensMotoristaService {
     const modo = await resolverModoServico(this.prisma, input.tipoServicoId, divs);
 
     // Material é lido aqui (e não junto do bota-fora, mais abaixo) porque a
-    // validação do ticket já depende dele. Modo que não exige material grava
-    // materialId null.
-    let materialId = modo.exigeMaterial ? (input.materialId ?? null) : null;
-    if (modo.exigeMaterial && !input.materialId) {
-      divs.add(MotivoDivergencia.FALTA_MATERIAL);
-    }
+    // validação do ticket já depende dele. O que o motorista mandou FICA, mesmo
+    // num modo que não exige material: não exigir é não cobrar, não é jogar
+    // fora — descartar apagava um dado que ele informou por conta própria.
+    let materialId = input.materialId ?? null;
     const material = materialId
       ? await this.prisma.material.findUnique({
           where: { id: materialId },
@@ -1267,19 +1265,14 @@ export class ViagensMotoristaService {
       materialId = null;
     }
 
-    if (modo.exigeLocalDescarga && !input.localDescargaId) {
-      divs.add(MotivoDivergencia.FALTA_LOCAL_DESCARGA);
-    }
-    if (modo.exigeKm && input.km == null) {
-      divs.add(MotivoDivergencia.FALTA_KM);
-    }
-
     // Modo "aguardando peso": motorista lança sem peso/ticket porque o romaneio
     // só sai no fim do dia. Pula a validação de ticket (fica null); peso e ticket
     // entram depois via completarPeso (app) ou update admin (dashboard).
     const aguardandoPeso = input.aguardandoPeso === true;
-    const semPeso = !aguardandoPeso && (input.toneladas == null || input.toneladas <= 0);
-    if (semPeso) divs.add(MotivoDivergencia.FALTA_TONELADAS);
+
+    // O que falta, pela MESMA régua que o app usa antes de enfileirar
+    // (shared-types). Material, km e descarga dependem do modo; peso não.
+    carimbarFaltasDoModo(divs, input, modo);
 
     // Ticket: basta o modo OU o material dispensar. Número repetido NÃO impede
     // o lançamento — vem carimbado pra quem confere decidir. Sem cliente
@@ -1697,6 +1690,7 @@ export class ViagensMotoristaService {
         motoristaId: true,
         status: true,
         materialId: true,
+        tipoServicoId: true,
         cliente: { select: { empresaId: true } },
       },
     });
@@ -1719,12 +1713,16 @@ export class ViagensMotoristaService {
     // muitas vezes sem sinal): recusar aqui deixaria a viagem presa em
     // AGUARDANDO_PESO pra sempre. Carimba e segue.
     const divs = new Divergencias();
+    // Ticket segue o modo da viagem (e o material): modo sem ticket não cobra
+    // ticket nem na hora de completar o peso. Sem modo gravado (viagem guiada
+    // de app antigo) vale o padrão da conta.
+    const modo = await resolverModoServico(this.prisma, viagem.tipoServicoId, divs);
     const { ticket, duplicadoDeId } = await this.resolverTicketParaEmpresa(
       viagem.cliente?.empresaId ?? "",
       viagem.materialId,
       input.ticket,
       viagemId,
-      true,
+      modo.exigeTicket,
       divs,
     );
 
@@ -1741,6 +1739,8 @@ export class ViagensMotoristaService {
         toneladas: input.toneladas,
         ticket,
         ticketDuplicadoDeId: duplicadoDeId,
+        // Só preenche quando faltava: modo já gravado não muda por aqui.
+        ...(viagem.tipoServicoId == null && modo.id ? { tipoServicoId: modo.id } : {}),
         ...(dispensadaPeso ? carimbosDaDispensa(new Date()) : { status: statusBasePeso }),
       },
       include: VIAGEM_INCLUDE,
@@ -1901,6 +1901,12 @@ export class ViagensMotoristaService {
       veiculoId,
     );
 
+    // Modo de serviço já no começo: é ele que diz o que o finalizar vai pedir,
+    // e é com ele que a tabela de preço casa. App antigo não manda → padrão da
+    // conta (conta sem modo nenhum → null, o clássico). Tipo que sumiu do
+    // cadastro cai no padrão e sai carimbado — nunca recusa.
+    const modo = await resolverModoServico(this.prisma, input.tipoServicoId, divs);
+
     const viagem = await this.prisma.viagem.create({
       data: {
         clientId: input.clientId,
@@ -1908,6 +1914,7 @@ export class ViagensMotoristaService {
         veiculoId,
         clienteId,
         transportadoraId,
+        tipoServicoId: modo.id,
         // EM_ANDAMENTO já é fora do fechamento; carimbo não muda o status aqui
         // (statusFinal preserva os status de fluxo), só sinaliza pro painel.
         status: "EM_ANDAMENTO",
@@ -2086,7 +2093,14 @@ export class ViagensMotoristaService {
   async finalizar(motoristaId: string, clientId: string, input: FinalizarViagemInput) {
     const viagem = await this.prisma.viagem.findUnique({
       where: { clientId },
-      select: { id: true, motoristaId: true, status: true, clienteId: true, localCargaId: true },
+      select: {
+        id: true,
+        motoristaId: true,
+        status: true,
+        clienteId: true,
+        localCargaId: true,
+        tipoServicoId: true,
+      },
     });
     if (!viagem) throw new NotFoundException("Viagem em andamento ainda não sincronizada.");
     if (viagem.motoristaId !== motoristaId) {
@@ -2125,6 +2139,11 @@ export class ViagensMotoristaService {
       clienteIdEfetivo = null;
     }
 
+    // O modo foi gravado no iniciar. Viagem aberta por app antigo (sem modo)
+    // cai no padrão da conta — o mesmo que o app resolve pelo catálogo, então
+    // os dois lados cobram os mesmos campos.
+    const modo = await resolverModoServico(this.prisma, viagem.tipoServicoId, divs);
+
     // Modo "aguardando peso": finaliza sem peso/ticket (romaneio no fim do dia).
     // Pula a validação de ticket (fica null) e a viagem vai pra AGUARDANDO_PESO
     // em vez de ENVIADA; peso e ticket entram depois via completarPeso/admin.
@@ -2137,7 +2156,7 @@ export class ViagensMotoristaService {
             input.materialId ?? null,
             input.ticket,
             viagem.id,
-            true,
+            modo.exigeTicket,
             divs,
           );
 
@@ -2156,23 +2175,20 @@ export class ViagensMotoristaService {
           },
         })
       : null;
-    if (!materialIdFin) {
-      divs.add(MotivoDivergencia.FALTA_MATERIAL);
-    } else if (!materialFin) {
+    if (materialIdFin && !materialFin) {
       divs.add(MotivoDivergencia.CADASTRO_MATERIAL_SUMIU, { materialId: materialIdFin });
       materialIdFin = null;
     }
-    if (input.km == null) divs.add(MotivoDivergencia.FALTA_KM);
-    if (!aguardandoPeso && (input.toneladas == null || Number(input.toneladas) <= 0)) {
-      divs.add(MotivoDivergencia.FALTA_TONELADAS);
-    }
+    // O que falta, pela régua do modo (a mesma do app): material, km e
+    // descarga só são cobrados quando o modo pede. Peso sempre.
+    carimbarFaltasDoModo(divs, input, modo);
 
     // Foto do comprovante (mesma regra do create): carimba a falta, nunca recusa.
-    // O lifecycle guiado não escolhe modo de serviço,
-    // então só o material suprime.
+    // Material sem papel ou modo sem ticket suprimem.
     const exigeFotoFin = exigeFotoDaViagem({
       contaExige: (await this.contaExigeFoto()).viagem,
       materialTemComprovante: materialFin?.temComprovanteFoto,
+      modoExigeTicket: modo.exigeTicket,
     });
     const trechosCreate = this.montarTrechos(
       input.trechos,
@@ -2198,7 +2214,6 @@ export class ViagensMotoristaService {
           divs,
         })
       : null;
-    if (!input.localDescargaId) divs.add(MotivoDivergencia.FALTA_LOCAL_DESCARGA);
 
     const finalizada = await this.prisma.viagem.update({
       where: { id: viagem.id },
@@ -2206,6 +2221,9 @@ export class ViagensMotoristaService {
         ...(dispensadaFin ? carimbosDaDispensa(new Date()) : { status: statusBaseFin }),
         clienteId: clienteIdEfetivo,
         materialId: materialIdFin,
+        // Viagem aberta por app antigo nasceu sem modo: grava o que valeu agora,
+        // senão a tabela de preço amarrada a um modo nunca casa com ela.
+        tipoServicoId: modo.id,
         data: input.data,
         toneladas: aguardandoPeso ? null : input.toneladas,
         km: input.km,
