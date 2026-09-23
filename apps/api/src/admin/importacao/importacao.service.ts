@@ -123,8 +123,9 @@ export class ImportacaoService {
     entidade: string;
     linhas: LinhaValidada[];
     usuarioId: string;
-    /** Obrigatório em clientes: `Cliente.empresaId` é NOT NULL. */
+    /** Em clientes (obras): o cliente que paga, ou `clientePorLinha`. */
     empresaId?: string;
+    clientePorLinha?: boolean;
   }): Promise<{ criados: number; atualizados: number; ignorados: number; avisos: string[] }> {
     const entidade = this.entidade(args.entidade);
     // Zera o cache de cadastros a cada importação: entre uma subida e outra o
@@ -156,18 +157,63 @@ export class ImportacaoService {
     return { criados, atualizados, ignorados, avisos };
   }
 
+  /** Uma linha = um cliente (quem paga) com a obra de mesmo nome. */
+  private async gravarClienteComObra(
+    nome: string,
+    chave: string,
+    apelidos: string[],
+    usuarioId: string,
+  ): Promise<"criado" | "atualizado"> {
+    const empresas = await this.prisma.empresa.findMany({ select: { id: true, nome: true } });
+    const empresa = empresas.find((e) => normalizar(e.nome) === chave);
+    if (!empresa) {
+      await this.prisma.$transaction(async (tx) => {
+        const nova = await tx.empresa.create({ data: { nome, criadoPorId: usuarioId } });
+        await tx.cliente.create({
+          data: { nome, empresaId: nova.id, apelidos, criadoPorId: usuarioId },
+        });
+      });
+      return "criado";
+    }
+    // Cliente que já existe: garante a obra de mesmo nome (sem mexer nas
+    // outras obras dele) e atualiza os apelidos se a planilha trouxe.
+    const obras = await this.prisma.cliente.findMany({
+      where: { empresaId: empresa.id },
+      select: { id: true, nome: true },
+    });
+    const obra = obras.find((o) => normalizar(o.nome) === chave);
+    if (obra) {
+      if (apelidos.length > 0) {
+        await this.prisma.cliente.update({ where: { id: obra.id }, data: { apelidos } });
+      }
+      return "atualizado";
+    }
+    await this.prisma.cliente.create({
+      data: { nome, empresaId: empresa.id, apelidos, criadoPorId: usuarioId },
+    });
+    return "atualizado";
+  }
+
   private async gravar(
     entidade: EntidadeImportavel,
     linha: LinhaValidada,
-    args: { usuarioId: string; empresaId?: string },
+    args: { usuarioId: string; empresaId?: string; clientePorLinha?: boolean },
     avisos: string[],
   ): Promise<"criado" | "atualizado" | "pulado"> {
     const v = linha.valores;
 
     switch (entidade.chave) {
       case "clientes": {
-        if (!args.empresaId) throw new BadRequestException("Escolha o cliente dessas obras.");
         const nome = String(v.nome);
+        // Sem cliente escolhido, cada linha é um cliente novo com a obra de
+        // mesmo nome — é o caso de quem está começando (33 de 34 clientes em
+        // produção têm uma obra só, com o nome dele). Casa por nome
+        // normalizado dos dois lados: subir a planilha de novo atualiza, não
+        // duplica.
+        if (!args.empresaId && args.clientePorLinha) {
+          return this.gravarClienteComObra(nome, linha.chave, this.lista(v.apelidos), args.usuarioId);
+        }
+        if (!args.empresaId) throw new BadRequestException("Escolha o cliente dessas obras.");
         // Casa por nome NORMALIZADO: "Pedreira Norte" e "PEDREIRA NORTE  " são
         // o mesmo cliente, e importar os dois é o começo de uma base suja que
         // ninguém limpa depois.

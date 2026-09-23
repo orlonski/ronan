@@ -42,7 +42,6 @@ const EXIGENCIAS: Exigencia[] = [
   { passo: "veiculo", perm: "veiculos.criar" },
   { passo: "local", perm: "locais.criar" },
   { passo: "empresa", perm: "empresas.criar" },
-  { passo: "cliente", perm: "clientes.criar" },
   { passo: "app", perm: "motoristas.ver" },
   { passo: "viagem", perm: "viagens.ver" },
   { passo: "preco", perm: "tabelas-preco.criar" },
@@ -77,7 +76,6 @@ export class PrimeirosPassosService {
       veiculos,
       motoristas,
       locais,
-      empresas,
       clientes,
       viagens,
       importadas,
@@ -87,7 +85,6 @@ export class PrimeirosPassosService {
         this.prisma.veiculo.count(),
         this.prisma.motorista.count(),
         this.prisma.local.count(),
-        this.prisma.empresa.count(),
         this.prisma.cliente.count(),
         // Viagem em andamento não conta como "já rodou": o ciclo pode ter sido
         // aberto e abandonado, e o passo é sobre ter chegado ao fim uma vez.
@@ -143,22 +140,15 @@ export class PrimeirosPassosService {
         rota: "/locais/novo",
         cumprido: locais > 1,
       },
-      // Cliente exige `empresaId` — sem a empresa, a tela de cliente não tem o
-      // que escolher. A dependência aparece na lista pra pessoa não descobrir
-      // isso no meio do formulário.
+      // Um passo só (era "cliente" e depois "obra"): o cliente nasce com a
+      // obra de mesmo nome, e é a OBRA que o motorista escolhe. Por isso o
+      // cumprido olha as obras — cliente sem obra não aparece no app.
       {
         chave: "empresa",
         titulo: "Cadastre o cliente que te contrata",
         descricao:
-          "É quem paga o frete e manda a planilha ou recebe o fechamento. As obras ficam dentro dele, então ele vem antes.",
+          "É quem paga o frete e manda a planilha ou recebe o fechamento. A obra com o mesmo nome nasce junto — é o que o motorista escolhe no app.",
         rota: "/empresas/novo",
-        cumprido: empresas > 0,
-      },
-      {
-        chave: "cliente",
-        titulo: "Cadastre uma obra",
-        descricao: "Dentro do cliente acima. É onde se trabalha — o que o motorista escolhe no app.",
-        rota: "/clientes/novo",
         cumprido: clientes > 0,
       },
       {

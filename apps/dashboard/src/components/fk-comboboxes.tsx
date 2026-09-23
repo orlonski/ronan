@@ -41,10 +41,24 @@ export const veiculoOption = (v: {
   sublabel: v.modelo ?? undefined,
 });
 
+/**
+ * Uma OBRA (model `Cliente`). O nome do cliente que paga só aparece embaixo
+ * quando é diferente — "Castilho / Castilho" repetido não ajuda; já as duas
+ * obras da Dromos precisam dizer de quem são. A lista de /admin/clientes traz
+ * `empresa` junto; quem monta a opção sem ela só vê o nome.
+ */
 export const clienteOption = (c: {
   id: string;
   nome: string;
-}): ComboboxOption => ({ value: c.id, label: c.nome });
+  empresa?: { nome: string } | null;
+}): ComboboxOption => ({
+  value: c.id,
+  label: c.nome,
+  sublabel:
+    c.empresa && c.empresa.nome.trim().toLowerCase() !== c.nome.trim().toLowerCase()
+      ? c.empresa.nome
+      : undefined,
+});
 
 export const transportadoraOption = (t: {
   id: string;

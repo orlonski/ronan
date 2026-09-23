@@ -5,6 +5,7 @@ import { RequerTela } from "@/components/requer-tela";
 import { FormPageHeader } from "@/components/form-page-header";
 import { useResourceItem } from "@/lib/client-api";
 import { EmpresaForm, type Empresa } from "../_components/empresa-form";
+import { ObrasDoCliente } from "../_components/obras-do-cliente";
 
 export default function EditarEmpresaPage({
   params,
@@ -25,6 +26,7 @@ export default function EditarEmpresaPage({
           <p className="text-sm text-muted-foreground">Carregando…</p>
         )}
         {item.data && <EmpresaForm initial={item.data} />}
+        {item.data && <ObrasDoCliente clienteId={item.data.id} nomeCliente={item.data.nome} />}
       </div>
     </RequerTela>
   );

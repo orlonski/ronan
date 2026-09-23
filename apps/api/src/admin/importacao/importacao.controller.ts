@@ -36,6 +36,8 @@ const LinhaSchema = z.object({
 const AplicarInput = z.object({
   entidade: z.string().min(2).max(40),
   empresaId: z.string().uuid().optional(),
+  /** Obras sem cliente escolhido: cada linha vira um cliente com a obra de mesmo nome. */
+  clientePorLinha: z.boolean().optional(),
   linhas: z.array(LinhaSchema).max(5000),
 });
 
@@ -139,6 +141,7 @@ export class ImportacaoController {
       entidade: body.entidade,
       linhas: body.linhas,
       empresaId: body.empresaId,
+      clientePorLinha: body.clientePorLinha,
       usuarioId: user.id,
     });
   }

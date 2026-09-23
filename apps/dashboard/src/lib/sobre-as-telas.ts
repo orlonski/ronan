@@ -632,23 +632,6 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
-  "/clientes": {
-    oQue:
-      "Onde se trabalha — a obra, a loja, o canteiro de cada cliente. É o que o " +
-      "motorista escolhe no app, é onde ficam os locais, e é o que diz, na viagem, " +
-      "pra onde aquela carga foi.",
-    faz: [
-      "Cadastrar cada obra dentro do cliente que contratou o frete",
-      "Preencher CNPJ, inscrição estadual e endereço, que é o que o CT-e exige de remetente e destinatário",
-      "Guardar os apelidos do dia a dia (\"obra do Beto\") pra busca achar mesmo escrito de outro jeito",
-    ],
-    naoEAqui: {
-      procurando: "quem paga, recebe a planilha e tem o preço combinado",
-      vaEm: "Clientes",
-      href: "/empresas",
-    },
-  },
-
   "/locais": {
     oQue:
       "De onde a carga sai e pra onde ela vai — é a lista que o motorista " +

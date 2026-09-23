@@ -45,29 +45,76 @@ export class EmpresasService {
       const exists = await this.prisma.empresa.findFirst({ where: { cnpj: data.cnpj } });
       if (exists) throw new ConflictException("CNPJ/CPF já cadastrado");
     }
-    return this.prisma.empresa.create({
-      data: { ...data, criadoPorId: usuarioId } as Prisma.EmpresaUncheckedCreateInput,
+    // Todo cliente nasce com a primeira obra, com o mesmo nome. O motorista
+    // escolhe OBRA no app — um cliente sem nenhuma não aparece pra ele, e antes
+    // o escritório tinha que cadastrar o mesmo nome duas vezes (33 de 34 casos
+    // em produção eram exatamente isso). Quem tem uma obra só nunca precisa
+    // ver essa camada; quem tem várias cadastra as outras dentro do cliente.
+    return this.prisma.$transaction(async (tx) => {
+      const empresa = await tx.empresa.create({
+        data: { ...data, criadoPorId: usuarioId } as Prisma.EmpresaUncheckedCreateInput,
+      });
+      await tx.cliente.create({
+        data: { nome: empresa.nome, empresaId: empresa.id, criadoPorId: usuarioId },
+      });
+      return empresa;
     });
   }
 
   async update(id: string, data: AtualizarEmpresaInput) {
-    await this.ensureExists(id);
-    return this.prisma.empresa.update({
-      where: { id },
-      data: data as Prisma.EmpresaUncheckedUpdateInput,
+    const antes = await this.ensureExists(id);
+    return this.prisma.$transaction(async (tx) => {
+      const empresa = await tx.empresa.update({
+        where: { id },
+        data: data as Prisma.EmpresaUncheckedUpdateInput,
+      });
+      // Renomear o cliente leva junto a obra que nasceu com ele — só quando é
+      // a única e tem EXATAMENTE o nome antigo. "Castilho" com a obra
+      // "CASTILHO" não é a mesma coisa: alguém escolheu escrever diferente
+      // (é o nome que o motorista lê), e isso não se muda por tabela.
+      if (data.nome && data.nome !== antes.nome) {
+        const obras = await tx.cliente.findMany({
+          where: { empresaId: id },
+          select: { id: true, nome: true },
+          take: 2,
+        });
+        if (obras.length === 1 && obras[0]!.nome === antes.nome) {
+          await tx.cliente.update({ where: { id: obras[0]!.id }, data: { nome: data.nome } });
+        }
+      }
+      return empresa;
     });
   }
 
   async remove(id: string) {
-    await this.ensureExists(id);
+    const empresa = await this.ensureExists(id);
+    // A obra que nasceu junto não pode travar a exclusão pra sempre: se ela é a
+    // única, tem o mesmo nome e nunca foi usada (sem viagem, local ou pedido),
+    // sai junto. Obra usada continua travando — ela carrega histórico.
+    const obras = await this.prisma.cliente.findMany({
+      where: { empresaId: id },
+      select: { id: true, nome: true },
+      take: 2,
+    });
+    let obraQueSaiJunto: string | null = null;
+    if (obras.length === 1 && obras[0]!.nome === empresa.nome) {
+      const [viagens, locais, pedidos] = await Promise.all([
+        this.prisma.viagem.count({ where: { clienteId: obras[0]!.id } }),
+        this.prisma.localCliente.count({ where: { clienteId: obras[0]!.id } }),
+        this.prisma.pedido.count({ where: { clienteId: obras[0]!.id } }),
+      ]);
+      if (viagens + locais + pedidos === 0) obraQueSaiJunto = obras[0]!.id;
+    }
     const [clientes, fechamentos, layouts, envios] = await Promise.all([
-      this.prisma.cliente.count({ where: { empresaId: id } }),
+      this.prisma.cliente.count({
+        where: { empresaId: id, ...(obraQueSaiJunto ? { id: { not: obraQueSaiJunto } } : {}) },
+      }),
       this.prisma.fechamento.count({ where: { empresaId: id } }),
       this.prisma.layoutEnvio.count({ where: { empresaId: id } }),
       this.prisma.envioFechamento.count({ where: { empresaId: id } }),
     ]);
     const partes: string[] = [];
-    if (clientes > 0) partes.push(`${clientes} cliente${clientes === 1 ? "" : "s"}`);
+    if (clientes > 0) partes.push(`${clientes} obra${clientes === 1 ? "" : "s"}`);
     if (fechamentos > 0)
       partes.push(`${fechamentos} fechamento${fechamentos === 1 ? "" : "s"}`);
     if (layouts > 0) partes.push(`${layouts} layout${layouts === 1 ? "" : "s"} de envio`);
@@ -78,7 +125,10 @@ export class EmpresasService {
       );
     }
     // LayoutImportBloco sai cascade via schema
-    await this.prisma.empresa.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      if (obraQueSaiJunto) await tx.cliente.delete({ where: { id: obraQueSaiJunto } });
+      await tx.empresa.delete({ where: { id } });
+    });
     return { ok: true };
   }
 

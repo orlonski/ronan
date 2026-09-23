@@ -57,8 +57,21 @@ export class ClientesService {
   }
 
   async update(id: string, data: AtualizarClienteInput) {
-    await this.ensureExists(id);
+    const obra = await this.ensureExists(id);
     if (data.empresaId) await this.ensureEmpresa(data.empresaId);
+    // Obra com viagem não muda de cliente (decisão do dono, 23/09/2026). O
+    // mínimo e o preço são resolvidos pelo cliente NA HORA de mostrar
+    // (viagem.cliente.empresaId): trocar o cliente reescreveria o faturado de
+    // meses passados sem ninguém ver. Cadastro errado se corrige criando a
+    // obra no cliente certo.
+    if (data.empresaId && data.empresaId !== obra.empresaId) {
+      const viagens = await this.prisma.viagem.count({ where: { clienteId: id } });
+      if (viagens > 0) {
+        throw new ConflictException(
+          `Esta obra já tem ${viagens} viage${viagens === 1 ? "m" : "ns"} e não pode mudar de cliente: o mínimo e o preço dessas viagens mudariam junto. Se foi cadastrada no cliente errado, crie a obra no cliente certo.`,
+        );
+      }
+    }
     return this.prisma.cliente.update({ where: { id }, data });
   }
 

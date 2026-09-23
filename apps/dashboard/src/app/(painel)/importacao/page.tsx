@@ -56,6 +56,9 @@ type Resultado = {
   avisos: string[];
 };
 
+/** Valor do seletor pra "cada linha é um cliente com a obra de mesmo nome". */
+const CADA_LINHA = "__cada_linha__";
+
 export default function ImportacaoPage() {
   return (
     <RequerTela chave="importacao.ver">
@@ -143,7 +146,8 @@ function Conteudo() {
           method: "POST",
           body: JSON.stringify({
             entidade: previa.entidade,
-            empresaId: empresaId ?? undefined,
+            empresaId: empresaId && empresaId !== CADA_LINHA ? empresaId : undefined,
+            clientePorLinha: empresaId === CADA_LINHA || undefined,
             linhas: previa.linhas,
           }),
         }),
@@ -243,8 +247,9 @@ function Conteudo() {
           </div>
         )}
 
-        {/* Empresa é PARTE do cliente no modelo — sem ela o registro não existe.
-            Perguntar aqui é melhor que aceitar o arquivo e falhar em cada linha. */}
+        {/* Obra sempre pertence a um cliente. Ou a planilha é de obras de um
+            cliente só, ou cada linha é um cliente com a obra de mesmo nome — o
+            caso de quem está começando. */}
         {precisaEmpresa && (
           <div className="space-y-1.5">
             <Label htmlFor="imp-empresa">2. De qual cliente são essas obras</Label>
@@ -254,6 +259,7 @@ function Conteudo() {
               onChange={(e) => setEmpresaId(e.target.value || null)}
             >
               <option value="">Selecione…</option>
+              <option value={CADA_LINHA}>Cada linha é um cliente (cria o cliente e a obra com o mesmo nome)</option>
               {(empresas.data ?? []).map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.nome}

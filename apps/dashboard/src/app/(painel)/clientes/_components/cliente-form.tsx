@@ -58,11 +58,17 @@ export type Cliente = {
 const PATH = "/admin/clientes";
 const EMPRESAS_PATH = "/admin/empresas";
 
-type Props = { initial?: Cliente };
+type Props = {
+  initial?: Cliente;
+  /** Obra nova criada de dentro da página de um cliente: já vem com ele. */
+  empresaIdInicial?: string;
+  /** Pra onde volta depois de salvar ou cancelar. */
+  voltarPara?: string;
+};
 
 type ClienteBody = Record<string, unknown>;
 
-export function ClienteForm({ initial }: Props) {
+export function ClienteForm({ initial, empresaIdInicial, voltarPara = "/clientes" }: Props) {
   const router = useRouter();
   const empresas = useResourceOptions<Empresa>(EMPRESAS_PATH);
   const create = useCreateResource<ClienteBody, Cliente>(PATH, PATH);
@@ -70,7 +76,7 @@ export function ClienteForm({ initial }: Props) {
 
   const [form, setForm] = useState({
     nome: initial?.nome ?? "",
-    empresaId: initial?.empresaId ?? "",
+    empresaId: initial?.empresaId ?? empresaIdInicial ?? "",
     apelidos: initial?.apelidos ?? ([] as string[]),
   });
   const [fiscal, setFiscal] = useState(fiscalDe(initial));
@@ -103,7 +109,7 @@ export function ClienteForm({ initial }: Props) {
     } else {
       await create.mutateAsync(body);
     }
-    router.push("/clientes");
+    router.push(voltarPara as never);
   }
 
   const saving = create.isPending || update.isPending;
@@ -175,7 +181,7 @@ export function ClienteForm({ initial }: Props) {
         </details>
 
         <div className="flex justify-end gap-2 pt-2">
-          <BotaoCancelar href="/clientes" sujo={sujo} />
+          <BotaoCancelar href={voltarPara} sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

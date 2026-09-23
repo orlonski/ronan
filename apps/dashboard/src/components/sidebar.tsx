@@ -12,7 +12,6 @@ import {
   BarChart3,
   Bell,
   Bot,
-  Boxes,
   Briefcase,
   Building,
   Building2,
@@ -260,10 +259,10 @@ const GRUPOS: Grupo[] = [
     coach: "grupo-cadastros",
     itens: [
       // Nomes decididos em 23/09/2026: o model `Empresa` é o CLIENTE (quem
-      // paga) e o model `Cliente` é a OBRA (onde se trabalha). Só a palavra
-      // mudou — href, permissão e coach seguem os antigos.
+      // paga) e o model `Cliente` é a OBRA (onde se trabalha). As obras moram
+      // dentro da página do cliente — "Obras" solto no menu era o mesmo nome
+      // digitado duas vezes em 33 de 34 casos. /clientes continua abrindo.
       { href: "/empresas", label: "Clientes", icon: Building2, perm: "empresas.ver" },
-      { href: "/clientes", label: "Obras", icon: Boxes, perm: "clientes.ver" },
       { href: "/locais", label: "Locais", icon: MapPin, perm: "locais.ver" },
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },
       { href: "/tipos-servico", label: "Como a viagem é cobrada", icon: Timer, perm: "tipos-servico.ver" },
