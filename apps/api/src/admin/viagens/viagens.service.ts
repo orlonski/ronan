@@ -29,13 +29,11 @@ import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { mudouInsumoDePreco } from "../../common/viagem-preco";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
-import { distanciaMetros } from "../../common/geo";
 import { lerChaveFiscal } from "../../common/chave-fiscal";
 import { resolverDivergenciasSupridas } from "../../common/divergencias";
 import { checarAlteracaoKm, fmtKmBr } from "../../common/km-motorista";
 import { filtrarComercial, omitirComercial } from "./comercial";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
-import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
 import { GeocodingService } from "../../geocoding/geocoding.service";
 import { KmAtipicoService } from "../../km-atipico/km-atipico.service";
 import { PrecificacaoService } from "../tabelas-preco/precificacao.service";
@@ -73,204 +71,11 @@ export class ViagensAdminService {
     private readonly roteamento: RoteamentoService,
     private readonly push: PushService,
     private readonly pedagiosConsulta: PedagiosRodoviaConsultaService,
-    private readonly buscaConfig: BuscaLocaisConfigService,
     private readonly geocoding: GeocodingService,
     private readonly kmAtipico: KmAtipicoService,
     private readonly precificacao: PrecificacaoService,
     private readonly mensagens: ViagemMensagensService,
   ) {}
-
-  /**
-   * Audita viagens cujo GPS de lançamento ficou FORA do raio inicial atual em
-   * relação ao local de descarga escolhido — mas existe OUTRO local de descarga
-   * dentro do raio inicial do GPS real. São candidatas a erro do raio antigo
-   * (busca de 500m), pra admin revisar e corrigir 1 a 1. Não altera nada.
-   */
-  async descargasSuspeitas(escopo: EscopoAdmin, opts?: { limit?: number }) {
-    const cfg = await this.buscaConfig.get();
-    const raioInicial = cfg.raioInicialM;
-    const raioAmpliado = cfg.raioAmpliadoM;
-    const LIMITE = opts?.limit ?? 300;
-
-    const locais = await this.prisma.local.findMany({
-      where: {
-        ativo: true,
-        tipo: { in: ["DESCARGA", "AMBOS"] },
-        lat: { not: null },
-        lng: { not: null },
-      },
-      select: { id: true, nome: true, cidade: true, uf: true, lat: true, lng: true },
-    });
-
-    const viagens = await this.prisma.viagem.findMany({
-      // O escopo entra aqui, e não só no decorator: marcar `@EscopoPor` sem
-      // filtrar de verdade é pior que não marcar, porque passa a impressão de
-      // que foi tratado. O gestor de frota terceira vê as descargas suspeitas
-      // dos motoristas DELE.
-      where: { lat: { not: null }, lng: { not: null }, ...filtroEscopo(escopo) },
-      select: {
-        id: true,
-        ticket: true,
-        data: true,
-        lat: true,
-        lng: true,
-        localDescargaId: true,
-        localDescarga: {
-          select: { id: true, nome: true, cidade: true, uf: true, lat: true, lng: true },
-        },
-        motorista: { select: { id: true, nome: true } },
-        _count: { select: { matchesFechamento: true } },
-      },
-      orderBy: { data: "desc" },
-    });
-
-    const itens = [];
-    for (const v of viagens) {
-      if (v.lat == null || v.lng == null) continue;
-
-      const distAtual =
-        v.localDescarga?.lat != null && v.localDescarga.lng != null
-          ? distanciaMetros(v.lat, v.lng, v.localDescarga.lat, v.localDescarga.lng)
-          : Number.POSITIVE_INFINITY;
-      // Dentro do raio inicial: a escolha está ok, não é suspeita.
-      if (distAtual <= raioInicial) continue;
-
-      // Local de descarga mais perto do GPS real.
-      let melhor: { id: string; nome: string; cidade: string; uf: string; dist: number } | null =
-        null;
-      for (const l of locais) {
-        if (l.lat == null || l.lng == null) continue;
-        const d = distanciaMetros(v.lat, v.lng, l.lat, l.lng);
-        if (melhor == null || d < melhor.dist) {
-          melhor = { id: l.id, nome: l.nome, cidade: l.cidade, uf: l.uf, dist: d };
-        }
-      }
-      const dMelhor = melhor ? melhor.dist : Number.POSITIVE_INFINITY;
-      let tipo: "COM_SUGESTAO" | "SEM_LOCAL";
-      let sugestao:
-        | { id: string; nome: string; cidade: string; uf: string; distanciaMetros: number }
-        | null = null;
-
-      if (melhor && melhor.id !== v.localDescargaId && dMelhor <= raioAmpliado) {
-        // Existe OUTRO local dentro do alcance da busca (50→500m): sugere.
-        tipo = "COM_SUGESTAO";
-        sugestao = {
-          id: melhor.id,
-          nome: melhor.nome,
-          cidade: melhor.cidade,
-          uf: melhor.uf,
-          distanciaMetros: Math.round(melhor.dist),
-        };
-      } else if (dMelhor > raioAmpliado) {
-        // Nada cadastrado nem dentro do raio ampliado: não dá pra sugerir.
-        // Admin cadastra o local na hora ou manda revisar.
-        tipo = "SEM_LOCAL";
-      } else {
-        // melhor é o próprio local escolhido (é o mais perto), só que além do
-        // raio inicial. Motorista pegou o mais perto disponível — não sinaliza.
-        continue;
-      }
-
-      itens.push({
-        viagemId: v.id,
-        ticket: v.ticket,
-        data: v.data,
-        motorista: v.motorista,
-        bloqueada: v._count.matchesFechamento > 0,
-        lat: v.lat,
-        lng: v.lng,
-        tipo,
-        localAtual: v.localDescarga
-          ? {
-              id: v.localDescarga.id,
-              nome: v.localDescarga.nome,
-              cidade: v.localDescarga.cidade,
-              uf: v.localDescarga.uf,
-              distanciaMetros: Number.isFinite(distAtual) ? Math.round(distAtual) : null,
-            }
-          : null,
-        sugestao,
-      });
-    }
-
-    // Pior caso primeiro (mais longe do local atual; sem coords vai pro topo).
-    itens.sort(
-      (a, b) =>
-        (b.localAtual?.distanciaMetros ?? Number.MAX_SAFE_INTEGER) -
-        (a.localAtual?.distanciaMetros ?? Number.MAX_SAFE_INTEGER),
-    );
-
-    return {
-      raioInicialM: raioInicial,
-      raioAmpliadoM: raioAmpliado,
-      total: itens.length,
-      itens: itens.slice(0, LIMITE),
-    };
-  }
-
-  /**
-   * Cadastra um Local de descarga a partir do nome digitado pelo admin + o GPS
-   * de lançamento da viagem (reverse geocoding preenche o endereço), e já
-   * atribui à viagem. Usado no caso "sem local cadastrado" da auditoria de
-   * descargas suspeitas. Reusa `atualizar` pra validar/auditar/notificar.
-   */
-  async cadastrarLocalDescarga(id: string, nome: string, usuarioId: string, escopo: EscopoAdmin) {
-    await this.ensureNoEscopo(id, escopo);
-    const viagem = await this.prisma.viagem.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        lat: true,
-        lng: true,
-        _count: { select: { matchesFechamento: true } },
-      },
-    });
-    if (!viagem) throw new NotFoundException("Viagem não encontrada");
-    if (viagem._count.matchesFechamento > 0) {
-      throw new ConflictException(
-        "Viagem já vinculada a fechamento. Desfaça o match primeiro.",
-      );
-    }
-    if (viagem.lat == null || viagem.lng == null) {
-      throw new BadRequestException(
-        "Viagem sem GPS de lançamento — não dá pra cadastrar o local pela posição.",
-      );
-    }
-
-    const reverse = await this.geocoding
-      .reverseGeocoding(viagem.lat, viagem.lng)
-      .catch(() => null);
-
-    const local = await this.prisma.local.create({
-      data: {
-        nome: nome.trim(),
-        logradouro: reverse?.logradouro ?? "(sem endereço)",
-        numero: reverse?.numero ?? null,
-        bairro: reverse?.bairro ?? null,
-        cidade: reverse?.cidade ?? "?",
-        uf: (reverse?.uf ?? "??").toUpperCase().slice(0, 2),
-        cep: reverse?.cep ?? null,
-        tipo: TipoLocal.DESCARGA,
-        lat: viagem.lat,
-        lng: viagem.lng,
-        criadoPorId: usuarioId,
-        nivelConfianca: NivelConfiancaLocal.RASCUNHO,
-        origemCadastro: OrigemCadastroLocal.ADMIN_AUDITORIA,
-      },
-    });
-
-    // Atribui à viagem reusando atualizar (valida fechamento, audita o diff
-    // localDescarga antes→depois e notifica o motorista da troca de local).
-    return this.atualizar(
-      id,
-      { localDescargaId: local.id },
-      usuarioId,
-      // Tela de descargas suspeitas: handler sem @EscopoPor, então o
-      // Handler sem @EscopoPor: sem recorte por frota aqui.
-      null,
-      true,
-    );
-  }
 
   /**
    * Pra cada viagem da lista, marca `temPedagioSemValor=true` quando a rota que

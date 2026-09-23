@@ -75,10 +75,6 @@ const EnviarMensagemInput = z.object({
 });
 type EnviarMensagemInput = z.infer<typeof EnviarMensagemInput>;
 
-const CadastrarLocalDescargaInput = z.object({
-  nome: z.string().min(2).max(120),
-});
-
 const DefinirBotaForaInput = z.object({
   teveBotaFora: z.boolean(),
 });
@@ -138,35 +134,6 @@ export class ViagensAdminController {
     const comercial = podeVerComercial(user);
     exigirComercialParaFiltros(query, comercial);
     return this.service.list(query, user.escopo, comercial);
-  }
-
-  /**
-   * Audita viagens cujo local de descarga provavelmente foi escolhido errado
-   * com o raio antigo (maior). Lista com sugestão do local mais próximo do GPS
-   * real, pra admin revisar e corrigir 1 a 1 (via PATCH :id). Não altera nada.
-   * Declarado antes de :id pra não ser capturado pela rota dinâmica.
-   */
-  @RequerPermissao("descargas-suspeitas.ver")
-  @EscopoPor("viagem")
-  @Get("descargas-suspeitas")
-  descargasSuspeitas(@CurrentUser() user: AuthAdminUser) {
-    return this.service.descargasSuspeitas(user.escopo);
-  }
-
-  /**
-   * Caso "sem local cadastrado" da auditoria: admin digita o nome, cria o
-   * local no GPS de lançamento da viagem e já atribui. Reusa atualizar.
-   */
-  @RequerPermissao("descargas-suspeitas.corrigir")
-  @EscopoPor("viagem")
-  @Post("descargas-suspeitas/:id/cadastrar-local")
-  cadastrarLocalDescarga(
-    @Param("id") id: string,
-    @Body(new ZodValidationPipe(CadastrarLocalDescargaInput))
-    body: z.infer<typeof CadastrarLocalDescargaInput>,
-    @CurrentUser() user: AuthAdminUser,
-  ) {
-    return this.service.cadastrarLocalDescarga(id, body.nome, user.id, user.escopo);
   }
 
   @EscopoPor("viagem")

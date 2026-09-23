@@ -1567,9 +1567,10 @@ function DuplicataLocalBadge({
   );
 }
 
-// Mostra quão confiável foi a marcação da descarga pelo motorista: distância
-// do GPS no clique até o local escolhido + precisão do sinal. Destaca em âmbar
-// quando ficou ruim (longe do local ou sinal fraco) — sinal de revisar.
+// Onde o motorista estava quando marcou a descarga: distância do GPS até o
+// local escolhido + precisão do sinal. Só informação, sem alarme: o motorista
+// pode lançar a viagem de casa, então "longe da descarga" não é sinal de erro
+// (decisão do dono, 23/09/2026 — junto com a tela "Descargas fora do local").
 function MarcacaoDescarga({
   viagem,
   limiteSinalFraco,
@@ -1588,11 +1589,9 @@ function MarcacaoDescarga({
   // Busca offline: o app procurou o local no catálogo em cache (sem internet),
   // então pode ter faltado algum local recém-criado por outro motorista.
   if (viagem.descargaBuscaOffline) partes.push("busca offline");
-  const suspeito = (dist != null && dist > 200) || (prec != null && prec > limiteSinalFraco);
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
       <span
-        className={suspeito ? "text-amber-600" : ""}
         style={{ fontVariant: "tabular-nums" }}
         title={
           viagem.descargaLat != null && viagem.descargaLng != null
@@ -1601,7 +1600,6 @@ function MarcacaoDescarga({
         }
       >
         {partes.join(" · ")}
-        {suspeito && " ⚠️"}
       </span>
       <SinalGpsBadge
         precisao={prec}

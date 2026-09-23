@@ -99,7 +99,6 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // "ver-comercial" no endpoint: o comprovante mostra km/toneladas faturados,
   // então quem não enxerga isso no painel não pode gerar link que mostre.
   { recurso: "viagens", label: "Viagens (lista e ao vivo)", modulo: "Operação", acoes: ["ver", "ver-comercial", "editar", "excluir", "validar", "compartilhar", "alterar-valor"] },
-  { recurso: "descargas-suspeitas", label: "Descargas fora do local", modulo: "Operação", acoes: ["ver", "corrigir"] },
   { recurso: "abastecimentos", label: "Abastecimentos", modulo: "Operação", acoes: ["ver", "editar", "excluir"] },
   { recurso: "fechamentos", label: "Planilhas dos clientes", modulo: "Operação", acoes: ["ver", "criar", "conferir", "exportar", "excluir"] },
   { recurso: "envios", label: "Planilhas enviadas", modulo: "Operação", acoes: ["ver", "criar", "excluir"] },

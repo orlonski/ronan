@@ -232,22 +232,6 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
-  "/descargas-suspeitas": {
-    oQue:
-      "Viagens em que o motorista estava longe do local de descarga que ficou " +
-      "gravado — quase sempre o lugar certo era outro, ali do lado.",
-    faz: [
-      "Comparar o local que ficou na viagem com onde o GPS do motorista estava",
-      "Trocar pelo local sugerido, quando existe um mais perto",
-      "Cadastrar o lugar na hora, no ponto do GPS, quando não há nenhum por perto",
-    ],
-    naoEAqui: {
-      procurando: "mudar a distância que o app usa pra achar o local perto do motorista",
-      vaEm: "Busca de locais",
-      href: "/configuracoes/busca-locais",
-    },
-  },
-
   "/lancamentos-travados": {
     oQue:
       "A cópia de segurança do que o app do motorista tentou mandar e o " +

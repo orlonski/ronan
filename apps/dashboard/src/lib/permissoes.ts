@@ -113,7 +113,6 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/ponto/configuracoes", perm: "config-ponto.ver" },
   { prefixo: "/ponto", perm: "ponto.ver" },
   { prefixo: "/relatorios", perm: "relatorios.ver" },
-  { prefixo: "/descargas-suspeitas", perm: "descargas-suspeitas.ver" },
   { prefixo: "/pedagios-rodovia", perm: "pedagios.ver" },
   { prefixo: "/viagens-andamento", perm: "viagens.ver" },
   { prefixo: "/viagens", perm: "viagens.ver" },

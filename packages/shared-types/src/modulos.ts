@@ -111,7 +111,7 @@ export const MODULOS: ModuloDef[] = [
     nome: "Conferência",
     pitch: "Descarga suspeita, km atípico e a leitura do ticket por IA.",
     medido: true,
-    recursos: ["descargas-suspeitas", "conferencia-ticket", "config-km-atipico", "config-ia"],
+    recursos: ["conferencia-ticket", "config-km-atipico", "config-ia"],
   },
   {
     chave: "fechamento",
