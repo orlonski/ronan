@@ -23,6 +23,7 @@ import { showAlert } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { hidratarViagemDoServidor, iniciarViagemGuiada } from "@/lib/lifecycle";
 import { useCatalogos, useMe } from "@/lib/queries";
+import { pagadorSeDiferente } from "@/lib/utils";
 
 /**
  * Passo 1 do lifecycle guiado: escolher a placa e (opcional) marcar o local
@@ -77,7 +78,7 @@ export default function IniciarViagem() {
   const clienteOptions: SelectOption[] = (cat.data?.clientes ?? []).map((c) => ({
     value: c.id,
     label: c.nome,
-    sublabel: c.empresa?.nome ?? undefined,
+    sublabel: pagadorSeDiferente(c.nome, c.empresa?.nome),
   }));
   const clienteNome = useMemo(
     () => cat.data?.clientes.find((c) => c.id === clienteId)?.nome,

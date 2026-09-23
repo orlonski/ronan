@@ -40,6 +40,7 @@ import { listPendingViagens, type PendingViagem } from "@/db/database";
 import * as FileSystem from "expo-file-system/legacy";
 import type { ExtrairTicketResult } from "@ronan/shared-types";
 import { atualizarViagemPendente } from "@/lib/sync";
+import { pagadorSeDiferente } from "@/lib/utils";
 import {
   useCalcularRota,
   useCatalogos,
@@ -497,7 +498,7 @@ export default function NovaViagem() {
       (cat.data?.clientes ?? []).map((o) => ({
         value: o.id,
         label: o.nome,
-        sublabel: o.empresa.nome,
+        sublabel: pagadorSeDiferente(o.nome, o.empresa?.nome),
       })),
     [cat.data?.clientes],
   );
