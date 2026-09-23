@@ -42,6 +42,7 @@ import {
   useMarcarEnvioEnviado,
   type EnvioStandalone,
 } from "@/lib/fechamentos-api";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type Empresa = { id: string; nome: string };
 
@@ -180,9 +181,10 @@ export default function EnviosPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="fechamento" />
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Planilhas enviadas</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Mandar a minha planilha ao cliente</h1>
           <p className="text-sm text-muted-foreground">
             Planilhas geradas pra mandar pros clientes que recebem o fechamento.
           </p>

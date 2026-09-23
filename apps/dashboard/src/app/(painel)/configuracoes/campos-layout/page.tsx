@@ -18,6 +18,7 @@ import {
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/confirm-dialog";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type Campo = {
   id: string;
@@ -60,11 +61,12 @@ export default function CamposLayoutPage() {
   return (
     <div className="space-y-6">
     <ConfirmDialog />
+      <AbasDaTela grupo="fechamento" />
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
             <Columns3 className="h-6 w-6 text-amber-600" />
-            Colunas da planilha do cliente
+            Como ler a planilha do cliente
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Quais colunas a leitura automática reconhece quando abre uma planilha

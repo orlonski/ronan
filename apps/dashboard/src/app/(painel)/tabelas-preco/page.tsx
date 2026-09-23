@@ -27,6 +27,7 @@ import {
   useUpdateResource,
 } from "@/lib/client-api";
 import { useConfirm } from "@/components/confirm-dialog";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type Empresa = { id: string; nome: string };
 type Preco = {
@@ -208,9 +209,10 @@ export default function TabelasPrecoPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="preco" />
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Tabela de preços</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Preço</h1>
           <p className="text-sm text-muted-foreground">
             Quanto cada cliente paga por tonelada, km ou viagem. O preço multiplica a
             quantidade já com o mínimo aplicado.

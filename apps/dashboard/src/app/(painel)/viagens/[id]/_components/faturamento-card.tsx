@@ -141,7 +141,7 @@ export function FaturamentoCard(p: Props) {
             <div className="rounded-lg border border-dashed border-muted-foreground/30 p-3 text-xs text-muted-foreground">
               Sem valor: não há preço cadastrado que sirva pra esta viagem. Cadastre em{" "}
               <a href="/tabelas-preco" className="underline">
-                Tabela de preços
+                Preço e mínimo
               </a>
               .
             </div>

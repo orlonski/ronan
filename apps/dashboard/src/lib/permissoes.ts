@@ -137,6 +137,9 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/acertos", perm: "acertos.ver" },
   { prefixo: "/financeiro", perm: "financeiro.ver" },
   { prefixo: "/frota", perm: "manutencao.ver" },
+  // Aba "Documentos que pedimos" de Minha empresa. A página já se protegia
+  // com RequerTela; aqui é pra o TelaGuard dizer "acesso restrito" também.
+  { prefixo: "/documentos-exigidos", perm: "documentos-exigidos.ver" },
   { prefixo: "/programacao", perm: "programacao.ver" },
   { prefixo: "/torre", perm: "programacao.ver" },
   { prefixo: "/importacao", perm: "importacao.ver" },

@@ -23,7 +23,6 @@ import {
   ClipboardCheck,
   ClipboardList,
   Clock,
-  Columns3,
   FileCheck2,
   FileSpreadsheet,
   Fuel,
@@ -43,8 +42,6 @@ import {
   Package,
   PenLine,
   Radio,
-  Ruler,
-  Send,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -212,10 +209,25 @@ const GRUPOS: Grupo[] = [
     titulo: "Dinheiro",
     coach: "grupo-dinheiro",
     itens: [
-      { href: "/fechamentos", label: "Planilhas dos clientes", icon: FileSpreadsheet, perm: "fechamentos.ver" },
-      { href: "/envios", label: "Planilhas enviadas", icon: Send, perm: "envios.ver" },
-      { href: "/tabelas-preco", label: "Tabela de preços", icon: Tag, perm: "tabelas-preco.ver" },
-      { href: "/regras-minimo", label: "Mínimo faturado por km", icon: Ruler, perm: "regras-minimo.ver" },
+      // Abas: conferir a planilha dele, mandar a minha e ⚙ como ler a planilha.
+      {
+        href: "/fechamentos",
+        label: "Fechamento com o cliente",
+        icon: FileSpreadsheet,
+        perm: "fechamentos.ver",
+        ou: [
+          { href: "/envios", perm: "envios.ver" },
+          { href: "/configuracoes/campos-layout", perm: "config-campos-layout.ver" },
+        ],
+      },
+      // Abas: preço e mínimo (km e tonelada).
+      {
+        href: "/tabelas-preco",
+        label: "Preço e mínimo",
+        icon: Tag,
+        perm: "tabelas-preco.ver",
+        ou: [{ href: "/regras-minimo", perm: "regras-minimo.ver" }],
+      },
       { href: "/cte", label: "CT-e emitidos", icon: FileCheck2, perm: "cte.ver" },
       { href: "/financeiro", label: "Contas a pagar e receber", icon: Wallet, perm: "financeiro.ver" },
       { href: "/acertos", label: "Acertos com motorista", icon: HandCoins, perm: "acertos.ver" },
@@ -235,12 +247,11 @@ const GRUPOS: Grupo[] = [
     itens: [
       { href: "/motoristas", label: "Motoristas", icon: HardHat, perm: "motoristas.ver" },
       { href: "/veiculos", label: "Veículos", icon: Truck, perm: "veiculos.ver" },
-      { href: "/frota", label: "Manutenção e documentos", icon: Wrench, perm: "manutencao.ver" },
+      { href: "/frota", label: "Manutenção e vencimentos do caminhão", icon: Wrench, perm: "manutencao.ver" },
       { href: "/transportadoras", label: "Transportadoras", icon: Building, perm: "transportadoras.ver" },
-      // Veio de "Cadastros", onde ficava no fim de uma lista de tabelas fixas.
-      // Não é tabela de apoio: é o que você exige das PESSOAS, e quem procura
-      // isso está pensando em motorista, não em cadastro.
-      { href: "/documentos-exigidos", label: "Documentos exigidos", icon: FileCheck2, perm: "documentos-exigidos.ver" },
+      // "Documentos exigidos" saiu daqui em 23/09/2026: virou a aba "Documentos
+      // que pedimos" de Minha empresa, e aparece também na página de cada
+      // cliente e em Quem bate ponto — onde a pessoa está quando precisa dela.
       { href: "/pedagios-rodovia", label: "Praças de pedágio", icon: TrafficCone, perm: "pedagios.ver" },
       { href: "/chat", label: "Chat dos motoristas", icon: MessagesSquare, perm: "chat.ver" },
       // O sininho do topo também se chama "Notificações" e é outra coisa: são os
@@ -294,7 +305,8 @@ const GRUPOS: Grupo[] = [
     titulo: "Ajustes",
     coach: "grupo-ajustes",
     itens: [
-      // Três abas num item: dados da empresa, emissor de CT-e e contrato.
+      // Quatro abas num item: dados da empresa, emissor de CT-e, documentos
+      // que pedimos e contrato.
       // O Contrato é a última alternativa e SEM permissão, de propósito: o
       // modal de aceite bloqueia TODO usuário do painel, e quem é obrigado a
       // aceitar tem que conseguir reler o que aceitou — por isso o item
@@ -304,7 +316,11 @@ const GRUPOS: Grupo[] = [
         label: "Minha empresa",
         icon: Landmark,
         perm: "minha-empresa.editar",
-        ou: [{ href: "/configuracoes/cte", perm: "cte.ver" }, { href: "/configuracoes/contrato" }],
+        ou: [
+          { href: "/configuracoes/cte", perm: "cte.ver" },
+          { href: "/documentos-exigidos", perm: "documentos-exigidos.ver" },
+          { href: "/configuracoes/contrato" },
+        ],
         secao: "Sua conta",
       },
       { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver", secao: "Sua conta" },
@@ -319,8 +335,6 @@ const GRUPOS: Grupo[] = [
         secao: "Sua conta",
       },
       { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver", secao: "Sua conta" },
-
-      { href: "/configuracoes/campos-layout", label: "Colunas da planilha do cliente", icon: Columns3, perm: "config-campos-layout.ver", secao: "Como o sistema se comporta" },
 
       /**
        * Chaves de `RECURSOS_PLATAFORMA`: a empresa não as recebe, então na

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileCheck2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +11,7 @@ import {
   type TipoDocumentoMotorista,
 } from "@ronan/shared-types";
 import { RequerTela } from "@/components/requer-tela";
+import { AbasMinhaEmpresa } from "@/components/abas-minha-empresa";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
@@ -37,6 +39,11 @@ type Exigido = {
 
 const PATH = "/admin/admissao/documentos-exigidos";
 
+type Publico = NonNullable<Exigido["publico"]>;
+const PUBLICOS: Publico[] = ["MENSAL", "TODOS", "REGISTRADOS"];
+/** "gerais" = da transportadora (sem cliente); "cliente" = de um cliente só. */
+type Escopo = "gerais" | "cliente" | "todos";
+
 /**
  * O que cada contratante exige antes do caminhão entrar na obra.
  *
@@ -52,6 +59,12 @@ const PATH = "/admin/admissao/documentos-exigidos";
  *
  * A "gaveta" é onde o arquivo fica guardado no cadastro do motorista, e é o
  * que faz o documento sair no pacote que vai pro contratante.
+ *
+ * ⚠️ Desde 23/09/2026 não tem item próprio no menu: é a aba "Documentos que
+ * pedimos" de Minha empresa, e por isso abre nas exigências GERAIS (as da
+ * transportadora). O que um cliente exige aparece também na página dele
+ * (`?cliente=<id>` chega aqui já filtrado), e o que se pede de registrado em
+ * Quem bate ponto (`?publico=REGISTRADOS`). `?novo=1` já abre o formulário.
  */
 export default function DocumentosExigidosPage() {
   return (
@@ -65,7 +78,15 @@ function Conteudo() {
   const token = useAuthToken();
   const qc = useQueryClient();
   const { temPermissao } = usePermissoes();
-  const [criando, setCriando] = useState(false);
+  const params = useSearchParams();
+  const clienteDaUrl = params.get("cliente") ?? undefined;
+  const publicoDaUrl = params.get("publico");
+  const [escopo, setEscopo] = useState<Escopo>(clienteDaUrl ? "cliente" : "gerais");
+  const [clienteId, setClienteId] = useState<string | undefined>(clienteDaUrl);
+  const [publico, setPublico] = useState<Publico | "">(
+    PUBLICOS.includes(publicoDaUrl as Publico) ? (publicoDaUrl as Publico) : "",
+  );
+  const [criando, setCriando] = useState(params.get("novo") === "1");
 
   const lista = useQuery({
     queryKey: [PATH],
@@ -79,21 +100,31 @@ function Conteudo() {
     return (id: string | null) => (id ? (m.get(id) ?? "Cliente") : "Todos os clientes");
   }, [empresas.data]);
 
-  const ativos = (lista.data ?? []).filter((e) => e.ativo);
+  const todosAtivos = (lista.data ?? []).filter((e) => e.ativo);
+  const ativos = todosAtivos.filter(
+    (e) =>
+      (!publico || e.publico === publico) &&
+      (escopo === "todos" ||
+        (escopo === "gerais" && !e.empresaId) ||
+        (escopo === "cliente" && (!clienteId ? !!e.empresaId : e.empresaId === clienteId))),
+  );
   const gerais = ativos.filter((e) => !e.empresaId);
   const porContratante = ativos.filter((e) => e.empresaId);
+  const filtrando = escopo !== "todos" || !!publico;
 
   return (
     <div className="space-y-4">
+      <AbasMinhaEmpresa />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold">
             <FileCheck2 className="h-6 w-6 text-muted-foreground" />
-            Documentos exigidos pela obra
+            Documentos que pedimos
           </h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            O que o cliente pede antes do caminhão entrar na obra. É essa lista que o link de coleta
-            mostra pro motorista ou pro dono do caminhão.
+            O que a transportadora pede de documento — do motorista, de quem é registrado em
+            carteira, ou porque um cliente exige antes do caminhão entrar na obra. É essa lista que
+            o link de coleta mostra pro motorista ou pro dono do caminhão.
           </p>
         </div>
         {temPermissao("documentos-exigidos.editar") && (
@@ -104,22 +135,62 @@ function Conteudo() {
         )}
       </div>
 
+      <Card className="flex flex-wrap items-end gap-3 p-4">
+        <div className="w-full sm:w-64">
+          <Label>De quem é a exigência</Label>
+          <Select value={escopo} onChange={(e) => setEscopo(e.target.value as Escopo)}>
+            <option value="gerais">Da transportadora (todos os clientes)</option>
+            <option value="cliente">De um cliente</option>
+            <option value="todos">Todas</option>
+          </Select>
+        </div>
+        {escopo === "cliente" && (
+          <div className="w-full sm:w-64">
+            <Label>Cliente</Label>
+            <Combobox
+              value={clienteId}
+              onChange={setClienteId}
+              placeholder="Qualquer cliente"
+              options={(empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome }))}
+            />
+          </div>
+        )}
+        <div className="w-full sm:w-64">
+          <Label>De quem se pede</Label>
+          <Select value={publico} onChange={(e) => setPublico(e.target.value as Publico | "")}>
+            <option value="">Qualquer um</option>
+            <option value="MENSAL">Só de quem é contratado</option>
+            <option value="TODOS">De todo motorista da frota</option>
+            <option value="REGISTRADOS">De quem é registrado em carteira</option>
+          </Select>
+        </div>
+      </Card>
+
       {ativos.length === 0 && !lista.isLoading ? (
         <Card className="p-4">
-          <EstadoVazio
-            titulo="Nada exigido ainda"
-            descricao="Enquanto essa lista estiver vazia, o link de coleta abre sem pedir documento nenhum."
-          />
+          {filtrando && todosAtivos.length > 0 ? (
+            <EstadoVazio
+              titulo="Nada com esse filtro"
+              descricao="Mude o filtro acima (ou escolha Todas) pra ver o resto do que é pedido."
+            />
+          ) : (
+            <EstadoVazio
+              titulo="Nada exigido ainda"
+              descricao="Enquanto essa lista estiver vazia, o link de coleta abre sem pedir documento nenhum."
+            />
+          )}
         </Card>
       ) : (
         <>
-          <Grupo
-            titulo="Vale pra todos os clientes"
-            descricao="Exigência da transportadora, independente de quem é o cliente."
-            itens={gerais}
-            nomeEmpresa={nomeEmpresa}
-            onMudou={() => void qc.invalidateQueries({ queryKey: [PATH] })}
-          />
+          {escopo !== "cliente" && (
+            <Grupo
+              titulo="Vale pra todos os clientes"
+              descricao="Exigência da transportadora, independente de quem é o cliente."
+              itens={gerais}
+              nomeEmpresa={nomeEmpresa}
+              onMudou={() => void qc.invalidateQueries({ queryKey: [PATH] })}
+            />
+          )}
           {porContratante.length > 0 && (
             <Grupo
               titulo="Por cliente"
@@ -132,8 +203,14 @@ function Conteudo() {
         </>
       )}
 
-      {criando && (
+      {/* A permissão é checada aqui, e não no estado inicial: `?novo=1` chega
+          antes de as permissões carregarem. */}
+      {criando && temPermissao("documentos-exigidos.editar") && (
         <DialogNovo
+          inicial={{
+            empresaId: escopo === "cliente" ? clienteId : undefined,
+            publico: publico || undefined,
+          }}
           onFechar={() => setCriando(false)}
           onCriado={() => {
             setCriando(false);
@@ -239,13 +316,24 @@ function Grupo({
   );
 }
 
-function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: () => void }) {
+function DialogNovo({
+  inicial,
+  onFechar,
+  onCriado,
+}: {
+  /** Chega preenchido com o filtro da tela (o cliente, o público). */
+  inicial?: { empresaId?: string; publico?: Publico };
+  onFechar: () => void;
+  onCriado: () => void;
+}) {
   const token = useAuthToken();
   const [titulo, setTitulo] = useState("");
   const [ajuda, setAjuda] = useState("");
-  const [publico, setPublico] = useState<"MENSAL" | "TODOS" | "REGISTRADOS">("MENSAL");
+  const [publico, setPublico] = useState<"MENSAL" | "TODOS" | "REGISTRADOS">(
+    inicial?.publico ?? "MENSAL",
+  );
   const [tipo, setTipo] = useState<string>("CNH");
-  const [empresaId, setEmpresaId] = useState<string>();
+  const [empresaId, setEmpresaId] = useState<string | undefined>(inicial?.empresaId);
   const [obrigatorio, setObrigatorio] = useState(true);
   const [comoAssinar, setComoAssinar] = useState<"NAO" | "NO_APP" | "JA_ASSINADO">("NAO");
   const [exigeIcpBrasil, setExigeIcpBrasil] = useState(false);

@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { EstadoVazio } from "@/components/estado-vazio";
-import { apiBaseUrl, fetchApi, useAuthToken } from "@/lib/client-api";
+import { apiBaseUrl, fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { hojeSP } from "@/lib/datetime-br";
 import { usePermissoes } from "@/lib/permissoes";
 import { AcessoAppCard } from "../../motoristas/[id]/acesso-app-card";
@@ -53,6 +53,39 @@ type Modelo = { id: string; nome: string };
  * 409 dizendo o que encerrar antes. Esta frase dizia "não pode estar nos
  * dois cadastros", e contradizia a ficha do motorista e a tela de perfis.
  */
+/**
+ * O que a empresa pede de quem é registrado — o cadastro mora em Minha
+ * empresa › Documentos que pedimos, mas quem pensa nisso está aqui, olhando
+ * pros registrados. Conta só `REGISTRADOS`: é o único público que o app do
+ * funcionário cobra (`exigidosDoRegistrado` na API).
+ */
+function DocumentosQuePedimos() {
+  const { temPermissao, temModulo } = usePermissoes();
+  const ve = temPermissao("documentos-exigidos.ver") && temModulo("documentos-exigidos.ver");
+  const lista = useApiQuery<{ publico?: string; ativo: boolean }[]>(
+    ve ? "/admin/admissao/documentos-exigidos" : undefined,
+  );
+  if (!ve || !lista.data) return null;
+  const n = lista.data.filter((e) => e.ativo && e.publico === "REGISTRADOS").length;
+  return (
+    <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+      <div className="flex items-center gap-2 text-sm">
+        <FileText className="h-4 w-4 text-muted-foreground" />
+        <span>
+          <strong>Documentos que pedimos a quem é registrado:</strong>{" "}
+          {n === 0 ? "nenhum ainda" : n === 1 ? "1 documento" : `${n} documentos`}
+        </span>
+      </div>
+      <Link
+        href="/documentos-exigidos?publico=REGISTRADOS"
+        className="text-sm text-primary underline"
+      >
+        {n === 0 ? "Escolher o que pedir" : "Ver a lista"}
+      </Link>
+    </Card>
+  );
+}
+
 export default function FuncionariosPage() {
   return (
     <RequerTela chave="funcionarios.ver">
@@ -105,6 +138,8 @@ function Conteudo() {
           )}
         </div>
       </div>
+
+      <DocumentosQuePedimos />
 
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={inativos} onChange={(e) => setInativos(e.target.checked)} />

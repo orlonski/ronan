@@ -72,7 +72,7 @@ export default function FechamentoDetalhePage({
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <Button variant="ghost" size="icon" asChild>
-              <Link href="/fechamentos" aria-label="Voltar para Planilhas dos clientes">
+              <Link href="/fechamentos" aria-label="Voltar para Conferir a planilha do cliente">
               <ArrowLeft className="h-5 w-5" />
               </Link>
             </Button>

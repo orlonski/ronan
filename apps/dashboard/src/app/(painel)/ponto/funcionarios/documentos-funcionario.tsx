@@ -133,8 +133,8 @@ export function DocumentosDoFuncionario({
         {estado.data && docs.length === 0 && (
           <p className="text-sm text-muted-foreground">
             A empresa ainda não pede nenhum papel de quem é registrado. Crie em{" "}
-            <Link href="/documentos-exigidos" className="underline">
-              Documentos exigidos
+            <Link href="/documentos-exigidos?publico=REGISTRADOS&novo=1" className="underline">
+              Minha empresa › Documentos que pedimos
             </Link>
             , com “De quem é registrado em carteira”.
           </p>

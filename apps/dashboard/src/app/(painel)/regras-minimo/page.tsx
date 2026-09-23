@@ -17,6 +17,7 @@ import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useResourceOptions, useUpdateResource } from "@/lib/client-api";
 import { EstadoVazio } from "@/components/estado-vazio";
 import { usePermissoes } from "@/lib/permissoes";
+import { AbasDaTela } from "@/components/abas-da-tela";
 
 type Empresa = { id: string; nome: string };
 type Regra = {
@@ -139,9 +140,10 @@ export default function RegrasMinimoPage() {
 
   return (
     <div className="space-y-6">
+      <AbasDaTela grupo="preco" />
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Mínimo faturado por km</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Mínimo por viagem (km e tonelada)</h1>
           <p className="text-sm text-muted-foreground">
             Km/toneladas mínimos faturados por cliente, material e faixa de km rodado.
           </p>

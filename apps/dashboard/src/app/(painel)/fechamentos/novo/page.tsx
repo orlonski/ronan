@@ -55,7 +55,7 @@ export default function NovoFechamentoPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <header className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
-            <Link href="/fechamentos" aria-label="Voltar para Planilhas dos clientes">
+            <Link href="/fechamentos" aria-label="Voltar para Conferir a planilha do cliente">
             <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>

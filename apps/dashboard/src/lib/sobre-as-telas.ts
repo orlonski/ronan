@@ -168,10 +168,14 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Ver quanto tempo as viagens estão demorando pra ser conferidas",
       "Baixar em Excel ou PDF o que está nas abas Viagens e Abastecimentos",
     ],
+    // Era "conferir uma viagem de cada vez → Viagens". Trocado em 23/09/2026:
+    // o engano que mais acontece aqui é baixar a produção em Excel achando que
+    // é o arquivo que vai pro cliente — e esse sai no layout dele, em outro
+    // lugar, com registro de quando foi.
     naoEAqui: {
-      procurando: "conferir uma viagem de cada vez",
-      vaEm: "Viagens",
-      href: "/viagens",
+      procurando: "mandar pro cliente a planilha do fechamento",
+      vaEm: "Fechamento com o cliente › Mandar a minha planilha",
+      href: "/envios",
     },
     // A rota do menu só redireciona pra primeira aba; as quatro são a mesma
     // tela com o mesmo propósito. Sem isto, este texto nunca apareceria.
@@ -261,7 +265,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "a planilha que você manda pro cliente",
-      vaEm: "Planilhas enviadas",
+      vaEm: "Fechamento com o cliente › Mandar a minha planilha",
       href: "/envios",
     },
   },
@@ -277,7 +281,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "conferir a planilha que o cliente mandou pra você",
-      vaEm: "Planilhas dos clientes",
+      vaEm: "Fechamento com o cliente",
       href: "/fechamentos",
     },
   },
@@ -294,7 +298,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "o km ou o peso mínimo que se cobra numa viagem curta",
-      vaEm: "Mínimo faturado por km",
+      vaEm: "Preço e mínimo › Mínimo (km e tonelada)",
       href: "/regras-minimo",
     },
   },
@@ -310,7 +314,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "quanto vale o que foi contado",
-      vaEm: "Tabela de preços",
+      vaEm: "Preço e mínimo",
       href: "/tabelas-preco",
     },
   },
@@ -368,8 +372,8 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/configuracoes/campos-layout": {
     oQue:
-      "A lista de colunas que a leitura automática sabe reconhecer quando alguém " +
-      "sobe a planilha de um cliente.",
+      "Como o sistema lê a planilha que o cliente manda: a lista de colunas que a " +
+      "leitura automática sabe reconhecer quando alguém sobe o arquivo em Conferir a planilha dele.",
     faz: [
       "Criar uma coluna que os seus clientes usam e o sistema ainda não conhece (ex.: número da NF-e)",
       "Mudar o nome, a descrição e a ordem em que ela aparece na hora de montar a leitura do cliente",
@@ -411,7 +415,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "quando vence o licenciamento ou a próxima revisão",
-      vaEm: "Manutenção e documentos",
+      vaEm: "Manutenção e vencimentos do caminhão",
       href: "/frota",
     },
   },
@@ -452,11 +456,13 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/documentos-exigidos": {
     oQue:
-      "O que o cliente pede antes do caminhão entrar na obra. É esta lista que " +
-      "o link de coleta mostra pro motorista — lista vazia, link que não pede nada.",
+      "Os documentos que a transportadora pede — do motorista, de quem é registrado " +
+      "em carteira, ou porque um cliente exige antes do caminhão entrar na obra. É " +
+      "esta lista que o link de coleta mostra pro motorista — lista vazia, link que não pede nada.",
     faz: [
       "Escrever cada exigência com o nome que o cliente usa, não com o nosso",
-      "Separar o que vale pra todos os clientes do que só um cliente pede",
+      "Separar o que vale pra todos os clientes do que só um cliente pede — o que um cliente exige aparece também na página dele",
+      "Dizer de quem se pede: de quem é contratado, de todo motorista ou de quem é registrado em carteira",
       "Marcar o que é obrigatório e o que precisa vir assinado",
     ],
     naoEAqui: {
@@ -544,7 +550,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "fechar o mês do cliente pra faturar",
-      vaEm: "Planilhas dos clientes",
+      vaEm: "Fechamento com o cliente",
       href: "/fechamentos",
     },
   },
@@ -574,6 +580,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Dizer qual jornada vale pra cada um, e desde quando",
       "Trazer de uma vez, por planilha, quem já está na folha",
       "Registrar o desligamento sem perder o que já foi apurado",
+      "Ver quantos documentos a empresa pede de quem é registrado, e ir direto pra essa lista",
     ],
     naoEAqui: {
       procurando: "o motorista parceiro, que recebe por viagem",
@@ -624,6 +631,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Cadastrar quem contrata o frete, com CNPJ e quem é o contato lá dentro",
       "Ensinar o sistema a ler a planilha que ele te manda e a montar a planilha que você manda pra ele",
       "Na leitura da planilha dele, dizer quanta diferença de km e de tonelada é aceitável antes de a linha virar divergência",
+      "Abrir um cliente pra ver as obras dele, o preço e o mínimo que valem pra ele e os documentos que ele exige",
     ],
     naoEAqui: {
       procurando: "as donas dos caminhões que rodam pra você",
@@ -660,7 +668,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "o mínimo de tonelada ou de km que se fatura por material",
-      vaEm: "Mínimo faturado por km",
+      vaEm: "Preço e mínimo › Mínimo (km e tonelada)",
       href: "/regras-minimo",
     },
   },
@@ -675,7 +683,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "quanto vale a tonelada ou o km",
-      vaEm: "Tabela de preços",
+      vaEm: "Preço e mínimo",
       href: "/tabelas-preco",
     },
   },
@@ -746,7 +754,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "o preço que você cobra dos seus clientes",
-      vaEm: "Tabela de preços",
+      vaEm: "Preço e mínimo",
       href: "/tabelas-preco",
     },
   },
@@ -795,7 +803,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "a planilha que o cliente te manda no fim do mês",
-      vaEm: "Planilhas dos clientes",
+      vaEm: "Fechamento com o cliente",
       href: "/fechamentos",
     },
   },

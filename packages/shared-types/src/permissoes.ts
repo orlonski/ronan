@@ -100,8 +100,8 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // então quem não enxerga isso no painel não pode gerar link que mostre.
   { recurso: "viagens", label: "Viagens (lista e ao vivo)", modulo: "Operação", acoes: ["ver", "ver-comercial", "editar", "excluir", "validar", "compartilhar", "alterar-valor"] },
   { recurso: "abastecimentos", label: "Abastecimentos", modulo: "Operação", acoes: ["ver", "editar", "excluir"] },
-  { recurso: "fechamentos", label: "Planilhas dos clientes", modulo: "Operação", acoes: ["ver", "criar", "conferir", "exportar", "excluir"] },
-  { recurso: "envios", label: "Planilhas enviadas", modulo: "Operação", acoes: ["ver", "criar", "excluir"] },
+  { recurso: "fechamentos", label: "Fechamento com o cliente — conferir a planilha dele", modulo: "Operação", acoes: ["ver", "criar", "conferir", "exportar", "excluir"] },
+  { recurso: "envios", label: "Fechamento com o cliente — mandar a minha planilha", modulo: "Operação", acoes: ["ver", "criar", "excluir"] },
   // O que a empresa deve a cada motorista no período. Três ações separadas de
   // propósito: montar o acerto é trabalho de escritório; dizer que está
   // combinado (fechar) e que o dinheiro saiu (pagar) é decisão de quem responde
@@ -116,7 +116,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // o link por onde esses papéis chegam. `coletas.criar` é separado de `ver`
   // porque gerar link é expor documento de alguém a quem tiver a URL — é ação
   // com consequência, não consulta.
-  { recurso: "documentos-exigidos", label: "Documentos exigidos pela obra", modulo: "Cadastros", acoes: ["ver", "editar"] },
+  { recurso: "documentos-exigidos", label: "Documentos que pedimos (Minha empresa)", modulo: "Cadastros", acoes: ["ver", "editar"] },
   { recurso: "coletas", label: "Link de coleta de documentos", modulo: "Operação", acoes: ["ver", "criar"] },
 
   // ---- Pessoas: o ponto eletrônico (funcionário CLT) ----
@@ -149,7 +149,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "custos-veiculo", label: "Custos fixos do veículo", modulo: "Cadastros", acoes: ["ver", "editar"] },
   // Manutenção, pneu, documento do veículo e multa — o que some do radar e vira
   // caminhão parado ou multa vencida.
-  { recurso: "manutencao", label: "Manutenção e documentos", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "manutencao", label: "Manutenção e vencimentos do caminhão", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "pneus", label: "Pneus", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "multas", label: "Multas", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "documentos-veiculo", label: "Documentos do veículo", modulo: "Cadastros", acoes: ["ver", "editar"] },
@@ -203,12 +203,12 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // aplicar reescreve TRINTA pessoas de uma vez: é poder de outra ordem que
   // corrigir o nome do perfil.
   { recurso: "perfis-acesso", label: "Permissões do app", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "aplicar", "excluir"] },
-  { recurso: "regras-minimo", label: "Mínimo faturado por km", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "regras-minimo", label: "Preço e mínimo — mínimo por viagem (km e tonelada)", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // Quanto cada empresa paga por tonelada/km/viagem. Chave própria e separada de
   // `regras-minimo` porque são decisões diferentes: mínimo é quanto se CONTA
   // (operacional, quem confere mexe), preço é quanto se COBRA (comercial, nem
   // todo mundo que confere viagem pode mexer no preço do contrato).
-  { recurso: "tabelas-preco", label: "Tabela de preços", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "tabelas-preco", label: "Preço e mínimo — preço", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "tipos-evento-viagem", label: "Paradas e ocorrências", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // ---- Sistema ----
   { recurso: "usuarios", label: "Usuários", modulo: "Sistema", acoes: ["ver", "criar", "editar", "excluir"] },
@@ -242,7 +242,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
     acoes: ["ver", "reprocessar"],
   },
   { recurso: "config-agente", label: "Agente WhatsApp", modulo: "Sistema", acoes: ["ver", "editar"] },
-  { recurso: "config-campos-layout", label: "Colunas da planilha do cliente", modulo: "Sistema", acoes: ["ver", "editar"] },
+  { recurso: "config-campos-layout", label: "Fechamento com o cliente — como ler a planilha do cliente", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-forca-atualizacao", label: "Força-atualização do app", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-km-atipico", label: "Alerta de km fora do padrão", modulo: "Sistema", acoes: ["ver", "editar"] },
 ];

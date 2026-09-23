@@ -43,6 +43,10 @@ export const ABAS = {
   "minha-empresa": [
     { href: "/configuracoes/empresa", label: "Dados da empresa", perm: "minha-empresa.editar" },
     { href: "/configuracoes/cte", label: "Emissor de CT-e", perm: "cte.ver", config: true },
+    // O que a transportadora pede de documento (ao motorista, ao registrado,
+    // ou em nome de um cliente). A lista geral mora aqui; a de cada cliente
+    // aparece também na página dele.
+    { href: "/documentos-exigidos", label: "Documentos que pedimos", perm: "documentos-exigidos.ver" },
     { href: "/configuracoes/contrato", label: "Contrato", perm: null },
   ],
   locais: [
@@ -52,6 +56,21 @@ export const ABAS = {
   mapa: [
     { href: "/mapa", label: "Mapa", perm: "mapa.ver" },
     { href: "/configuracoes/tracking", label: "Posição durante a viagem", perm: "config-tracking.ver", config: true },
+  ],
+  // Decidido em 23/09/2026: conferir a planilha que o cliente manda e mandar
+  // a nossa são as duas metades do mesmo fechamento — eram três itens soltos
+  // em dois grupos do menu (o "como ler" morava em Ajustes).
+  fechamento: [
+    { href: "/fechamentos", label: "Conferir a planilha dele", perm: "fechamentos.ver" },
+    { href: "/envios", label: "Mandar a minha planilha", perm: "envios.ver" },
+    { href: "/configuracoes/campos-layout", label: "Como ler a planilha", perm: "config-campos-layout.ver", config: true },
+  ],
+  // Mínimo é quanto se CONTA, preço é quanto vale o que foi contado — duas
+  // regras que a pessoa procura juntas quando pensa "quanto cobro deste
+  // cliente". Continuam com chaves separadas (ver permissoes.ts).
+  preco: [
+    { href: "/tabelas-preco", label: "Preço", perm: "tabelas-preco.ver" },
+    { href: "/regras-minimo", label: "Mínimo (km e tonelada)", perm: "regras-minimo.ver" },
   ],
   torre: [
     { href: "/torre", label: "Torre de controle", perm: "programacao.ver" },
