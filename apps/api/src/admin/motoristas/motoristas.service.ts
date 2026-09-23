@@ -294,11 +294,29 @@ export class MotoristasService {
       }),
     ]);
     const porCpf = new Map(excecoes.map((e) => [e.cpf, e._count._all]));
+    type BaseGuardada = { perfilId?: string; perfilNome?: string } | null;
+    const bases = new Map(
+      efetivos.map((e) => [e.motoristaId, (e.explicacao as { base?: { motorista?: BaseGuardada } }).base?.motorista]),
+    );
+    // O NOME vem do perfil de hoje, não da explicação guardada: o recálculo
+    // pula quem não mudou de capacidade (hash igual), então renomear o grupo
+    // deixava a lista mostrando o nome antigo ("Padrão da empresa (herdado)").
+    const idsPerfis = [...new Set([...bases.values()].map((b) => b?.perfilId).filter((x): x is string => !!x))];
+    const nomes = new Map(
+      idsPerfis.length === 0
+        ? []
+        : (
+            await this.prisma.perfilAcessoApp.findMany({
+              where: { id: { in: idsPerfis } },
+              select: { id: true, nome: true },
+            })
+          ).map((p) => [p.id, p.nome]),
+    );
     for (const e of efetivos) {
       if (!e.motoristaId) continue;
-      const base = (e.explicacao as { base?: { motorista?: { perfilNome?: string } | null } }).base;
+      const base = bases.get(e.motoristaId);
       mapa.set(e.motoristaId, {
-        perfil: base?.motorista?.perfilNome ?? null,
+        perfil: (base?.perfilId && nomes.get(base.perfilId)) || base?.perfilNome || null,
         excecoes: porCpf.get(e.cpf) ?? 0,
       });
     }
