@@ -6255,10 +6255,11 @@ model AceiteTermo {
 
 /// De quem se cobra um documento exigido.
 enum PublicoDocumento {
-  /// Nome histórico (vem da obra, que saiu do sistema): de quem tem regime
-  /// vigente na empresa. É o padrão.
+  /// HISTÓRICO: o público da obra/mensal (quem tinha regime vigente). Saiu em
+  /// 23/09/2026 — a migration passou as linhas pra REGISTRADOS e a API não
+  /// aceita mais na entrada. Fica no enum só pra não reescrever o histórico.
   MENSAL
-  /// De todo motorista da transportadora, esteja em obra ou não.
+  /// De todo mundo: motoristas parceiros e registrados.
   TODOS
   /// De quem é REGISTRADO EM CARTEIRA nesta empresa (tenha ou não cadastro
   /// de motorista). O arquivo mora no cadastro de funcionário.
@@ -6283,22 +6284,19 @@ model DocumentoExigido {
   conta   Conta  @relation(fields: [contaId], references: [id])
   id      String @id @default(uuid())
 
-  /// Null = exigência da transportadora inteira, valendo pra qualquer obra.
+  /// Contratante — HISTÓRICO. Vinha da alocação de obra, que saiu do sistema;
+  /// nenhuma tela preenche mais e a cobrança ignora (toda exigência ativa vale
+  /// pra empresa inteira). Dado antigo fica como está.
   empresaId String?
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
-  /// DE QUEM se cobra este papel.
+  /// DE QUEM se cobra este papel — a única regra (decisão do dono, 23/09/2026):
+  /// REGISTRADOS (quem é CLT) ou TODOS (motoristas também).
   ///
-  /// ⚠️ Sem isto, exigência sem contratante valia pra TODO motorista da conta —
-  /// e quem só roda frete comum abria o app com "3 documentos faltam" de uma
-  /// papelada de obra que não é dele. Decisão do dono (21/09/2026): documento
-  /// de admissão é cobrança de quem tem regime vigente na empresa; para o resto
-  /// não aparece pendência nenhuma.
-  ///
-  /// Default `MENSAL` de propósito: o silêncio é o padrão seguro. Uma
-  /// exigência nova que nasce valendo pra frota inteira cobra gente que nunca
-  /// foi chamada pra obra, e quem descobre é o motorista.
-  publico PublicoDocumento @default(MENSAL)
+  /// Default REGISTRADOS de propósito: o silêncio é o padrão seguro. Uma
+  /// exigência nova que nasce valendo pra todo mundo cobra o motorista parceiro
+  /// de uma papelada de admissão que não é dele, e quem descobre é ele.
+  publico PublicoDocumento @default(REGISTRADOS)
 
   /// Como a operação chama o papel. Texto livre, de propósito.
   titulo String

@@ -29,19 +29,27 @@ export const CriarDocumentoExigidoInput = z.object({
   ajuda: z.string().trim().max(200).optional(),
   /** Em que gaveta o arquivo cai (um `TipoDocumentoMotorista`). */
   tipo: z.string().trim().min(1, "Escolha a gaveta do arquivo."),
-  /** Vazio = exigência da transportadora inteira, valendo pra qualquer obra. */
+  /**
+   * Contratante da exigência. Mantido só por compatibilidade: NENHUMA tela
+   * manda mais, e a API grava nulo e ignora na cobrança. Vinha da alocação de
+   * obra (o motorista nunca escolhe cliente no app), que saiu do sistema.
+   */
   empresaId: z.string().uuid().optional(),
   /**
-   * DE QUEM se cobra este papel.
+   * DE QUEM se pede este papel — a única regra (decisão do dono, 23/09/2026).
    *
-   * `MENSAL` (padrão, nome histórico) = só de quem tem regime vigente na
-   * empresa. `TODOS` = de toda a frota. O padrão é o silêncio: exigência que
-   * nasce valendo pra todo mundo faz o motorista de frete comum abrir o app
-   * com uma papelada que não é dele.
+   * `REGISTRADOS` (padrão) = de quem é registrado em carteira (CLT), tenha ou
+   * não cadastro de motorista; o arquivo mora no cadastro de funcionário.
+   * `TODOS` = de todo mundo, motoristas parceiros também.
+   *
+   * O padrão é o silêncio: exigência que nasce valendo pra todo mundo faz o
+   * motorista parceiro abrir o app com uma papelada de admissão que não é dele.
+   *
+   * `MENSAL` existia (o público da obra/mensal: quem tinha regime vigente) e
+   * saiu em 23/09/2026 — não é mais aceito na entrada. O valor segue no enum
+   * do banco só pelo histórico; a migration passou as linhas pra `REGISTRADOS`.
    */
-  // `REGISTRADOS` = de quem é registrado em carteira (tenha ou não cadastro de
-  // motorista); o arquivo mora no cadastro de funcionário.
-  publico: z.enum(["MENSAL", "TODOS", "REGISTRADOS"]).default("MENSAL"),
+  publico: z.enum(["TODOS", "REGISTRADOS"]).default("REGISTRADOS"),
   obrigatorio: z.boolean().default(true),
   ordem: z.number().int().min(0).default(0),
   /**

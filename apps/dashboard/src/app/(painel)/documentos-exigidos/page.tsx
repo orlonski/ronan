@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileCheck2, Plus, Trash2 } from "lucide-react";
@@ -14,22 +14,21 @@ import { RequerTela } from "@/components/requer-tela";
 import { AbasMinhaEmpresa } from "@/components/abas-minha-empresa";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { EstadoVazio } from "@/components/estado-vazio";
-import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
+import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 
 type Exigido = {
   id: string;
   titulo: string;
   ajuda?: string | null;
+  /** `MENSAL` é histórico (ver `publicoDe`). */
   publico?: "MENSAL" | "TODOS" | "REGISTRADOS";
   comoAssinar?: "NAO" | "NO_APP" | "JA_ASSINADO";
   tipo: TipoDocumentoMotorista;
-  empresaId: string | null;
   obrigatorio: boolean;
   exigeAssinatura: boolean;
   exigeIcpBrasil: boolean;
@@ -39,32 +38,44 @@ type Exigido = {
 
 const PATH = "/admin/admissao/documentos-exigidos";
 
-type Publico = NonNullable<Exigido["publico"]>;
-const PUBLICOS: Publico[] = ["MENSAL", "TODOS", "REGISTRADOS"];
-/** "gerais" = da transportadora (sem cliente); "cliente" = de um cliente só. */
-type Escopo = "gerais" | "cliente" | "todos";
+/** As duas respostas de "de quem se pede". */
+type Publico = "REGISTRADOS" | "TODOS";
+const PUBLICOS: Publico[] = ["REGISTRADOS", "TODOS"];
+const ROTULO_PUBLICO: Record<Publico, string> = {
+  REGISTRADOS: "Quem é registrado (CLT)",
+  TODOS: "Todo mundo (motoristas também)",
+};
 
 /**
- * O que cada contratante exige antes do caminhão entrar na obra.
+ * De quem se pede, lido do que a API devolve. `MENSAL` é o público antigo (a
+ * obra/mensal, que saiu em 23/09/2026 e foi migrado pra REGISTRADOS): se ainda
+ * aparecer, conta como de registrado — é assim que a API o cobra.
+ */
+function publicoDe(e: Exigido): Publico {
+  return e.publico === "TODOS" ? "TODOS" : "REGISTRADOS";
+}
+
+/**
+ * Os documentos que a transportadora pede — UMA lista, UMA regra.
  *
- * É catálogo, não constante, porque são vários contratantes e cada um pede uma
- * coisa — o próximo cliente não pode precisar de deploy pra começar a operar.
+ * Cada exigência diz só DE QUEM se pede: de quem é registrado (CLT, o padrão)
+ * ou de todo mundo, motoristas parceiros também. O recorte por cliente e o
+ * público "só de quem é contratado" saíram em 23/09/2026: o motorista nunca
+ * escolhe cliente no app, e na prática papel se pede de quem é CLT.
+ *
+ * Não confundir com os documentos do próprio motorista (CNH etc., na ficha
+ * dele): aquilo é outra coisa e não passa por aqui.
  *
  * ⚠️ O TÍTULO É TEXTO LIVRE, e isso é decisão, não preguiça. O sistema não
- * nomeia o documento: quem escreve é você, copiando o que o contratante pede.
- * Ter "NR" ou "ordem de serviço" fixo em código faria a plataforma parecer
- * emissora de documento de segurança do trabalho, que é obrigação de
- * empregador — e estes motoristas são parceiros autônomos. Nós transportamos
- * o arquivo; o nome e o conteúdo são requisito de quem exige.
+ * nomeia o documento: quem escreve é você. Ter "NR" ou "ordem de serviço"
+ * fixo em código faria a plataforma parecer emissora de documento de
+ * segurança do trabalho, que é obrigação de empregador — e os motoristas
+ * parceiros são autônomos. Nós transportamos o arquivo.
  *
- * A "gaveta" é onde o arquivo fica guardado no cadastro do motorista, e é o
- * que faz o documento sair no pacote que vai pro contratante.
+ * A "gaveta" é onde o arquivo fica guardado no cadastro da pessoa.
  *
- * ⚠️ Desde 23/09/2026 não tem item próprio no menu: é a aba "Documentos que
- * pedimos" de Minha empresa, e por isso abre nas exigências GERAIS (as da
- * transportadora). O que um cliente exige aparece também na página dele
- * (`?cliente=<id>` chega aqui já filtrado), e o que se pede de registrado em
- * Quem bate ponto (`?publico=REGISTRADOS`). `?novo=1` já abre o formulário.
+ * É a aba "Documentos que pedimos" de Minha empresa. Quem bate ponto chega
+ * aqui com `?publico=REGISTRADOS`; `?novo=1` já abre o formulário.
  */
 export default function DocumentosExigidosPage() {
   return (
@@ -79,10 +90,7 @@ function Conteudo() {
   const qc = useQueryClient();
   const { temPermissao } = usePermissoes();
   const params = useSearchParams();
-  const clienteDaUrl = params.get("cliente") ?? undefined;
   const publicoDaUrl = params.get("publico");
-  const [escopo, setEscopo] = useState<Escopo>(clienteDaUrl ? "cliente" : "gerais");
-  const [clienteId, setClienteId] = useState<string | undefined>(clienteDaUrl);
   const [publico, setPublico] = useState<Publico | "">(
     PUBLICOS.includes(publicoDaUrl as Publico) ? (publicoDaUrl as Publico) : "",
   );
@@ -94,23 +102,8 @@ function Conteudo() {
     queryFn: () => fetchApi<Exigido[]>(PATH, { token }),
   });
 
-  const empresas = useResourceOptions<{ id: string; nome: string }>("/admin/empresas");
-  const nomeEmpresa = useMemo(() => {
-    const m = new Map((empresas.data ?? []).map((e) => [e.id, e.nome]));
-    return (id: string | null) => (id ? (m.get(id) ?? "Cliente") : "Todos os clientes");
-  }, [empresas.data]);
-
   const todosAtivos = (lista.data ?? []).filter((e) => e.ativo);
-  const ativos = todosAtivos.filter(
-    (e) =>
-      (!publico || e.publico === publico) &&
-      (escopo === "todos" ||
-        (escopo === "gerais" && !e.empresaId) ||
-        (escopo === "cliente" && (!clienteId ? !!e.empresaId : e.empresaId === clienteId))),
-  );
-  const gerais = ativos.filter((e) => !e.empresaId);
-  const porContratante = ativos.filter((e) => e.empresaId);
-  const filtrando = escopo !== "todos" || !!publico;
+  const ativos = todosAtivos.filter((e) => !publico || publicoDe(e) === publico);
 
   return (
     <div className="space-y-4">
@@ -122,9 +115,8 @@ function Conteudo() {
             Documentos que pedimos
           </h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            O que a transportadora pede de documento — do motorista, de quem é registrado em
-            carteira, ou porque um cliente exige antes do caminhão entrar na obra. É essa lista que
-            o link de coleta mostra pro motorista ou pro dono do caminhão.
+            Os papéis que a transportadora pede — de quem é registrado em carteira ou de todo
+            mundo. Quem precisa mandar vê a lista no app, e é ela que o link de coleta mostra.
           </p>
         </div>
         {temPermissao("documentos-exigidos.editar") && (
@@ -136,81 +128,42 @@ function Conteudo() {
       </div>
 
       <Card className="flex flex-wrap items-end gap-3 p-4">
-        <div className="w-full sm:w-64">
-          <Label>De quem é a exigência</Label>
-          <Select value={escopo} onChange={(e) => setEscopo(e.target.value as Escopo)}>
-            <option value="gerais">Da transportadora (todos os clientes)</option>
-            <option value="cliente">De um cliente</option>
-            <option value="todos">Todas</option>
-          </Select>
-        </div>
-        {escopo === "cliente" && (
-          <div className="w-full sm:w-64">
-            <Label>Cliente</Label>
-            <Combobox
-              value={clienteId}
-              onChange={setClienteId}
-              placeholder="Qualquer cliente"
-              options={(empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome }))}
-            />
-          </div>
-        )}
-        <div className="w-full sm:w-64">
+        <div className="w-full sm:w-72">
           <Label>De quem se pede</Label>
           <Select value={publico} onChange={(e) => setPublico(e.target.value as Publico | "")}>
-            <option value="">Qualquer um</option>
-            <option value="MENSAL">Só de quem é contratado</option>
-            <option value="TODOS">De todo motorista da frota</option>
-            <option value="REGISTRADOS">De quem é registrado em carteira</option>
+            <option value="">Todos</option>
+            {PUBLICOS.map((p) => (
+              <option key={p} value={p}>
+                {ROTULO_PUBLICO[p]}
+              </option>
+            ))}
           </Select>
         </div>
       </Card>
 
       {ativos.length === 0 && !lista.isLoading ? (
         <Card className="p-4">
-          {filtrando && todosAtivos.length > 0 ? (
+          {publico && todosAtivos.length > 0 ? (
             <EstadoVazio
               titulo="Nada com esse filtro"
-              descricao="Mude o filtro acima (ou escolha Todas) pra ver o resto do que é pedido."
+              descricao="Mude o filtro acima (ou escolha Todos) pra ver o resto do que é pedido."
             />
           ) : (
             <EstadoVazio
               titulo="Nada exigido ainda"
-              descricao="Enquanto essa lista estiver vazia, o link de coleta abre sem pedir documento nenhum."
+              descricao="Enquanto essa lista estiver vazia, ninguém é cobrado de documento nenhum."
             />
           )}
         </Card>
       ) : (
-        <>
-          {escopo !== "cliente" && (
-            <Grupo
-              titulo="Vale pra todos os clientes"
-              descricao="Exigência da transportadora, independente de quem é o cliente."
-              itens={gerais}
-              nomeEmpresa={nomeEmpresa}
-              onMudou={() => void qc.invalidateQueries({ queryKey: [PATH] })}
-            />
-          )}
-          {porContratante.length > 0 && (
-            <Grupo
-              titulo="Por cliente"
-              descricao="Aparecem no link de coleta; no app do motorista vale só o que é da transportadora inteira."
-              itens={porContratante}
-              nomeEmpresa={nomeEmpresa}
-              onMudou={() => void qc.invalidateQueries({ queryKey: [PATH] })}
-            />
-          )}
-        </>
+        <Lista itens={ativos} onMudou={() => void qc.invalidateQueries({ queryKey: [PATH] })} />
       )}
 
       {/* A permissão é checada aqui, e não no estado inicial: `?novo=1` chega
           antes de as permissões carregarem. */}
       {criando && temPermissao("documentos-exigidos.editar") && (
         <DialogNovo
-          inicial={{
-            empresaId: escopo === "cliente" ? clienteId : undefined,
-            publico: publico || undefined,
-          }}
+          inicial={{ publico: publico || undefined }}
           onFechar={() => setCriando(false)}
           onCriado={() => {
             setCriando(false);
@@ -222,19 +175,7 @@ function Conteudo() {
   );
 }
 
-function Grupo({
-  titulo,
-  descricao,
-  itens,
-  nomeEmpresa,
-  onMudou,
-}: {
-  titulo: string;
-  descricao: string;
-  itens: Exigido[];
-  nomeEmpresa: (id: string | null) => string;
-  onMudou: () => void;
-}) {
+function Lista({ itens, onMudou }: { itens: Exigido[]; onMudou: () => void }) {
   const token = useAuthToken();
   const { temPermissao } = usePermissoes();
 
@@ -251,13 +192,10 @@ function Grupo({
 
   return (
     <Card className="p-4">
-      <p className="font-medium">{titulo}</p>
-      <p className="text-sm text-muted-foreground">{descricao}</p>
-
       {itens.length === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">Nenhum.</p>
+        <p className="text-sm text-muted-foreground">Nenhum.</p>
       ) : (
-        <div className="mt-3 space-y-2">
+        <div className="space-y-2">
           {itens.map((e) => (
             <div
               key={e.id}
@@ -271,23 +209,21 @@ function Grupo({
                       opcional
                     </span>
                   )}
-                  {/* De quem se cobra. Fica visível na lista porque é a
-                      diferença entre pedir papelada de obra só de quem está
-                      na obra e pedir dela da frota inteira. */}
-                  {e.publico === "TODOS" && (
+                  {/* De quem se pede. Fica visível na lista porque é a
+                      diferença entre cobrar só o CLT e cobrar também o
+                      motorista parceiro. */}
+                  {publicoDe(e) === "TODOS" ? (
                     <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-normal text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                      toda a frota
+                      todo mundo
                     </span>
-                  )}
-                  {e.publico === "REGISTRADOS" && (
+                  ) : (
                     <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-normal text-blue-900 dark:bg-blue-950 dark:text-blue-200">
-                      registrados em carteira
+                      registrados (CLT)
                     </span>
                   )}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   guardado em {ROTULO_DOCUMENTO_MOTORISTA[e.tipo] ?? e.tipo}
-                  {e.empresaId ? ` · ${nomeEmpresa(e.empresaId)}` : ""}
                   {e.comoAssinar === "JA_ASSINADO"
                     ? e.exigeIcpBrasil
                       ? " · chega assinado (só digital)"
@@ -321,23 +257,21 @@ function DialogNovo({
   onFechar,
   onCriado,
 }: {
-  /** Chega preenchido com o filtro da tela (o cliente, o público). */
-  inicial?: { empresaId?: string; publico?: Publico };
+  /** Chega preenchido com o filtro da tela. */
+  inicial?: { publico?: Publico };
   onFechar: () => void;
   onCriado: () => void;
 }) {
   const token = useAuthToken();
   const [titulo, setTitulo] = useState("");
   const [ajuda, setAjuda] = useState("");
-  const [publico, setPublico] = useState<"MENSAL" | "TODOS" | "REGISTRADOS">(
-    inicial?.publico ?? "MENSAL",
-  );
+  // Padrão: de quem é registrado. Pedir de todo mundo cobra o motorista
+  // parceiro, e isso tem que ser escolha, não esquecimento.
+  const [publico, setPublico] = useState<Publico>(inicial?.publico ?? "REGISTRADOS");
   const [tipo, setTipo] = useState<string>("CNH");
-  const [empresaId, setEmpresaId] = useState<string | undefined>(inicial?.empresaId);
   const [obrigatorio, setObrigatorio] = useState(true);
   const [comoAssinar, setComoAssinar] = useState<"NAO" | "NO_APP" | "JA_ASSINADO">("NAO");
   const [exigeIcpBrasil, setExigeIcpBrasil] = useState(false);
-  const empresas = useResourceOptions<{ id: string; nome: string }>("/admin/empresas");
 
   const criar = useMutation({
     mutationFn: () =>
@@ -349,7 +283,6 @@ function DialogNovo({
           ajuda: ajuda.trim() || undefined,
           publico,
           tipo,
-          empresaId,
           obrigatorio,
           comoAssinar,
           exigeAssinatura: comoAssinar !== "NAO",
@@ -359,7 +292,7 @@ function DialogNovo({
       }),
     onSuccess: () => {
       toast.success("Passou a ser exigido.", {
-        description: "Quem abrir um link de coleta já vai ver esse documento na lista.",
+        description: "Quem precisa mandar já vê esse documento na lista dele.",
       });
       onCriado();
     },
@@ -372,13 +305,13 @@ function DialogNovo({
         <div>
           <p className="text-lg font-semibold">Exigir um documento</p>
           <p className="text-sm text-muted-foreground">
-            Escreva o nome do jeito que o cliente pede. O sistema não inventa nome de
+            Escreva o nome do jeito que o papel é pedido. O sistema não inventa nome de
             documento.
           </p>
         </div>
 
         <div>
-          <Label>Como o cliente chama</Label>
+          <Label>Como o papel se chama</Label>
           <Input
             value={titulo}
             onChange={(e) => setTitulo(e.target.value)}
@@ -411,48 +344,24 @@ function DialogNovo({
             ))}
           </Select>
           <p className="mt-1 text-xs text-muted-foreground">
-            É onde o arquivo fica no cadastro do motorista, e o que faz ele sair no pacote do
-            cliente. Pode repetir a gaveta em mais de um documento — cada um guarda o
-            arquivo dele.
+            É onde o arquivo fica no cadastro da pessoa. Pode repetir a gaveta em mais de um
+            documento — cada um guarda o arquivo dele.
           </p>
         </div>
-
-        {publico !== "REGISTRADOS" && (
-        <div>
-          <Label>De qual cliente</Label>
-          <Combobox
-            value={empresaId}
-            onChange={setEmpresaId}
-            placeholder="Todos os clientes"
-            options={(empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome }))}
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Vazio = vale pra qualquer cliente. Com cliente, só nas obras dele.
-          </p>
-        </div>
-        )}
 
         <div>
           <Label>De quem se pede</Label>
-          <Select
-            value={publico}
-            onChange={(e) => setPublico(e.target.value as "MENSAL" | "TODOS" | "REGISTRADOS")}
-          >
-            <option value="MENSAL">Só de quem é contratado</option>
-            <option value="TODOS">De todo motorista da frota</option>
-            <option value="REGISTRADOS">De quem é registrado em carteira</option>
+          <Select value={publico} onChange={(e) => setPublico(e.target.value as Publico)}>
+            {PUBLICOS.map((p) => (
+              <option key={p} value={p}>
+                {ROTULO_PUBLICO[p]}
+              </option>
+            ))}
           </Select>
-          {publico === "REGISTRADOS" && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Vale pra todo registrado da empresa, tenha ele cadastro de motorista ou não (o
-              mecânico, o escritório). Ele manda pelo app, e você confere em Quem bate ponto.
-            </p>
-          )}
           <p className="mt-1 text-xs text-muted-foreground">
-            Papelada de admissão é de quem tem vínculo com a empresa — registrado em carteira
-            ou parceiro. Marcando &quot;toda a frota&quot;, quem só roda frete comum passa a ver
-            esse documento como pendência no app dele; use só pro que a transportadora pede de
-            todo mundo, como CNH.
+            {publico === "REGISTRADOS"
+              ? "Todo registrado em carteira, tenha ele cadastro de motorista ou não (o mecânico, o escritório). Ele manda pelo app, e você confere em Quem bate ponto."
+              : "Todo mundo: os motoristas parceiros também passam a ver esse documento como pendência no app. Use só pro que a transportadora pede de todos."}
           </p>
         </div>
 

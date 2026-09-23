@@ -456,13 +456,12 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/documentos-exigidos": {
     oQue:
-      "Os documentos que a transportadora pede — do motorista, de quem é registrado " +
-      "em carteira, ou porque um cliente exige antes do caminhão entrar na obra. É " +
-      "esta lista que o link de coleta mostra pro motorista — lista vazia, link que não pede nada.",
+      "Os papéis que a transportadora pede — de quem é registrado em carteira (CLT) " +
+      "ou de todo mundo, motoristas parceiros também. Quem precisa mandar vê a lista " +
+      "no app — lista vazia, ninguém é cobrado de nada.",
     faz: [
-      "Escrever cada exigência com o nome que o cliente usa, não com o nosso",
-      "Separar o que vale pra todos os clientes do que só um cliente pede — o que um cliente exige aparece também na página dele",
-      "Dizer de quem se pede: de quem é contratado, de todo motorista ou de quem é registrado em carteira",
+      "Escrever cada documento com o nome que ele tem, do jeito que é pedido",
+      "Dizer de quem se pede: de quem é registrado (CLT) ou de todo mundo",
       "Marcar o que é obrigatório e o que precisa vir assinado",
     ],
     naoEAqui: {
@@ -631,7 +630,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Cadastrar quem contrata o frete, com CNPJ e quem é o contato lá dentro",
       "Ensinar o sistema a ler a planilha que ele te manda e a montar a planilha que você manda pra ele",
       "Na leitura da planilha dele, dizer quanta diferença de km e de tonelada é aceitável antes de a linha virar divergência",
-      "Abrir um cliente pra ver as obras dele, o preço e o mínimo que valem pra ele e os documentos que ele exige",
+      "Abrir um cliente pra ver as obras dele e o preço e o mínimo que valem pra ele",
     ],
     naoEAqui: {
       procurando: "as donas dos caminhões que rodam pra você",

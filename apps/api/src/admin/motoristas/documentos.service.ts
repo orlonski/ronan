@@ -101,7 +101,8 @@ export class MotoristasDocumentosService {
       : null;
     if (exigenciaId && !exigencia) throw new NotFoundException("Exigência não encontrada");
     // O que se pede de REGISTRADO mora no cadastro de funcionário, não aqui.
-    if (exigencia?.publico === "REGISTRADOS") {
+    // (`MENSAL` é o público antigo, migrado pra `REGISTRADOS` em 23/09/2026.)
+    if (exigencia && exigencia.publico !== "TODOS") {
       throw new BadRequestException(
         "Este documento é pedido de quem é registrado em carteira: suba em Quem bate ponto.",
       );
@@ -122,7 +123,7 @@ export class MotoristasDocumentosService {
      */
     if (!exigencia) {
       const daGaveta = await this.prisma.documentoExigido.findMany({
-        where: { tipo, ativo: true, publico: { not: "REGISTRADOS" } },
+        where: { tipo, ativo: true, publico: "TODOS" },
         take: 2,
       });
       if (daGaveta.length === 1) exigencia = daGaveta[0]!;

@@ -56,8 +56,12 @@ type Modelo = { id: string; nome: string };
 /**
  * O que a empresa pede de quem é registrado — o cadastro mora em Minha
  * empresa › Documentos que pedimos, mas quem pensa nisso está aqui, olhando
- * pros registrados. Conta só `REGISTRADOS`: é o único público que o app do
- * funcionário cobra (`exigidosDoRegistrado` na API).
+ * pros registrados. Conta TUDO que está ativo: desde 23/09/2026 são só dois
+ * públicos, e os dois chegam ao registrado — `REGISTRADOS` pelo cadastro de
+ * funcionário e `TODOS` ("todo mundo, motoristas também") também, pelo de
+ * funcionário ou, se ele for motorista CLT, pelo de motorista
+ * (`exigidosDoRegistrado` na API). Por isso o link abre a lista sem filtro:
+ * o número tem que bater com o que a pessoa vê lá.
  */
 function DocumentosQuePedimos() {
   const { temPermissao, temModulo } = usePermissoes();
@@ -66,7 +70,7 @@ function DocumentosQuePedimos() {
     ve ? "/admin/admissao/documentos-exigidos" : undefined,
   );
   if (!ve || !lista.data) return null;
-  const n = lista.data.filter((e) => e.ativo && e.publico === "REGISTRADOS").length;
+  const n = lista.data.filter((e) => e.ativo).length;
   return (
     <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
       <div className="flex items-center gap-2 text-sm">
@@ -76,10 +80,7 @@ function DocumentosQuePedimos() {
           {n === 0 ? "nenhum ainda" : n === 1 ? "1 documento" : `${n} documentos`}
         </span>
       </div>
-      <Link
-        href="/documentos-exigidos?publico=REGISTRADOS"
-        className="text-sm text-primary underline"
-      >
+      <Link href="/documentos-exigidos" className="text-sm text-primary underline">
         {n === 0 ? "Escolher o que pedir" : "Ver a lista"}
       </Link>
     </Card>

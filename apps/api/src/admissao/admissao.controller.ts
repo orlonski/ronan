@@ -49,8 +49,8 @@ export class AdmissaoAdminController {
 
   @RequerPermissao("documentos-exigidos.ver")
   @Get("documentos-exigidos")
-  listarExigidos(@Query("empresaId") empresaId?: string) {
-    return this.service.listarExigidos(empresaId);
+  listarExigidos() {
+    return this.service.listarExigidos();
   }
 
   @RequerPermissao("documentos-exigidos.editar")

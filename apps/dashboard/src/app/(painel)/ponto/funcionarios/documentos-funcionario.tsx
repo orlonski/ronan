@@ -136,7 +136,7 @@ export function DocumentosDoFuncionario({
             <Link href="/documentos-exigidos?publico=REGISTRADOS&novo=1" className="underline">
               Minha empresa › Documentos que pedimos
             </Link>
-            , com “De quem é registrado em carteira”.
+            , com “Quem é registrado (CLT)”.
           </p>
         )}
 

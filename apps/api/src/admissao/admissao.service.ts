@@ -10,7 +10,7 @@ import type { OrigemDocumento } from "@prisma/client";
 import { TIPOS_DOCUMENTO_MOTORISTA, type TipoDocumentoMotorista } from "@ronan/shared-types";
 import { chaveDaExigencia, chaveDocumento } from "../common/chave-documento";
 import { checarArquivoEnviado, MIMES_DOCUMENTO } from "../common/arquivo-enviado";
-import { regimeVivo } from "../common/regime-vigente";
+import { soDigitos } from "../common/regime-vigente";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { PushService } from "../push/push.service";
@@ -48,8 +48,8 @@ const MAX_ENVIOS_POR_CONVITE = 40;
 const DIAS_DE_VALIDADE = 14;
 
 /**
- * A admissão: os papéis que o contratante exige antes do caminhão entrar na
- * obra, e o link por onde eles chegam.
+ * A admissão: os papéis que a transportadora pede (de quem é registrado ou de
+ * todo mundo), e o link e o app por onde eles chegam.
  *
  * ⚠️ O sistema não nomeia documento. O título é o que a operação escreveu,
  * copiando o que o contratante pede — ver o comentário do model
@@ -60,8 +60,9 @@ type DadosExigencia = {
   titulo: string;
   ajuda?: string | null;
   tipo: string;
+  /** Aceito por compatibilidade e ignorado: nenhuma tela manda mais. */
   empresaId?: string;
-  publico?: "MENSAL" | "TODOS" | "REGISTRADOS";
+  publico?: "TODOS" | "REGISTRADOS";
   obrigatorio?: boolean;
   ordem?: number;
   comoAssinar?: "NAO" | "NO_APP" | "JA_ASSINADO";
@@ -107,66 +108,71 @@ export class AdmissaoService {
   // --------------------------------------------------- o que se exige ---
 
   /**
-   * O que é exigido deste motorista.
+   * O que se pede do CADASTRO DE MOTORISTA: as exigências de "todo mundo".
    *
-   * Duas perguntas, e as duas decidem:
+   * UMA regra só (decisão do dono, 23/09/2026): cada exigência diz só DE QUEM
+   * se pede — `REGISTRADOS` (quem é CLT, o padrão) ou `TODOS` (motoristas
+   * também). O que se pede de registrado mora no cadastro de funcionário
+   * (`exigidosDoRegistrado`); daqui sai só o `TODOS`.
    *
-   * 1. **QUEM PEDE** — as exigências da transportadora (contratante nulo).
-   * 2. **DE QUEM SE PEDE** (`publico`) — papelada de admissão se cobra de quem
-   *    TEM VÍNCULO com a empresa, e não da frota inteira: o motorista de frete
-   *    comum não pode abrir o app com "3 documentos faltam" de uma papelada
-   *    que nunca foi dele.
+   * ⚠️ `empresaId` (o contratante) é IGNORADO de propósito. Ele vinha da
+   * alocação de obra, que saiu do sistema: o motorista nunca escolhe cliente
+   * no app, então uma exigência "do cliente X" não tinha como chegar a
+   * ninguém. Tratar toda exigência ativa como geral é o que a tela mostra —
+   * uma lista só — e ninguém some da cobrança por causa de um campo que
+   * nenhuma tela preenche mais.
    *
-   * ⚠️ VÍNCULO: a pergunta é "esta pessoa tem vínculo vivo aqui?", e quem
-   * responde é o `RegimeVigente`.
-   *
-   * ⚠️ O filtro só vale pra TELA DO MOTORISTA (`soDoPublicoDele`). O escritório
-   * e o link de coleta continuam vendo o catálogo inteiro, e isso não é
-   * inconsistência: a admissão acontece ANTES de qualquer vínculo formal.
-   * Filtrar o link deixaria a coleta vazia exatamente no momento em que ela
-   * serve — o escritório junta a papelada e só então contrata.
+   * O `motoristaId` fica na assinatura porque é o dono que se consulta: hoje a
+   * resposta é igual pra todos, e quem chama não precisa saber disso.
    */
-  async exigidosPara(motoristaId: string, opts?: { soDoPublicoDele?: boolean }) {
-    const motorista = await this.prisma.motorista.findFirst({
-      where: { id: motoristaId },
-      select: { cpf: true },
-    });
-
-    // Quem tem vínculo vivo manda documento. Quem não tem é o motorista de
-    // frete comum, e dele só se pede o que vale pra frota inteira.
-    // (O contratante vinha da alocação de obra, que saiu do sistema: sem ela,
-    // o motorista vê as exigências da transportadora inteira.)
-    const temVinculo = (await regimeVivo(this.prisma as never, motorista?.cpf ?? "")) !== null;
-
+  async exigidosPara(_motoristaId: string) {
     return this.prisma.documentoExigido.findMany({
-      where: {
-        ativo: true,
-        // O que se pede de REGISTRADO mora no cadastro de funcionário, não no
-        // de motorista: aparece junto no app dele, mas não é deste dono.
-        publico: { not: "REGISTRADOS" },
-        empresaId: null,
-        // Sem vínculo, só o que vale pra todo mundo — e só quando quem
-        // pergunta é o app dele.
-        ...(opts?.soDoPublicoDele && !temVinculo ? { publico: "TODOS" as const } : {}),
-      },
+      where: { ativo: true, publico: "TODOS" },
       orderBy: [{ ordem: "asc" }, { titulo: "asc" }],
     });
   }
 
   /**
-   * O que se pede de quem é REGISTRADO EM CARTEIRA. Vale pra empresa inteira:
-   * papel de admissão CLT não é de obra nenhuma.
+   * O que se pede de quem é REGISTRADO EM CARTEIRA (cadastro de funcionário).
+   *
+   * `REGISTRADOS` sempre. `MENSAL` é o público antigo (a obra/mensal, que saiu
+   * em 23/09/2026 e foi migrado pra `REGISTRADOS`); se alguma linha escapar,
+   * conta como de registrado — é o que a tela mostra.
+   *
+   * E o `TODOS` — "todo mundo, motoristas também" — chega aqui só pro
+   * registrado SEM cadastro de motorista (mecânico, escritório). Quem tem os
+   * dois (motorista CLT) já recebe o `TODOS` pelo cadastro de motorista;
+   * pedir dos dois lados cobraria o mesmo papel duas vezes, em dois lugares.
    */
-  exigidosDoRegistrado() {
+  async exigidosDoRegistrado(funcionarioId: string) {
+    const incluirTodos = !(await this.funcionarioTemCadastroDeMotorista(funcionarioId));
     return this.prisma.documentoExigido.findMany({
-      where: { ativo: true, publico: "REGISTRADOS" },
+      where: {
+        ativo: true,
+        publico: { in: incluirTodos ? ["REGISTRADOS", "MENSAL", "TODOS"] : ["REGISTRADOS", "MENSAL"] },
+      },
       orderBy: [{ ordem: "asc" }, { titulo: "asc" }],
     });
   }
 
-  listarExigidos(empresaId?: string) {
+  /** O registrado também é motorista aqui? (Pelo CPF: são cadastros separados.) */
+  private async funcionarioTemCadastroDeMotorista(funcionarioId: string) {
+    const f = await this.prisma.funcionario.findFirst({
+      where: { id: funcionarioId },
+      select: { cpf: true },
+    });
+    const cpf = soDigitos(f?.cpf ?? "");
+    if (!cpf) return false;
+    const m = await this.prisma.motorista.findFirst({ where: { cpf }, select: { id: true } });
+    return m !== null;
+  }
+
+  /**
+   * O catálogo inteiro, pra tela "Documentos que pedimos". O filtro por
+   * contratante (`empresaId`) saiu com a obra: é uma lista só.
+   */
+  listarExigidos() {
     return this.prisma.documentoExigido.findMany({
-      where: empresaId ? { OR: [{ empresaId: null }, { empresaId }] } : {},
       orderBy: [{ ordem: "asc" }, { titulo: "asc" }],
     });
   }
@@ -178,11 +184,13 @@ export class AdmissaoService {
         titulo: dados.titulo,
         ajuda: dados.ajuda?.trim() || null,
         tipo: dados.tipo,
-        // Papel de registrado é da empresa inteira, nunca de um contratante.
-        empresaId: dados.publico === "REGISTRADOS" ? null : (dados.empresaId ?? null),
-        // Default MENSAL: o silêncio é o padrão seguro. Exigência que nasce
-        // valendo pra frota inteira cobra gente que nunca foi chamada pra obra.
-        publico: dados.publico ?? "MENSAL",
+        // Exigência é da empresa inteira: nenhuma tela manda mais contratante
+        // (`empresaId`), e o que vier é ignorado na cobrança.
+        empresaId: null,
+        // Default REGISTRADOS: o silêncio é o padrão seguro. Exigência que
+        // nasce valendo pra todo mundo cobra o motorista parceiro de uma
+        // papelada de admissão que não é dele.
+        publico: dados.publico ?? "REGISTRADOS",
         obrigatorio: dados.obrigatorio ?? true,
         ordem: dados.ordem ?? 0,
         ...this.camposDeAssinatura(dados),
@@ -209,8 +217,9 @@ export class AdmissaoService {
       data: {
         titulo: dados.titulo,
         ajuda: dados.ajuda?.trim() || null,
-        empresaId: (dados.publico ?? e.publico) === "REGISTRADOS" ? null : (dados.empresaId ?? null),
-        publico: dados.publico ?? e.publico,
+        // `empresaId` não se mexe: dado antigo fica como está, e a cobrança
+        // já o ignora.
+        publico: dados.publico ?? (e.publico === "MENSAL" ? "REGISTRADOS" : e.publico),
         obrigatorio: dados.obrigatorio ?? e.obrigatorio,
         ordem: dados.ordem ?? e.ordem,
         ...this.camposDeAssinatura({ ...dados, tipo: e.tipo }),
@@ -404,13 +413,13 @@ export class AdmissaoService {
    *
    * Roda dentro da conta: quem chama é responsável pelo `comConta`.
    */
-  async estadoDosDocumentos(motoristaId: string, opts?: { soDoPublicoDele?: boolean }) {
-    return this.estadoDe({ motoristaId }, await this.exigidosPara(motoristaId, opts));
+  async estadoDosDocumentos(motoristaId: string) {
+    return this.estadoDe({ motoristaId }, await this.exigidosPara(motoristaId));
   }
 
   /** O mesmo estado, do cadastro de funcionário (quem é registrado). */
   async estadoDoFuncionario(funcionarioId: string) {
-    return this.estadoDe({ funcionarioId }, await this.exigidosDoRegistrado());
+    return this.estadoDe({ funcionarioId }, await this.exigidosDoRegistrado(funcionarioId));
   }
 
   private async estadoDe(
@@ -562,8 +571,7 @@ export class AdmissaoService {
    */
   async paraOApp(quem: QuemNoApp) {
     const [doMotorista, doRegistrado] = await Promise.all([
-      // Na tela DELE, só o que é dele.
-      quem.motoristaId ? this.estadoDosDocumentos(quem.motoristaId, { soDoPublicoDele: true }) : null,
+      quem.motoristaId ? this.estadoDosDocumentos(quem.motoristaId) : null,
       quem.funcionarioId ? this.estadoDoFuncionario(quem.funcionarioId) : null,
     ]);
     const partes = [doMotorista, doRegistrado].filter((p): p is NonNullable<typeof p> => p !== null);
@@ -687,7 +695,7 @@ export class AdmissaoService {
       extensoesTambem: ASSINATURA_DESTACADA,
       comoDizer: "Use PDF, JPG, PNG ou WebP.",
     });
-    const exigencia = (await this.exigidosDoRegistrado()).find((e) => e.id === exigenciaId);
+    const exigencia = (await this.exigidosDoRegistrado(funcionarioId)).find((e) => e.id === exigenciaId);
     if (!exigencia) throw new BadRequestException("Esta exigência não é de quem é registrado.");
     const { doc } = await this.receberDocumento({
       dono: { funcionarioId },
@@ -850,8 +858,8 @@ export class AdmissaoService {
    */
   private async exigenciaDoApp(quem: QuemNoApp, exigenciaId: string) {
     const [doMotorista, doRegistrado] = await Promise.all([
-      quem.motoristaId ? this.exigidosPara(quem.motoristaId, { soDoPublicoDele: true }) : [],
-      quem.funcionarioId ? this.exigidosDoRegistrado() : [],
+      quem.motoristaId ? this.exigidosPara(quem.motoristaId) : [],
+      quem.funcionarioId ? this.exigidosDoRegistrado(quem.funcionarioId) : [],
     ]);
     const m = doMotorista.find((e) => e.id === exigenciaId);
     if (m && quem.motoristaId) return { exigencia: m, dono: { motoristaId: quem.motoristaId } as DonoDocumento };

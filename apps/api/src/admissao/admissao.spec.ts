@@ -37,6 +37,8 @@ function servico(over: {
   arquivoGuardado?: Buffer;
   /** Vínculo vivo: contratado em carteira ou parceiro. */
   regime?: { id: string; regime: "PARCEIRO" | "EMPREGADO" } | null;
+  /** O registrado (`func1`) também tem cadastro de motorista? Padrão: não. */
+  funcionarioEhMotorista?: boolean;
 } = {}) {
   // As exigências ganham id aqui porque a IDENTIDADE do documento passou a ser
   // a exigência, não a gaveta. Os testes continuam falando em "CNH"/"ASO" (que
@@ -48,7 +50,7 @@ function servico(over: {
     id: `e${i + 1}`,
     exigeAssinatura: false,
     exigeIcpBrasil: false,
-    publico: "MENSAL",
+    publico: "TODOS",
     comoAssinar: "NAO",
     ...e,
   }));
@@ -101,15 +103,14 @@ function servico(over: {
       findMany: async () => [],
     },
     documentoExigido: {
-      // Respeita o filtro de público como o banco faz: é o que separa a
-      // papelada de obra de quem só roda frete comum.
-      // `publico` pode vir exato ("TODOS") ou negado ({ not: "REGISTRADOS" }):
-      // o que se pede de registrado mora no cadastro de funcionário.
-      findMany: async ({ where }: { where?: { publico?: string | { not: string } } } = {}) => {
+      // Respeita o filtro de público como o banco faz: é o que separa o
+      // que se pede de todo mundo do que se pede de quem é registrado.
+      // `publico` pode vir exato ("TODOS") ou em lista ({ in: [...] }).
+      findMany: async ({ where }: { where?: { publico?: string | { in: string[] } } } = {}) => {
         const p = where?.publico;
         if (!p) return exigidos;
         return exigidos.filter((e) =>
-          typeof p === "string" ? (e.publico ?? "MENSAL") === p : (e.publico ?? "MENSAL") !== p.not,
+          typeof p === "string" ? e.publico === p : p.in.includes(e.publico),
         );
       },
       findFirst: async ({ where }: { where?: { id?: string } } = {}) =>
@@ -146,12 +147,15 @@ function servico(over: {
       },
     },
     motorista: {
-      findFirst: async () => ({
-        id: "mot1",
-        nome: "João",
-        cpf: "11122233344",
-        expoPushToken: "tok-1",
-      }),
+      // Procurado pelo CPF do registrado: só acha quando o teste diz que ele
+      // também é motorista.
+      findFirst: async ({ where }: { where?: { cpf?: string } } = {}) =>
+        where?.cpf === "99988877766" && !over.funcionarioEhMotorista
+          ? null
+          : { id: "mot1", nome: "João", cpf: "11122233344", expoPushToken: "tok-1" },
+    },
+    funcionario: {
+      findFirst: async () => ({ id: "func1", cpf: "999.888.777-66" }),
     },
     // A trava de vínculo: é ela que diz se esta pessoa é contratada aqui.
     regimeVigente: { findFirst: async () => over.regime ?? null },
@@ -682,15 +686,14 @@ describe("o que o motorista vê no app", () => {
 });
 
 /**
- * DE QUEM SE PEDE.
+ * DE QUEM SE PEDE — uma regra só (decisão do dono, 23/09/2026).
  *
- * ⚠️ Exigência sem contratante valia pra TODO motorista da conta. Quem só roda
- * frete comum abria o app com "3 documentos faltam" de uma papelada de obra em
- * que ele nunca pôs o caminhão — cobrança errada, na tela de quem não podia
- * resolver. Decisão do dono (21/09/2026): documento de admissão é de
- * mensalista; o resto se marca na tela, um por um.
+ * ⚠️ Antes eram três públicos (MENSAL/TODOS/REGISTRADOS), um recorte por
+ * contratante e um por vínculo. O motorista nunca escolhe cliente no app e,
+ * na prática, papel se pede de quem é CLT. Sobrou: REGISTRADOS (padrão) ou
+ * TODOS (motoristas também).
  */
-describe("quem não tem vínculo não é cobrado de papelada de admissão", () => {
+describe("de quem se pede: registrado ou todo mundo", () => {
   const CATALOGO = [
     { tipo: "CNH", titulo: "CNH", obrigatorio: true, empresaId: null, publico: "TODOS" as const },
     {
@@ -698,43 +701,56 @@ describe("quem não tem vínculo não é cobrado de papelada de admissão", () =
       titulo: "eSocial",
       obrigatorio: true,
       empresaId: null,
-      publico: "MENSAL" as const,
+      publico: "REGISTRADOS" as const,
     },
   ];
 
-  it("sem vínculo, só o que vale pra frota inteira", async () => {
-    const { s } = servico({ exigidos: CATALOGO, regime: null });
-    const r = await s.paraOMotorista("mot1");
-    expect(r.documentos.map((d) => d.titulo)).toEqual(["CNH"]);
+  it("o motorista parceiro vê só o de todo mundo — com ou sem vínculo", async () => {
+    for (const regime of [null, { id: "r1", regime: "PARCEIRO" as const }]) {
+      const { s } = servico({ exigidos: CATALOGO, regime });
+      const r = await s.paraOMotorista("mot1");
+      expect(r.documentos.map((d) => d.titulo)).toEqual(["CNH"]);
+    }
   });
 
-  it("com vínculo vivo, vem tudo", async () => {
-    const { s } = servico({
-      exigidos: CATALOGO,
-      regime: { id: "r1", regime: "PARCEIRO" },
-    });
-    const r = await s.paraOMotorista("mot1");
-    expect(r.documentos.map((d) => d.titulo)).toEqual(["CNH", "eSocial"]);
-  });
-
-  it("motorista de frete comum, catálogo só de obra: nenhuma pendência", async () => {
-    // O app some com o bloco e com a tela. É o caso mais comum da base — a
-    // maioria dos motoristas de uma transportadora não está em obra mensal.
-    const { s } = servico({
-      exigidos: [
-        {
-          tipo: "ESOCIAL",
-          titulo: "eSocial",
-          obrigatorio: true,
-          empresaId: null,
-          publico: "MENSAL" as const,
-        },
-      ],
-      regime: null,
-    });
+  it("catálogo só de registrado: o motorista parceiro não tem pendência", async () => {
+    const { s } = servico({ exigidos: [CATALOGO[1]!] });
     const r = await s.paraOMotorista("mot1");
     expect(r.total).toBe(0);
     expect(r.faltamObrigatorios).toBe(0);
+  });
+
+  it("registrado sem cadastro de motorista recebe o de registrado E o de todo mundo", async () => {
+    // "Todo mundo" é todo mundo: o mecânico registrado também.
+    const { s } = servico({ exigidos: CATALOGO });
+    const r = await s.estadoDoFuncionario("func1");
+    expect(r.documentos.map((d) => d.titulo)).toEqual(["CNH", "eSocial"]);
+  });
+
+  it("motorista CLT não recebe o de todo mundo duas vezes", async () => {
+    // Ele já recebe pelo cadastro de motorista; pedir também no de
+    // funcionário cobraria o mesmo papel em dois lugares.
+    const { s } = servico({ exigidos: CATALOGO, funcionarioEhMotorista: true });
+    const r = await s.paraOApp({ motoristaId: "mot1", funcionarioId: "func1" });
+    expect(r.documentos.map((d) => d.titulo).sort()).toEqual(["CNH", "eSocial"]);
+  });
+
+  it("linha antiga MENSAL conta como de registrado", async () => {
+    const { s } = servico({
+      exigidos: [{ ...CATALOGO[1]!, titulo: "Antigo", publico: "MENSAL" as const }],
+    });
+    expect((await s.paraOMotorista("mot1")).total).toBe(0);
+    expect((await s.estadoDoFuncionario("func1")).total).toBe(1);
+  });
+
+  it("exigência antiga de um contratante vale como geral", async () => {
+    // O contratante vinha da obra, que saiu: ninguém mais chega nele.
+    const { s } = servico({
+      exigidos: [{ ...CATALOGO[0]!, titulo: "Do cliente", empresaId: "emp1" }],
+    });
+    expect((await s.paraOMotorista("mot1")).documentos.map((d) => d.titulo)).toEqual([
+      "Do cliente",
+    ]);
   });
 });
 
@@ -981,51 +997,6 @@ describe("a conferência é de gente, não do sistema", () => {
 });
 
 /**
- * DOCUMENTO SEGUE O VÍNCULO, NÃO A OBRA.
- *
- * ⚠️ Isto já foi "tem alocação de obra ativa", e estava errado: o motorista
- * contratado em carteira que ainda não foi pra obra nenhuma — ou cuja empresa
- * nem usa o controle de obra — não via documento nenhum. A empresa contrata,
- * a pessoa manda os papéis e bate ponto; obra é detalhe de operação, não
- * requisito de admissão.
- */
-describe("quem tem vínculo manda documento, com ou sem obra", () => {
-  const SO_DO_MENSAL = [
-    {
-      tipo: "ESOCIAL",
-      titulo: "eSocial",
-      obrigatorio: true,
-      empresaId: null,
-      publico: "MENSAL" as const,
-    },
-  ];
-
-  it("contratado em carteira vê os documentos", async () => {
-    const { s } = servico({
-      exigidos: SO_DO_MENSAL,
-      regime: { id: "r1", regime: "EMPREGADO" },
-    });
-    const r = await s.paraOMotorista("mot1");
-    expect(r.total).toBe(1);
-  });
-
-  it("parceiro com regime vivo também vê", async () => {
-    const { s } = servico({
-      exigidos: SO_DO_MENSAL,
-      regime: { id: "r1", regime: "PARCEIRO" },
-    });
-    const r = await s.paraOMotorista("mot1");
-    expect(r.total).toBe(1);
-  });
-
-  it("motorista de frete comum, sem vínculo nenhum, continua sem ver nada", async () => {
-    const { s } = servico({ exigidos: SO_DO_MENSAL, regime: null });
-    const r = await s.paraOMotorista("mot1");
-    expect(r.total).toBe(0);
-  });
-});
-
-/**
  * UM DOCUMENTO, UMA LINHA.
  *
  * ⚠️ A separação por exigência resolveu "18 papéis não cabem em 12 gavetas",
@@ -1120,9 +1091,7 @@ describe("o que se pede de registrado não é do cadastro de motorista", () => {
 
   it("a lista do motorista (tela dele e ficha do painel) não traz a de registrado", async () => {
     const { s } = servico({ exigidos: MISTO });
-    const naTelaDele = await s.estadoDosDocumentos("mot1", { soDoPublicoDele: true });
     const naFicha = await s.estadoDosDocumentos("mot1");
-    expect(naTelaDele.documentos.map((d) => d.titulo)).toEqual(["CNH"]);
     expect(naFicha.documentos.map((d) => d.titulo)).toEqual(["CNH"]);
   });
 
