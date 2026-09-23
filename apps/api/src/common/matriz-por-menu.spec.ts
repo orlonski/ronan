@@ -80,11 +80,14 @@ describe("matriz de papéis agrupada pelo menu", () => {
   });
 
   for (const plataforma of [true, false]) {
-    it(`todo recurso do catálogo sai em exatamente uma linha (plataforma=${plataforma})`, () => {
+    it(`todo recurso do catálogo aparece na matriz, e nenhum some (plataforma=${plataforma})`, () => {
       const menu = menuDoSidebar().filter((g) => !g.soPlataforma || plataforma);
       const secoes = agruparRecursosPorMenu(menu, RECURSOS, { recurso: (r) => RECURSOS_LABEL[r] });
       const vistos = recursosDasSecoes(secoes);
-      expect([...vistos].sort()).toEqual([...RECURSOS].sort());
+      expect([...new Set(vistos)].sort()).toEqual([...RECURSOS].sort());
+      // Fora do menu, cada recurso no máximo uma vez.
+      const sobras = secoes.find((s) => s.titulo === SECAO_SEM_ITEM_NO_MENU)?.linhas.map((l) => l.recurso) ?? [];
+      expect(sobras.length).toBe(new Set(sobras).size);
       expect(secoes.filter((s) => s.linhas.length === 0)).toEqual([]);
     });
   }
@@ -99,22 +102,22 @@ describe("matriz de papéis agrupada pelo menu", () => {
     expect(frota.linhas[i + 1]).toMatchObject({ recurso: "modalidades", rotulo: "Motoristas › Modalidades", aba: true });
   });
 
-  it("recurso em dois lugares fica no primeiro e anota o outro", () => {
-    const secoes = agruparRecursosPorMenu(menuDoSidebar(), RECURSOS);
-    const cte = secoes.flatMap((s) => s.linhas).filter((l) => l.recurso === "cte");
-    expect(cte).toHaveLength(1);
-    expect(cte[0]!.tambemEm.some((t) => t.startsWith("Ajustes › Minha empresa"))).toBe(true);
+  it("todo item do menu vira linha, mesmo dividindo a permissão com outro", () => {
+    // Torre de controle e Programação do dia usam a mesma chave (programacao):
+    // as duas têm que aparecer, cada uma no seu lugar, apontando uma pra outra.
+    // Até 23/09/2026 só a Programação aparecia e o dono não achou a Torre.
+    const linhas = agruparRecursosPorMenu(menuDoSidebar(), RECURSOS).flatMap((s) => s.linhas);
+    const torre = linhas.find((l) => l.rotulo === "Torre de controle")!;
+    expect(torre.recurso).toBe("programacao");
+    expect(torre.tambemEm.some((t) => t.includes("Programação"))).toBe(true);
+    const viagens = linhas.find((l) => l.rotulo === "Viagens")!;
+    expect(viagens.tambemEm.some((t) => t.includes("Ao vivo"))).toBe(true);
+    expect(linhas.find((l) => l.rotulo === "Ao vivo")?.recurso).toBe("viagens");
   });
 
-  it("recurso mora no item com o nome dele, não no primeiro que aparece", () => {
-    // "Ao vivo" (Dia a dia) usa viagens.ver e vem antes de Viagens no menu;
-    // os checkboxes de Viagens têm que estar em Viagens.
-    const secoes = agruparRecursosPorMenu(menuDoSidebar(), RECURSOS);
-    const linha = secoes.flatMap((s) => s.linhas).find((l) => l.recurso === "viagens")!;
-    expect(linha.rotulo).toBe("Viagens");
-    expect(linha.tambemEm.some((t) => t.includes("Ao vivo"))).toBe(true);
-    const prog = secoes.flatMap((s) => s.linhas).find((l) => l.recurso === "programacao")!;
-    expect(prog.rotulo).toMatch(/^Programação/);
+  it("aba que repete a chave do próprio item não vira linha (é a mesma tela)", () => {
+    const linhas = agruparRecursosPorMenu(menuDoSidebar(), RECURSOS).flatMap((s) => s.linhas);
+    expect(linhas.find((l) => l.rotulo === "Torre de controle › Quando avisar")).toBeUndefined();
   });
 
   it("recurso fora do catálogo desta pessoa não vira linha; o que o menu não alcança vai pro fim", () => {

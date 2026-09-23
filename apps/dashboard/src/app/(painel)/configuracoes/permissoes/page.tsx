@@ -135,12 +135,12 @@ function PermissoesInner() {
     });
 
     if (process.env.NODE_ENV !== "production") {
-      // Nenhum recurso do catálogo pode sumir da matriz, nem sair duas vezes.
+      // Nenhum recurso do catálogo pode sumir da matriz. Repetir é esperado:
+      // item do menu que divide a chave com outro tem linha própria.
       const vistos = secoes.flatMap((s) => s.linhas.map((l) => l.recurso));
       const faltando = recursos.filter((r) => !vistos.includes(r));
-      const repetidos = vistos.filter((r, i) => vistos.indexOf(r) !== i);
-      if (faltando.length || repetidos.length) {
-        console.error("[permissoes] matriz fora do catálogo", { faltando, repetidos });
+      if (faltando.length) {
+        console.error("[permissoes] matriz fora do catálogo", { faltando });
       }
     }
 
@@ -334,7 +334,7 @@ function PermissoesInner() {
                           {rotulo}
                           {tambemEm.length > 0 && (
                             <span className="block text-[11px] font-normal text-muted-foreground">
-                              também em {tambemEm.join(", ")}
+                              mesma permissão de {tambemEm.join(", ")} — marcar aqui marca lá
                             </span>
                           )}
                         </span>
