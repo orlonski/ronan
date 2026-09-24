@@ -206,6 +206,13 @@ export function ClienteComboboxMulti({
   );
 }
 
+/**
+ * Pede à API só nome e CPF. Sem isso o dropdown recebia a ficha completa de
+ * cada motorista (viagens do histórico inteiro, regime, acesso ao app) — ~0,7s
+ * em toda tela que tem filtro de motorista.
+ */
+const SO_OPCOES = { campos: "opcoes" };
+
 const motoristaOption = (m: Motorista): ComboboxOption => ({
   value: m.id,
   label: m.nome,
@@ -232,6 +239,7 @@ export function MotoristaCombobox({
       onChange={onChange}
       initialOption={initialOption}
       path="/admin/motoristas"
+      filtros={SO_OPCOES}
       mapOption={motoristaOption}
       placeholder={placeholder}
       searchPlaceholder="Buscar por nome ou CPF…"
@@ -257,6 +265,7 @@ export function MotoristaComboboxMulti({
       onChange={onChange}
       initialOptions={initialOptions}
       path="/admin/motoristas"
+      filtros={SO_OPCOES}
       mapOption={motoristaOption}
       searchPlaceholder="Buscar por nome ou CPF…"
       emptyMessage="Nenhum motorista encontrado."

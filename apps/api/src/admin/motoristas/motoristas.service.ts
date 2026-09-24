@@ -54,7 +54,11 @@ type ListMotoristasParams = PaginationQuery & {
   semTransportadora?: "true";
   acessoPerfilId?: string;
   acessoExcecao?: "true";
+  campos?: "opcoes";
 };
+
+/** O mínimo que uma opção de "escolher motorista" mostra. */
+const SELECT_OPCAO = { id: true, nome: true, cpf: true, ativo: true } as const;
 
 const SAFE_SELECT = {
   id: true,
@@ -219,9 +223,17 @@ export class MotoristasService {
           transportadora: "transportadora.nome",
         },
         defaultSort: { field: "nome", order: "asc" },
-        select: SAFE_SELECT as unknown as Record<string, unknown>,
+        select: (params.campos === "opcoes" ? SELECT_OPCAO : SAFE_SELECT) as unknown as Record<
+          string,
+          unknown
+        >,
       },
     );
+
+    // O campo de escolher motorista mostra nome e CPF. A ficha completa (com
+    // viagens de todo o histórico, regime e acesso ao app de cada um) custava
+    // ~0,4s no servidor pra desenhar um dropdown — em toda tela com filtro.
+    if (params.campos === "opcoes") return result;
 
     const flat = result.data.map(
       (m) => this.flatten(m as Parameters<typeof this.flatten>[0]) as Record<string, unknown>,

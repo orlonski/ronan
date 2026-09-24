@@ -55,8 +55,8 @@ export class ChatAdminController {
 
   @RequerPermissao("chat.ver")
   @Get("avisos/:id/foto")
-  async foto(@Param("id") id: string, @Res() res: Response) {
-    const { buffer, contentType } = await this.service.fotoBuffer(id);
+  async foto(@Param("id") id: string, @Query("mini") mini: string | undefined, @Res() res: Response) {
+    const { buffer, contentType } = await this.service.fotoBuffer(id, !!mini);
     res.set("Content-Type", contentType);
     res.set("Cache-Control", "private, max-age=86400");
     res.send(buffer);

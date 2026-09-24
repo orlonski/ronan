@@ -43,6 +43,8 @@ const ListMotoristasQuery = paginationQuerySchema.extend({
   // Acesso ao app: quem cai num perfil, e quem tem exceção viva.
   acessoPerfilId: z.string().uuid().optional(),
   acessoExcecao: z.enum(["true"]).optional(),
+  // Campo de escolher motorista (filtro, formulário): só o que a opção mostra.
+  campos: z.enum(["opcoes"]).optional(),
 });
 type ListMotoristasQuery = z.infer<typeof ListMotoristasQuery>;
 

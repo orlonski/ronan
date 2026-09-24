@@ -112,17 +112,26 @@ export class ChatAdminService {
     return { fotoKey };
   }
 
-  /** Bytes da foto de um aviso, pro painel mostrar a miniatura. */
-  async fotoBuffer(avisoId: string): Promise<{ buffer: Buffer; contentType: string }> {
+  /**
+   * Bytes da foto de um aviso. `mini`: a miniatura de ~15 KB que o painel
+   * desenha em 64px — o original (até 10 MB) levava ~3s pra atravessar até o
+   * navegador. Sem miniatura possível, cai no original.
+   */
+  async fotoBuffer(avisoId: string, mini = false): Promise<{ buffer: Buffer; contentType: string }> {
     const canalId = await this.chat.garantirCanalAvisos();
     const aviso = await this.prisma.mensagemChat.findFirst({
       where: { id: avisoId, conversaId: canalId, apagadaEm: null },
       select: { fotoKey: true },
     });
     if (!aviso?.fotoKey) throw new NotFoundException("Foto não disponível.");
-    const buffer = await this.uploads.getObjectBuffer(aviso.fotoKey);
     const ext = aviso.fotoKey.split(".").pop()?.toLowerCase();
-    return { buffer, contentType: ext === "png" ? "image/png" : "image/jpeg" };
+    const contentType = ext === "png" ? "image/png" : "image/jpeg";
+    if (mini) {
+      const thumb = await this.uploads.miniatura(aviso.fotoKey, contentType, null);
+      if (thumb) return { buffer: thumb, contentType: "image/jpeg" };
+    }
+    const buffer = await this.uploads.getObjectBuffer(aviso.fotoKey);
+    return { buffer, contentType };
   }
 
   /**

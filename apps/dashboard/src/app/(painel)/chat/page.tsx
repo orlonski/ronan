@@ -383,7 +383,8 @@ function FotoAviso({ avisoId }: { avisoId: string }) {
     if (!token) return;
     let objectUrl: string | null = null;
     let vivo = true;
-    void fetch(`${API_URL}/admin/chat/avisos/${avisoId}/foto`, {
+    // `mini`: a tela desenha 64px; o original tem até 10 MB (~3s pra chegar).
+    void fetch(`${API_URL}/admin/chat/avisos/${avisoId}/foto?mini=1`, {
       headers: { authorization: `Bearer ${token}` },
     })
       .then((r) => (r.ok ? r.blob() : null))
