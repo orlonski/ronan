@@ -59,3 +59,13 @@ export type ColunaApp = {
 export type Simulacao = { total: number; mudam: MudancaAcessoApp[]; herdadas?: number };
 
 export const CHAVE_PAINEL = ["/admin/acesso-app"];
+
+/**
+ * Tudo que é de acesso ao app no cache — o painel e o recorte de perfis que a
+ * lista de motoristas usa (`/admin/acesso-app/perfis`). Invalidar só a chave do
+ * painel deixava a lista com a fonte/perfis velhos por até um minuto.
+ */
+export const DO_ACESSO_APP = {
+  predicate: (q: { queryKey: readonly unknown[] }) =>
+    typeof q.queryKey[0] === "string" && q.queryKey[0].startsWith("/admin/acesso-app"),
+};

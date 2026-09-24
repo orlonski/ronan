@@ -11,7 +11,8 @@ import { Injectable, Logger } from "@nestjs/common";
  * `createdAt` (data de publicação). O `createdAt` é idêntico entre plataformas
  * pra um mesmo publish, então comparar por ele é à prova de iOS/Android.
  *
- * Cache em memória (TTL 10min) pra não bater na Expo a cada listagem. Se a Expo
+ * Cache em memória (TTL 10min, renovado por trás quando vence) pra não bater na
+ * Expo a cada listagem. Se a Expo
  * falhar, devolve o último valor bom (mesmo vencido) ou null — quem chama cai no
  * fallback da heurística antiga, nunca regride.
  */
@@ -40,9 +41,20 @@ export class EasUpdateService {
    */
   async latest(runtimeVersion: string): Promise<LatestUpdate | null> {
     const cached = this.cache.get(runtimeVersion);
-    const agora = Date.now();
-    if (cached && agora - cached.ts < TTL_MS) return cached.value;
+    if (cached && Date.now() - cached.ts < TTL_MS) return cached.value;
 
+    // Vencido: responde com o que tem e renova por trás. Esperar a Expo aqui
+    // custava ~2,5s pra quem abrisse a lista de motoristas a cada 10 min — e o
+    // selo de "atualizado" não precisa estar certo no segundo.
+    if (cached) {
+      void this.renovar(runtimeVersion);
+      return cached.value;
+    }
+    return this.renovar(runtimeVersion);
+  }
+
+  /** Busca na Expo e guarda; chamadas simultâneas dividem a mesma busca. */
+  private renovar(runtimeVersion: string): Promise<LatestUpdate | null> {
     const existing = this.inFlight.get(runtimeVersion);
     if (existing) return existing;
 

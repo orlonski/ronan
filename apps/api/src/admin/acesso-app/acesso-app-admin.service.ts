@@ -153,6 +153,16 @@ export class AcessoAppAdminService {
     };
   }
 
+  /** Recorte do `painel` pra lista/ficha do motorista. Ver o controller. */
+  async perfisParaFixar() {
+    const cfg = await this.config();
+    const perfis = await this.prisma.perfilAcessoApp.findMany({
+      orderBy: [{ ativo: "desc" }, { nome: "asc" }],
+      select: { id: true, nome: true, ativo: true },
+    });
+    return { fonte: cfg.fonte, perfis };
+  }
+
   async explicarMotorista(id: string, escopo: EscopoAdmin) {
     const m = await this.prisma.motorista.findFirst({
       where: { id, ...filtroEscopo(escopo) },

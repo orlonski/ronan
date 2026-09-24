@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { ConfirmarMudanca } from "./simulacao";
-import { CHAVE_PAINEL, type PainelAcessoApp, type Simulacao } from "./tipos";
+import { DO_ACESSO_APP, type PainelAcessoApp, type Simulacao } from "./tipos";
 
 const CAMADAS: { chave: CamadaCorte; label: string; efeito: string }[] = [
   {
@@ -179,7 +179,7 @@ export function AbaPlataforma({ painel }: { painel: PainelAcessoApp }) {
               });
               toast.success("Salvo.");
               setSimulacao(null);
-              void qc.invalidateQueries({ queryKey: CHAVE_PAINEL });
+              void qc.invalidateQueries(DO_ACESSO_APP);
             } catch (e) {
               toast.error((e as Error).message);
             }
@@ -222,7 +222,7 @@ function TravasDoServidor({ painel }: { painel: PainelAcessoApp }) {
       });
       toast.success(msg);
       setConfirmando(null);
-      void qc.invalidateQueries({ queryKey: CHAVE_PAINEL });
+      void qc.invalidateQueries(DO_ACESSO_APP);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {

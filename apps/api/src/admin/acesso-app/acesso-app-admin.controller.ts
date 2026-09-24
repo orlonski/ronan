@@ -54,6 +54,18 @@ export class AcessoAppAdminController {
     return this.service.painel(!!user.plataforma);
   }
 
+  /**
+   * Só o que a lista e a ficha do motorista usam: se a empresa já está nas
+   * regras e quais perfis dá pra fixar. O `GET /` monta o painel inteiro —
+   * inclusive o acesso efetivo de cada pessoa — e custava ~3s pra abrir a
+   * lista de motoristas.
+   */
+  @Get("perfis")
+  @RequerPermissao("perfis-acesso.ver")
+  perfis() {
+    return this.service.perfisParaFixar();
+  }
+
   @Post("simular")
   @RequerPermissao("perfis-acesso.ver")
   simular(@Body(new ZodValidationPipe(SimularAcessoAppInput)) body: SimularAcessoAppInput) {

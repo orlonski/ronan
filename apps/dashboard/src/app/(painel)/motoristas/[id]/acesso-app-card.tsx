@@ -69,7 +69,7 @@ export function AcessoAppCard(alvo: AlvoAcesso) {
   const [mudando, setMudando] = useState(false);
   const [mudandoGrupo, setMudandoGrupo] = useState(false);
   const [desfazendo, setDesfazendo] = useState<ExcecaoApp | null>(null);
-  const painel = useApiQuery<{ perfis: PerfilOpcao[] }>(mudandoGrupo ? "/admin/acesso-app" : undefined);
+  const painel = useApiQuery<{ perfis: PerfilOpcao[] }>(mudandoGrupo ? "/admin/acesso-app/perfis" : undefined);
 
   const a = acesso.data;
   if (!a) return null;

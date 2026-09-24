@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 import { PessoasDiferentes } from "./_components/excecoes";
 import { AbaPlataforma } from "./_components/plataforma";
 import { ConfirmarMudanca } from "./_components/simulacao";
-import { CHAVE_PAINEL, type ColunaApp, type PainelAcessoApp, type Simulacao } from "./_components/tipos";
+import { DO_ACESSO_APP, type ColunaApp, type PainelAcessoApp, type Simulacao } from "./_components/tipos";
 
 
 /**
@@ -228,7 +228,7 @@ function EditorDoTipo({ painel, coluna }: { painel: PainelAcessoApp; coluna: Col
     await fetchApi("/admin/acesso-app/tabela", { method: "PUT", token, body: JSON.stringify(corpoTabela()) });
     toast.success("Salvo. Chega no celular de cada um na próxima vez que abrir o app com sinal.");
     setSimulacao(null);
-    void qc.invalidateQueries({ queryKey: CHAVE_PAINEL });
+    void qc.invalidateQueries(DO_ACESSO_APP);
   }
 
   return (
@@ -466,7 +466,7 @@ function PassarParaTabela() {
                     await fetchApi("/admin/acesso-app/passar-para-regras", { method: "POST", token });
                     toast.success("Pronto. O app agora é configurado por aqui.");
                     setConfirmando(false);
-                    void qc.invalidateQueries({ queryKey: CHAVE_PAINEL });
+                    void qc.invalidateQueries(DO_ACESSO_APP);
                   } catch (e) {
                     toast.error((e as Error).message);
                   } finally {

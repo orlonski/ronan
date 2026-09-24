@@ -177,7 +177,7 @@ export default function MotoristasPage() {
   // Marcar vários e dar/tirar acesso de uma vez. Só com a empresa nas regras:
   // no espelho, a ficha de cada um manda e o lote seria recusado.
   const painelAcesso = useApiQuery<{ fonte: "COLUNAS" | "REGRAS"; perfis: PerfilOpcao[] }>(
-    temPermissao("perfis-acesso.ver") ? "/admin/acesso-app" : undefined,
+    temPermissao("perfis-acesso.ver") ? "/admin/acesso-app/perfis" : undefined,
     { staleTime: 60_000 },
   );
   const podeLote = temPermissao("perfis-acesso.aplicar") && painelAcesso.data?.fonte === "REGRAS";
