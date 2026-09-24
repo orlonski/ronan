@@ -33,6 +33,14 @@ function diaUtc(iso: string): Date {
   return new Date(`${iso}T00:00:00Z`);
 }
 
+/**
+ * Dias até a data (coluna @db.Date) contando de HOJE no Brasil. Contava do dia
+ * UTC: depois das 21h o documento "vencia" um dia antes na tela.
+ */
+function diasAte(d: Date): number {
+  return Math.round((d.getTime() - inicioDoDiaData().getTime()) / 86_400_000);
+}
+
 @Injectable()
 export class FrotaManutencaoService {
   private readonly log = new Logger(FrotaManutencaoService.name);
@@ -400,22 +408,21 @@ export class FrotaManutencaoService {
       (a, b) => FrotaManutencaoService.ordemUrgencia(a) - FrotaManutencaoService.ordemUrgencia(b),
     );
 
-    // O odômetro mais recente de cada veículo sai do abastecimento — é o único
-    // lugar onde ele é informado de verdade, e por isso o plano por km depende
-    // de a frota anotar o odômetro ao abastecer.
+    // O odômetro sai do abastecimento, do conserto concluído e da conferência
+    // no prontuário — o plano por km depende de pelo menos um deles.
     // O km de hoje é ESTIMADO (common/km-atual.ts): última leitura confiável
     // mais o km das viagens. Era o maior odômetro já anotado, e um dígito a
     // mais prendia o plano em "vencido" pra sempre.
     const kms = await this.kmAtualDosVeiculos([...new Set(planos.map((p) => p.veiculoId))]);
+    // Revisão que já tem conserto aberto (agendado ou na oficina) já foi
+    // decidida: aparece em Agendado / Parados, não de novo em "Precisa de
+    // decisão" — ali o Agendar abria uma segunda OS pro mesmo serviço.
+    const planosComOs = new Set(
+      [...agendadas, ...emOficina].map((m) => m.planoId).filter((id): id is string => Boolean(id)),
+    );
     const odoPorVeiculo = new Map([...kms].map(([id, k]) => [id, k.km]));
 
     const hoje = new Date();
-    const diasAte = (d: Date) =>
-      Math.round(
-        (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) -
-          Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate())) /
-          86_400_000,
-      );
 
     return {
       manutencoes: planos
@@ -423,7 +430,8 @@ export class FrotaManutencaoService {
           ...avaliarPlano(p, { odometro: odoPorVeiculo.get(p.veiculoId) ?? null, hoje }),
           veiculo: p.veiculo,
         }))
-        .filter((a) => a.situacao === "VENCIDO" || a.situacao === "PROXIMO"),
+        .filter((a) => a.situacao === "VENCIDO" || a.situacao === "PROXIMO")
+        .filter((a) => !planosComOs.has(a.planoId)),
 
       documentos: documentos
         .map((d) => ({
@@ -922,12 +930,6 @@ export class FrotaManutencaoService {
     const [custoMes, custoAno] = await Promise.all([periodo(inicioMes), periodo(inicioAno)]);
 
     const hoje = new Date();
-    const diasAte = (d: Date) =>
-      Math.round(
-        (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) -
-          Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate())) /
-          86_400_000,
-      );
 
     type Evento = { data: Date; tipo: string; titulo: string; detalhe: string | null; valor: number | null; ref: string };
     const linha: Evento[] = [
@@ -1010,7 +1012,7 @@ export class FrotaManutencaoService {
     const out = new Map<string, KmAtual>();
     if (veiculoIds.length === 0) return out;
     const umAno = new Date(Date.now() - 400 * 86_400_000);
-    const [abastecimentos, conferidas] = await Promise.all([
+    const [abastecimentos, conferidas, consertos] = await Promise.all([
       this.prisma.abastecimento.findMany({
         where: { veiculoId: { in: veiculoIds }, odometro: { gt: 0 }, data: { gte: umAno } },
         select: { id: true, veiculoId: true, data: true, odometro: true },
@@ -1019,12 +1021,28 @@ export class FrotaManutencaoService {
         where: { veiculoId: { in: veiculoIds } },
         select: { id: true, veiculoId: true, lidoEm: true, odometro: true },
       }),
+      // O odômetro anotado ao concluir o conserto também é leitura: a oficina
+      // olhou o painel. Não é "conferida" — veio digitado da nota, e passa
+      // pelo mesmo filtro de plausível que o abastecimento.
+      this.prisma.manutencaoVeiculo.findMany({
+        where: {
+          veiculoId: { in: veiculoIds },
+          status: "CONCLUIDA",
+          odometro: { gt: 0 },
+          concluidaEm: { gte: umAno },
+        },
+        select: { id: true, veiculoId: true, concluidaEm: true, odometro: true },
+      }),
     ]);
     const porVeiculo = new Map<string, LeituraOdometro[]>();
     const add = (vid: string, l: LeituraOdometro) =>
       porVeiculo.set(vid, [...(porVeiculo.get(vid) ?? []), l]);
-    for (const a of abastecimentos) add(a.veiculoId, { data: a.data, odometro: a.odometro, ref: a.id });
-    for (const c of conferidas) add(c.veiculoId, { data: c.lidoEm, odometro: c.odometro, confiavel: true, ref: c.id });
+    for (const a of abastecimentos)
+      add(a.veiculoId, { data: a.data, odometro: a.odometro, ref: a.id, origem: "ABASTECIMENTO" });
+    for (const c of conferidas)
+      add(c.veiculoId, { data: c.lidoEm, odometro: c.odometro, confiavel: true, ref: c.id, origem: "CONFERIDO" });
+    for (const m of consertos)
+      add(m.veiculoId, { data: m.concluidaEm!, odometro: m.odometro!, ref: m.id, origem: "CONSERTO" });
 
     // Primeiro a âncora de cada um (sem viagens), depois UMA consulta de km.
     const ancoras = new Map<string, Date>();
@@ -1152,12 +1170,13 @@ export class FrotaManutencaoService {
 
   // --------------------------------------------------------- documentos
 
-  listDocumentos(veiculoId?: string) {
-    return this.prisma.documentoVeiculo.findMany({
+  async listDocumentos(veiculoId?: string) {
+    const docs = await this.prisma.documentoVeiculo.findMany({
       where: veiculoId ? { veiculoId } : {},
       include: { veiculo: { select: { id: true, placa: true } } },
       orderBy: [{ veiculoId: "asc" }, { tipo: "asc" }],
     });
+    return docs.map((d) => ({ ...d, diasRestantes: d.validade ? diasAte(d.validade) : null }));
   }
 
   salvarDocumento(input: SalvarDocumentoVeiculoInput) {

@@ -25,7 +25,11 @@ export type LeituraOdometro = {
   confiavel?: boolean;
   /** Pra quem chamou saber qual foi descartada. */
   ref?: string;
+  /** De onde veio, pra tela dizer ("anotado no abastecimento", "no conserto"). */
+  origem?: OrigemLeitura;
 };
+
+export type OrigemLeitura = "ABASTECIMENTO" | "CONSERTO" | "CONFERIDO";
 
 /** O máximo que um caminhão roda num dia, com folga. Acima disso é digitação. */
 export const KM_MAXIMO_POR_DIA = 1_500;
@@ -111,6 +115,8 @@ export type KmAtual = {
   kmViagensDepois: number;
   /** A âncora foi conferida por alguém (e não só anotada no abastecimento). */
   conferido: boolean;
+  /** De onde veio a âncora. */
+  origem: OrigemLeitura | null;
   descartadas: LeituraOdometro[];
 };
 
@@ -125,13 +131,14 @@ export function kmAtual(
 ): KmAtual {
   const { validas, descartadas } = leiturasValidas(leituras);
   const ancora = validas[validas.length - 1];
-  if (!ancora) return { km: null, desde: null, kmViagensDepois: 0, conferido: false, descartadas };
+  if (!ancora) return { km: null, desde: null, kmViagensDepois: 0, conferido: false, origem: null, descartadas };
   const extra = Math.max(0, Math.round(kmViagensDepois(ancora.data)));
   return {
     km: ancora.odometro + extra,
     desde: ancora.data,
     kmViagensDepois: extra,
     conferido: !!ancora.confiavel,
+    origem: ancora.origem ?? (ancora.confiavel ? "CONFERIDO" : null),
     descartadas,
   };
 }

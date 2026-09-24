@@ -26,7 +26,13 @@ type Custo = {
 
 type Prontuario = {
   veiculo: { id: string; placa: string; modelo: string | null; marca: string | null; anoModelo: number | null };
-  km: { km: number | null; desde: string | null; kmViagensDepois: number; conferido: boolean };
+  km: {
+    km: number | null;
+    desde: string | null;
+    kmViagensDepois: number;
+    conferido: boolean;
+    origem?: "ABASTECIMENTO" | "CONSERTO" | "CONFERIDO" | null;
+  };
   situacao: "RODANDO" | "NA_OFICINA" | "PARADO";
   custoMes: Custo;
   custoAno: Custo;
@@ -63,6 +69,12 @@ const ROTULO_EVENTO: Record<string, string> = {
  * abas sem filtro por placa. Padrão do mercado (a página do veículo no
  * Fleetio), decidido com o dono em 24/09/2026.
  */
+const ORIGEM_KM = {
+  CONFERIDO: "Conferido",
+  ABASTECIMENTO: "Anotado no abastecimento",
+  CONSERTO: "Anotado no conserto",
+} as const;
+
 export function ProntuarioDoCaminhao({ veiculoId }: { veiculoId: string }) {
   const token = useAuthToken();
   const queryClient = useQueryClient();
@@ -127,7 +139,7 @@ export function ProntuarioDoCaminhao({ veiculoId }: { veiculoId: string }) {
           <p className="text-sm text-muted-foreground">
             {p.km.km == null
               ? "Ninguém anotou odômetro ainda. Confira no painel do caminhão."
-              : `${p.km.conferido ? "Conferido" : "Anotado no abastecimento"} em ${dia(p.km.desde!)}${
+              : `${ORIGEM_KM[p.km.origem ?? (p.km.conferido ? "CONFERIDO" : "ABASTECIMENTO")]} em ${dia(p.km.desde!)}${
                   p.km.kmViagensDepois > 0
                     ? ` + ${p.km.kmViagensDepois.toLocaleString("pt-BR")} km de viagens depois (estimado)`
                     : ""

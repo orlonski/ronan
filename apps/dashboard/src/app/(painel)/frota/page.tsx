@@ -474,7 +474,7 @@ function AnexoLink({ manutencaoId, indice }: { manutencaoId: string; indice: num
 
 /**
  * PLANOS DE MANUTENÇÃO: "troca de óleo a cada 20.000 km ou 6 meses". São eles
- * que acendem o "Manutenção preventiva" em Precisa de você — e até 23/09/2026
+ * que acendem a revisão na Caixa de entrada — e até 23/09/2026
  * não tinham tela: a API gravava, o aviso pedia pra cadastrar, e não havia onde.
  */
 function ListaPlanos() {
@@ -590,9 +590,9 @@ function ListaPlanos() {
     <div className="space-y-3">
       <ConfirmDialog />
       <p className="text-sm text-muted-foreground">
-        A manutenção que se repete — a cada tantos km ou a cada tantos dias. O sistema avisa em
-        Precisa de você quando estiver chegando. O km atual vem do odômetro anotado nos
-        abastecimentos.
+        A manutenção que se repete — a cada tantos km ou a cada tantos dias. Quando estiver
+        chegando, ela aparece na Caixa de entrada. O km do caminhão vem do odômetro anotado no
+        abastecimento, no conserto ou conferido no prontuário, somado ao km das viagens depois.
       </p>
       <Permitido chave="manutencao.criar">
         <Button
@@ -655,9 +655,9 @@ function ListaPlanos() {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Pode preencher os dois: vale o que chegar primeiro. O aviso por km usa o odômetro
-            anotado nos abastecimentos deste caminhão — sem odômetro anotado, só o aviso por dias
-            funciona.
+            Pode preencher os dois: vale o que chegar primeiro. O aviso por km precisa de pelo
+            menos um odômetro anotado (no abastecimento, no conserto ou conferido no prontuário do
+            caminhão) — sem nenhum, só o aviso por dias funciona.
           </p>
           {(editando || veiculosLote.length <= 1) && (
           <div className="grid gap-3 md:grid-cols-2">
@@ -1431,6 +1431,7 @@ function ListaDocumentos() {
             </p>
             <p className="text-xs text-muted-foreground tabular-nums">
               vence {dataBR(d.validade)}
+              {d.diasRestantes != null && d.diasRestantes > 45 && ` · faltam ${d.diasRestantes} dias`}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1441,7 +1442,11 @@ function ListaDocumentos() {
               }`}
             >
               <AlertTriangle className="mr-1 h-3 w-3" />
-              {d.diasRestantes < 0 ? "vencido" : `${d.diasRestantes} dias`}
+              {d.diasRestantes < 0
+                ? `vencido há ${Math.abs(d.diasRestantes)} dias`
+                : d.diasRestantes === 0
+                  ? "vence hoje"
+                  : `vence em ${d.diasRestantes} dias`}
             </Badge>
           )}
           <Permitido chave="documentos-veiculo.editar">

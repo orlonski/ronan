@@ -76,4 +76,15 @@ describe("kmAtual", () => {
     expect(k.km).toBe(153_200);
     expect(k.descartadas).toHaveLength(1);
   });
+
+  it("o odômetro do conserto vira a âncora e a tela sabe de onde veio", () => {
+    const k = kmAtual(
+      [
+        L("2026-09-01", 150_000),
+        { data: new Date("2026-09-12T15:00:00Z"), odometro: 151_200, origem: "CONSERTO" as const },
+      ],
+      semViagem,
+    );
+    expect(k).toMatchObject({ km: 151_200, conferido: false, origem: "CONSERTO" });
+  });
 });

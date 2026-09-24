@@ -182,7 +182,9 @@ export function CaixaDeEntrada({
               >
                 {(d.diasRestantes ?? 0) < 0
                   ? `vencido há ${Math.abs(d.diasRestantes!)} dias`
-                  : `vence em ${d.diasRestantes} dias`}
+                  : d.diasRestantes === 0
+                    ? "vence hoje"
+                    : `vence em ${d.diasRestantes} dias`}
               </Badge>
             </span>
             <Button size="sm" variant="outline" onClick={() => onVerAba("documentos")}>
