@@ -343,7 +343,7 @@ function HomeDaEmpresa() {
       </View>
 
       <FlatList<Viagem>
-        data={viagens.data ?? []}
+        data={mostraHistorico ? (viagens.data ?? []) : []}
         keyExtractor={(v) => v.id}
         contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
         refreshControl={
@@ -679,7 +679,7 @@ function HomeDaEmpresa() {
               )}
 
             {/* Resumo do mes corrente — bate com pagamento */}
-            {resumo.data && resumo.data.totalViagens > 0 && (
+            {mostraHistorico && resumo.data && resumo.data.totalViagens > 0 && (
               <View className="mt-3 rounded-2xl border-2 border-border bg-card p-4">
                 <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   Resumo de {fmtMesLongo(resumo.data.mes)}
@@ -712,7 +712,7 @@ function HomeDaEmpresa() {
           </View>
         }
         ListFooterComponent={
-          (viagens.data?.length ?? 0) > 0 ? (
+          mostraHistorico && (viagens.data?.length ?? 0) > 0 ? (
             <Pressable
               onPress={() => router.push("/historico")}
               className="mt-2 flex-row items-center justify-center gap-2 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
