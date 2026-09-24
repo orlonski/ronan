@@ -132,8 +132,8 @@ export default function ConferenciasPage() {
       // aconteceu.
       toast.success(`${r.mudaram} de ${r.total} mudaram de veredito`, {
         description: r.reverteram
-          ? `${r.reverteram} viagem(ns) saíram da revisão. Sem custo: a leitura já estava guardada.`
-          : "Sem custo: só a comparação rodou de novo, a leitura já estava guardada.",
+          ? `${r.reverteram} viagem(ns) saíram da revisão. A leitura já estava guardada, só a comparação rodou de novo.`
+          : "Só a comparação rodou de novo, a leitura já estava guardada.",
       });
       void resumo.refetch();
       void lista.refetch();
@@ -204,8 +204,8 @@ export default function ConferenciasPage() {
               {pendentes.data?.pendentes} viagem(ns) com foto ainda sem conferência
             </p>
             <p className="text-sm text-muted-foreground">
-              São as que já estavam aqui antes. Cada uma custa uma leitura (~R$ 0,03), então elas não
-              entram sozinhas — vão até 100 por vez, das mais recentes pras mais antigas.
+              São as que já estavam aqui antes. Elas não entram sozinhas — vão até 100 por vez, das
+              mais recentes pras mais antigas.
             </p>
           </div>
           <Button onClick={() => void conferirPendentes()} disabled={enviando}>
@@ -223,12 +223,12 @@ export default function ConferenciasPage() {
             <p className="text-sm font-medium">Reavaliar o que já foi lido</p>
             <p className="text-sm text-muted-foreground">
               Roda a comparação de novo, com as regras de hoje, em cima das leituras já guardadas.{" "}
-              <strong>Não gasta nada</strong> — a leitura é a parte cara e ela já foi feita. Serve
-              quando a regra fica mais esperta e o histórico precisa acompanhar.
+              A foto não é lida de novo. Serve quando a regra fica mais esperta e o histórico
+              precisa acompanhar.
             </p>
           </div>
           <Button variant="outline" onClick={() => void recomparar()} disabled={recomparando}>
-            {recomparando ? "Recomparando…" : "Reavaliar sem custo"}
+            {recomparando ? "Recomparando…" : "Reavaliar"}
           </Button>
         </Card>
       )}
@@ -321,8 +321,8 @@ export default function ConferenciasPage() {
           <p className="text-sm font-medium">Onde estão as diferenças</p>
           <p className="mb-3 text-sm text-muted-foreground">
             Agrupado por campo — <strong>clique num grupo pra ver só essas conferências</strong>. Um
-            padrão que aparece muito costuma ser regra a afinar, não motorista errando — e afinar
-            não custa nada, é só reavaliar depois.
+            padrão que aparece muito costuma ser regra a afinar, não motorista errando — e depois de
+            afinar é só reavaliar.
           </p>
           <div className="space-y-3">
             {diag.data!.porCampo.map((g) => {

@@ -217,6 +217,7 @@ function DarOuTirar({
   efetivo: Set<string>;
   onFechar: () => void;
 }) {
+  const { plataforma } = usePermissoes();
   const token = useAuthToken();
   const qc = useQueryClient();
   const ehMotorista = "motoristaId" in alvo;
@@ -247,7 +248,7 @@ function DarOuTirar({
                 <option key={c.chave} value={c.chave}>
                   {efetivo.has(c.chave) ? "Tirar: " : "Dar: "}
                   {c.label}
-                  {c.custa ? " (custa)" : ""}
+                  {plataforma && c.custa ? " (custa)" : ""}
                 </option>
               ))}
             </Select>

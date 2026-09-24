@@ -114,11 +114,11 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
         toast.error(r.motivo ?? "Não consegui reavaliar.");
       } else if (r.reverteu) {
         toast.success("Confere — a viagem saiu da revisão", {
-          description: "Sem custo: só a comparação rodou de novo.",
+          description: "Só a comparação rodou de novo.",
         });
       } else {
         toast.success(r.mudou ? "Reavaliei e o resultado mudou" : "Reavaliei — o resultado é o mesmo", {
-          description: "Sem custo: a leitura já estava guardada.",
+          description: "A leitura já estava guardada, só a comparação rodou de novo.",
         });
       }
       void refetch();
@@ -206,7 +206,7 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
               alguma coisa antes de decidir. */}
           <p className="mt-1 text-xs text-muted-foreground">
             {data.falha.ressuscitavel
-              ? "Vou tentar de novo sozinho mais tarde — falha de conexão não chega a custar leitura. "
+              ? "Vou tentar de novo sozinho mais tarde. "
               : "Não vou tentar sozinho de novo: use ler de novo quando quiser. "}
             A viagem não foi alterada e o motorista não foi avisado; ela segue na fila normal de
             conferência.
@@ -258,11 +258,11 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
           type="button"
           onClick={() => void reavaliar()}
           disabled={reavaliando}
-          title="Compara de novo com o que está lançado agora. Não gasta leitura."
+          title="Compara de novo com o que está lançado agora, sem ler a foto outra vez."
           className="ml-auto flex items-center gap-1 rounded border border-current/20 bg-white/60 px-2 py-0.5 text-[11px] hover:bg-white disabled:opacity-50"
         >
           <ScanEye className={`h-3 w-3 ${reavaliando ? "animate-pulse" : ""}`} />
-          {reavaliando ? "reavaliando…" : "reavaliar sem custo"}
+          {reavaliando ? "reavaliando…" : "reavaliar"}
         </button>
 
         {botaoReler}
@@ -285,7 +285,7 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
       {data.desatualizada && (
         <p className="mt-2 rounded border border-current/20 bg-white/60 px-2 py-1 text-xs">
           O lançamento mudou depois desta leitura. A comparação abaixo é da versão
-          anterior — use <strong>reavaliar sem custo</strong> pra conferir com os dados de agora.
+          anterior — use <strong>reavaliar</strong> pra conferir com os dados de agora.
         </p>
       )}
 

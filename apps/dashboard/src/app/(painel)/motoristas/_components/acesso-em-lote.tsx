@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePermissoes } from "@/lib/permissoes";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CAPACIDADES_APP, type CapacidadeApp } from "@ronan/shared-types";
@@ -91,6 +92,7 @@ function useAplicar(onFeito: () => void, onFechar: () => void) {
 }
 
 function DialogExcecao({ ids, onFechar, onFeito }: { ids: string[]; onFechar: () => void; onFeito: () => void }) {
+  const { plataforma } = usePermissoes();
   const [capacidade, setCapacidade] = useState<CapacidadeApp | "">("");
   const [efeito, setEfeito] = useState<"CONCEDER" | "NEGAR" | "">("");
   const [motivo, setMotivo] = useState("");
@@ -113,7 +115,7 @@ function DialogExcecao({ ids, onFechar, onFeito }: { ids: string[]; onFechar: ()
               {CAPACIDADES_LOTE.map((c) => (
                 <option key={c.chave} value={c.chave}>
                   {c.grupo} · {c.label}
-                  {c.custa ? " (custa)" : ""}
+                  {plataforma && c.custa ? " (custa)" : ""}
                 </option>
               ))}
             </Select>

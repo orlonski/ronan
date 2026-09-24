@@ -227,7 +227,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Ver, viagem por viagem, onde o ticket e o que foi lançado não bateram",
       "Olhar só o que diverge, só o que ficou em dúvida, ou só o campo que mais dá diferença",
       "Mandar ler as viagens antigas que ainda não passaram pela conferência",
-      "Reavaliar o que já foi lido quando a regra melhora, sem gastar nada",
+      "Reavaliar o que já foi lido quando a regra melhora, sem ler a foto de novo",
     ],
     naoEAqui: {
       procurando: "corrigir a viagem que não bateu",

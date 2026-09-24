@@ -781,7 +781,7 @@ export class ConferenciaFilaService {
           autorNome: "Conferência automática",
           texto:
             "Reavaliei esta leitura com a regra de hoje e o documento confere. " +
-            "A viagem voltou pra fila normal, sem custo de leitura nova.",
+            "A viagem voltou pra fila normal, sem ler a foto de novo.",
           acao: "CONFERIU",
         },
       });

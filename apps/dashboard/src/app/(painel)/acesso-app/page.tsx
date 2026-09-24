@@ -159,7 +159,9 @@ function avisoDoItem(def: CapacidadeAppDef, chave: string): string | null {
 function EditorDoTipo({ painel, coluna }: { painel: PainelAcessoApp; coluna: ColunaApp }) {
   const token = useAuthToken();
   const qc = useQueryClient();
-  const { temPermissao } = usePermissoes();
+  // O selo "custa" é conta da Movatruck, não do cliente: quem paga a IA é a
+  // plataforma, e valor não aparece pra empresa (pedido do dono, 23/09/2026).
+  const { temPermissao, plataforma } = usePermissoes();
   const podeEditar = painel.fonte === "REGRAS" && temPermissao("perfis-acesso.editar");
   const inicial = useMemo(() => new Set(coluna.capacidades as CapacidadeApp[]), [coluna]);
   const [marcadas, setMarcadas] = useState<Set<CapacidadeApp>>(inicial);
@@ -172,7 +174,7 @@ function EditorDoTipo({ painel, coluna }: { painel: PainelAcessoApp; coluna: Col
   const itens = CAPACIDADES_APP.filter((c) => c.tipo !== "PLATAFORMA");
   const alterado =
     marcadas.size !== inicial.size || [...marcadas].some((c) => !inicial.has(c));
-  const custa = itens.some((c) => c.custa && marcadas.has(c.chave));
+  const custa = plataforma && itens.some((c) => c.custa && marcadas.has(c.chave));
   const nomeTipo = coluna.nome;
   const tipo = coluna.chave;
 
@@ -291,7 +293,7 @@ function EditorDoTipo({ painel, coluna }: { painel: PainelAcessoApp; coluna: Col
                       <span className="min-w-0">
                         <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
                           {c.label}
-                          {c.custa && (
+                          {plataforma && c.custa && (
                             <span
                               title="Cada uso tem custo e entra na conta"
                               className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1 text-[10px] font-semibold text-amber-700"
