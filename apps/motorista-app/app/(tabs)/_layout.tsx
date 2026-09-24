@@ -6,6 +6,7 @@ import { useMe } from "@/lib/queries";
 import { useVisao } from "@/lib/visao";
 import { useEhFuncionario } from "@/hooks/use-eh-funcionario";
 import { usePermite } from "@/lib/acessos-app";
+import { useMostraHistorico } from "@/lib/mostra-historico";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -21,6 +22,8 @@ export default function TabsLayout() {
   const podeChat = usePermite("app.chat.usar", visao === "empresa" && (me.data?.podeChat ?? false));
   const naoLidas = useBadgeChat(podeChat).data ?? 0;
   const ehFuncionario = usePermite("app.ponto.bater", useEhFuncionario());
+  // Quem não pode lançar nada e nunca lançou não tem histórico pra ver.
+  const mostraHistorico = useMostraHistorico();
 
   return (
     <Tabs
@@ -57,7 +60,7 @@ export default function TabsLayout() {
         name="historico"
         options={{
           title: "Histórico",
-          href: visao === "registrado" ? null : undefined,
+          href: visao === "registrado" || !mostraHistorico ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Calendar color={color} size={size} />
           ),

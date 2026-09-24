@@ -890,7 +890,7 @@ export function useCatalogoPonto(enabled = true) {
   });
 }
 
-export function useViagens() {
+export function useViagens(opts: { enabled?: boolean } = {}) {
   const cacheKey = "q:viagens";
   const buscarRede = async (): Promise<Viagem[]> => {
     const fresh = await api.get<ListaViagens>("/m/viagens?limit=10");
@@ -901,6 +901,7 @@ export function useViagens() {
   return useQuery({
     queryKey: ["viagens"],
     staleTime: 60_000,
+    enabled: opts.enabled ?? true,
     queryFn: () =>
       cacheFirst<Viagem[]>(["viagens"], cacheKey, buscarRede, (arr) =>
         arr.map(normalizarViagem),

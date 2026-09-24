@@ -66,6 +66,7 @@ import { getNavDestino } from "@/lib/nav-destino-storage";
 import { autoLimparCascaOrfa, getLifecycleLocal, hidratarViagemDoServidor } from "@/lib/lifecycle";
 import { startHomeTutorialIfNeeded } from "@/lib/home-tutorial";
 import { usePermite } from "@/lib/acessos-app";
+import { useMostraHistorico } from "@/lib/mostra-historico";
 
 const statusVariant: Record<
   string,
@@ -117,6 +118,9 @@ function HomeDaEmpresa() {
   const me = useMe();
   const viagens = useViagens();
   const resumo = useResumoMes();
+  // Sem forma de lançar e sem viagem nenhuma, "Suas viagens recentes" é uma
+  // lista vazia apontando pra um botão que não existe (lib/mostra-historico.ts).
+  const mostraHistorico = useMostraHistorico();
   const pending = usePending();
   const aguardandoPeso = useViagensAguardandoPeso();
   const nAguardandoPeso = aguardandoPeso.data?.length ?? 0;
@@ -700,9 +704,11 @@ function HomeDaEmpresa() {
               </View>
             )}
 
-            <Text className="mt-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-              Suas viagens recentes
-            </Text>
+            {mostraHistorico && (
+              <Text className="mt-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                Suas viagens recentes
+              </Text>
+            )}
           </View>
         }
         ListFooterComponent={
@@ -724,7 +730,7 @@ function HomeDaEmpresa() {
           </Animated.View>
         )}
         ListEmptyComponent={
-          viagens.isLoading ? (
+          !mostraHistorico ? null : viagens.isLoading ? (
             <View className="gap-3">
               <ViagemCardSkeleton />
               <ViagemCardSkeleton />
