@@ -109,10 +109,11 @@ export class AbastecimentosAdminController {
   async foto(
     @Param("id") id: string,
     @Param("fotoId") fotoId: string,
+    @Query("mini") mini: string | undefined,
     @CurrentUser() user: AuthAdminUser,
     @Res() res: Response,
   ) {
-    const { buffer, contentType } = await this.service.fotoBuffer(id, fotoId, user.escopo);
+    const { buffer, contentType } = await this.service.fotoBuffer(id, fotoId, user.escopo, !!mini);
     res.set("Content-Type", contentType);
     res.set("Cache-Control", "private, max-age=3600");
     res.send(buffer);

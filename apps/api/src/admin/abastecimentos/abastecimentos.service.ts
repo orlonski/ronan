@@ -161,16 +161,25 @@ export class AbastecimentosAdminService {
     return { ok: true };
   }
 
-  async fotoBuffer(abastecimentoId: string, fotoId: string, escopo: EscopoAdmin) {
+  /**
+   * `mini`: a miniatura (~15 KB) do quadrado da ficha. O original (130 KB a
+   * 1 MB) levava 1 a 2,3s por foto; quem quer ler o comprovante clica e abre
+   * ele inteiro. Sem miniatura possível, cai no original.
+   */
+  async fotoBuffer(abastecimentoId: string, fotoId: string, escopo: EscopoAdmin, mini = false) {
     await this.garantirNoEscopo(abastecimentoId, escopo);
     const foto = await this.prisma.abastecimentoFoto.findFirst({
       where: { id: fotoId, abastecimentoId },
       select: { storageKey: true },
     });
     if (!foto) throw new NotFoundException("Foto não encontrada");
-    const buffer = await this.uploads.getObjectBuffer(foto.storageKey);
     const ext = foto.storageKey.split(".").pop()?.toLowerCase();
     const contentType = ext === "png" ? "image/png" : "image/jpeg";
+    if (mini) {
+      const thumb = await this.uploads.miniatura(foto.storageKey, contentType, null);
+      if (thumb) return { buffer: thumb, contentType: "image/jpeg" };
+    }
+    const buffer = await this.uploads.getObjectBuffer(foto.storageKey);
     return { buffer, contentType };
   }
 

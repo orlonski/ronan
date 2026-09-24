@@ -374,10 +374,12 @@ function FotoThumb({
     staleTime: 30 * 60_000,
     gcTime: 10 * 60_000,
     retry: false,
+    // O quadrado mostra a miniatura (~15 KB): o original, de 130 KB a 1 MB,
+    // levava 1 a 2,3s por foto. O original só vem quando alguém clica.
     queryFn: async () => {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
       const res = await fetch(
-        `${apiUrl}/admin/abastecimentos/${abastecimentoId}/fotos/${fotoId}`,
+        `${apiUrl}/admin/abastecimentos/${abastecimentoId}/fotos/${fotoId}?mini=1`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -422,6 +424,10 @@ function FotoThumb({
         href={q.data}
         target="_blank"
         rel="noopener"
+        onClick={(e) => {
+          e.preventDefault();
+          void abrirOriginal(abastecimentoId, fotoId, token);
+        }}
         className="absolute inset-0 transition-opacity hover:opacity-80"
         title="Abrir foto em nova aba"
       >
@@ -448,6 +454,28 @@ function FotoThumb({
       </button>
     </div>
   );
+}
+
+/**
+ * A foto inteira, pra ler o comprovante. A aba abre JÁ no clique (e só depois
+ * recebe o endereço): aberta depois do download, o navegador trata como
+ * pop-up e bloqueia.
+ */
+async function abrirOriginal(abastecimentoId: string, fotoId: string, token: string | undefined) {
+  const aba = window.open("", "_blank");
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+    const res = await fetch(`${apiUrl}/admin/abastecimentos/${abastecimentoId}/fotos/${fotoId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const url = URL.createObjectURL(await res.blob());
+    if (aba) aba.location.href = url;
+    else window.open(url, "_blank");
+  } catch (e) {
+    aba?.close();
+    toast.error(`Não deu pra abrir a foto: ${(e as Error).message}`);
+  }
 }
 
 function fmtDataHora(iso: string): string {
