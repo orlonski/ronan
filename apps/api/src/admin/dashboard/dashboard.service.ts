@@ -18,11 +18,54 @@ import { contaIdAtual } from "../../common/conta/conta-context";
  *  - `*Inst` (meia-noite de Brasília = 03:00 UTC): pra colunas timestamp
  *    (abastecimento.data, ultimoLoginEm).
  */
+/** Resposta guardada vale inteira por este tempo. */
+const FRESCO_MS = 60_000;
+/**
+ * Até aqui, vencida ainda responde na hora e recalcula por trás. Depois disso
+ * espera o cálculo: a home não pode mostrar "hoje" de horas atrás a quem abre
+ * depois de um tempo parado, nem o dia de ontem logo depois da meia-noite.
+ */
+const VELHO_MAX_MS = 5 * 60_000;
+
 @Injectable()
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async snapshot(escopo: EscopoAdmin) {
+  private readonly guardados = new Map<string, { valor: Snapshot; em: number }>();
+  private readonly emCurso = new Map<string, Promise<Snapshot>>();
+
+  /**
+   * A home de cada empresa (por recorte de frota), guardada por um minuto. São
+   * ~30 consultas por abertura — ~0,65s no servidor — pra números que o próprio
+   * painel já segura 30s no navegador; recalcular a cada clique só fazia todo
+   * mundo esperar pela mesma resposta.
+   */
+  async snapshot(escopo: EscopoAdmin): Promise<Snapshot> {
+    const chave = `${contaIdAtual()}|${escopo ? [...escopo.transportadoraIds].sort().join(",") : "*"}`;
+    const guardado = this.guardados.get(chave);
+    const idade = guardado ? Date.now() - guardado.em : Infinity;
+    if (guardado && idade < FRESCO_MS) return guardado.valor;
+    if (guardado && idade < VELHO_MAX_MS) {
+      void this.recalcular(chave, escopo).catch(() => {});
+      return guardado.valor;
+    }
+    return this.recalcular(chave, escopo);
+  }
+
+  private recalcular(chave: string, escopo: EscopoAdmin): Promise<Snapshot> {
+    const emCurso = this.emCurso.get(chave);
+    if (emCurso) return emCurso;
+    const p = this.calcular(escopo)
+      .then((valor) => {
+        this.guardados.set(chave, { valor, em: Date.now() });
+        return valor;
+      })
+      .finally(() => this.emCurso.delete(chave));
+    this.emCurso.set(chave, p);
+    return p;
+  }
+
+  private async calcular(escopo: EscopoAdmin) {
     // Todo KPI de viagem/motorista/abastecimento/pedágio carrega o recorte por
     // frota. Os que não têm dono de frota (fechamento, envio, erro) são da
     // Schaba e ficam zerados pra quem é restrito — não são pendência dele.
@@ -381,3 +424,5 @@ function preencherAnalisesPorDia(
   }
   return out;
 }
+
+type Snapshot = Awaited<ReturnType<DashboardService["calcular"]>>;

@@ -82,10 +82,13 @@ export class PrimeirosPassosService {
       motoristasNoApp,
       precos,
     ] = await Promise.all([
-        this.prisma.veiculo.count(),
-        this.prisma.motorista.count(),
-        this.prisma.local.count(),
-        this.prisma.cliente.count(),
+        // Todo passo só pergunta "já tem?" (`> 0`; locais, `> 1`), então a
+        // contagem para no primeiro que acha. Contar tudo percorria o histórico
+        // inteiro de viagens a cada abertura da home, pra dizer "sim" de novo.
+        this.prisma.veiculo.count({ take: 1 }),
+        this.prisma.motorista.count({ take: 1 }),
+        this.prisma.local.count({ take: 2 }),
+        this.prisma.cliente.count({ take: 1 }),
         // Viagem em andamento não conta como "já rodou": o ciclo pode ter sido
         // aberto e abandonado, e o passo é sobre ter chegado ao fim uma vez.
         //
@@ -98,13 +101,14 @@ export class PrimeirosPassosService {
             status: { notIn: STATUS_FORA_FECHAMENTO },
             NOT: { clientId: { startsWith: PREFIXO_IMPORTACAO } },
           },
+          take: 1,
         }),
-        this.prisma.viagem.count({ where: { clientId: { startsWith: PREFIXO_IMPORTACAO } } }),
+        this.prisma.viagem.count({ where: { clientId: { startsWith: PREFIXO_IMPORTACAO } }, take: 1 }),
         // O passo da viagem é o único que o dono NÃO cumpre sozinho: quem lança
         // é o motorista, pelo celular. Sem este passo no meio, a lista pedia um
         // resultado sem nunca pedir a ação que o produz.
-        this.prisma.motorista.count({ where: { ultimoLoginEm: { not: null } } }),
-        this.prisma.tabelaPreco.count(),
+        this.prisma.motorista.count({ where: { ultimoLoginEm: { not: null } }, take: 1 }),
+        this.prisma.tabelaPreco.count({ take: 1 }),
       ]);
 
     const passos: PrimeiroPasso[] = [
