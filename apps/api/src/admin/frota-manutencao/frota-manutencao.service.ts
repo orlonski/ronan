@@ -176,6 +176,15 @@ export class FrotaManutencaoService {
     const atual = await this.prisma.manutencaoVeiculo.findUnique({ where: { id } });
     if (!atual) throw new NotFoundException("Manutenção não encontrada");
 
+    // Cancelar tem caminho próprio (cancelarManutencao): devolve o aviso do
+    // motorista pra decisão. Pelo PATCH o aviso ficava pendurado num conserto morto.
+    if (input.status === "CANCELADA" && atual.status !== "CANCELADA") {
+      throw new BadRequestException("Para cancelar o conserto, use Cancelar conserto (pede o motivo).");
+    }
+    if (atual.status === "CANCELADA" && input.status && input.status !== "CANCELADA") {
+      throw new BadRequestException("Este conserto foi cancelado. Abra um novo.");
+    }
+
     const { gerarContaPagar, ...resto } = input;
     const pecas = resto.valorPecas ?? Number(atual.valorPecas ?? 0);
     const mao = resto.valorMaoObra ?? Number(atual.valorMaoObra ?? 0);
@@ -256,8 +265,61 @@ export class FrotaManutencaoService {
         "Essa manutenção já virou conta a pagar. Cancele a conta antes de apagar.",
       );
     }
+    // Lançada por engano a partir de um aviso: o aviso volta pra decisão, em
+    // vez de ficar "virou conserto" apontando pra nada.
+    await this.devolverAvisoPraDecisao(id);
     await this.prisma.manutencaoVeiculo.delete({ where: { id } });
     return { ok: true };
+  }
+
+  /**
+   * CANCELAR CONSERTO — agendado ou na oficina, e não vai acontecer (a oficina
+   * desmarcou, foi agendado errado). Não apaga: fica no histórico como
+   * cancelado, com o motivo. A revisão ligada volta sozinha pra "Precisa de
+   * decisão" (ela só sai de lá enquanto tem conserto aberto), e o aviso do
+   * motorista que originou o conserto também volta — com ele sabendo.
+   */
+  async cancelarManutencao(id: string, motivo: string, usuarioId: string) {
+    const m = await this.prisma.manutencaoVeiculo.findFirst({
+      where: { id },
+      select: { status: true, observacao: true },
+    });
+    if (!m) throw new NotFoundException("Manutenção não encontrada");
+    if (m.status === "CANCELADA") return { ok: true };
+    if (m.status === "CONCLUIDA") {
+      throw new BadRequestException("Este conserto já foi concluído — não dá pra cancelar.");
+    }
+    await this.prisma.manutencaoVeiculo.update({
+      where: { id },
+      data: {
+        status: "CANCELADA",
+        observacao: [m.observacao, `Cancelado: ${motivo}`].filter(Boolean).join("\n"),
+      },
+    });
+    const problemaId = await this.devolverAvisoPraDecisao(id);
+    if (problemaId) {
+      await this.contarProMotorista(
+        problemaId,
+        "Conserto desmarcado",
+        `${motivo.slice(0, 100)} — o escritório vai decidir de novo sobre o seu aviso.`,
+        usuarioId,
+      );
+    }
+    return { ok: true };
+  }
+
+  /** O aviso do motorista ligado a esta OS volta pra "esperando decisão". */
+  private async devolverAvisoPraDecisao(manutencaoId: string): Promise<string | null> {
+    const p = await this.prisma.problemaVeiculo.findFirst({
+      where: { manutencaoId },
+      select: { id: true },
+    });
+    if (!p) return null;
+    await this.prisma.problemaVeiculo.update({
+      where: { id: p.id },
+      data: { status: "ABERTO", manutencaoId: null, decididoPorId: null, decididoEm: null },
+    });
+    return p.id;
   }
 
   // ----------------------------------------------------------- plano e alerta

@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { CardAviso, ListaAvisos, type Aviso } from "./aviso";
+import { CancelarConserto } from "./cancelar-conserto";
 import { ConcluirConserto } from "./concluir-conserto";
 import { brl, dataBR, type Alertas, type Manutencao, type Veiculo } from "./tipos";
 
@@ -35,6 +36,11 @@ export function CaixaDeEntrada({
   const queryClient = useQueryClient();
   const [concluindo, setConcluindo] = React.useState<Manutencao | null>(null);
   const [verHistorico, setVerHistorico] = React.useState(false);
+  const [cancelando, setCancelando] = React.useState<{
+    id: string;
+    descricao: string;
+    veiculo: Veiculo | null;
+  } | null>(null);
 
   // Os avisos esperando decisão, já com o parado no topo (a API ordena).
   const avisos = useQuery({
@@ -127,9 +133,14 @@ export function CaixaDeEntrada({
               )}
             </span>
             <Permitido chave="manutencao.editar">
-              <Button size="sm" variant="success" onClick={() => abrirConclusao(m.id)}>
-                Concluir
-              </Button>
+              <span className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setCancelando(m)}>
+                  Cancelar conserto
+                </Button>
+                <Button size="sm" variant="success" onClick={() => abrirConclusao(m.id)}>
+                  Concluir
+                </Button>
+              </span>
             </Permitido>
           </Linha>
         ))}
@@ -240,7 +251,10 @@ export function CaixaDeEntrada({
               {m.oficina && <span className="text-muted-foreground"> · {m.oficina}</span>}
             </span>
             <Permitido chave="manutencao.editar">
-              <span className="flex gap-2">
+              <span className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => setCancelando(m)}>
+                  Cancelar conserto
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => void entrouNaOficina(m.id)}>
                   Entrou na oficina
                 </Button>
@@ -268,6 +282,7 @@ export function CaixaDeEntrada({
         )}
       </div>
 
+      <CancelarConserto manutencao={cancelando} onFechar={() => setCancelando(null)} />
       <ConcluirConserto manutencao={concluindo} aberto={concluindo !== null} onFechar={() => setConcluindo(null)} />
     </div>
   );

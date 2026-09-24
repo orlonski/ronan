@@ -83,6 +83,12 @@ export const AtualizarManutencaoInput = z.object({
 });
 export type AtualizarManutencaoInput = z.infer<typeof AtualizarManutencaoInput>;
 
+/** Desmarcar um conserto que não vai acontecer (a oficina desmarcou, agendou errado). */
+export const CancelarManutencaoInput = z.object({
+  motivo: z.string().trim().min(3, "Diga por que o conserto foi cancelado.").max(300),
+});
+export type CancelarManutencaoInput = z.infer<typeof CancelarManutencaoInput>;
+
 export const CriarPlanoManutencaoInput = z
   .object({
     veiculoId: z.string().uuid(),

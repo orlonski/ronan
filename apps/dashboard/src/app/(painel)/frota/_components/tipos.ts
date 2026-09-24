@@ -67,6 +67,7 @@ export type Manutencao = {
   anexos?: string[];
   planoId?: string | null;
   valorMaoObra?: string | null;
+  observacao?: string | null;
   veiculo: Veiculo;
   fornecedor: { id: string; nome: string } | null;
 };

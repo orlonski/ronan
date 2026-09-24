@@ -35,6 +35,7 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { CaixaDeEntrada } from "./_components/caixa-entrada";
+import { CancelarConserto } from "./_components/cancelar-conserto";
 import { ConcluirConserto } from "./_components/concluir-conserto";
 import {
   brl,
@@ -248,8 +249,38 @@ function ListaManutencoes({
     await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
   }
 
+  // Excluir é pra conserto lançado por engano; o que não vai acontecer se
+  // CANCELA (fica no histórico com o motivo).
+  async function excluir(m: Manutencao) {
+    if (!token) return;
+    const ok = await confirmar({
+      title: `Excluir "${m.descricao}" do ${m.veiculo.placa}?`,
+      description:
+        m.status === "CONCLUIDA"
+          ? "Use só pra conserto lançado por engano: ele some do histórico e do custo do caminhão. A revisão que ele zerou não volta atrás."
+          : "Use só pra conserto lançado por engano: ele some do histórico. Se o conserto só não vai mais acontecer, prefira Cancelar conserto.",
+      confirmLabel: "Excluir conserto",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    try {
+      await fetchApi(`/admin/manutencao/${m.id}`, { token, method: "DELETE" });
+      toast.success("Conserto excluído.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+    for (const k of ["manutencoes", "frota-alertas", "problemas-veiculo", "prontuario"]) {
+      await queryClient.invalidateQueries({ queryKey: [k] });
+    }
+  }
+
   // "Concluir" abre o formulário de conclusão em cascata (ConcluirConserto).
   const [concluindo, setConcluindo] = React.useState<Manutencao | null>(null);
+  const [cancelando, setCancelando] = React.useState<Manutencao | null>(null);
+  const { confirmar, ConfirmDialog } = useConfirm();
+  const { temPermissao } = usePermissoes();
+  const podeEditar = temPermissao("manutencao.editar");
+  const podeExcluir = temPermissao("manutencao.excluir");
 
   return (
     <div className="space-y-3">
@@ -409,6 +440,9 @@ function ListaManutencoes({
                 {m.odometro && ` · ${m.odometro.toLocaleString("pt-BR")} km`}
                 {m.fornecedor && ` · ${m.fornecedor.nome}`}
               </p>
+              {m.status === "CANCELADA" && m.observacao && (
+                <p className="mt-0.5 whitespace-pre-line text-xs text-muted-foreground">{m.observacao}</p>
+              )}
               {(m.anexos?.length ?? 0) > 0 && (
                 <div className="mt-1 flex flex-wrap gap-2 text-xs">
                   {m.anexos!.map((_, k) => (
@@ -432,23 +466,40 @@ function ListaManutencoes({
               </Badge>
             </div>
           </div>
-          {m.status !== "CONCLUIDA" && m.status !== "CANCELADA" && (
-            <Permitido chave="manutencao.editar">
-              <div className="mt-3 flex gap-2 border-t pt-3">
-                {m.status === "ABERTA" && (
-                  <Button size="sm" variant="outline" onClick={() => void mudarStatus(m.id, "EM_ANDAMENTO")}>
-                    Entrou na oficina
+          {(podeEditar && m.status !== "CONCLUIDA" && m.status !== "CANCELADA") || podeExcluir ? (
+            <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+              {podeEditar && m.status !== "CONCLUIDA" && m.status !== "CANCELADA" && (
+                <>
+                  {m.status === "ABERTA" && (
+                    <Button size="sm" variant="outline" onClick={() => void mudarStatus(m.id, "EM_ANDAMENTO")}>
+                      Entrou na oficina
+                    </Button>
+                  )}
+                  <Button size="sm" variant="success" onClick={() => setConcluindo(m)}>
+                    Concluir
                   </Button>
-                )}
-                <Button size="sm" variant="success" onClick={() => setConcluindo(m)}>
-                  Concluir
+                  <Button size="sm" variant="outline" onClick={() => setCancelando(m)}>
+                    Cancelar conserto
+                  </Button>
+                </>
+              )}
+              {podeExcluir && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto text-destructive hover:text-destructive"
+                  onClick={() => void excluir(m)}
+                >
+                  Excluir
                 </Button>
-              </div>
-            </Permitido>
-          )}
+              )}
+            </div>
+          ) : null}
         </Card>
       ))}
       <ConcluirConserto manutencao={concluindo} aberto={concluindo !== null} onFechar={() => setConcluindo(null)} />
+      <CancelarConserto manutencao={cancelando} onFechar={() => setCancelando(null)} />
+      <ConfirmDialog />
     </div>
   );
 }

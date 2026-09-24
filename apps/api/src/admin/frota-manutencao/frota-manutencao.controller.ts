@@ -25,6 +25,7 @@ import {
   CriarPlanosEmLoteInput,
   AbrirManutencaoDoProblemaInput,
   AtualizarManutencaoInput,
+  CancelarManutencaoInput,
   AvisarProblemaVeiculoInput,
   DescartarProblemaVeiculoInput,
   AtualizarMultaInput,
@@ -112,6 +113,16 @@ export class ManutencaoController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.service.atualizarManutencao(id, body, user.id);
+  }
+
+  @RequerPermissao("manutencao.editar")
+  @Post(":id/cancelar")
+  cancelar(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(CancelarManutencaoInput)) body: CancelarManutencaoInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.cancelarManutencao(id, body.motivo, user.id);
   }
 
   @RequerPermissao("manutencao.excluir")
