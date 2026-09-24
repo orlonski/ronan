@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { HistoricoTimeline } from "@/components/historico-timeline";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { VisualizadorFotos, type FotoVisualizavel } from "@/components/visualizador-fotos";
 import {
   ROTULO_FOTO_ABASTECIMENTO,
   type TipoFotoAbastecimento,
@@ -311,22 +312,7 @@ export default function AbastecimentoDetalhePage({
                 <Camera className="h-4 w-4" />
                 Fotos do comprovante
               </h2>
-              <div className="grid grid-cols-2 gap-3">
-                {x.fotos.map((f) => (
-                  <div key={f.id} className="space-y-1">
-                    {/* Sem o rótulo, três fotos viram um monte indistinguível. */}
-                    <p className="text-xs font-medium text-muted-foreground">
-                      {ROTULO_FOTO_ABASTECIMENTO[f.tipo ?? "CUPOM"]}
-                    </p>
-                    <FotoThumb
-                      abastecimentoId={x.id}
-                      fotoId={f.id}
-                      rotacao={f.rotacao}
-                      token={token}
-                    />
-                  </div>
-                ))}
-              </div>
+              <FotosDoComprovante abastecimentoId={x.id} fotos={x.fotos} token={token} />
             </Card>
           )}
         </div>
@@ -356,16 +342,81 @@ function Info({
   );
 }
 
+/** As fotos do lançamento, e o visualizador que abre por cima ao tocar numa. */
+function FotosDoComprovante({
+  abastecimentoId,
+  fotos,
+  token,
+}: {
+  abastecimentoId: string;
+  fotos: { id: string; rotacao: number; tipo?: TipoFotoAbastecimento | null }[];
+  token: string | undefined;
+}) {
+  const qc = useQueryClient();
+  const [aberta, setAberta] = useState<number | null>(null);
+
+  const visualizaveis: FotoVisualizavel[] = fotos.map((f) => ({
+    id: f.id,
+    caminho: `/admin/abastecimentos/${abastecimentoId}/fotos/${f.id}`,
+    rotacao: f.rotacao,
+    // A miniatura que o quadrado já baixou: o visualizador abre com ela na hora.
+    previa: qc.getQueryData<string>(["abastecimento-foto-blob", abastecimentoId, f.id]),
+  }));
+
+  const girar = useMutation({
+    mutationFn: ({ fotoId, rotacao }: { fotoId: string; rotacao: number }) =>
+      fetchApi(`/admin/abastecimentos/${abastecimentoId}/fotos/${fotoId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ rotacao }),
+        token,
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["abastecimento-admin", abastecimentoId] }),
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        {fotos.map((f, i) => (
+          <div key={f.id} className="space-y-1">
+            {/* Sem o rótulo, três fotos viram um monte indistinguível. */}
+            <p className="text-xs font-medium text-muted-foreground">
+              {ROTULO_FOTO_ABASTECIMENTO[f.tipo ?? "CUPOM"]}
+            </p>
+            <FotoThumb
+              abastecimentoId={abastecimentoId}
+              fotoId={f.id}
+              rotacao={f.rotacao}
+              token={token}
+              onAbrir={() => setAberta(i)}
+            />
+          </div>
+        ))}
+      </div>
+      <VisualizadorFotos
+        fotos={visualizaveis}
+        indice={aberta}
+        onIndice={setAberta}
+        onFechar={() => setAberta(null)}
+        onGirar={(foto, rotacao) => girar.mutate({ fotoId: foto.id, rotacao })}
+        titulo={aberta !== null ? ROTULO_FOTO_ABASTECIMENTO[fotos[aberta]?.tipo ?? "CUPOM"] : "Foto"}
+      />
+    </>
+  );
+}
+
 function FotoThumb({
   abastecimentoId,
   fotoId,
   rotacao,
   token,
+  onAbrir,
 }: {
   abastecimentoId: string;
   fotoId: string;
   rotacao: number;
   token: string | undefined;
+  onAbrir: () => void;
 }) {
   const qc = useQueryClient();
   const q = useQuery({
@@ -420,16 +471,11 @@ function FotoThumb({
 
   return (
     <div className="relative aspect-square overflow-hidden rounded-md border bg-muted">
-      <a
-        href={q.data}
-        target="_blank"
-        rel="noopener"
-        onClick={(e) => {
-          e.preventDefault();
-          void abrirOriginal(abastecimentoId, fotoId, token);
-        }}
-        className="absolute inset-0 transition-opacity hover:opacity-80"
-        title="Abrir foto em nova aba"
+      <button
+        type="button"
+        onClick={onAbrir}
+        className="absolute inset-0 cursor-zoom-in transition-opacity hover:opacity-80"
+        title="Ver a foto de perto"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -438,7 +484,7 @@ function FotoThumb({
           className="h-full w-full object-cover"
           style={{ transform: `rotate(${rotacao}deg)` }}
         />
-      </a>
+      </button>
       <button
         type="button"
         onClick={(e) => {
@@ -454,28 +500,6 @@ function FotoThumb({
       </button>
     </div>
   );
-}
-
-/**
- * A foto inteira, pra ler o comprovante. A aba abre JÁ no clique (e só depois
- * recebe o endereço): aberta depois do download, o navegador trata como
- * pop-up e bloqueia.
- */
-async function abrirOriginal(abastecimentoId: string, fotoId: string, token: string | undefined) {
-  const aba = window.open("", "_blank");
-  try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
-    const res = await fetch(`${apiUrl}/admin/abastecimentos/${abastecimentoId}/fotos/${fotoId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const url = URL.createObjectURL(await res.blob());
-    if (aba) aba.location.href = url;
-    else window.open(url, "_blank");
-  } catch (e) {
-    aba?.close();
-    toast.error(`Não deu pra abrir a foto: ${(e as Error).message}`);
-  }
 }
 
 function fmtDataHora(iso: string): string {

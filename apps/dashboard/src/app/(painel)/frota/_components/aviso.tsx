@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { LoadingCard } from "@/components/loading";
 import { FornecedorCombobox, VeiculoCombobox } from "@/components/fk-comboboxes";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { VisualizadorFotos, type FotoVisualizavel } from "@/components/visualizador-fotos";
 import { usePermissoes } from "@/lib/permissoes";
 import type { Plano, Veiculo } from "./tipos";
 
@@ -46,8 +47,34 @@ export type Aviso = {
   decididoPor: { id: string; nome: string } | null;
 };
 
+/** As fotos do aviso, e o visualizador que abre por cima ao tocar numa. */
+function FotosDoAviso({ id, total }: { id: string; total: number }) {
+  const qc = useQueryClient();
+  const [aberta, setAberta] = React.useState<number | null>(null);
+  const fotos: FotoVisualizavel[] = Array.from({ length: total }, (_, i) => ({
+    id: String(i),
+    caminho: `/admin/manutencao/problemas/${id}/fotos/${i}`,
+    rotacao: 0,
+    previa: qc.getQueryData<string>(["problema-foto", id, i]),
+  }));
+  return (
+    <div className="flex flex-wrap gap-2">
+      {fotos.map((_, i) => (
+        <FotoAviso key={i} id={id} indice={i} onAbrir={() => setAberta(i)} />
+      ))}
+      <VisualizadorFotos
+        fotos={fotos}
+        indice={aberta}
+        onIndice={setAberta}
+        onFechar={() => setAberta(null)}
+        titulo="Foto do aviso"
+      />
+    </div>
+  );
+}
+
 /** Foto do aviso: vem da API com o token (o bucket não é público). */
-export function FotoAviso({ id, indice }: { id: string; indice: number }) {
+export function FotoAviso({ id, indice, onAbrir }: { id: string; indice: number; onAbrir: () => void }) {
   const token = useAuthToken();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
   const base = `${apiUrl}/admin/manutencao/problemas/${id}/fotos/${indice}`;
@@ -63,21 +90,14 @@ export function FotoAviso({ id, indice }: { id: string; indice: number }) {
     },
   });
 
-  async function abrirGrande() {
-    if (!token) return;
-    const res = await fetch(base, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) return;
-    window.open(URL.createObjectURL(await res.blob()), "_blank", "noopener");
-  }
-
   if (!q.data) {
     return <div className="h-20 w-20 animate-pulse rounded-md border bg-muted" />;
   }
   return (
     <button
       type="button"
-      onClick={() => void abrirGrande()}
-      className="h-20 w-20 overflow-hidden rounded-md border"
+      onClick={onAbrir}
+      className="h-20 w-20 cursor-zoom-in overflow-hidden rounded-md border"
       title="Ver a foto inteira"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -255,13 +275,7 @@ export function CardAviso({ a, onMudou }: { a: Aviso; onMudou: () => void }) {
           Ver no mapa onde o caminhão parou →
         </a>
       )}
-      {a.fotos > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {Array.from({ length: a.fotos }, (_, i) => (
-            <FotoAviso key={i} id={a.id} indice={i} />
-          ))}
-        </div>
-      )}
+      {a.fotos > 0 && <FotosDoAviso id={a.id} total={a.fotos} />}
       {a.status !== "ABERTO" && a.decididoPor && (
         <p className="text-xs text-muted-foreground">
           Decidido por {a.decididoPor.nome}

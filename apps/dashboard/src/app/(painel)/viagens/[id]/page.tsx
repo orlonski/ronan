@@ -67,6 +67,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { VisualizadorFotos } from "@/components/visualizador-fotos";
 import { usePermissoes } from "@/lib/permissoes";
 import {
   fmtBR,
@@ -1752,7 +1753,8 @@ function FotosViagem({
   const { confirmar, ConfirmDialog } = useConfirm();
   const token = useAuthToken();
   const qc = useQueryClient();
-  const [zoom, setZoom] = useState<{ url: string; rotacao: number } | null>(null);
+  // Foto aberta no visualizador (índice em `fotos`) — null = fechado.
+  const [aberta, setAberta] = useState<number | null>(null);
 
   const rotacionar = useMutation({
     mutationFn: (params: { fotoId: string; rotacao: number }) =>
@@ -1819,14 +1821,14 @@ function FotosViagem({
       {/* 1 coluna em telas md+ (a Card já fica numa coluna do grid externo,
           então 1-col aqui maximiza tamanho da foto pra conferência). */}
       <div className="grid grid-cols-1 gap-3">
-        {fotos.map((f) => (
+        {fotos.map((f, i) => (
           <FotoThumb
             key={f.id}
             viagemId={viagemId}
             fotoId={f.id}
             rotacao={f.rotacao}
             token={token}
-            onClick={(url) => setZoom({ url, rotacao: f.rotacao })}
+            onClick={() => setAberta(i)}
             onRotacionar={() =>
               rotacionar.mutate({
                 fotoId: f.id,
@@ -1873,28 +1875,20 @@ function FotosViagem({
         </label>
       </div>
 
-      {zoom && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setZoom(null)}
-        >
-          <button
-            type="button"
-            className="absolute right-4 top-4 rounded-full bg-white/20 p-2 text-white hover:bg-white/30"
-            onClick={(e) => { e.stopPropagation(); setZoom(null); }}
-          >
-            <X className="h-5 w-5" />
-          </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={zoom.url}
-            alt="Foto do ticket"
-            className="max-h-full max-w-full object-contain"
-            style={{ transform: `rotate(${zoom.rotacao}deg)` }}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <VisualizadorFotos
+        fotos={fotos.map((f) => ({
+          id: f.id,
+          caminho: `/admin/viagens/${viagemId}/fotos/${f.id}`,
+          rotacao: f.rotacao,
+          // O quadrado da ficha já baixou a foto: abre com ela, sem esperar.
+          previa: qc.getQueryData<string>(["viagem-foto-blob", viagemId, f.id]),
+        }))}
+        indice={aberta}
+        onIndice={setAberta}
+        onFechar={() => setAberta(null)}
+        onGirar={(foto, rotacao) => rotacionar.mutate({ fotoId: foto.id, rotacao })}
+        titulo="Foto do ticket"
+      />
     </>
   );
 }
