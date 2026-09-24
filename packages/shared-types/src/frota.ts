@@ -148,3 +148,34 @@ export const PONTOS_POR_GRAVIDADE: Record<string, number> = {
   GRAVE: 5,
   GRAVISSIMA: 7,
 };
+
+/**
+ * O aviso de problema no caminhão, mandado pelo app (campos de texto do
+ * multipart; as fotos vão no mesmo envio, no campo `fotos`).
+ */
+export const AvisarProblemaVeiculoInput = z.object({
+  /** O `clientId` do outbox: reenvio não duplica. */
+  clientId: z.string().trim().min(8).max(80),
+  veiculoId: z.string().uuid().nullish(),
+  descricao: z.string().trim().min(3, "Conte o que está acontecendo.").max(1000),
+  /** Quando ele avisou no aparelho — o envio pode ter esperado sinal. */
+  avisadoEm: z.coerce.date().optional(),
+});
+export type AvisarProblemaVeiculoInput = z.infer<typeof AvisarProblemaVeiculoInput>;
+
+export const STATUS_PROBLEMA_VEICULO = ["ABERTO", "VIROU_MANUTENCAO", "DESCARTADO"] as const;
+export type StatusProblemaVeiculoTipo = (typeof STATUS_PROBLEMA_VEICULO)[number];
+
+/** O escritório decidindo o aviso que não vira manutenção. */
+export const DescartarProblemaVeiculoInput = z.object({
+  motivo: z.string().trim().min(3, "Diga por que não vira manutenção.").max(300),
+});
+export type DescartarProblemaVeiculoInput = z.infer<typeof DescartarProblemaVeiculoInput>;
+
+/** O escritório transformando o aviso numa manutenção aberta. */
+export const AbrirManutencaoDoProblemaInput = z.object({
+  veiculoId: z.string().uuid().optional(),
+  tipo: TipoManutencaoSchema.optional(),
+  descricao: z.string().trim().min(3).max(300).optional(),
+});
+export type AbrirManutencaoDoProblemaInput = z.infer<typeof AbrirManutencaoDoProblemaInput>;

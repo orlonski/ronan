@@ -32,6 +32,7 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.locais.verTodos",
   "app.pedagio.lancar",
   "app.abastecimento.lancar",
+  "app.problema.avisar",
   "app.posicao.compartilhar",
   "app.programacao.ver",
   "app.acertos.ver",
@@ -234,6 +235,20 @@ const DEFS: CapacidadeAppDef[] = [
     gate: "SERVIDOR",
     aoPerder: "VALA",
     colunaLegada: { coluna: "podeLancarAbastecimento", espelha: true },
+  },
+  {
+    // O motorista é quem vê o pneu careca e a luz acesa no painel (dono,
+    // 23/09/2026). Nasce ligado como toda capacidade nova sem coluna; só
+    // aparece onde a empresa tem o módulo Frota.
+    chave: "app.problema.avisar",
+    label: "Avisar problema no caminhão",
+    efeito: "Botão no Início pra mandar foto e descrição de um problema no caminhão; o escritório decide em Manutenção.",
+    grupo: "Operação",
+    tipo: "EMPRESA",
+    vinculo: "MOTORISTA",
+    modulo: "frota",
+    gate: "SERVIDOR",
+    aoPerder: "VALA",
   },
   {
     chave: "app.posicao.compartilhar",

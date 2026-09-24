@@ -297,6 +297,30 @@ export type PendingDocumentoAdmissao = {
   errorPermanenteLocal?: boolean;
 };
 
+/**
+ * Aviso de problema no caminhão ("Avisar problema no caminhão"), com até 3
+ * fotos. `clientId` é novo a cada aviso: dois avisos são dois problemas.
+ */
+export type PendingProblemaVeiculo = {
+  clientId: string;
+  veiculoId: string | null;
+  /** Pra tela de Pendentes mostrar a placa sem ir buscar na rede. */
+  placa: string | null;
+  descricao: string;
+  /** Cópias em `documentDirectory` — o iOS esvazia `Caches/` quando quer. */
+  fotos: { tipo: "PROBLEMA"; uri: string; mime: string }[];
+  /** Quando ele avisou (o envio pode esperar dias por sinal). */
+  avisadoEm: string;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
+};
+
 export type PendingPonto = {
   clientId: string;
   payload: {
@@ -456,6 +480,7 @@ const VG_CANCELAR_KEY = "outbox.viagem-cancelar";
 const COMPLETAR_PESO_KEY = "outbox.viagem-completar-peso";
 const PONTO_KEY = "outbox.ponto";
 const DOCUMENTO_ADMISSAO_KEY = "outbox.documento-admissao";
+const PROBLEMAS_VEICULO_KEY = "outbox.problemas-veiculo";
 
 /** Todos os sufixos do outbox — usado pela adoção/limpeza do storage legado. */
 const SUFIXOS_OUTBOX = [
@@ -475,6 +500,7 @@ const SUFIXOS_OUTBOX = [
   // de "não enviados" e pode não ser adotado numa migração de storage.
   PONTO_KEY,
   DOCUMENTO_ADMISSAO_KEY,
+  PROBLEMAS_VEICULO_KEY,
 ];
 
 async function readList<T>(key: string): Promise<T[]> {
@@ -718,6 +744,26 @@ export async function deletePendingDocumentoAdmissao(clientId: string): Promise<
   const list = await listPendingDocumentosAdmissao();
   await writeList(
     DOCUMENTO_ADMISSAO_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingProblemasVeiculo(): Promise<PendingProblemaVeiculo[]> {
+  return readList<PendingProblemaVeiculo>(PROBLEMAS_VEICULO_KEY);
+}
+
+export async function upsertPendingProblemaVeiculo(item: PendingProblemaVeiculo): Promise<void> {
+  const list = await listPendingProblemasVeiculo();
+  const i = list.findIndex((x) => x.clientId === item.clientId);
+  if (i >= 0) list[i] = item;
+  else list.push(item);
+  await writeList(PROBLEMAS_VEICULO_KEY, list);
+}
+
+export async function deletePendingProblemaVeiculo(clientId: string): Promise<void> {
+  const list = await listPendingProblemasVeiculo();
+  await writeList(
+    PROBLEMAS_VEICULO_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }

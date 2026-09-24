@@ -27,6 +27,7 @@ import {
   type PendingLocal,
   type PendingStory,
   type PendingDocumentoAdmissao,
+  type PendingProblemaVeiculo,
   type ZodIssueSaved,
 } from "@/db/database";
 import { usePendingViagens } from "@/hooks/use-pending-viagens";
@@ -37,6 +38,7 @@ import { usePendingCompletarPeso } from "@/hooks/use-pending-completar-peso";
 import { usePendingPonto } from "@/hooks/use-pending-ponto";
 import { usePendingOutros } from "@/hooks/use-pending-outros";
 import { usePendingDocumentos } from "@/hooks/use-pending-documentos";
+import { usePendingProblemas } from "@/hooks/use-pending-problemas";
 import {
   descartarViagemPendente,
   descartarPedagioPendente,
@@ -46,6 +48,7 @@ import {
   descartarLocalPendente,
   descartarStoryPendente,
   descartarDocumentoAdmissaoPendente,
+  descartarProblemaVeiculoPendente,
   drain,
   tentarNovamenteViagemPendente,
   tentarNovamentePedagioPendente,
@@ -58,6 +61,7 @@ import {
   tentarNovamenteLocalPendente,
   tentarNovamenteStoryPendente,
   tentarNovamenteDocumentoAdmissaoPendente,
+  tentarNovamenteProblemaVeiculoPendente,
 } from "@/lib/sync";
 import { descartarViagemGuiada } from "@/lib/lifecycle";
 import { useCatalogos } from "@/lib/queries";
@@ -77,7 +81,8 @@ type PendingRow =
   | { kind: "foto"; item: PendingFoto }
   | { kind: "local"; item: PendingLocal }
   | { kind: "story"; item: PendingStory }
-  | { kind: "documento"; item: PendingDocumentoAdmissao };
+  | { kind: "documento"; item: PendingDocumentoAdmissao }
+  | { kind: "problema"; item: PendingProblemaVeiculo };
 
 const TIPO_COMBUSTIVEL_LABEL: Record<string, string> = {
   DIESEL_S10: "Diesel S10",
@@ -96,6 +101,7 @@ export default function Pendentes() {
   const ponto = usePendingPonto();
   const outros = usePendingOutros();
   const documentos = usePendingDocumentos();
+  const problemas = usePendingProblemas();
   const cat = useCatalogos();
   const [sincronizando, setSincronizando] = useState(false);
 
@@ -183,9 +189,10 @@ export default function Pendentes() {
       ...outros.locais.map((item) => ({ kind: "local" as const, item })),
       ...outros.stories.map((item) => ({ kind: "story" as const, item })),
       ...documentos.map((item) => ({ kind: "documento" as const, item })),
+      ...problemas.map((item) => ({ kind: "problema" as const, item })),
     ];
     return all.sort((a, b) => a.item.createdAt - b.item.createdAt);
-  }, [viagens, pedagios, abastecimentos, outros, documentos]);
+  }, [viagens, pedagios, abastecimentos, outros, documentos, problemas]);
 
   // Helpers de lookup por id no catalogo
   const lookups = useMemo(() => {
@@ -206,6 +213,7 @@ export default function Pendentes() {
     local: "este local",
     story: "este story",
     documento: "este documento",
+    problema: "este aviso",
   };
 
   async function confirmarExcluir(row: PendingRow) {
@@ -224,6 +232,7 @@ export default function Pendentes() {
     else if (row.kind === "foto") await descartarFotoPendente(id);
     else if (row.kind === "local") await descartarLocalPendente(id);
     else if (row.kind === "documento") await descartarDocumentoAdmissaoPendente(id);
+    else if (row.kind === "problema") await descartarProblemaVeiculoPendente(id);
     else await descartarStoryPendente(id);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
@@ -237,6 +246,7 @@ export default function Pendentes() {
     else if (row.kind === "foto") await tentarNovamenteFotoPendente(id);
     else if (row.kind === "local") await tentarNovamenteLocalPendente(id);
     else if (row.kind === "documento") await tentarNovamenteDocumentoAdmissaoPendente(id);
+    else if (row.kind === "problema") await tentarNovamenteProblemaVeiculoPendente(id);
     else await tentarNovamenteStoryPendente(id);
   }
 
@@ -723,6 +733,14 @@ function resumoCard(
       titulo: row.item.titulo,
       subtitulo: fmtData(new Date(row.item.createdAt).toISOString()),
       linha3: "Foto guardada aqui, esperando sinal pra chegar no escritório.",
+    };
+  }
+  if (row.kind === "problema") {
+    return {
+      tipoLabel: "Problema no caminhão",
+      titulo: row.item.placa ?? "Caminhão não informado",
+      subtitulo: fmtData(new Date(row.item.createdAt).toISOString()),
+      linha3: row.item.descricao,
     };
   }
   if (row.kind === "local") {

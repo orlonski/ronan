@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CircleDot,
   FileWarning,
+  MessageSquareWarning,
   Plus,
   ShieldAlert,
   Wrench,
@@ -71,6 +72,15 @@ type Alertas = {
     diasParaIndicar: number | null;
   }[];
   emOficina: { id: string; veiculo: Veiculo; descricao: string; desde: string | null }[];
+  /** Avisos do motorista esperando decisão (API antiga não manda). */
+  avisosMotorista?: {
+    id: string;
+    descricao: string;
+    avisadoEm: string;
+    fotos: number;
+    veiculo: Veiculo | null;
+    motorista: { id: string; nome: string };
+  }[];
 };
 
 type Manutencao = {
@@ -107,7 +117,7 @@ export default function FrotaPage() {
   );
 }
 
-type Aba = "alertas" | "manutencoes" | "planos" | "pneus" | "multas" | "documentos";
+type Aba = "alertas" | "avisos" | "manutencoes" | "planos" | "pneus" | "multas" | "documentos";
 
 function Conteudo() {
   const token = useAuthToken();
@@ -118,6 +128,7 @@ function Conteudo() {
   const abas = (
     [
       ["alertas", null, "manutencao.ver"],
+      ["avisos", "Avisos do motorista", "manutencao.ver"],
       ["manutencoes", "Manutenções", "manutencao.ver"],
       ["planos", "Planos de manutenção", "manutencao.ver"],
       ["pneus", "Pneus", "pneus.ver"],
@@ -136,7 +147,8 @@ function Conteudo() {
     ? alertas.data.manutencoes.length +
       alertas.data.documentos.length +
       alertas.data.pneus.length +
-      alertas.data.emOficina.length
+      alertas.data.emOficina.length +
+      (alertas.data.avisosMotorista?.length ?? 0)
     : 0;
 
   return (
@@ -171,9 +183,10 @@ function Conteudo() {
       {aba === "alertas" && (
         <>
           {alertas.isLoading && <LoadingCard />}
-          {alertas.data && <BlocoAlertas a={alertas.data} />}
+          {alertas.data && <BlocoAlertas a={alertas.data} onVerAvisos={() => setAba("avisos")} />}
         </>
       )}
+      {aba === "avisos" && <ListaAvisos />}
       {aba === "manutencoes" && <ListaManutencoes />}
       {aba === "planos" && <ListaPlanos />}
       {aba === "pneus" && <ListaPneus />}
@@ -183,8 +196,10 @@ function Conteudo() {
   );
 }
 
-function BlocoAlertas({ a }: { a: Alertas }) {
+function BlocoAlertas({ a, onVerAvisos }: { a: Alertas; onVerAvisos: () => void }) {
+  const avisos = a.avisosMotorista ?? [];
   const nada =
+    avisos.length === 0 &&
     a.manutencoes.length === 0 &&
     a.documentos.length === 0 &&
     a.pneus.length === 0 &&
@@ -205,6 +220,28 @@ function BlocoAlertas({ a }: { a: Alertas }) {
 
   return (
     <div className="space-y-4">
+      {avisos.length > 0 && (
+        <Card className="border-l-4 border-l-blue-500 p-4">
+          <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
+            <MessageSquareWarning className="h-4 w-4" /> Motorista avisou ({avisos.length})
+          </p>
+          <ul className="space-y-1 text-sm">
+            {avisos.slice(0, 5).map((v) => (
+              <li key={v.id} className="flex flex-wrap justify-between gap-2">
+                <span className="min-w-0 truncate">
+                  <span className="font-medium">{v.veiculo?.placa ?? "sem placa"}</span> ·{" "}
+                  {v.descricao}
+                </span>
+                <span className="text-xs text-muted-foreground">{v.motorista.nome}</span>
+              </li>
+            ))}
+          </ul>
+          <Button size="sm" variant="outline" className="mt-3" onClick={onVerAvisos}>
+            Ver e decidir
+          </Button>
+        </Card>
+      )}
+
       {a.emOficina.length > 0 && (
         <Card className="border-l-4 border-l-amber-500 p-4">
           <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
@@ -352,6 +389,278 @@ function BlocoAlertas({ a }: { a: Alertas }) {
         </Card>
       )}
     </div>
+  );
+}
+
+type Aviso = {
+  id: string;
+  descricao: string;
+  avisadoEm: string;
+  status: "ABERTO" | "VIROU_MANUTENCAO" | "DESCARTADO";
+  fotos: number;
+  motivoDescarte: string | null;
+  decididoEm: string | null;
+  manutencaoId: string | null;
+  veiculo: Veiculo | null;
+  motorista: { id: string; nome: string };
+  decididoPor: { id: string; nome: string } | null;
+};
+
+/** Foto do aviso: vem da API com o token (o bucket não é público). */
+function FotoAviso({ id, indice }: { id: string; indice: number }) {
+  const token = useAuthToken();
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const base = `${apiUrl}/admin/manutencao/problemas/${id}/fotos/${indice}`;
+  const q = useQuery({
+    queryKey: ["problema-foto", id, indice],
+    enabled: Boolean(token),
+    staleTime: Infinity,
+    retry: false,
+    queryFn: async () => {
+      const res = await fetch(`${base}?mini=1`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return URL.createObjectURL(await res.blob());
+    },
+  });
+
+  async function abrirGrande() {
+    if (!token) return;
+    const res = await fetch(base, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return;
+    window.open(URL.createObjectURL(await res.blob()), "_blank", "noopener");
+  }
+
+  if (!q.data) {
+    return <div className="h-20 w-20 animate-pulse rounded-md border bg-muted" />;
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void abrirGrande()}
+      className="h-20 w-20 overflow-hidden rounded-md border"
+      title="Ver a foto inteira"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={q.data} alt={`Foto ${indice + 1} do aviso`} className="h-full w-full object-cover" />
+    </button>
+  );
+}
+
+/**
+ * AVISOS DO MOTORISTA: o que ele mandou pelo app ("Avisar problema no
+ * caminhão"). O escritório decide: vira manutenção aberta, ou não vira — com o
+ * motivo escrito, pra ninguém reabrir no escuro.
+ */
+function ListaAvisos() {
+  const token = useAuthToken();
+  const queryClient = useQueryClient();
+  const [filtro, setFiltro] = React.useState<Aviso["status"]>("ABERTO");
+
+  const lista = useQuery({
+    queryKey: ["problemas-veiculo", filtro],
+    enabled: Boolean(token),
+    queryFn: () =>
+      fetchApi<Aviso[]>(`/admin/manutencao/problemas?status=${filtro}`, { token: token! }),
+  });
+
+  async function atualizar() {
+    await queryClient.invalidateQueries({ queryKey: ["problemas-veiculo"] });
+    await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
+    await queryClient.invalidateQueries({ queryKey: ["manutencoes"] });
+  }
+
+  const itens = lista.data ?? [];
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        O que os motoristas mandaram pelo app, com foto. Cada aviso vira uma manutenção aberta
+        ou fica registrado com o motivo de não virar.
+      </p>
+      <div className="max-w-xs">
+        <Select
+          aria-label="Quais avisos"
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value as Aviso["status"])}
+        >
+          <option value="ABERTO">Esperando decisão</option>
+          <option value="VIROU_MANUTENCAO">Viraram manutenção</option>
+          <option value="DESCARTADO">Não viraram manutenção</option>
+        </Select>
+      </div>
+
+      {lista.isLoading && <LoadingCard />}
+      {itens.length === 0 && !lista.isLoading && (
+        <Card className="p-8 text-center text-sm text-muted-foreground">
+          {filtro === "ABERTO"
+            ? "Nenhum aviso esperando. Quando um motorista avisar um problema pelo app, aparece aqui."
+            : "Nada por aqui."}
+        </Card>
+      )}
+      {itens.map((a) => (
+        <CardAviso key={a.id} a={a} onMudou={() => void atualizar()} />
+      ))}
+    </div>
+  );
+}
+
+function CardAviso({ a, onMudou }: { a: Aviso; onMudou: () => void }) {
+  const token = useAuthToken();
+  const [modo, setModo] = React.useState<"nada" | "abrir" | "descartar">("nada");
+  const [veiculoId, setVeiculoId] = React.useState<string | undefined>(a.veiculo?.id);
+  const [tipo, setTipo] = React.useState<TipoManutencaoTipo>("CORRETIVA");
+  const [motivo, setMotivo] = React.useState("");
+  const [erro, setErro] = React.useState<string | null>(null);
+  const [enviando, setEnviando] = React.useState(false);
+
+  async function abrir() {
+    if (!token) return;
+    if (!veiculoId) return setErro("Escolha o caminhão.");
+    setErro(null);
+    setEnviando(true);
+    try {
+      await fetchApi(`/admin/manutencao/problemas/${a.id}/abrir-manutencao`, {
+        token,
+        method: "POST",
+        body: JSON.stringify({ veiculoId, tipo }),
+      });
+      onMudou();
+    } catch (e) {
+      setErro((e as Error).message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function descartar() {
+    if (!token) return;
+    if (motivo.trim().length < 3) return setErro("Diga por que não vira manutenção.");
+    setErro(null);
+    setEnviando(true);
+    try {
+      await fetchApi(`/admin/manutencao/problemas/${a.id}/descartar`, {
+        token,
+        method: "POST",
+        body: JSON.stringify({ motivo }),
+      });
+      onMudou();
+    } catch (e) {
+      setErro((e as Error).message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-medium">
+            {a.veiculo?.placa ?? "Caminhão não informado"} · {a.motorista.nome}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            avisou em {new Date(a.avisadoEm).toLocaleString("pt-BR")}
+          </p>
+        </div>
+        {a.status === "VIROU_MANUTENCAO" && (
+          <Badge className="border-transparent bg-emerald-100 text-emerald-700">Virou manutenção</Badge>
+        )}
+        {a.status === "DESCARTADO" && (
+          <Badge className="border-transparent bg-slate-100 text-slate-700">Não virou manutenção</Badge>
+        )}
+      </div>
+      <p className="whitespace-pre-wrap text-sm">{a.descricao}</p>
+      {a.fotos > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {Array.from({ length: a.fotos }, (_, i) => (
+            <FotoAviso key={i} id={a.id} indice={i} />
+          ))}
+        </div>
+      )}
+      {a.status !== "ABERTO" && a.decididoPor && (
+        <p className="text-xs text-muted-foreground">
+          Decidido por {a.decididoPor.nome}
+          {a.decididoEm && ` em ${new Date(a.decididoEm).toLocaleDateString("pt-BR")}`}
+          {a.motivoDescarte && ` · motivo: ${a.motivoDescarte}`}
+        </p>
+      )}
+
+      {a.status === "ABERTO" && modo === "nada" && (
+        <div className="flex flex-wrap gap-2 border-t pt-3">
+          <Permitido chave="manutencao.criar">
+            <Button size="sm" variant="success" onClick={() => setModo("abrir")}>
+              Abrir manutenção
+            </Button>
+          </Permitido>
+          <Permitido chave="manutencao.editar">
+            <Button size="sm" variant="outline" onClick={() => setModo("descartar")}>
+              Não vira manutenção
+            </Button>
+          </Permitido>
+        </div>
+      )}
+
+      {modo === "abrir" && (
+        <div className="space-y-3 border-t pt-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label>Caminhão</Label>
+              <VeiculoCombobox
+                value={veiculoId}
+                initialOption={a.veiculo ? { value: a.veiculo.id, label: a.veiculo.placa } : undefined}
+                onChange={setVeiculoId}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`aviso-tipo-${a.id}`}>Tipo</Label>
+              <Select
+                id={`aviso-tipo-${a.id}`}
+                value={tipo}
+                onChange={(e) => setTipo(e.target.value as TipoManutencaoTipo)}
+              >
+                {TIPOS_MANUTENCAO.map((t) => (
+                  <option key={t} value={t}>
+                    {TIPO_MANUTENCAO_LABEL[t]}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          {erro && <p className="text-sm text-destructive">{erro}</p>}
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={() => setModo("nada")} disabled={enviando}>
+              Voltar
+            </Button>
+            <Button size="sm" variant="success" onClick={() => void abrir()} disabled={enviando}>
+              Abrir manutenção
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {modo === "descartar" && (
+        <div className="space-y-3 border-t pt-3">
+          <div className="space-y-1">
+            <Label htmlFor={`aviso-motivo-${a.id}`}>Por que não vira manutenção</Label>
+            <Input
+              id={`aviso-motivo-${a.id}`}
+              placeholder="ex: Já resolvido na última revisão"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+            />
+          </div>
+          {erro && <p className="text-sm text-destructive">{erro}</p>}
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={() => setModo("nada")} disabled={enviando}>
+              Voltar
+            </Button>
+            <Button size="sm" variant="warning" onClick={() => void descartar()} disabled={enviando}>
+              Registrar que não vira
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 

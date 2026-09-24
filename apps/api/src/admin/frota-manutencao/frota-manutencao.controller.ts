@@ -1,8 +1,28 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FilesInterceptor } from "@nestjs/platform-express";
+import type { Response } from "express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import {
+  AbrirManutencaoDoProblemaInput,
   AtualizarManutencaoInput,
+  AvisarProblemaVeiculoInput,
+  DescartarProblemaVeiculoInput,
   AtualizarMultaInput,
   CriarManutencaoInput,
   CriarMultaInput,
@@ -20,8 +40,11 @@ import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { EscopoPor } from "../../common/escopo/escopo.decorator";
-import type { AuthAdminUser } from "../../auth/types";
-import { FrotaManutencaoService } from "./frota-manutencao.service";
+import type { AuthAdminUser, AuthMotorista } from "../../auth/types";
+import { RequerCapacidade } from "../../common/acesso-app/capacidade.decorator";
+import { PrismaService } from "../../prisma/prisma.service";
+import { UploadsService } from "../../uploads/uploads.service";
+import { FrotaManutencaoService, MAX_FOTOS_PROBLEMA } from "./frota-manutencao.service";
 
 const ListManutencoes = paginationQuerySchema.extend({
   veiculoId: z.string().uuid().optional(),
@@ -45,7 +68,10 @@ const ListMultas = paginationQuerySchema.extend({
 @Roles("ADMIN_USER")
 @Controller("admin/manutencao")
 export class ManutencaoController {
-  constructor(private readonly service: FrotaManutencaoService) {}
+  constructor(
+    private readonly service: FrotaManutencaoService,
+    private readonly uploads: UploadsService,
+  ) {}
 
   @EscopoPor("veiculo")
   @RequerPermissao("manutencao.ver")
@@ -87,6 +113,59 @@ export class ManutencaoController {
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.removerManutencao(id);
+  }
+
+  /** Os avisos dos motoristas. `?status=` mostra os já decididos. */
+  @RequerPermissao("manutencao.ver")
+  @Get("problemas")
+  problemas(@Query("status") status?: string) {
+    return this.service.listarProblemas(status);
+  }
+
+  /** A foto do aviso, servida pela API: o bucket não tem domínio público. */
+  @RequerPermissao("manutencao.ver")
+  @Get("problemas/:id/fotos/:indice")
+  async fotoDoProblema(
+    @Param("id") id: string,
+    @Param("indice") indice: string,
+    @Query("mini") mini: string | undefined,
+    @Res() res: Response,
+  ) {
+    const chave = await this.service.fotoDoProblema(id, Number(indice) || 0);
+    const mime = chave.endsWith(".png") ? "image/png" : "image/jpeg";
+    if (mini) {
+      const thumb = await this.uploads.miniatura(chave, mime, null);
+      if (thumb) {
+        res.setHeader("Content-Type", "image/jpeg");
+        res.setHeader("Cache-Control", "private, max-age=2592000, immutable");
+        res.end(thumb);
+        return;
+      }
+    }
+    const stream = await this.uploads.getObjectStream(chave);
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Cache-Control", "private, max-age=2592000, immutable");
+    stream.pipe(res);
+  }
+
+  @RequerPermissao("manutencao.criar")
+  @Post("problemas/:id/abrir-manutencao")
+  abrirManutencaoDoProblema(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(AbrirManutencaoDoProblemaInput)) body: AbrirManutencaoDoProblemaInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.abrirManutencaoDoProblema(id, body, user.id);
+  }
+
+  @RequerPermissao("manutencao.editar")
+  @Post("problemas/:id/descartar")
+  descartarProblema(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(DescartarProblemaVeiculoInput)) body: DescartarProblemaVeiculoInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.descartarProblema(id, body.motivo, user.id);
   }
 
   @RequerPermissao("manutencao.ver")
@@ -202,5 +281,59 @@ export class DocumentosVeiculoController {
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.removerDocumento(id);
+  }
+}
+
+/**
+ * O motorista avisando problema no caminhão, pelo app.
+ *
+ * `@RequerCapacidade` não checa aprovação (e o guard de acesso só roda com
+ * `@AcessoMotorista`), então o cadastro aprovado é conferido aqui na mão — ver
+ * CLAUDE.md, "Guards do motorista".
+ */
+@ApiTags("motorista/problemas-veiculo")
+@ApiBearerAuth()
+@UseGuards(RolesGuard)
+@Roles("MOTORISTA")
+@Controller("m/problemas-veiculo")
+@RequerCapacidade("app.problema.avisar")
+export class ProblemasVeiculoMotoristaController {
+  constructor(
+    private readonly service: FrotaManutencaoService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  @Post()
+  @UseInterceptors(
+    FilesInterceptor("fotos", MAX_FOTOS_PROBLEMA, { limits: { fileSize: 10 * 1024 * 1024 } }),
+  )
+  async avisar(
+    @CurrentUser() user: AuthMotorista,
+    @Body() corpo: Record<string, unknown>,
+    @UploadedFiles() fotos: Express.Multer.File[] | undefined,
+  ) {
+    const m = await this.prisma.motorista.findUnique({
+      where: { id: user.id },
+      select: { status: true },
+    });
+    if (m?.status !== "APROVADO") {
+      throw new ForbiddenException("Seu cadastro ainda está em análise.");
+    }
+    // Multipart chega como texto: o Zod converte a data e valida o resto.
+    const r = AvisarProblemaVeiculoInput.safeParse({
+      ...corpo,
+      veiculoId: corpo.veiculoId ? corpo.veiculoId : null,
+    });
+    if (!r.success) throw new BadRequestException({ issues: r.error.issues });
+    return this.service.avisarProblema(
+      user.id,
+      r.data,
+      (fotos ?? []).map((f) => ({
+        buffer: f.buffer,
+        mimetype: f.mimetype,
+        size: f.size,
+        originalname: f.originalname,
+      })),
+    );
   }
 }

@@ -10,6 +10,7 @@ import {
   ArrowUp,
   CloudOff,
   Fuel,
+  Wrench,
   MapPin,
   Play,
   Plus,
@@ -121,6 +122,8 @@ function HomeDaEmpresa() {
   // Sem forma de lançar e sem viagem nenhuma, "Suas viagens recentes" é uma
   // lista vazia apontando pra um botão que não existe (lib/mostra-historico.ts).
   const mostraHistorico = useMostraHistorico();
+  // Esta home já é só da empresa: sem empresa não há escritório pra avisar.
+  const podeAvisarProblema = usePermite("app.problema.avisar");
   const pending = usePending();
   const aguardandoPeso = useViagensAguardandoPeso();
   const nAguardandoPeso = aguardandoPeso.data?.length ?? 0;
@@ -660,6 +663,27 @@ function HomeDaEmpresa() {
                 </View>
               </Pressable>
               </CoachTarget>
+            )}
+
+            {/* Avisar problema no caminhão: quem vê o pneu careca e a luz no
+                painel é quem dirige. Cai em Manutenção, no painel. */}
+            {podeAvisarProblema && (
+              <Pressable
+                onPress={() => router.push("/avisar-problema")}
+                className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+              >
+                <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+                  <Wrench size={26} color="#13316b" strokeWidth={2.5} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-lg font-bold text-foreground">
+                    Problema no caminhão
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Avisar com foto pro escritório
+                  </Text>
+                </View>
+              </Pressable>
             )}
 
             {/* Empty state se todas as 4 funcionalidades estão desabilitadas */}

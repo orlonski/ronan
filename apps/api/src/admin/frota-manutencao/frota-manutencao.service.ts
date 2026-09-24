@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type {
+  AbrirManutencaoDoProblemaInput,
   AtualizarManutencaoInput,
+  AvisarProblemaVeiculoInput,
   AtualizarMultaInput,
   CriarManutencaoInput,
   CriarMultaInput,
@@ -13,6 +15,12 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, SEM_ESCOPO, type EscopoAdmin } from "../../common/escopo/escopo";
 import { avaliarPlano, diasParaIndicar, situacaoPneu } from "../../common/manutencao";
+import { checarArquivoEnviado, MIMES_IMAGEM } from "../../common/arquivo-enviado";
+import { UploadsService } from "../../uploads/uploads.service";
+
+/** Fotos por aviso: o que mostra o problema sem virar álbum. */
+export const MAX_FOTOS_PROBLEMA = 3;
+const MAX_BYTES_FOTO_PROBLEMA = 10 * 1024 * 1024;
 
 function diaUtc(iso: string): Date {
   return new Date(`${iso}T00:00:00Z`);
@@ -20,7 +28,10 @@ function diaUtc(iso: string): Date {
 
 @Injectable()
 export class FrotaManutencaoService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploads: UploadsService,
+  ) {}
 
   // ------------------------------------------------------------- manutenção
 
@@ -205,6 +216,21 @@ export class FrotaManutencaoService {
         include: { veiculo: { select: { id: true, placa: true } } },
       }),
     ]);
+    // O que os motoristas avisaram e ninguém decidiu ainda. Aviso sem placa
+    // (ele não soube dizer qual) só escapa do filtro quando não há escopo.
+    const avisos = await this.prisma.problemaVeiculo.findMany({
+      where: { status: "ABERTO", ...(escopo ? { veiculo: filtroVeiculo } : {}) },
+      orderBy: { avisadoEm: "desc" },
+      take: 50,
+      select: {
+        id: true,
+        descricao: true,
+        avisadoEm: true,
+        fotos: true,
+        veiculo: { select: { id: true, placa: true } },
+        motorista: { select: { id: true, nome: true } },
+      },
+    });
 
     // O odômetro mais recente de cada veículo sai do abastecimento — é o único
     // lugar onde ele é informado de verdade, e por isso o plano por km depende
@@ -271,6 +297,8 @@ export class FrotaManutencaoService {
 
       // Caminhão na oficina é caminhão que não roda — entra no alerta porque
       // some da programação sem ninguém lembrar por quê.
+      avisosMotorista: avisos.map(({ fotos, ...a }) => ({ ...a, fotos: fotos.length })),
+
       emOficina: emOficina.map((m) => ({
         id: m.id,
         veiculo: m.veiculo,
@@ -278,6 +306,174 @@ export class FrotaManutencaoService {
         desde: m.iniciadaEm,
       })),
     };
+  }
+
+  // -------------------------------------------------- aviso do motorista
+
+  /**
+   * O motorista avisando um problema no caminhão, pelo app.
+   *
+   * Idempotente pelo `clientId`: o outbox reenvia depois de timeout, e o
+   * segundo envio devolve o aviso que já existe em vez de duplicar.
+   *
+   * Nunca recusa por causa do caminhão: placa que não existe mais (ou de outra
+   * empresa) vira aviso sem placa, e o escritório escolhe na hora de decidir.
+   * Recusar travaria o item no aparelho por um dado que ele não tem como
+   * consertar.
+   */
+  async avisarProblema(
+    motoristaId: string,
+    input: AvisarProblemaVeiculoInput,
+    fotos: { buffer: Buffer; mimetype: string; size: number; originalname: string }[],
+  ) {
+    const existente = await this.prisma.problemaVeiculo.findFirst({
+      where: { clientId: input.clientId },
+      select: { id: true, status: true },
+    });
+    if (existente) return existente;
+
+    if (fotos.length > MAX_FOTOS_PROBLEMA) {
+      throw new BadRequestException(`Mande até ${MAX_FOTOS_PROBLEMA} fotos.`);
+    }
+    for (const f of fotos) {
+      checarArquivoEnviado(f, {
+        mimes: MIMES_IMAGEM,
+        maxBytes: MAX_BYTES_FOTO_PROBLEMA,
+        comoDizer: "Mande uma foto.",
+      });
+    }
+
+    const veiculo = input.veiculoId
+      ? await this.prisma.veiculo.findFirst({ where: { id: input.veiculoId }, select: { id: true } })
+      : null;
+
+    const chaves: string[] = [];
+    for (const f of fotos) {
+      chaves.push(await this.uploads.putProblemaVeiculoFoto(f.buffer, f.mimetype, motoristaId));
+    }
+
+    try {
+      return await this.prisma.problemaVeiculo.create({
+        data: {
+          clientId: input.clientId,
+          motoristaId,
+          veiculoId: veiculo?.id ?? null,
+          descricao: input.descricao,
+          fotos: chaves,
+          avisadoEm: input.avisadoEm ?? new Date(),
+        },
+        select: { id: true, status: true },
+      });
+    } catch (e) {
+      // Dois envios do mesmo item ao mesmo tempo: o outro ganhou a corrida.
+      if ((e as { code?: string }).code === "P2002") {
+        for (const k of chaves) void this.uploads.removerObjeto(k).catch(() => {});
+        const ganhou = await this.prisma.problemaVeiculo.findFirst({
+          where: { clientId: input.clientId },
+          select: { id: true, status: true },
+        });
+        if (ganhou) return ganhou;
+      }
+      throw e;
+    }
+  }
+
+  /** Os avisos, pro escritório. Sem filtro = os que esperam decisão. */
+  listarProblemas(status?: string) {
+    const valido = status === "VIROU_MANUTENCAO" || status === "DESCARTADO" ? status : "ABERTO";
+    return this.prisma.problemaVeiculo
+      .findMany({
+        where: { status: valido },
+        orderBy: { avisadoEm: "desc" },
+        take: 200,
+        select: {
+          id: true,
+          descricao: true,
+          avisadoEm: true,
+          status: true,
+          fotos: true,
+          motivoDescarte: true,
+          decididoEm: true,
+          manutencaoId: true,
+          veiculo: { select: { id: true, placa: true } },
+          motorista: { select: { id: true, nome: true } },
+          decididoPor: { select: { id: true, nome: true } },
+        },
+      })
+      // A chave do storage não sai daqui: a tela pede a foto pelo índice.
+      .then((l) => l.map(({ fotos, ...p }) => ({ ...p, fotos: fotos.length })));
+  }
+
+  /** A chave da foto `indice` do aviso, pra API servir (o bucket não é público). */
+  async fotoDoProblema(id: string, indice: number): Promise<string> {
+    const p = await this.prisma.problemaVeiculo.findFirst({
+      where: { id },
+      select: { fotos: true },
+    });
+    const chave = p?.fotos[indice];
+    if (!chave) throw new NotFoundException("Foto não encontrada");
+    return chave;
+  }
+
+  /**
+   * O aviso vira uma manutenção aberta (corretiva, por padrão), e os dois
+   * ficam ligados: quem abrir a OS sabe de onde ela veio.
+   */
+  async abrirManutencaoDoProblema(
+    id: string,
+    input: AbrirManutencaoDoProblemaInput,
+    usuarioId: string,
+  ) {
+    const p = await this.prisma.problemaVeiculo.findFirst({ where: { id } });
+    if (!p) throw new NotFoundException("Aviso não encontrado");
+    if (p.status !== "ABERTO") throw new BadRequestException("Este aviso já foi decidido.");
+    const veiculoId = input.veiculoId ?? p.veiculoId;
+    if (!veiculoId) {
+      throw new BadRequestException("Escolha o caminhão: o motorista não disse qual era.");
+    }
+    const v = await this.prisma.veiculo.findFirst({ where: { id: veiculoId }, select: { id: true } });
+    if (!v) throw new NotFoundException("Veículo não encontrado");
+
+    return this.prisma.$transaction(async (tx) => {
+      const m = await tx.manutencaoVeiculo.create({
+        data: {
+          veiculoId,
+          tipo: input.tipo ?? "CORRETIVA",
+          descricao: (input.descricao ?? p.descricao).slice(0, 300),
+          observacao: "Aberta a partir de um aviso do motorista pelo app.",
+          criadoPorId: usuarioId,
+        },
+        select: { id: true },
+      });
+      await tx.problemaVeiculo.update({
+        where: { id },
+        data: {
+          status: "VIROU_MANUTENCAO",
+          manutencaoId: m.id,
+          veiculoId,
+          decididoPorId: usuarioId,
+          decididoEm: new Date(),
+        },
+      });
+      return { manutencaoId: m.id };
+    });
+  }
+
+  /** O aviso que não vira manutenção — com o motivo, pra ninguém reabrir no escuro. */
+  async descartarProblema(id: string, motivo: string, usuarioId: string) {
+    const p = await this.prisma.problemaVeiculo.findFirst({ where: { id }, select: { status: true } });
+    if (!p) throw new NotFoundException("Aviso não encontrado");
+    if (p.status !== "ABERTO") throw new BadRequestException("Este aviso já foi decidido.");
+    await this.prisma.problemaVeiculo.update({
+      where: { id },
+      data: {
+        status: "DESCARTADO",
+        motivoDescarte: motivo,
+        decididoPorId: usuarioId,
+        decididoEm: new Date(),
+      },
+    });
+    return { ok: true };
   }
 
   // ----------------------------------------------------------------- pneus

@@ -54,6 +54,20 @@ export class UploadsService implements OnModuleInit {
     return key;
   }
 
+  /** Foto do problema que o motorista avisou no caminhão. */
+  async putProblemaVeiculoFoto(
+    buffer: Buffer,
+    mimetype: string,
+    motoristaId: string,
+  ): Promise<string> {
+    const ext = mimetype.includes("png") ? "png" : "jpg";
+    const key = `${contaIdAtual()}/problemas-veiculo/${diaBR()}/${motoristaId}/${randomUUID()}.${ext}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": mimetype,
+    });
+    return key;
+  }
+
   async putAbastecimentoFoto(
     buffer: Buffer,
     mimetype: string,

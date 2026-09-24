@@ -539,6 +539,7 @@ model Conta {
   fornecedores                  Fornecedor[]
   custosFixosVeiculo            CustoFixoVeiculo[]
   manutencoesVeiculo            ManutencaoVeiculo[]
+  problemasVeiculo              ProblemaVeiculo[]
   planosManutencao              PlanoManutencao[]
   documentosVeiculo             DocumentoVeiculo[]
   pneus                         Pneu[]
@@ -702,51 +703,52 @@ model User {
   // Escopo de acesso (ver acessoGlobal). Vazio + acessoGlobal=false = vê nada.
   transportadoras UsuarioTransportadora[]
 
-  clientesCriados        Cliente[]             @relation("CriouCliente")
-  materiaisCriados       Material[]            @relation("CriouMaterial")
-  tiposServicoCriados    TipoServico[]         @relation("CriouTipoServico")
-  modalidadesCriadas     ModalidadeMotorista[] @relation("CriouModalidadeMotorista")
-  veiculosCriados        Veiculo[]             @relation("CriouVeiculo")
-  transportadorasCriadas Transportadora[]      @relation("CriouTransportadora")
-  motoristasCriados      Motorista[]           @relation("CriouMotorista")
-  motoristasAprovados    Motorista[]           @relation("AprovouMotorista")
-  motoristasConvidados   Motorista[]           @relation("ConvidouMotorista")
-  empresasCriadas        Empresa[]             @relation("CriouEmpresa")
-  regrasMinimoCriadas    RegraMinimo[]         @relation("CriouRegraMinimo")
-  tabelasPrecoCriadas    TabelaPreco[]         @relation("CriouTabelaPreco")
-  acertosFechados        AcertoMotorista[]     @relation("FechouAcerto")
-  acertosPagos           AcertoMotorista[]     @relation("PagouAcerto")
-  itensAcertoCriados     ItemAcerto[]          @relation("CriouItemAcerto")
-  pedidosCriados         Pedido[]              @relation("CriouPedido")
-  planejadasCriadas      ViagemPlanejada[]     @relation("CriouViagemPlanejada")
-  modulosLigados         ModuloContratado[]    @relation("LigouModulo")
-  faturasCriadas         Fatura[]              @relation("CriouFatura")
-  titulosPagarCriados    TituloPagar[]         @relation("CriouTituloPagar")
-  baixasDadas            BaixaTitulo[]         @relation("DeuBaixa")
-  manutencoesCriadas     ManutencaoVeiculo[]   @relation("CriouManutencao")
-  multasCriadas          Multa[]               @relation("CriouMulta")
-  alertasResolvidos      AlertaOperacional[]   @relation("ResolveuAlerta")
-  documentosFiscais      DocumentoFiscal[]     @relation("EmitiuDocumentoFiscal")
-  certificadosSubidos    CertificadoDigital[]  @relation("SubiuCertificado")
-  ocorrenciasEncerradas  EventoViagem[]        @relation("EncerrouOcorrencia")
-  viagemValoresAlterados ViagemValor[]         @relation("AlterouViagemValor")
-  tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
-  locaisCriados          Local[]               @relation("CriouLocal")
-  usuariosCriados        User[]                @relation("CriouUser")
-  criadoPor              User?                 @relation("CriouUser", fields: [criadoPorId], references: [id], onDelete: SetNull)
-  criadoPorId            String?
-  notificacoesCriadas    Notificacao[]         @relation("CriouNotificacao")
-  fechamentosCriados     Fechamento[]          @relation("CriouFechamento")
-  viagensRevisadas       Viagem[]              @relation("RevisouViagem")
-  viagensKmAlterado      Viagem[]              @relation("AlterouKmViagem")
-  divergenciasResolvidas ViagemDivergencia[]
-  adminNotificacoes      AdminNotificacao[]
-  postsInstagramCriados  PostInstagram[]       @relation("PostsInstagramCriados")
-  assinaturasCriadas     Assinatura[]          @relation("CriouAssinatura")
-  assinaturasCanceladas  Assinatura[]          @relation("CancelouAssinatura")
-  cobrancasBaixadas      CobrancaAssinatura[]  @relation("BaixouCobranca")
-  aceitesTermo           AceiteTermo[]
-  onboarding             OnboardingUsuario?
+  clientesCriados           Cliente[]             @relation("CriouCliente")
+  materiaisCriados          Material[]            @relation("CriouMaterial")
+  tiposServicoCriados       TipoServico[]         @relation("CriouTipoServico")
+  modalidadesCriadas        ModalidadeMotorista[] @relation("CriouModalidadeMotorista")
+  veiculosCriados           Veiculo[]             @relation("CriouVeiculo")
+  transportadorasCriadas    Transportadora[]      @relation("CriouTransportadora")
+  motoristasCriados         Motorista[]           @relation("CriouMotorista")
+  motoristasAprovados       Motorista[]           @relation("AprovouMotorista")
+  motoristasConvidados      Motorista[]           @relation("ConvidouMotorista")
+  empresasCriadas           Empresa[]             @relation("CriouEmpresa")
+  regrasMinimoCriadas       RegraMinimo[]         @relation("CriouRegraMinimo")
+  tabelasPrecoCriadas       TabelaPreco[]         @relation("CriouTabelaPreco")
+  acertosFechados           AcertoMotorista[]     @relation("FechouAcerto")
+  acertosPagos              AcertoMotorista[]     @relation("PagouAcerto")
+  itensAcertoCriados        ItemAcerto[]          @relation("CriouItemAcerto")
+  pedidosCriados            Pedido[]              @relation("CriouPedido")
+  planejadasCriadas         ViagemPlanejada[]     @relation("CriouViagemPlanejada")
+  modulosLigados            ModuloContratado[]    @relation("LigouModulo")
+  faturasCriadas            Fatura[]              @relation("CriouFatura")
+  titulosPagarCriados       TituloPagar[]         @relation("CriouTituloPagar")
+  baixasDadas               BaixaTitulo[]         @relation("DeuBaixa")
+  manutencoesCriadas        ManutencaoVeiculo[]   @relation("CriouManutencao")
+  problemasVeiculoDecididos ProblemaVeiculo[]     @relation("DecidiuProblemaVeiculo")
+  multasCriadas             Multa[]               @relation("CriouMulta")
+  alertasResolvidos         AlertaOperacional[]   @relation("ResolveuAlerta")
+  documentosFiscais         DocumentoFiscal[]     @relation("EmitiuDocumentoFiscal")
+  certificadosSubidos       CertificadoDigital[]  @relation("SubiuCertificado")
+  ocorrenciasEncerradas     EventoViagem[]        @relation("EncerrouOcorrencia")
+  viagemValoresAlterados    ViagemValor[]         @relation("AlterouViagemValor")
+  tiposEventoCriados        TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
+  locaisCriados             Local[]               @relation("CriouLocal")
+  usuariosCriados           User[]                @relation("CriouUser")
+  criadoPor                 User?                 @relation("CriouUser", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId               String?
+  notificacoesCriadas       Notificacao[]         @relation("CriouNotificacao")
+  fechamentosCriados        Fechamento[]          @relation("CriouFechamento")
+  viagensRevisadas          Viagem[]              @relation("RevisouViagem")
+  viagensKmAlterado         Viagem[]              @relation("AlterouKmViagem")
+  divergenciasResolvidas    ViagemDivergencia[]
+  adminNotificacoes         AdminNotificacao[]
+  postsInstagramCriados     PostInstagram[]       @relation("PostsInstagramCriados")
+  assinaturasCriadas        Assinatura[]          @relation("CriouAssinatura")
+  assinaturasCanceladas     Assinatura[]          @relation("CancelouAssinatura")
+  cobrancasBaixadas         CobrancaAssinatura[]  @relation("BaixouCobranca")
+  aceitesTermo              AceiteTermo[]
+  onboarding                OnboardingUsuario?
 
   coletasCriadas ConviteColeta[] @relation("CriouColeta")
 
@@ -1506,7 +1508,8 @@ model Motorista {
 
   titulosPagar TituloPagar[]
 
-  multas Multa[]
+  multas           Multa[]
+  problemasVeiculo ProblemaVeiculo[]
 
   alertas AlertaOperacional[]
 
@@ -2043,6 +2046,7 @@ model Veiculo {
   custosFixos  CustoFixoVeiculo[]
 
   manutencoes      ManutencaoVeiculo[]
+  problemas        ProblemaVeiculo[]
   planosManutencao PlanoManutencao[]
   documentos       DocumentoVeiculo[]
   pneus            Pneu[]
@@ -3144,10 +3148,55 @@ model ManutencaoVeiculo {
   criadoEm      DateTime         @default(now())
   alteradoEm    DateTime         @updatedAt
 
+  /// O aviso do motorista que virou esta OS, quando veio de um.
+  problema ProblemaVeiculo?
+
   @@index([veiculoId, status])
   @@index([contaId, status])
   @@index([contaId])
   @@map("manutencoes_veiculo")
+}
+
+/// O que o motorista avisou do caminhão pelo app: foto e descrição.
+///
+/// Pedido do dono (23/09/2026): a manutenção tem duas origens, o escritório e o
+/// motorista — quem vê o pneu careca e a luz no painel é quem dirige. Fica
+/// SEPARADO da `ManutencaoVeiculo` de propósito: aviso não é ordem de serviço,
+/// e o escritório decide se vira uma (VIROU_MANUTENCAO) ou não (DESCARTADO).
+/// Misturar faria todo aviso nascer como OS aberta e sujar custo e oficina.
+model ProblemaVeiculo {
+  contaId        String                @default("__SEM_CONTA__")
+  conta          Conta                 @relation(fields: [contaId], references: [id])
+  id             String                @id @default(uuid())
+  /// O `clientId` do outbox do app: reenvio da fila não duplica o aviso.
+  clientId       String
+  motorista      Motorista             @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId    String
+  veiculo        Veiculo?              @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
+  veiculoId      String?
+  descricao      String
+  /// Chaves no storage (servidas pela API, nunca pelo bucket).
+  fotos          String[]              @default([])
+  status         StatusProblemaVeiculo @default(ABERTO)
+  manutencao     ManutencaoVeiculo?    @relation(fields: [manutencaoId], references: [id], onDelete: SetNull)
+  manutencaoId   String?               @unique
+  motivoDescarte String?
+  decididoPor    User?                 @relation("DecidiuProblemaVeiculo", fields: [decididoPorId], references: [id], onDelete: SetNull)
+  decididoPorId  String?
+  decididoEm     DateTime?
+  /// Quando o motorista avisou no aparelho (pode ter esperado sinal).
+  avisadoEm      DateTime
+  criadoEm       DateTime              @default(now())
+
+  @@unique([contaId, clientId])
+  @@index([contaId, status])
+  @@map("problemas_veiculo")
+}
+
+enum StatusProblemaVeiculo {
+  ABERTO
+  VIROU_MANUTENCAO
+  DESCARTADO
 }
 
 /**
