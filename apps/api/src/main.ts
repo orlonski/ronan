@@ -18,7 +18,17 @@ async function bootstrap() {
   // exposedHeaders: sem isso o browser não deixa o dashboard LER headers
   // customizados cross-origin (X-Imagem-Tipo diz se a foto do local é Street
   // View ou satélite).
-  app.enableCors({ origin, credentials: true, exposedHeaders: ["X-Imagem-Tipo"] });
+  //
+  // maxAge: toda chamada do painel leva `Authorization`, então o navegador
+  // pergunta antes (OPTIONS) se pode. Sem Max-Age o Chrome lembra a resposta
+  // por só 5s — e com o servidor na França cada pergunta é mais uma ida e
+  // volta de ~230ms. 7200s é o teto que o Chrome aceita.
+  app.enableCors({
+    origin,
+    credentials: true,
+    exposedHeaders: ["X-Imagem-Tipo"],
+    maxAge: 7200,
+  });
 
   // Gzip nas respostas. Crítico pro app móvel em rede 3G/4G —
   // reduz /catalogos de ~300KB pra ~40KB. Threshold default ignora
