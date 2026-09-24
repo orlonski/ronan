@@ -149,6 +149,8 @@ export type Me = {
   nome: string;
   cpf: string;
   telefone: string | null;
+  /** O telefone que a empresa deixou pro motorista ligar ("Ligar pro escritório"). */
+  telefoneEscritorio?: string | null;
   status: StatusMotorista;
   veiculoDefaultId: string | null;
   veiculoDefault: Veiculo | null;
@@ -2575,13 +2577,15 @@ export type MeuProblemaVeiculo = {
   fotos: number;
   veiculo: { placa: string } | null;
   manutencao: { status: string } | null;
+  /** FICOU_BOM ou VOLTOU, quando ele já conferiu o conserto. */
+  confirmacao?: string | null;
 };
 
 /**
  * Os avisos de problema no caminhão que ele mandou, com o que o escritório
  * decidiu. Cache-first como o resto do app: abre na hora, mesmo sem sinal.
  */
-export function useMeusProblemas() {
+export function useMeusProblemas(opts: { enabled?: boolean } = {}) {
   const cacheKey = "q:meus-problemas";
   const buscarRede = async (): Promise<MeuProblemaVeiculo[]> => {
     const fresh = await api.get<MeuProblemaVeiculo[]>("/m/problemas-veiculo");
@@ -2591,6 +2595,7 @@ export function useMeusProblemas() {
   return useQuery({
     queryKey: ["meus-problemas"],
     staleTime: 60_000,
+    enabled: opts.enabled ?? true,
     queryFn: () => cacheFirst<MeuProblemaVeiculo[]>(["meus-problemas"], cacheKey, buscarRede),
   });
 }

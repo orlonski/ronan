@@ -61,6 +61,8 @@ import {
   useViagens,
   useViagensAguardandoPeso,
   type Viagem,
+  useMeusProblemas,
+  type MeuProblemaVeiculo,
 } from "@/lib/queries";
 import { iniciarTracking, isTrackingAtivo, useViagemAndamento } from "@/lib/tracking";
 import { getNavDestino } from "@/lib/nav-destino-storage";
@@ -124,6 +126,10 @@ function HomeDaEmpresa() {
   const mostraHistorico = useMostraHistorico();
   // Esta home já é só da empresa: sem empresa não há escritório pra avisar.
   const podeAvisarProblema = usePermite("app.problema.avisar");
+  // O aviso dele em andamento aparece no Início: sem isso a resposta do
+  // escritório só era vista por quem abrisse o Perfil (squad de 24/09/2026).
+  const meusProblemas = useMeusProblemas({ enabled: podeAvisarProblema });
+  const avisoEmAndamento = avisoPraMostrar(meusProblemas.data ?? []);
   const pending = usePending();
   const aguardandoPeso = useViagensAguardandoPeso();
   const nAguardandoPeso = aguardandoPeso.data?.length ?? 0;
@@ -665,6 +671,19 @@ function HomeDaEmpresa() {
               </CoachTarget>
             )}
 
+            {avisoEmAndamento && (
+              <Pressable
+                onPress={() => router.push("/meus-avisos")}
+                className="rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+              >
+                <Text className="text-sm font-semibold text-muted-foreground">
+                  Seu aviso{avisoEmAndamento.p.veiculo ? ` do ${avisoEmAndamento.p.veiculo.placa}` : ""}
+                </Text>
+                <Text className={`text-base font-bold ${avisoEmAndamento.cor}`}>{avisoEmAndamento.titulo}</Text>
+                <Text className="text-sm text-brand">Ver meus avisos →</Text>
+              </Pressable>
+            )}
+
             {/* Avisar problema no caminhão: quem vê o pneu careca e a luz no
                 painel é quem dirige. Cai em Manutenção, no painel. */}
             {podeAvisarProblema && (
@@ -985,4 +1004,27 @@ function fmtNum(v: string, casas: number): string {
     minimumFractionDigits: casas,
     maximumFractionDigits: casas,
   });
+}
+
+/**
+ * O aviso que merece aparecer no Início: o que pede alguma coisa dele primeiro
+ * (conserto concluído esperando "ficou bom?"), depois o que está andando. Só
+ * dos últimos 30 dias — aviso velho decidido não é notícia.
+ */
+function avisoPraMostrar(
+  lista: MeuProblemaVeiculo[],
+): { p: MeuProblemaVeiculo; titulo: string; cor: string } | null {
+  const limite = Date.now() - 30 * 86_400_000;
+  const recentes = lista.filter((p) => new Date(p.avisadoEm).getTime() >= limite);
+  const conferir = recentes.find(
+    (p) => p.status === "VIROU_MANUTENCAO" && p.manutencao?.status === "CONCLUIDA" && !p.confirmacao,
+  );
+  if (conferir) return { p: conferir, titulo: "Conserto concluído — conte se ficou bom", cor: "text-green-700" };
+  const oficina = recentes.find((p) => p.status === "VIROU_MANUTENCAO" && p.manutencao?.status === "EM_ANDAMENTO");
+  if (oficina) return { p: oficina, titulo: "Na oficina", cor: "text-green-700" };
+  const conserto = recentes.find((p) => p.status === "VIROU_MANUTENCAO" && p.manutencao?.status === "ABERTA");
+  if (conserto) return { p: conserto, titulo: "Virou conserto — o escritório vai agendar", cor: "text-green-700" };
+  const aberto = recentes.find((p) => p.status === "ABERTO");
+  if (aberto) return { p: aberto, titulo: "Chegou no escritório — ainda vão olhar", cor: "text-blue-700" };
+  return null;
 }

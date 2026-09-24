@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { router, Stack } from "expo-router";
 import { CloudOff, Wrench } from "lucide-react-native";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
@@ -8,6 +8,11 @@ import { EmptyState } from "@/components/empty-state";
 import { RequerCapacidade } from "@/components/requer-capacidade";
 import { usePendingProblemas } from "@/hooks/use-pending-problemas";
 import { useMeusProblemas, type MeuProblemaVeiculo } from "@/lib/queries";
+import {
+  confirmarConserto,
+  enviarConfirmacoesPendentes,
+  useConfirmacoesPendentes,
+} from "@/lib/confirmar-conserto";
 
 /**
  * MEUS AVISOS: o que ele avisou do caminhão e o que o escritório decidiu.
@@ -31,6 +36,12 @@ type Linha =
 function Conteudo() {
   const q = useMeusProblemas();
   const naFila = usePendingProblemas();
+  const respostasGuardadas = useConfirmacoesPendentes();
+  // Resposta de conserto que ficou guardada sem sinal: tenta de novo ao abrir.
+  useEffect(() => {
+    void enviarConfirmacoesPendentes().then(() => q.refetch().catch(() => {}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // RefreshControl só no gesto: recarga automática prende o spinner no iOS.
   const [puxando, setPuxando] = useState(false);
 
@@ -96,7 +107,7 @@ function Conteudo() {
               <Text className="text-sm text-muted-foreground">{fmtQuando(l.quando)}</Text>
             </View>
           ) : (
-            <CardAviso p={l.item} />
+            <CardAviso p={l.item} respostaGuardada={respostasGuardadas.get(l.item.id)} onRespondeu={() => void q.refetch()} />
           )
         }
       />
@@ -104,8 +115,29 @@ function Conteudo() {
   );
 }
 
-function CardAviso({ p }: { p: MeuProblemaVeiculo }) {
+function CardAviso({
+  p,
+  respostaGuardada,
+  onRespondeu,
+}: {
+  p: MeuProblemaVeiculo;
+  respostaGuardada: boolean | undefined;
+  onRespondeu: () => void;
+}) {
   const situacao = situacaoDoAviso(p);
+  const [enviando, setEnviando] = useState(false);
+  // Conserto concluído e ele ainda não disse se ficou bom: pergunta aqui.
+  const perguntar =
+    p.status === "VIROU_MANUTENCAO" &&
+    p.manutencao?.status === "CONCLUIDA" &&
+    !p.confirmacao &&
+    respostaGuardada === undefined;
+  async function responder(ficouBom: boolean) {
+    setEnviando(true);
+    await confirmarConserto(p.id, ficouBom).catch(() => {});
+    setEnviando(false);
+    onRespondeu();
+  }
   return (
     <View className="gap-1 rounded-2xl border-2 border-border bg-card p-4">
       <Text className={`text-sm font-semibold ${situacao.cor}`}>{situacao.titulo}</Text>
@@ -118,6 +150,32 @@ function CardAviso({ p }: { p: MeuProblemaVeiculo }) {
         Avisado {fmtQuando(new Date(p.avisadoEm).getTime())}
         {p.fotos > 0 ? ` · ${p.fotos} foto${p.fotos > 1 ? "s" : ""}` : ""}
       </Text>
+      {perguntar && (
+        <View className="mt-2 gap-2">
+          <Text className="text-base font-semibold text-foreground">O conserto ficou bom?</Text>
+          <View className="flex-row gap-2">
+            <Pressable
+              disabled={enviando}
+              onPress={() => void responder(true)}
+              className="flex-1 items-center rounded-xl bg-success p-3 active:opacity-75"
+            >
+              <Text className="text-base font-bold text-success-foreground">Ficou bom</Text>
+            </Pressable>
+            <Pressable
+              disabled={enviando}
+              onPress={() => void responder(false)}
+              className="flex-1 items-center rounded-xl bg-warning p-3 active:opacity-75"
+            >
+              <Text className="text-base font-bold text-warning-foreground">O problema voltou</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+      {respostaGuardada !== undefined && !p.confirmacao && (
+        <Text className="mt-1 text-sm text-amber-700">
+          Sua resposta está guardada e vai pro escritório assim que tiver sinal.
+        </Text>
+      )}
     </View>
   );
 }
@@ -132,7 +190,11 @@ function situacaoDoAviso(p: MeuProblemaVeiculo): { titulo: string; detalhe?: str
   }
   if (p.status === "VIROU_MANUTENCAO") {
     const st = p.manutencao?.status;
-    if (st === "CONCLUIDA") return { titulo: "Consertado", cor: "text-green-700" };
+    if (st === "CONCLUIDA") {
+      if (p.confirmacao === "VOLTOU")
+        return { titulo: "Você avisou que o problema voltou — o escritório vai olhar", cor: "text-amber-700" };
+      return { titulo: "Consertado", cor: "text-green-700" };
+    }
     if (st === "EM_ANDAMENTO") return { titulo: "Na oficina", cor: "text-green-700" };
     if (st === "CANCELADA") return { titulo: "Conserto cancelado pelo escritório", cor: "text-muted-foreground" };
     return { titulo: "Virou conserto — o escritório vai agendar", cor: "text-green-700" };

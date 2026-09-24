@@ -476,6 +476,7 @@ export class ContasService implements OnModuleInit {
         codigoMunicipioIbge: true,
         uf: true,
         telefoneFiscal: true,
+        telefoneParaMotoristas: true,
         rntrc: true,
         tipoTransportador: true,
       },

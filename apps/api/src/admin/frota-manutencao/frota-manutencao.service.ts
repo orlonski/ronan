@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type {
+  ConfirmarConsertoInput,
+  CriarPlanosEmLoteInput,
   AbrirManutencaoDoProblemaInput,
   AtualizarManutencaoInput,
   AtualizarPlanoManutencaoInput,
@@ -16,7 +18,9 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, SEM_ESCOPO, type EscopoAdmin } from "../../common/escopo/escopo";
 import { avaliarPlano, diasParaIndicar, situacaoPneu } from "../../common/manutencao";
-import { checarArquivoEnviado, MIMES_IMAGEM } from "../../common/arquivo-enviado";
+import { checarArquivoEnviado, MIMES_DOCUMENTO, MIMES_IMAGEM } from "../../common/arquivo-enviado";
+import { kmAtual, type KmAtual, type LeituraOdometro } from "../../common/km-atual";
+import { inicioDoDiaData, ymdSaoPaulo } from "../../common/timezone";
 import { UploadsService } from "../../uploads/uploads.service";
 import { AdminInboxService } from "../inbox/inbox.service";
 import { PushService } from "../../push/push.service";
@@ -126,7 +130,8 @@ export class FrotaManutencaoService {
       where: { id: planoId, veiculoId },
       data: {
         ...(odometro != null ? { ultimoOdometro: odometro } : {}),
-        ultimaEm: diaUtc(quando.toISOString().slice(0, 10)),
+        // O dia de SÃO PAULO: concluído às 22h ainda é hoje, não amanhã em UTC.
+        ultimaEm: inicioDoDiaData(quando),
       },
     });
   }
@@ -183,7 +188,56 @@ export class FrotaManutencaoService {
     // Concluir é o momento em que o plano ligado zera — com o odômetro da saída.
     if (concluindoAgora) await this.zerarPlano(m.planoId, m.veiculoId, m.odometro, agora);
     if (gerarContaPagar) await this.gerarConta(id, usuarioId);
+
+    // A OS nasceu de um aviso do motorista: ele fica sabendo de cada passo.
+    const entrouNaOficina = input.status === "EM_ANDAMENTO" && atual.status !== "EM_ANDAMENTO";
+    if (entrouNaOficina || concluindoAgora) {
+      const problema = await this.prisma.problemaVeiculo.findFirst({
+        where: { manutencaoId: id },
+        select: { id: true },
+      });
+      if (problema) {
+        await this.contarProMotorista(
+          problema.id,
+          concluindoAgora ? "Conserto concluído" : "Seu caminhão entrou na oficina",
+          concluindoAgora
+            ? `${atual.descricao.slice(0, 100)} — confira se ficou bom e conte pra gente.`
+            : atual.descricao.slice(0, 140),
+          usuarioId,
+        );
+      }
+    }
     return m;
+  }
+
+  // ---------------------------------------------------------------- anexos
+
+  /** Nota da oficina ou foto do serviço, anexada à OS. */
+  async anexarNaManutencao(
+    id: string,
+    arquivo: { buffer: Buffer; mimetype: string; size: number; originalname: string },
+  ) {
+    checarArquivoEnviado(arquivo, {
+      mimes: MIMES_DOCUMENTO,
+      maxBytes: 15 * 1024 * 1024,
+      comoDizer: "Mande uma foto ou um PDF.",
+    });
+    const m = await this.prisma.manutencaoVeiculo.findFirst({ where: { id }, select: { anexos: true } });
+    if (!m) throw new NotFoundException("Manutenção não encontrada");
+    if (m.anexos.length >= 10) throw new BadRequestException("Esta manutenção já tem 10 anexos.");
+    const chave = await this.uploads.putManutencaoAnexo(arquivo.buffer, arquivo.mimetype, id);
+    await this.prisma.manutencaoVeiculo.update({
+      where: { id },
+      data: { anexos: { push: chave } },
+    });
+    return { anexos: m.anexos.length + 1 };
+  }
+
+  async anexoDaManutencao(id: string, indice: number): Promise<string> {
+    const m = await this.prisma.manutencaoVeiculo.findFirst({ where: { id }, select: { anexos: true } });
+    const chave = m?.anexos[indice];
+    if (!chave) throw new NotFoundException("Anexo não encontrado");
+    return chave;
   }
 
   async removerManutencao(id: string) {
@@ -220,6 +274,31 @@ export class FrotaManutencaoService {
         ultimaEm: input.ultimaEm ? diaUtc(input.ultimaEm) : null,
       },
     });
+  }
+
+  /** O mesmo plano em vários caminhões: um por caminhão, sem duplicar o que já existe. */
+  async criarPlanosEmLote(input: CriarPlanosEmLoteInput) {
+    const veiculos = await this.prisma.veiculo.findMany({
+      where: { id: { in: input.veiculoIds } },
+      select: { id: true },
+    });
+    const jaTem = await this.prisma.planoManutencao.findMany({
+      where: { veiculoId: { in: veiculos.map((v) => v.id) }, descricao: input.descricao, ativo: true },
+      select: { veiculoId: true },
+    });
+    const pular = new Set(jaTem.map((p) => p.veiculoId));
+    const criar = veiculos.filter((v) => !pular.has(v.id));
+    if (criar.length > 0) {
+      await this.prisma.planoManutencao.createMany({
+        data: criar.map((v) => ({
+          veiculoId: v.id,
+          descricao: input.descricao,
+          intervaloKm: input.intervaloKm ?? null,
+          intervaloDias: input.intervaloDias ?? null,
+        })),
+      });
+    }
+    return { criados: criar.length, jaTinham: pular.size };
   }
 
   async atualizarPlano(id: string, input: AtualizarPlanoManutencaoInput) {
@@ -276,7 +355,29 @@ export class FrotaManutencaoService {
       }),
       this.prisma.manutencaoVeiculo.findMany({
         where: { status: "EM_ANDAMENTO", veiculo: filtroVeiculo },
-        include: { veiculo: { select: { id: true, placa: true } } },
+        include: {
+          veiculo: { select: { id: true, placa: true } },
+          fornecedor: { select: { nome: true } },
+        },
+      }),
+    ]);
+    // Consertos abertos que ainda não entraram na oficina (o "agendado") e o
+    // gasto de manutenção do mês — os números do topo da caixa de entrada.
+    const [anoSP, mesSP] = ymdSaoPaulo();
+    const inicioMes = new Date(Date.UTC(anoSP, mesSP - 1, 1, 3));
+    const [agendadas, gasto] = await Promise.all([
+      this.prisma.manutencaoVeiculo.findMany({
+        where: { status: "ABERTA", veiculo: filtroVeiculo },
+        orderBy: [{ previstaEm: "asc" }, { criadoEm: "asc" }],
+        take: 50,
+        include: {
+          veiculo: { select: { id: true, placa: true } },
+          fornecedor: { select: { nome: true } },
+        },
+      }),
+      this.prisma.manutencaoVeiculo.aggregate({
+        where: { status: "CONCLUIDA", concluidaEm: { gte: inicioMes }, veiculo: filtroVeiculo },
+        _sum: { valorTotal: true },
       }),
     ]);
     // O que os motoristas avisaram e ninguém decidiu ainda. Aviso sem placa
@@ -302,16 +403,11 @@ export class FrotaManutencaoService {
     // O odômetro mais recente de cada veículo sai do abastecimento — é o único
     // lugar onde ele é informado de verdade, e por isso o plano por km depende
     // de a frota anotar o odômetro ao abastecer.
-    const odometros = await this.prisma.abastecimento.groupBy({
-      by: ["veiculoId"],
-      // `odometro` é Int NOT NULL no schema; filtrar por "not null" nem type-checa.
-      // O que interessa é ter algum lançamento — zero é odômetro não anotado.
-      where: { odometro: { gt: 0 } },
-      _max: { odometro: true },
-    });
-    const odoPorVeiculo = new Map(
-      odometros.map((o) => [o.veiculoId, o._max?.odometro ?? null]),
-    );
+    // O km de hoje é ESTIMADO (common/km-atual.ts): última leitura confiável
+    // mais o km das viagens. Era o maior odômetro já anotado, e um dígito a
+    // mais prendia o plano em "vencido" pra sempre.
+    const kms = await this.kmAtualDosVeiculos([...new Set(planos.map((p) => p.veiculoId))]);
+    const odoPorVeiculo = new Map([...kms].map(([id, k]) => [id, k.km]));
 
     const hoje = new Date();
     const diasAte = (d: Date) =>
@@ -371,7 +467,16 @@ export class FrotaManutencaoService {
         veiculo: m.veiculo,
         descricao: m.descricao,
         desde: m.iniciadaEm,
+        oficina: m.fornecedor?.nome ?? null,
       })),
+      agendadas: agendadas.map((m) => ({
+        id: m.id,
+        veiculo: m.veiculo,
+        descricao: m.descricao,
+        previstaEm: m.previstaEm,
+        oficina: m.fornecedor?.nome ?? null,
+      })),
+      gastoMes: Number(gasto._sum.valorTotal ?? 0),
     };
   }
 
@@ -512,6 +617,51 @@ export class FrotaManutencaoService {
     }
   }
 
+  /**
+   * O motorista conferiu o conserto do aviso dele. "Voltou" vira aviso novo,
+   * ligado ao mesmo caminhão, no topo da caixa do escritório.
+   */
+  async confirmarConserto(motoristaId: string, problemaId: string, input: ConfirmarConsertoInput) {
+    const p = await this.prisma.problemaVeiculo.findFirst({
+      where: { id: problemaId, motoristaId },
+      select: {
+        id: true,
+        descricao: true,
+        veiculoId: true,
+        confirmacao: true,
+        status: true,
+        manutencao: { select: { status: true } },
+      },
+    });
+    if (!p) throw new NotFoundException("Aviso não encontrado");
+    // Idempotente: o app pode reenviar; a primeira resposta vale.
+    if (p.confirmacao) return { confirmacao: p.confirmacao };
+    if (p.status !== "VIROU_MANUTENCAO" || p.manutencao?.status !== "CONCLUIDA") {
+      throw new BadRequestException("Esse conserto ainda não foi concluído.");
+    }
+    const confirmacao = input.ficouBom ? "FICOU_BOM" : "VOLTOU";
+    await this.prisma.problemaVeiculo.update({
+      where: { id: problemaId },
+      data: { confirmacao, confirmadoEm: new Date() },
+    });
+    if (!input.ficouBom) {
+      const novo = await this.prisma.problemaVeiculo.create({
+        data: {
+          clientId: `voltou-${problemaId}`,
+          motoristaId,
+          veiculoId: p.veiculoId,
+          descricao: `O problema voltou depois do conserto: ${p.descricao}${
+            input.comentario ? ` — ${input.comentario}` : ""
+          }`.slice(0, 1000),
+          avisadoEm: new Date(),
+        },
+        select: { id: true },
+      });
+      await this.avisarEscritorio(novo.id);
+    }
+    return { confirmacao };
+  }
+
   /** Os avisos que ESTE motorista mandou, pra ele acompanhar no app. */
   meusProblemas(motoristaId: string) {
     return this.prisma.problemaVeiculo
@@ -531,6 +681,7 @@ export class FrotaManutencaoService {
           fotos: true,
           veiculo: { select: { placa: true } },
           manutencao: { select: { status: true } },
+          confirmacao: true,
         },
       })
       .then((l) => l.map(({ fotos, ...p }) => ({ ...p, fotos: fotos.length })));
@@ -605,6 +756,12 @@ export class FrotaManutencaoService {
     const v = await this.prisma.veiculo.findFirst({ where: { id: veiculoId }, select: { id: true } });
     if (!v) throw new NotFoundException("Veículo não encontrado");
 
+    const plano = input.planoId
+      ? await this.prisma.planoManutencao.findFirst({
+          where: { id: input.planoId, veiculoId },
+          select: { id: true },
+        })
+      : null;
     return this.prisma.$transaction(async (tx) => {
       const m = await tx.manutencaoVeiculo.create({
         data: {
@@ -612,6 +769,9 @@ export class FrotaManutencaoService {
           tipo: input.tipo ?? "CORRETIVA",
           descricao: (input.descricao ?? p.descricao).slice(0, 300),
           observacao: "Aberta a partir de um aviso do motorista pelo app.",
+          fornecedorId: input.fornecedorId ?? null,
+          planoId: plano?.id ?? null,
+          previstaEm: input.previstaEm ? diaUtc(input.previstaEm) : null,
           criadoPorId: usuarioId,
         },
         select: { id: true },
@@ -659,6 +819,253 @@ export class FrotaManutencaoService {
       usuarioId,
     );
     return { ok: true };
+  }
+
+  // ----------------------------------------------------------- prontuário
+
+  /**
+   * TUDO sobre UM caminhão numa tela: km, situação, custo do mês e do ano,
+   * revisões, documentos, pneus e a linha do tempo. É a pergunta que o dono
+   * faz ("como está o ABC-1234?") e que nenhuma tela respondia (24/09/2026).
+   */
+  async prontuario(veiculoId: string) {
+    const veiculo = await this.prisma.veiculo.findFirst({
+      where: { id: veiculoId },
+      select: { id: true, placa: true, modelo: true, marca: true, anoModelo: true, ativo: true },
+    });
+    if (!veiculo) throw new NotFoundException("Veículo não encontrado");
+
+    const [anoSP, mesSP] = ymdSaoPaulo();
+    const inicioMes = new Date(Date.UTC(anoSP, mesSP - 1, 1, 3));
+    const inicioAno = new Date(Date.UTC(anoSP, 0, 1, 3));
+
+    const [km, planos, documentos, pneus, manutencoes, avisos, multas, conferidas, oficina, parado] =
+      await Promise.all([
+        this.kmAtualDosVeiculos([veiculoId]).then((m) => m.get(veiculoId)!),
+        this.prisma.planoManutencao.findMany({ where: { veiculoId, ativo: true }, orderBy: { descricao: "asc" } }),
+        this.prisma.documentoVeiculo.findMany({ where: { veiculoId }, orderBy: { validade: "asc" } }),
+        this.prisma.pneu.findMany({ where: { veiculoId, ativo: true }, orderBy: { posicao: "asc" } }),
+        this.prisma.manutencaoVeiculo.findMany({
+          where: { veiculoId },
+          orderBy: { criadoEm: "desc" },
+          take: 60,
+          include: { fornecedor: { select: { id: true, nome: true } } },
+        }),
+        this.prisma.problemaVeiculo.findMany({
+          where: { veiculoId },
+          orderBy: { avisadoEm: "desc" },
+          take: 30,
+          select: {
+            id: true,
+            descricao: true,
+            avisadoEm: true,
+            status: true,
+            podeRodar: true,
+            confirmacao: true,
+            motorista: { select: { nome: true } },
+          },
+        }),
+        this.prisma.multa.findMany({ where: { veiculoId }, orderBy: { ocorridaEm: "desc" }, take: 30 }),
+        this.prisma.leituraOdometro.findMany({
+          where: { veiculoId },
+          orderBy: { lidoEm: "desc" },
+          take: 10,
+          include: { criadoPor: { select: { nome: true } } },
+        }),
+        this.prisma.manutencaoVeiculo.findFirst({ where: { veiculoId, status: "EM_ANDAMENTO" }, select: { id: true } }),
+        this.prisma.problemaVeiculo.findFirst({
+          where: { veiculoId, status: "ABERTO", podeRodar: "NAO" },
+          select: { id: true },
+        }),
+      ]);
+
+    // Custo: manutenção concluída, combustível e multas, no mês e no ano; e o
+    // km rodado nas viagens do período pro R$/km.
+    const periodo = async (desde: Date) => {
+      const [man, comb, mul, kmV] = await Promise.all([
+        this.prisma.manutencaoVeiculo.aggregate({
+          where: { veiculoId, status: "CONCLUIDA", concluidaEm: { gte: desde } },
+          _sum: { valorTotal: true },
+        }),
+        this.prisma.abastecimento.aggregate({
+          where: { veiculoId, data: { gte: desde } },
+          _sum: { valorTotal: true },
+        }),
+        this.prisma.multa.aggregate({
+          where: { veiculoId, ocorridaEm: { gte: desde }, status: { not: "CANCELADA" } },
+          _sum: { valor: true },
+        }),
+        this.prisma.viagem.aggregate({
+          // Viagem.data é só o DIA (meia-noite UTC): a fronteira volta as 3h do fuso.
+          where: {
+            veiculoId,
+            data: { gte: new Date(desde.getTime() - 3 * 3_600_000) },
+            status: { not: "RASCUNHO_OFFLINE" },
+          },
+          _sum: { km: true },
+        }),
+      ]);
+      const manutencao = Number(man._sum.valorTotal ?? 0);
+      const combustivel = Number(comb._sum.valorTotal ?? 0);
+      const multasV = Number(mul._sum.valor ?? 0);
+      const total = manutencao + combustivel + multasV;
+      const kmRodado = Number(kmV._sum.km ?? 0);
+      return {
+        manutencao,
+        combustivel,
+        multas: multasV,
+        total,
+        kmRodado,
+        porKm: kmRodado > 0 ? Math.round((total / kmRodado) * 100) / 100 : null,
+      };
+    };
+    const [custoMes, custoAno] = await Promise.all([periodo(inicioMes), periodo(inicioAno)]);
+
+    const hoje = new Date();
+    const diasAte = (d: Date) =>
+      Math.round(
+        (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) -
+          Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate())) /
+          86_400_000,
+      );
+
+    type Evento = { data: Date; tipo: string; titulo: string; detalhe: string | null; valor: number | null; ref: string };
+    const linha: Evento[] = [
+      ...manutencoes.map((m) => ({
+        data: m.concluidaEm ?? m.criadoEm,
+        tipo: m.status === "CONCLUIDA" ? "CONSERTO_CONCLUIDO" : m.status === "EM_ANDAMENTO" ? "NA_OFICINA" : "CONSERTO_ABERTO",
+        titulo: m.descricao,
+        detalhe: m.fornecedor?.nome ?? null,
+        valor: m.valorTotal != null ? Number(m.valorTotal) : null,
+        ref: m.id,
+      })),
+      ...avisos.map((a) => ({
+        data: a.avisadoEm,
+        tipo: "AVISO",
+        titulo: a.descricao,
+        detalhe: `Aviso de ${a.motorista.nome}`,
+        valor: null,
+        ref: a.id,
+      })),
+      ...multas.map((m) => ({
+        data: m.ocorridaEm,
+        tipo: "MULTA",
+        titulo: m.infracao,
+        detalhe: null,
+        valor: Number(m.valor),
+        ref: m.id,
+      })),
+      ...conferidas.map((c) => ({
+        data: c.criadoEm,
+        tipo: "ODOMETRO",
+        titulo: `Odômetro conferido: ${c.odometro.toLocaleString("pt-BR")} km`,
+        detalhe: c.criadoPor?.nome ?? null,
+        valor: null,
+        ref: c.id,
+      })),
+    ]
+      .sort((a, b) => b.data.getTime() - a.data.getTime())
+      .slice(0, 80);
+
+    return {
+      veiculo,
+      km,
+      situacao: oficina ? "NA_OFICINA" : parado ? "PARADO" : "RODANDO",
+      custoMes,
+      custoAno,
+      planos: planos.map((p) => ({
+        ...avaliarPlano(p, { odometro: km.km, hoje }),
+        intervaloKm: p.intervaloKm,
+        intervaloDias: p.intervaloDias,
+        ultimoOdometro: p.ultimoOdometro,
+        ultimaEm: p.ultimaEm,
+      })),
+      documentos: documentos.map((d) => ({
+        id: d.id,
+        tipo: d.tipo,
+        numero: d.numero,
+        validade: d.validade,
+        diasRestantes: d.validade ? diasAte(d.validade) : null,
+      })),
+      pneus: pneus.map((p) => ({
+        id: p.id,
+        numeroFogo: p.numeroFogo,
+        posicao: p.posicao,
+        sulcoMm: p.sulcoMm != null ? Number(p.sulcoMm) : null,
+        situacao: situacaoPneu(p.sulcoMm != null ? Number(p.sulcoMm) : null),
+      })),
+      avisosAbertos: avisos.filter((a) => a.status === "ABERTO").length,
+      linhaDoTempo: linha,
+    };
+  }
+
+  // ------------------------------------------------------------ km atual
+
+  /**
+   * O km estimado de cada caminhão (ver `common/km-atual.ts`): leituras do
+   * abastecimento (último ano) e as conferidas, mais o km das viagens depois
+   * da última leitura boa. Três consultas pra frota inteira, não por caminhão.
+   */
+  async kmAtualDosVeiculos(veiculoIds: string[]): Promise<Map<string, KmAtual>> {
+    const out = new Map<string, KmAtual>();
+    if (veiculoIds.length === 0) return out;
+    const umAno = new Date(Date.now() - 400 * 86_400_000);
+    const [abastecimentos, conferidas] = await Promise.all([
+      this.prisma.abastecimento.findMany({
+        where: { veiculoId: { in: veiculoIds }, odometro: { gt: 0 }, data: { gte: umAno } },
+        select: { id: true, veiculoId: true, data: true, odometro: true },
+      }),
+      this.prisma.leituraOdometro.findMany({
+        where: { veiculoId: { in: veiculoIds } },
+        select: { id: true, veiculoId: true, lidoEm: true, odometro: true },
+      }),
+    ]);
+    const porVeiculo = new Map<string, LeituraOdometro[]>();
+    const add = (vid: string, l: LeituraOdometro) =>
+      porVeiculo.set(vid, [...(porVeiculo.get(vid) ?? []), l]);
+    for (const a of abastecimentos) add(a.veiculoId, { data: a.data, odometro: a.odometro, ref: a.id });
+    for (const c of conferidas) add(c.veiculoId, { data: c.lidoEm, odometro: c.odometro, confiavel: true, ref: c.id });
+
+    // Primeiro a âncora de cada um (sem viagens), depois UMA consulta de km.
+    const ancoras = new Map<string, Date>();
+    for (const id of veiculoIds) {
+      const k = kmAtual(porVeiculo.get(id) ?? [], () => 0);
+      if (k.desde) ancoras.set(id, k.desde);
+    }
+    const somas = ancoras.size
+      ? await this.prisma.viagem.groupBy({
+          by: ["veiculoId"],
+          where: {
+            status: { not: "RASCUNHO_OFFLINE" },
+            OR: [...ancoras].map(([veiculoId, desde]) => ({ veiculoId, data: { gt: desde } })),
+          },
+          _sum: { km: true },
+        })
+      : [];
+    const kmDepois = new Map(somas.map((s) => [s.veiculoId, Number(s._sum.km ?? 0)]));
+    for (const id of veiculoIds) {
+      out.set(id, kmAtual(porVeiculo.get(id) ?? [], () => kmDepois.get(id) ?? 0));
+    }
+    return out;
+  }
+
+  /** O escritório conferiu o painel do caminhão: vira a âncora do km. */
+  async conferirOdometro(
+    veiculoId: string,
+    input: { odometro: number; lidoEm: string; observacao?: string | null },
+    usuarioId: string,
+  ) {
+    const v = await this.prisma.veiculo.findFirst({ where: { id: veiculoId }, select: { id: true } });
+    if (!v) throw new NotFoundException("Veículo não encontrado");
+    return this.prisma.leituraOdometro.create({
+      data: {
+        veiculoId,
+        odometro: input.odometro,
+        lidoEm: diaUtc(input.lidoEm),
+        observacao: input.observacao ?? null,
+        criadoPorId: usuarioId,
+      },
+    });
   }
 
   // ----------------------------------------------------------------- pneus

@@ -54,6 +54,16 @@ export class UploadsService implements OnModuleInit {
     return key;
   }
 
+  /** Anexo da ordem de serviço: nota da oficina (foto ou PDF), foto do serviço. */
+  async putManutencaoAnexo(buffer: Buffer, mimetype: string, manutencaoId: string): Promise<string> {
+    const ext = mimetype.includes("pdf") ? "pdf" : mimetype.includes("png") ? "png" : "jpg";
+    const key = `${contaIdAtual()}/manutencoes/${manutencaoId}/${randomUUID()}.${ext}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": mimetype,
+    });
+    return key;
+  }
+
   /** Foto do problema que o motorista avisou no caminhão. */
   async putProblemaVeiculoFoto(
     buffer: Buffer,

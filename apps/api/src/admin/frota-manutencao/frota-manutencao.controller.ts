@@ -10,15 +10,19 @@ import {
   Post,
   Query,
   Res,
+  UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
-import { FilesInterceptor } from "@nestjs/platform-express";
+import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import {
+  ConferirOdometroInput,
+  ConfirmarConsertoInput,
+  CriarPlanosEmLoteInput,
   AbrirManutencaoDoProblemaInput,
   AtualizarManutencaoInput,
   AvisarProblemaVeiculoInput,
@@ -114,6 +118,60 @@ export class ManutencaoController {
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.removerManutencao(id);
+  }
+
+  /** Tudo sobre um caminhão: km, custos, revisões, documentos, pneus, linha do tempo. */
+  @RequerPermissao("manutencao.ver")
+  @Get("veiculo/:veiculoId/prontuario")
+  prontuario(@Param("veiculoId") veiculoId: string) {
+    return this.service.prontuario(veiculoId);
+  }
+
+  /** Odômetro conferido no painel do caminhão: corrige o km estimado. */
+  @RequerPermissao("manutencao.editar")
+  @Post("veiculo/:veiculoId/odometro")
+  conferirOdometro(
+    @Param("veiculoId") veiculoId: string,
+    @Body(new ZodValidationPipe(ConferirOdometroInput)) body: ConferirOdometroInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.conferirOdometro(veiculoId, body, user.id);
+  }
+
+  /** O mesmo plano pra vários caminhões de uma vez. */
+  @RequerPermissao("manutencao.criar")
+  @Post("planos/lote")
+  planosEmLote(@Body(new ZodValidationPipe(CriarPlanosEmLoteInput)) body: CriarPlanosEmLoteInput) {
+    return this.service.criarPlanosEmLote(body);
+  }
+
+  /** Nota da oficina ou foto do serviço. */
+  @RequerPermissao("manutencao.editar")
+  @Post(":id/anexos")
+  @UseInterceptors(FileInterceptor("arquivo", { limits: { fileSize: 15 * 1024 * 1024 } }))
+  anexar(@Param("id") id: string, @UploadedFile() arquivo: Express.Multer.File | undefined) {
+    if (!arquivo) throw new BadRequestException("Escolha um arquivo.");
+    return this.service.anexarNaManutencao(id, {
+      buffer: arquivo.buffer,
+      mimetype: arquivo.mimetype,
+      size: arquivo.size,
+      originalname: arquivo.originalname,
+    });
+  }
+
+  @RequerPermissao("manutencao.ver")
+  @Get(":id/anexos/:indice")
+  async anexo(@Param("id") id: string, @Param("indice") indice: string, @Res() res: Response) {
+    const chave = await this.service.anexoDaManutencao(id, Number(indice) || 0);
+    const mime = chave.endsWith(".pdf")
+      ? "application/pdf"
+      : chave.endsWith(".png")
+        ? "image/png"
+        : "image/jpeg";
+    const stream = await this.uploads.getObjectStream(chave);
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Cache-Control", "private, max-age=2592000, immutable");
+    stream.pipe(res);
   }
 
   /** Os avisos dos motoristas. `?status=` mostra os já decididos. */
@@ -317,6 +375,16 @@ export class ProblemasVeiculoMotoristaController {
   @Get()
   meus(@CurrentUser() user: AuthMotorista) {
     return this.service.meusProblemas(user.id);
+  }
+
+  /** Ele conferiu o conserto: ficou bom, ou o problema voltou (vira aviso novo). */
+  @Post(":id/confirmar")
+  confirmar(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(ConfirmarConsertoInput)) body: ConfirmarConsertoInput,
+  ) {
+    return this.service.confirmarConserto(user.id, id, body);
   }
 
   @Post()

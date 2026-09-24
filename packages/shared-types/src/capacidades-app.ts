@@ -246,7 +246,7 @@ const DEFS: CapacidadeAppDef[] = [
     grupo: "Operação",
     tipo: "EMPRESA",
     vinculo: "MOTORISTA",
-    modulo: "frota",
+    modulo: "manutencao",
     gate: "SERVIDOR",
     aoPerder: "VALA",
   },

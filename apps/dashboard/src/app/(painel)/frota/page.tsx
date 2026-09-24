@@ -1,19 +1,13 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
+import { AlertTriangle, Plus } from "lucide-react";
+import { toast } from "sonner";
 import {
-  AlertTriangle,
-  CircleDot,
-  FileWarning,
-  MessageSquareWarning,
-  Plus,
-  ShieldAlert,
-  Wrench,
-} from "lucide-react";
-import {
-  PODE_RODAR_LABEL,
   STATUS_MANUTENCAO_LABEL,
   STATUS_MULTA,
   STATUS_MULTA_LABEL,
@@ -32,87 +26,26 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { LoadingCard } from "@/components/loading";
-import { MotoristaCombobox, VeiculoCombobox } from "@/components/fk-comboboxes";
+import {
+  MotoristaCombobox,
+  VeiculoCombobox,
+  VeiculoComboboxMulti,
+} from "@/components/fk-comboboxes";
 import { useConfirm } from "@/components/confirm-dialog";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
-
-type Veiculo = { id: string; placa: string };
-
-type Alertas = {
-  manutencoes: {
-    planoId: string;
-    descricao: string;
-    situacao: "VENCIDO" | "PROXIMO";
-    kmRestante: number | null;
-    diasRestante: number | null;
-    motivo: "KM" | "TEMPO" | null;
-    veiculo: Veiculo;
-  }[];
-  documentos: {
-    id: string;
-    tipo: string;
-    veiculo: Veiculo;
-    validade: string | null;
-    diasRestantes: number | null;
-  }[];
-  pneus: {
-    id: string;
-    numeroFogo: string;
-    posicao: string | null;
-    sulcoMm: number | null;
-    veiculo: Veiculo | null;
-    situacao: "CRITICO" | "ATENCAO";
-  }[];
-  multas: {
-    id: string;
-    infracao: string;
-    veiculo: Veiculo | null;
-    motorista: { id: string; nome: string } | null;
-    valor: string;
-    status: StatusMultaTipo;
-    diasParaIndicar: number | null;
-  }[];
-  emOficina: { id: string; veiculo: Veiculo; descricao: string; desde: string | null }[];
-  /** Avisos do motorista esperando decisão (API antiga não manda). */
-  avisosMotorista?: {
-    id: string;
-    descricao: string;
-    avisadoEm: string;
-    fotos: number;
-    podeRodar: "SIM" | "COM_CUIDADO" | "NAO" | null;
-    veiculo: Veiculo | null;
-    motorista: { id: string; nome: string };
-  }[];
-};
-
-type Manutencao = {
-  id: string;
-  tipo: TipoManutencaoTipo;
-  status: StatusManutencaoTipo;
-  descricao: string;
-  odometro: number | null;
-  previstaEm: string | null;
-  valorTotal: string | null;
-  valorPecas?: string | null;
-  valorMaoObra?: string | null;
-  veiculo: Veiculo;
-  fornecedor: { id: string; nome: string } | null;
-};
-
-function brl(v: string | number | null): string {
-  if (v == null) return "—";
-  const n = Number(v);
-  return Number.isFinite(n)
-    ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-    : String(v);
-}
-
-function dataBR(v: string | null): string {
-  if (!v) return "—";
-  const [a, m, d] = v.slice(0, 10).split("-");
-  return `${d}/${m}/${a}`;
-}
+import { CaixaDeEntrada } from "./_components/caixa-entrada";
+import { ConcluirConserto } from "./_components/concluir-conserto";
+import {
+  brl,
+  dataBR,
+  decimal,
+  inteiro,
+  type Alertas,
+  type Manutencao,
+  type Plano,
+  type Veiculo,
+} from "./_components/tipos";
 
 export default function FrotaPage() {
   return (
@@ -122,25 +55,27 @@ export default function FrotaPage() {
   );
 }
 
-type Aba = "alertas" | "avisos" | "manutencoes" | "planos" | "pneus" | "multas" | "documentos";
+type Aba = "caixa" | "manutencoes" | "planos" | "pneus" | "multas" | "documentos";
 
 function Conteudo() {
   const token = useAuthToken();
   const { temPermissao } = usePermissoes();
-  // O sininho do aviso do motorista chega com `?aba=avisos`.
-  const abaDaUrl = useSearchParams().get("aba");
-  const [aba, setAba] = React.useState<Aba>(abaDaUrl === "avisos" ? "avisos" : "alertas");
-  // "Lançar feita" no alerta de preventiva abre Manutenções já com o caminhão
-  // e o plano — é o plano marcado que zera a contagem.
+  // O sininho do aviso do motorista chega com `?aba=avisos` — que agora mora
+  // na caixa de entrada.
+  const abaDaUrl = useSearchParams().get("aba") as Aba | "avisos" | null;
+  const [aba, setAba] = React.useState<Aba>(
+    abaDaUrl && abaDaUrl !== "avisos" && abaDaUrl !== ("alertas" as string) ? abaDaUrl : "caixa",
+  );
+  // "Já foi feita" na revisão abre Consertos já com o caminhão e o plano — é o
+  // plano marcado que zera a contagem.
   const [prefill, setPrefill] = React.useState<{ veiculo: Veiculo; planoId: string; descricao: string } | null>(null);
   // Cada aba fala com um recurso próprio da API (pneus, multas, documentos):
   // quem não tem a chave não vê a aba, em vez de abrir e tomar 403.
   const abas = (
     [
-      ["alertas", null, "manutencao.ver"],
-      ["avisos", "Avisos do motorista", "manutencao.ver"],
-      ["manutencoes", "Manutenções", "manutencao.ver"],
-      ["planos", "Planos de manutenção", "manutencao.ver"],
+      ["caixa", "Caixa de entrada", "manutencao.ver"],
+      ["manutencoes", "Consertos", "manutencao.ver"],
+      ["planos", "Revisões programadas", "manutencao.ver"],
       ["pneus", "Pneus", "pneus.ver"],
       ["multas", "Multas", "multas.ver"],
       ["documentos", "Documentos", "documentos-veiculo.ver"],
@@ -153,59 +88,48 @@ function Conteudo() {
     queryFn: () => fetchApi<Alertas>("/admin/manutencao/alertas", { token: token! }),
   });
 
-  const total = alertas.data
-    ? alertas.data.manutencoes.length +
-      alertas.data.documentos.length +
-      alertas.data.pneus.length +
-      alertas.data.emOficina.length +
-      (alertas.data.avisosMotorista?.length ?? 0)
-    : 0;
-
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Manutenção e vencimentos do caminhão</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Manutenção</h1>
         <p className="text-sm text-muted-foreground">
-          Manutenção, pneu, documento e multa — o que some do radar e vira caminhão parado.
+          O que precisa de você hoje: caminhão parado, aviso do motorista, revisão, documento e
+          multa com prazo.
         </p>
       </header>
 
-      <div className="flex flex-wrap gap-1 border-b">
-        {abas.map(([chave, rotulo]) => {
-          const label = rotulo ?? (total > 0 ? `Precisa de você (${total})` : "Precisa de você");
-          return (
+      <div className="flex gap-1 overflow-x-auto border-b">
+        {abas.map(([chave, rotulo]) => (
           <button
             key={chave}
             type="button"
             onClick={() => setAba(chave as Aba)}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm transition-colors ${
+            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors ${
               aba === chave
                 ? "border-primary font-medium text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {label}
+            {rotulo}
           </button>
-          );
-        })}
+        ))}
       </div>
 
-      {aba === "alertas" && (
+      {aba === "caixa" && (
         <>
           {alertas.isLoading && <LoadingCard />}
           {alertas.data && (
-            <BlocoAlertas
+            <CaixaDeEntrada
               a={alertas.data}
-              onVerAvisos={() => setAba("avisos")}
-              onLancarPlano={(p) => {
+              onJaFeita={(p) => {
                 setPrefill(p);
                 setAba("manutencoes");
               }}
+              onVerAba={(x) => setAba(x)}
             />
           )}
         </>
       )}
-      {aba === "avisos" && <ListaAvisos />}
       {aba === "manutencoes" && (
         <ListaManutencoes prefill={prefill} onPrefillUsado={() => setPrefill(null)} />
       )}
@@ -214,523 +138,6 @@ function Conteudo() {
       {aba === "multas" && <ListaMultas />}
       {aba === "documentos" && <ListaDocumentos />}
     </div>
-  );
-}
-
-function BlocoAlertas({
-  a,
-  onVerAvisos,
-  onLancarPlano,
-}: {
-  a: Alertas;
-  onVerAvisos: () => void;
-  onLancarPlano: (p: { veiculo: Veiculo; planoId: string; descricao: string }) => void;
-}) {
-  const avisos = a.avisosMotorista ?? [];
-  const nada =
-    avisos.length === 0 &&
-    a.manutencoes.length === 0 &&
-    a.documentos.length === 0 &&
-    a.pneus.length === 0 &&
-    a.multas.length === 0 &&
-    a.emOficina.length === 0;
-
-  if (nada) {
-    return (
-      <Card className="p-8 text-center">
-        <p className="text-sm font-medium">Nada pendente na frota.</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Cadastre os planos de manutenção (ex.: troca de óleo a cada 20.000 km) e a validade
-          dos documentos, nas abas acima, pra ser avisado antes de o caminhão parar.
-        </p>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {avisos.length > 0 && (
-        <Card className="border-l-4 border-l-blue-500 p-4">
-          <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <MessageSquareWarning className="h-4 w-4" /> Motorista avisou ({avisos.length})
-          </p>
-          <ul className="space-y-1 text-sm">
-            {avisos.slice(0, 5).map((v) => (
-              <li key={v.id} className="flex flex-wrap justify-between gap-2">
-                <span className="min-w-0 truncate">
-                  {v.podeRodar === "NAO" && (
-                    <Badge className="mr-2 border-transparent bg-red-100 text-red-700">Parado</Badge>
-                  )}
-                  <span className="font-medium">{v.veiculo?.placa ?? "sem placa"}</span> ·{" "}
-                  {v.descricao}
-                </span>
-                <span className="text-xs text-muted-foreground">{v.motorista.nome}</span>
-              </li>
-            ))}
-          </ul>
-          <Button size="sm" variant="outline" className="mt-3" onClick={onVerAvisos}>
-            Ver e decidir
-          </Button>
-        </Card>
-      )}
-
-      {a.emOficina.length > 0 && (
-        <Card className="border-l-4 border-l-amber-500 p-4">
-          <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <Wrench className="h-4 w-4" /> Na oficina agora ({a.emOficina.length})
-          </p>
-          <ul className="space-y-1 text-sm">
-            {a.emOficina.map((m) => (
-              <li key={m.id} className="flex flex-wrap justify-between gap-2">
-                <span>
-                  <span className="font-medium">{m.veiculo.placa}</span> · {m.descricao}
-                </span>
-                {m.desde && (
-                  <span className="text-xs text-muted-foreground">
-                    desde {new Date(m.desde).toLocaleDateString("pt-BR")}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {a.manutencoes.length > 0 && (
-        <Card className="p-4">
-          <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <Wrench className="h-4 w-4" /> Manutenção preventiva
-          </p>
-          <ul className="space-y-2 text-sm">
-            {a.manutencoes.map((m) => (
-              <li key={m.planoId} className="flex flex-wrap items-center justify-between gap-2">
-                <span>
-                  <span className="font-medium">{m.veiculo.placa}</span> · {m.descricao}
-                </span>
-                <span className="flex items-center gap-2">
-                <Badge
-                  className={`border-transparent ${
-                    m.situacao === "VENCIDO"
-                      ? "bg-red-100 text-red-700"
-                      : "bg-amber-100 text-amber-800"
-                  }`}
-                >
-                  {m.situacao === "VENCIDO" ? "Vencida" : "Chegando"}
-                  {m.motivo === "KM" && m.kmRestante != null
-                    ? ` · ${Math.abs(m.kmRestante).toLocaleString("pt-BR")} km`
-                    : m.diasRestante != null
-                      ? ` · ${Math.abs(m.diasRestante)} dias`
-                      : ""}
-                </Badge>
-                <Permitido chave="manutencao.criar">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      onLancarPlano({ veiculo: m.veiculo, planoId: m.planoId, descricao: m.descricao })
-                    }
-                  >
-                    Lançar feita
-                  </Button>
-                </Permitido>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {a.documentos.length > 0 && (
-        <Card className="p-4">
-          <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <FileWarning className="h-4 w-4" /> Documento vencendo
-          </p>
-          <ul className="space-y-2 text-sm">
-            {a.documentos.map((d) => (
-              <li key={d.id} className="flex flex-wrap items-baseline justify-between gap-2">
-                <span>
-                  <span className="font-medium">{d.veiculo.placa}</span> · {d.tipo}
-                </span>
-                <Badge
-                  className={`border-transparent ${
-                    (d.diasRestantes ?? 0) < 0
-                      ? "bg-red-100 text-red-700"
-                      : "bg-amber-100 text-amber-800"
-                  }`}
-                >
-                  {(d.diasRestantes ?? 0) < 0
-                    ? `vencido há ${Math.abs(d.diasRestantes!)} dias`
-                    : `vence em ${d.diasRestantes} dias`}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {a.pneus.length > 0 && (
-        <Card className="p-4">
-          <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <CircleDot className="h-4 w-4" /> Pneu no limite
-          </p>
-          <ul className="space-y-2 text-sm">
-            {a.pneus.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-2">
-                <span>
-                  <span className="font-medium">{p.veiculo?.placa ?? "estoque"}</span> · fogo{" "}
-                  {p.numeroFogo}
-                  {p.posicao && ` · ${p.posicao}`}
-                </span>
-                <Badge
-                  className={`border-transparent ${
-                    p.situacao === "CRITICO"
-                      ? "bg-red-100 text-red-700"
-                      : "bg-amber-100 text-amber-800"
-                  }`}
-                >
-                  {p.sulcoMm}mm
-                  {p.situacao === "CRITICO" && " · abaixo do legal"}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {a.multas.length > 0 && (
-        <Card className="p-4">
-          <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <ShieldAlert className="h-4 w-4" /> Multas em aberto
-          </p>
-          <ul className="space-y-2 text-sm">
-            {a.multas.map((m) => (
-              <li key={m.id} className="flex flex-wrap items-baseline justify-between gap-2">
-                <span>
-                  <span className="font-medium">{m.veiculo?.placa ?? "—"}</span> · {m.infracao}
-                  {m.motorista && (
-                    <span className="text-muted-foreground"> · {m.motorista.nome}</span>
-                  )}
-                </span>
-                {/* Perder o prazo de indicação faz a multa virar do PROPRIETÁRIO,
-                    com pontos no CNPJ. É a informação mais acionável aqui. */}
-                {m.diasParaIndicar != null && m.status === "RECEBIDA" && (
-                  <Badge
-                    className={`border-transparent ${
-                      m.diasParaIndicar < 0
-                        ? "bg-red-100 text-red-700"
-                        : m.diasParaIndicar <= 7
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    {m.diasParaIndicar < 0
-                      ? "prazo de indicação perdido"
-                      : `indicar condutor em ${m.diasParaIndicar} dias`}
-                  </Badge>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-    </div>
-  );
-}
-
-type Aviso = {
-  id: string;
-  descricao: string;
-  avisadoEm: string;
-  status: "ABERTO" | "VIROU_MANUTENCAO" | "DESCARTADO";
-  fotos: number;
-  podeRodar: "SIM" | "COM_CUIDADO" | "NAO" | null;
-  lat: number | null;
-  lng: number | null;
-  motivoDescarte: string | null;
-  decididoEm: string | null;
-  manutencaoId: string | null;
-  veiculo: Veiculo | null;
-  motorista: { id: string; nome: string };
-  decididoPor: { id: string; nome: string } | null;
-};
-
-/** Foto do aviso: vem da API com o token (o bucket não é público). */
-function FotoAviso({ id, indice }: { id: string; indice: number }) {
-  const token = useAuthToken();
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
-  const base = `${apiUrl}/admin/manutencao/problemas/${id}/fotos/${indice}`;
-  const q = useQuery({
-    queryKey: ["problema-foto", id, indice],
-    enabled: Boolean(token),
-    staleTime: Infinity,
-    retry: false,
-    queryFn: async () => {
-      const res = await fetch(`${base}?mini=1`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return URL.createObjectURL(await res.blob());
-    },
-  });
-
-  async function abrirGrande() {
-    if (!token) return;
-    const res = await fetch(base, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) return;
-    window.open(URL.createObjectURL(await res.blob()), "_blank", "noopener");
-  }
-
-  if (!q.data) {
-    return <div className="h-20 w-20 animate-pulse rounded-md border bg-muted" />;
-  }
-  return (
-    <button
-      type="button"
-      onClick={() => void abrirGrande()}
-      className="h-20 w-20 overflow-hidden rounded-md border"
-      title="Ver a foto inteira"
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={q.data} alt={`Foto ${indice + 1} do aviso`} className="h-full w-full object-cover" />
-    </button>
-  );
-}
-
-/**
- * AVISOS DO MOTORISTA: o que ele mandou pelo app ("Avisar problema no
- * caminhão"). O escritório decide: vira manutenção aberta, ou não vira — com o
- * motivo escrito, pra ninguém reabrir no escuro.
- */
-function ListaAvisos() {
-  const token = useAuthToken();
-  const queryClient = useQueryClient();
-  const [filtro, setFiltro] = React.useState<Aviso["status"]>("ABERTO");
-
-  const lista = useQuery({
-    queryKey: ["problemas-veiculo", filtro],
-    enabled: Boolean(token),
-    queryFn: () =>
-      fetchApi<Aviso[]>(`/admin/manutencao/problemas?status=${filtro}`, { token: token! }),
-  });
-
-  async function atualizar() {
-    await queryClient.invalidateQueries({ queryKey: ["problemas-veiculo"] });
-    await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
-    await queryClient.invalidateQueries({ queryKey: ["manutencoes"] });
-  }
-
-  const itens = lista.data ?? [];
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        O que os motoristas mandaram pelo app, com foto. Cada aviso vira uma manutenção aberta
-        ou fica registrado com o motivo de não virar.
-      </p>
-      <div className="max-w-xs">
-        <Select
-          aria-label="Quais avisos"
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value as Aviso["status"])}
-        >
-          <option value="ABERTO">Esperando decisão</option>
-          <option value="VIROU_MANUTENCAO">Viraram manutenção</option>
-          <option value="DESCARTADO">Não viraram manutenção</option>
-        </Select>
-      </div>
-
-      {lista.isLoading && <LoadingCard />}
-      {itens.length === 0 && !lista.isLoading && (
-        <Card className="p-8 text-center text-sm text-muted-foreground">
-          {filtro === "ABERTO"
-            ? "Nenhum aviso esperando. Quando um motorista avisar um problema pelo app, aparece aqui."
-            : "Nada por aqui."}
-        </Card>
-      )}
-      {itens.map((a) => (
-        <CardAviso key={a.id} a={a} onMudou={() => void atualizar()} />
-      ))}
-    </div>
-  );
-}
-
-function SeloPodeRodar({ v }: { v: "SIM" | "COM_CUIDADO" | "NAO" }) {
-  const cls =
-    v === "NAO"
-      ? "bg-red-100 text-red-700"
-      : v === "COM_CUIDADO"
-        ? "bg-amber-100 text-amber-800"
-        : "bg-slate-100 text-slate-700";
-  return <Badge className={`border-transparent ${cls}`}>{PODE_RODAR_LABEL[v]}</Badge>;
-}
-
-function CardAviso({ a, onMudou }: { a: Aviso; onMudou: () => void }) {
-  const token = useAuthToken();
-  const [modo, setModo] = React.useState<"nada" | "abrir" | "descartar">("nada");
-  const [veiculoId, setVeiculoId] = React.useState<string | undefined>(a.veiculo?.id);
-  const [tipo, setTipo] = React.useState<TipoManutencaoTipo>("CORRETIVA");
-  const [motivo, setMotivo] = React.useState("");
-  const [erro, setErro] = React.useState<string | null>(null);
-  const [enviando, setEnviando] = React.useState(false);
-
-  async function abrir() {
-    if (!token) return;
-    if (!veiculoId) return setErro("Escolha o caminhão.");
-    setErro(null);
-    setEnviando(true);
-    try {
-      await fetchApi(`/admin/manutencao/problemas/${a.id}/abrir-manutencao`, {
-        token,
-        method: "POST",
-        body: JSON.stringify({ veiculoId, tipo }),
-      });
-      onMudou();
-    } catch (e) {
-      setErro((e as Error).message);
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  async function descartar() {
-    if (!token) return;
-    if (motivo.trim().length < 3) return setErro("Diga por que não vira manutenção.");
-    setErro(null);
-    setEnviando(true);
-    try {
-      await fetchApi(`/admin/manutencao/problemas/${a.id}/descartar`, {
-        token,
-        method: "POST",
-        body: JSON.stringify({ motivo }),
-      });
-      onMudou();
-    } catch (e) {
-      setErro((e as Error).message);
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  return (
-    <Card className="space-y-3 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-medium">
-            {a.veiculo?.placa ?? "Caminhão não informado"} · {a.motorista.nome}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            avisou em {new Date(a.avisadoEm).toLocaleString("pt-BR")}
-          </p>
-        </div>
-        {a.status === "ABERTO" && a.podeRodar && <SeloPodeRodar v={a.podeRodar} />}
-        {a.status === "VIROU_MANUTENCAO" && (
-          <Badge className="border-transparent bg-emerald-100 text-emerald-700">Virou manutenção</Badge>
-        )}
-        {a.status === "DESCARTADO" && (
-          <Badge className="border-transparent bg-slate-100 text-slate-700">Não virou manutenção</Badge>
-        )}
-      </div>
-      <p className="whitespace-pre-wrap text-sm">{a.descricao}</p>
-      {a.lat != null && a.lng != null && (
-        <a
-          href={`https://www.google.com/maps?q=${a.lat},${a.lng}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-block text-sm font-medium text-blue-700 underline-offset-2 hover:underline"
-        >
-          Ver no mapa onde o caminhão parou →
-        </a>
-      )}
-      {a.fotos > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {Array.from({ length: a.fotos }, (_, i) => (
-            <FotoAviso key={i} id={a.id} indice={i} />
-          ))}
-        </div>
-      )}
-      {a.status !== "ABERTO" && a.decididoPor && (
-        <p className="text-xs text-muted-foreground">
-          Decidido por {a.decididoPor.nome}
-          {a.decididoEm && ` em ${new Date(a.decididoEm).toLocaleDateString("pt-BR")}`}
-          {a.motivoDescarte && ` · motivo: ${a.motivoDescarte}`}
-        </p>
-      )}
-
-      {a.status === "ABERTO" && modo === "nada" && (
-        <div className="flex flex-wrap gap-2 border-t pt-3">
-          <Permitido chave="manutencao.criar">
-            <Button size="sm" variant="success" onClick={() => setModo("abrir")}>
-              Abrir manutenção
-            </Button>
-          </Permitido>
-          <Permitido chave="manutencao.editar">
-            <Button size="sm" variant="outline" onClick={() => setModo("descartar")}>
-              Não vira manutenção
-            </Button>
-          </Permitido>
-        </div>
-      )}
-
-      {modo === "abrir" && (
-        <div className="space-y-3 border-t pt-3">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1">
-              <Label>Caminhão</Label>
-              <VeiculoCombobox
-                triggerClassName="sm:w-full"
-                value={veiculoId}
-                initialOption={a.veiculo ? { value: a.veiculo.id, label: a.veiculo.placa } : undefined}
-                onChange={setVeiculoId}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor={`aviso-tipo-${a.id}`}>Tipo</Label>
-              <Select
-                id={`aviso-tipo-${a.id}`}
-                value={tipo}
-                onChange={(e) => setTipo(e.target.value as TipoManutencaoTipo)}
-              >
-                {TIPOS_MANUTENCAO.map((t) => (
-                  <option key={t} value={t}>
-                    {TIPO_MANUTENCAO_LABEL[t]}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
-          {erro && <p className="text-sm text-destructive">{erro}</p>}
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={() => setModo("nada")} disabled={enviando}>
-              Voltar
-            </Button>
-            <Button size="sm" variant="success" onClick={() => void abrir()} disabled={enviando}>
-              Abrir manutenção
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {modo === "descartar" && (
-        <div className="space-y-3 border-t pt-3">
-          <div className="space-y-1">
-            <Label htmlFor={`aviso-motivo-${a.id}`}>Por que não vira manutenção</Label>
-            <Input
-              id={`aviso-motivo-${a.id}`}
-              placeholder="ex: Já resolvido na última revisão"
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-            />
-          </div>
-          {erro && <p className="text-sm text-destructive">{erro}</p>}
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={() => setModo("nada")} disabled={enviando}>
-              Voltar
-            </Button>
-            <Button size="sm" variant="warning" onClick={() => void descartar()} disabled={enviando}>
-              Registrar que não vira
-            </Button>
-          </div>
-        </div>
-      )}
-    </Card>
   );
 }
 
@@ -841,49 +248,8 @@ function ListaManutencoes({
     await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
   }
 
-  // "Concluir" abre um formulário curto: sem valor não há conta a lançar, e
-  // o odômetro da saída é o que zera o plano por km.
-  const [concluindo, setConcluindo] = React.useState<string | null>(null);
-  const [fim, setFim] = React.useState({ odometro: "", valorPecas: "", valorMaoObra: "", lancarConta: true });
-  const [erroFim, setErroFim] = React.useState<string | null>(null);
-  function abrirConclusao(m: Manutencao) {
-    setErroFim(null);
-    setFim({
-      odometro: m.odometro != null ? String(m.odometro) : "",
-      valorPecas: m.valorPecas ? String(m.valorPecas).replace(".", ",") : "",
-      valorMaoObra: m.valorMaoObra ? String(m.valorMaoObra).replace(".", ",") : "",
-      lancarConta: true,
-    });
-    setConcluindo(m.id);
-  }
-  async function concluir(id: string) {
-    if (!token) return;
-    const pecas = fim.valorPecas ? Number(fim.valorPecas.replace(/\./g, "").replace(",", ".")) : null;
-    const mao = fim.valorMaoObra ? Number(fim.valorMaoObra.replace(/\./g, "").replace(",", ".")) : null;
-    if (fim.lancarConta && !(pecas || mao)) {
-      return setErroFim("Informe o valor pra lançar em Contas a pagar, ou desmarque a opção.");
-    }
-    setErroFim(null);
-    try {
-      await fetchApi(`/admin/manutencao/${id}`, {
-        token,
-        method: "PATCH",
-        body: JSON.stringify({
-          status: "CONCLUIDA",
-          odometro: fim.odometro ? Number(fim.odometro.replace(/\D/g, "")) : null,
-          valorPecas: pecas,
-          valorMaoObra: mao,
-          gerarContaPagar: fim.lancarConta,
-        }),
-      });
-      setConcluindo(null);
-      await queryClient.invalidateQueries({ queryKey: ["manutencoes"] });
-      await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
-      await queryClient.invalidateQueries({ queryKey: ["planos-manutencao"] });
-    } catch (e) {
-      setErroFim((e as Error).message);
-    }
-  }
+  // "Concluir" abre o formulário de conclusão em cascata (ConcluirConserto).
+  const [concluindo, setConcluindo] = React.useState<Manutencao | null>(null);
 
   return (
     <div className="space-y-3">
@@ -1033,13 +399,23 @@ function ListaManutencoes({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="font-medium">
-                {m.veiculo.placa} · {m.descricao}
+                <Link href={`/veiculos/${m.veiculo.id}` as Route} className="hover:underline">
+                  {m.veiculo.placa}
+                </Link>{" "}
+                · {m.descricao}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {TIPO_MANUTENCAO_LABEL[m.tipo]}
                 {m.odometro && ` · ${m.odometro.toLocaleString("pt-BR")} km`}
                 {m.fornecedor && ` · ${m.fornecedor.nome}`}
               </p>
+              {(m.anexos?.length ?? 0) > 0 && (
+                <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                  {m.anexos!.map((_, k) => (
+                    <AnexoLink key={k} manutencaoId={m.id} indice={k} />
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="font-medium tabular-nums">{brl(m.valorTotal)}</span>
@@ -1064,91 +440,37 @@ function ListaManutencoes({
                     Entrou na oficina
                   </Button>
                 )}
-                <Button size="sm" variant="success" onClick={() => abrirConclusao(m)}>
+                <Button size="sm" variant="success" onClick={() => setConcluindo(m)}>
                   Concluir
                 </Button>
               </div>
-              {concluindo === m.id && (
-                <div className="mt-3 space-y-3 rounded-md border p-3">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="space-y-1">
-                      <Label htmlFor={`fim-odo-${m.id}`}>Odômetro na saída</Label>
-                      <Input
-                        id={`fim-odo-${m.id}`}
-                        inputMode="numeric"
-                        value={fim.odometro}
-                        onChange={(e) => setFim({ ...fim, odometro: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor={`fim-pecas-${m.id}`}>Peças (R$)</Label>
-                      <Input
-                        id={`fim-pecas-${m.id}`}
-                        inputMode="decimal"
-                        value={fim.valorPecas}
-                        onChange={(e) => setFim({ ...fim, valorPecas: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor={`fim-mao-${m.id}`}>Mão de obra (R$)</Label>
-                      <Input
-                        id={`fim-mao-${m.id}`}
-                        inputMode="decimal"
-                        value={fim.valorMaoObra}
-                        onChange={(e) => setFim({ ...fim, valorMaoObra: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={fim.lancarConta}
-                      onChange={(e) => setFim({ ...fim, lancarConta: e.target.checked })}
-                    />
-                    Lançar o valor em Contas a pagar
-                  </label>
-                  {erroFim && <p className="text-sm text-destructive">{erroFim}</p>}
-                  <div className="flex justify-end gap-2">
-                    <Button size="sm" variant="outline" onClick={() => setConcluindo(null)}>
-                      Voltar
-                    </Button>
-                    <Button size="sm" variant="success" onClick={() => void concluir(m.id)}>
-                      Concluir manutenção
-                    </Button>
-                  </div>
-                </div>
-              )}
             </Permitido>
           )}
         </Card>
       ))}
+      <ConcluirConserto manutencao={concluindo} aberto={concluindo !== null} onFechar={() => setConcluindo(null)} />
     </div>
   );
 }
 
-/** "20.000" → 20000; vazio → null. */
-function inteiro(v: string): number | null {
-  const d = v.replace(/\D/g, "");
-  return d ? Number(d) : null;
+/** Abre o anexo da OS numa aba nova (vem da API com o token: o bucket não é público). */
+function AnexoLink({ manutencaoId, indice }: { manutencaoId: string; indice: number }) {
+  const token = useAuthToken();
+  async function abrir() {
+    if (!token) return;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+    const res = await fetch(`${apiUrl}/admin/manutencao/${manutencaoId}/anexos/${indice}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return;
+    window.open(URL.createObjectURL(await res.blob()), "_blank", "noopener");
+  }
+  return (
+    <button type="button" className="text-blue-700 hover:underline" onClick={() => void abrir()}>
+      Anexo {indice + 1}
+    </button>
+  );
 }
-
-/** "1.234,56" → 1234.56; vazio → null. */
-function decimal(v: string): number | null {
-  const t = v.trim();
-  if (!t) return null;
-  const n = Number(t.replace(/\./g, "").replace(",", "."));
-  return Number.isFinite(n) ? n : null;
-}
-
-type Plano = {
-  id: string;
-  descricao: string;
-  intervaloKm: number | null;
-  intervaloDias: number | null;
-  ultimoOdometro: number | null;
-  ultimaEm: string | null;
-  veiculo: Veiculo;
-};
 
 /**
  * PLANOS DE MANUTENÇÃO: "troca de óleo a cada 20.000 km ou 6 meses". São eles
@@ -1172,6 +494,8 @@ function ListaPlanos() {
     ultimaEm: "",
   };
   const [form, setForm] = React.useState(vazio);
+  // Plano novo pode ir pra vários caminhões de uma vez (40 caminhões = 1 formulário).
+  const [veiculosLote, setVeiculosLote] = React.useState<string[]>([]);
 
   const lista = useQuery({
     queryKey: ["planos-manutencao"],
@@ -1186,7 +510,41 @@ function ListaPlanos() {
 
   async function salvar() {
     if (!token) return;
-    if (!form.veiculoId) return setErro("Escolha o caminhão.");
+    // Novo com mais de um caminhão: vai pelo lote (a última vez de cada um se
+    // informa depois, editando — cada caminhão tem a sua).
+    if (!editando && veiculosLote.length > 1) {
+      if (form.descricao.trim().length < 3) return setErro("Diga qual é a manutenção.");
+      const km = inteiro(form.intervaloKm);
+      const dias = inteiro(form.intervaloDias);
+      if (km == null && dias == null) return setErro("Diga a cada quantos km ou a cada quantos dias.");
+      setErro(null);
+      try {
+        const r = await fetchApi<{ criados: number; jaTinham: number }>("/admin/manutencao/planos/lote", {
+          token,
+          method: "POST",
+          body: JSON.stringify({
+            veiculoIds: veiculosLote,
+            descricao: form.descricao,
+            intervaloKm: km,
+            intervaloDias: dias,
+          }),
+        });
+        setErro(null);
+        setEditando(null);
+        setVeiculosLote([]);
+        setForm(vazio);
+        await atualizar();
+        toast.success(
+          `${r.criados} plano(s) criado(s)${r.jaTinham ? `; ${r.jaTinham} caminhão(ões) já tinham esse plano` : ""}.`,
+          { description: "Informe a última vez de cada um editando o plano." },
+        );
+      } catch (e) {
+        setErro((e as Error).message);
+      }
+      return;
+    }
+    const veiculoId = editando ? form.veiculoId : (veiculosLote[0] ?? form.veiculoId);
+    if (!veiculoId) return setErro("Escolha o caminhão.");
     if (form.descricao.trim().length < 3) return setErro("Diga qual é a manutenção.");
     const km = inteiro(form.intervaloKm);
     const dias = inteiro(form.intervaloDias);
@@ -1197,7 +555,7 @@ function ListaPlanos() {
         token,
         method: editando ? "PATCH" : "POST",
         body: JSON.stringify({
-          ...(editando ? {} : { veiculoId: form.veiculoId }),
+          ...(editando ? {} : { veiculoId }),
           descricao: form.descricao,
           intervaloKm: km,
           intervaloDias: dias,
@@ -1243,6 +601,7 @@ function ListaPlanos() {
           onClick={() => {
             setErro(null);
             setForm(vazio);
+            setVeiculosLote([]);
             setEditando(editando === "" ? null : "");
           }}
         >
@@ -1254,17 +613,13 @@ function ListaPlanos() {
         <Card className="space-y-3 p-4">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
-              <Label>Caminhão</Label>
+              <Label>{editando ? "Caminhão" : "Caminhões (um ou vários)"}</Label>
               {editando ? (
                 <p className="flex h-9 items-center text-sm font-medium">
                   {itens.find((p) => p.id === editando)?.veiculo.placa}
                 </p>
               ) : (
-                <VeiculoCombobox
-                  triggerClassName="sm:w-full"
-                  value={form.veiculoId}
-                  onChange={(v) => setForm({ ...form, veiculoId: v })}
-                />
+                <VeiculoComboboxMulti value={veiculosLote} onChange={setVeiculosLote} />
               )}
             </div>
             <div className="space-y-1">
@@ -1304,6 +659,7 @@ function ListaPlanos() {
             anotado nos abastecimentos deste caminhão — sem odômetro anotado, só o aviso por dias
             funciona.
           </p>
+          {(editando || veiculosLote.length <= 1) && (
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="plano-ultodo">Última vez feita — odômetro</Label>
@@ -1324,6 +680,13 @@ function ListaPlanos() {
               />
             </div>
           </div>
+          )}
+          {!editando && veiculosLote.length > 1 && (
+            <p className="text-xs text-muted-foreground">
+              Vai criar o plano pra {veiculosLote.length} caminhões. A última vez de cada um você
+              informa depois, editando — até lá o plano fica sem referência (não aparece como vencido).
+            </p>
+          )}
           {erro && <p className="text-sm text-destructive">{erro}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditando(null)}>

@@ -29,7 +29,7 @@ export const MODULOS_CHAVES = [
   "fechamento",
   "comercial",
   "financeiro",
-  "frota",
+  "manutencao",
   "torre",
   "fiscal",
   "comunicacao",
@@ -107,6 +107,10 @@ export const MODULOS: ModuloDef[] = [
       "minha-empresa",
       "mapa",
       "importacao",
+      // Vieram de "Frota" em 24/09/2026: rastreamento e praças de pedágio são
+      // do dia a dia de todo cliente, não de quem compra manutenção.
+      "config-tracking",
+      "pedagios",
     ],
   },
   {
@@ -136,10 +140,13 @@ export const MODULOS: ModuloDef[] = [
     recursos: ["acertos", "financeiro", "fornecedores", "custos-veiculo"],
   },
   {
-    chave: "frota",
-    nome: "Frota",
-    pitch: "Consumo por caminhão, documentos com vencimento e rastreamento.",
-    recursos: ["config-tracking", "pedagios", "manutencao", "pneus", "multas", "documentos-veiculo"],
+    // Era "Frota" até 24/09/2026 (junto com rastreamento e pedágio, que foram
+    // pro núcleo). Separado pra poder ser vendido: preço só depois do piloto.
+    chave: "manutencao",
+    nome: "Manutenção e vencimentos",
+    pitch:
+      "Revisão por km ou data, o aviso do motorista virando conserto, documentos e multas com prazo, e quanto custa cada caminhão.",
+    recursos: ["manutencao", "pneus", "multas", "documentos-veiculo"],
   },
   {
     chave: "torre",

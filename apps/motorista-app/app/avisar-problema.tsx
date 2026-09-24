@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { X } from "lucide-react-native";
-import { Image, KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Image, KeyboardAvoidingView, Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { RequerCapacidade } from "@/components/requer-capacidade";
@@ -106,16 +106,22 @@ function Conteudo() {
         fotos,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Parado na estrada: o que ele precisa agora é falar com alguém.
+      const telefone = podeRodar === "NAO" ? me.data?.telefoneEscritorio : null;
       const escolha = await showAlert({
         title: "Aviso guardado",
         message:
           "Vai pro escritório assim que tiver sinal. Quando decidirem, você recebe uma notificação.",
         buttons: [
+          ...(telefone ? [{ label: "Ligar pro escritório", value: "ligar" }] : []),
           { label: "Ver meus avisos", value: "meus" },
-          { label: "Voltar pro início", value: "inicio" },
+          { label: "Voltar pro início", value: "inicio", style: "outline" as const },
         ],
       });
-      if (escolha === "meus") router.replace("/meus-avisos");
+      if (escolha === "ligar" && telefone) {
+        await Linking.openURL(`tel:${telefone.replace(/[^\d+]/g, "")}`).catch(() => {});
+        router.back();
+      } else if (escolha === "meus") router.replace("/meus-avisos");
       else router.back();
     } catch {
       await showAlert({

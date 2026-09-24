@@ -111,11 +111,9 @@ describe("matriz de papéis agrupada pelo menu", () => {
     });
     const linha = (recurso: string) =>
       secoes.flatMap((sec) => sec.linhas.map((l) => ({ ...l, secao: sec.titulo }))).find((l) => l.recurso === recurso);
-    expect(linha("pneus")).toMatchObject({ rotulo: "Manutenção e vencimentos do caminhão › Pneus", aba: true });
-    expect(linha("multas")?.rotulo).toBe("Manutenção e vencimentos do caminhão › Multas");
-    expect(linha("documentos-veiculo")?.rotulo).toBe(
-      "Manutenção e vencimentos do caminhão › Documentos do caminhão",
-    );
+    expect(linha("pneus")).toMatchObject({ rotulo: "Manutenção › Pneus", aba: true });
+    expect(linha("multas")?.rotulo).toBe("Manutenção › Multas");
+    expect(linha("documentos-veiculo")?.rotulo).toBe("Manutenção › Documentos do caminhão");
     expect(linha("clientes")?.rotulo).toBe("Clientes › Obras");
     expect(linha("coletas")?.rotulo).toBe("Motoristas › Pedir documentos por link");
     expect(linha("espelho-ponto")?.rotulo).toBe("Quem bate ponto › Espelho de ponto");

@@ -52,6 +52,8 @@ export const AtualizarMinhaEmpresaInput = z.object({
     .nullish(),
   uf: z.string().trim().toUpperCase().length(2).nullish().or(z.literal("")),
   telefoneFiscal: texto(20),
+  /** O telefone que o motorista vê no app pra ligar pro escritório. */
+  telefoneParaMotoristas: texto(20),
   /// Registro na ANTT. Sem ele não há CT-e, MDF-e nem CIOT.
   rntrc: texto(20),
   /// ETC (empresa), CTC (cooperativa) ou TAC (autônomo).

@@ -20,6 +20,8 @@ import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
 import { paraCadaConta } from "../../common/conta/para-cada-conta";
 import { comLockDeCron } from "../../common/cron-exclusivo";
+import { modulosDaConta } from "../../common/conta/teto-da-conta";
+import { FrotaManutencaoService } from "../frota-manutencao/frota-manutencao.service";
 
 const DIA_MS = 86_400_000;
 
@@ -75,7 +77,31 @@ export class ResumoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly envio: EnvioWhatsappService,
+    private readonly manutencao: FrotaManutencaoService,
   ) {}
+
+  /**
+   * O que a manutenção tem pra dizer no resumo: caminhão parado, revisão
+   * vencida, documento vencendo em até 15 dias. Vencimento pelo WhatsApp é o
+   * que nenhum concorrente confirmado faz (squad de 24/09/2026) — e o resumo
+   * já sai todo dia pra quem pediu. Só pra quem contratou Manutenção.
+   */
+  private async pendenciasDeManutencao(): Promise<{ parados: number; revisoes: number; documentos: number }> {
+    const zero = { parados: 0, revisoes: 0, documentos: 0 };
+    try {
+      const modulos = await modulosDaConta(this.prisma, contaIdAtual());
+      if (!modulos.has("manutencao")) return zero;
+      const a = await this.manutencao.alertas(null);
+      return {
+        parados: (a.avisosMotorista ?? []).filter((v) => v.podeRodar === "NAO").length,
+        revisoes: a.manutencoes.filter((m) => m.situacao === "VENCIDO").length,
+        documentos: a.documentos.filter((d) => (d.diasRestantes ?? 99) <= 15).length,
+      };
+    } catch (e) {
+      this.log.warn(`Manutenção fora do resumo: ${e instanceof Error ? e.message : e}`);
+      return zero;
+    }
+  }
 
   /** Todo dia às 20:00 de Brasília. */
   @Cron("0 0 20 * * *", { name: "resumo-diario", timeZone: "America/Sao_Paulo" })
@@ -586,7 +612,23 @@ export class ResumoService {
     // A manchete é sempre a mesma, independente dos blocos escolhidos: é o que
     // faz o aviso ser legível pra quem só marcou "Custos" e pra quem marcou
     // tudo. Nenhum parâmetro pode ficar vazio — a Meta recusa.
+    const man = await this.pendenciasDeManutencao();
+    if (man.parados + man.revisoes + man.documentos > 0) {
+      blocos.push(
+        [
+          "🔧 *Manutenção*",
+          man.parados > 0 ? `• Caminhão parado: ${fmt(man.parados)}` : null,
+          man.revisoes > 0 ? `• Revisão vencida: ${fmt(man.revisoes)}` : null,
+          man.documentos > 0 ? `• Documento vencendo em até 15 dias: ${fmt(man.documentos)}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+    }
     const pendencias = [
+      man.parados > 0 ? `${fmt(man.parados)} caminhão(ões) parado(s)` : null,
+      man.revisoes > 0 ? `${fmt(man.revisoes)} revisão(ões) vencida(s)` : null,
+      man.documentos > 0 ? `${fmt(man.documentos)} documento(s) vencendo` : null,
       motPend > 0 ? `${fmt(motPend)} motorista(s) pra aprovar` : null,
       fechAguardando > 0 ? `${fmt(fechAguardando)} fechamento(s) aguardando` : null,
       pendentesConf > 0 ? `${fmt(pendentesConf)} viagem(ns) pra conferir` : null,

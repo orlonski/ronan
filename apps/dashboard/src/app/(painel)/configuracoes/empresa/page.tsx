@@ -191,6 +191,7 @@ function Conteudo() {
       </div>
 
       <ComprovantesCard />
+      <ContatoMotoristaCard />
       <IdentidadeFiscalCard />
     </div>
   );
@@ -280,6 +281,7 @@ type Fiscal = {
   codigoMunicipioIbge: string | null;
   uf: string | null;
   telefoneFiscal: string | null;
+  telefoneParaMotoristas?: string | null;
   rntrc: string | null;
   tipoTransportador: string | null;
 };
@@ -315,6 +317,69 @@ const CAMPOS: { chave: keyof Fiscal; rotulo: string; dica?: string; largura?: st
  * Moram nesta tela, e não na do CT-e, porque são da EMPRESA — o CT-e é só o
  * primeiro a precisar deles; o MDF-e e o que vier depois usam os mesmos.
  */
+/**
+ * O telefone que o motorista vê no app ("Ligar pro escritório"), pensado pro
+ * caminhão parado na estrada. Separado do telefone fiscal, que vai na nota —
+ * o número que atende o motorista quase nunca é o do contador.
+ */
+function ContatoMotoristaCard() {
+  const token = useAuthToken();
+  const queryClient = useQueryClient();
+  const { temPermissao } = usePermissoes();
+  const [valor, setValor] = useState<string | null>(null);
+  const dados = useQuery({
+    queryKey: [PATH_MINHA_EMPRESA],
+    enabled: !!token,
+    queryFn: () => fetchApi<Fiscal>(PATH_MINHA_EMPRESA, { token }),
+  });
+  const salvar = useMutation({
+    mutationFn: (telefoneParaMotoristas: string) =>
+      fetchApi(PATH_MINHA_EMPRESA, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ telefoneParaMotoristas }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: [PATH_MINHA_EMPRESA] });
+      setValor(null);
+      toast.success("Telefone salvo. O app mostra na próxima vez que o motorista abrir.");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não consegui salvar."),
+  });
+  const atual = valor ?? dados.data?.telefoneParaMotoristas ?? "";
+  return (
+    <Card className="space-y-3 p-5">
+      <div>
+        <p className="text-sm font-medium">Telefone pro motorista ligar</p>
+        <p className="max-w-prose text-xs text-muted-foreground">
+          Aparece no app como "Ligar pro escritório" quando o motorista avisa que o caminhão
+          parou. Sem número aqui, o botão não aparece.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <Input
+          aria-label="Telefone pro motorista ligar"
+          className="max-w-xs"
+          inputMode="tel"
+          placeholder="(41) 99999-0000"
+          value={atual}
+          onChange={(e) => setValor(e.target.value)}
+          disabled={!temPermissao("minha-empresa.editar")}
+        />
+        {temPermissao("minha-empresa.editar") && (
+          <Button
+            size="sm"
+            onClick={() => salvar.mutate(atual)}
+            disabled={salvar.isPending || valor === null}
+          >
+            Salvar telefone
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function IdentidadeFiscalCard() {
   const token = useAuthToken();
   const queryClient = useQueryClient();

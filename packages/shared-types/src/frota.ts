@@ -213,5 +213,39 @@ export const AbrirManutencaoDoProblemaInput = z.object({
   veiculoId: z.string().uuid().optional(),
   tipo: TipoManutencaoSchema.optional(),
   descricao: z.string().trim().min(3).max(300).optional(),
+  /** A oficina que vai fazer. */
+  fornecedorId: z.string().uuid().nullish(),
+  /** O plano preventivo que este conserto cumpre (zera na conclusão). */
+  planoId: z.string().uuid().nullish(),
+  previstaEm: DATA.nullish(),
 });
 export type AbrirManutencaoDoProblemaInput = z.infer<typeof AbrirManutencaoDoProblemaInput>;
+
+/** O mesmo plano pra vários caminhões de uma vez (40 caminhões = 1 formulário). */
+export const CriarPlanosEmLoteInput = z
+  .object({
+    veiculoIds: z.array(z.string().uuid()).min(1, "Escolha pelo menos um caminhão.").max(500),
+    descricao: z.string().trim().min(3).max(120),
+    intervaloKm: z.number().int().positive().max(999999).nullish(),
+    intervaloDias: z.number().int().positive().max(3650).nullish(),
+  })
+  .refine((d) => d.intervaloKm != null || d.intervaloDias != null, {
+    message: "Diga a cada quantos km ou a cada quantos dias.",
+    path: ["intervaloKm"],
+  });
+export type CriarPlanosEmLoteInput = z.infer<typeof CriarPlanosEmLoteInput>;
+
+/** O motorista conferindo o conserto do aviso dele. */
+export const ConfirmarConsertoInput = z.object({
+  ficouBom: z.boolean(),
+  comentario: z.string().trim().max(500).nullish(),
+});
+export type ConfirmarConsertoInput = z.infer<typeof ConfirmarConsertoInput>;
+
+/** Odômetro conferido no painel do caminhão: vira a âncora do km estimado. */
+export const ConferirOdometroInput = z.object({
+  odometro: z.number().int().positive().max(9_999_999),
+  lidoEm: DATA,
+  observacao: z.string().trim().max(300).nullish(),
+});
+export type ConferirOdometroInput = z.infer<typeof ConferirOdometroInput>;

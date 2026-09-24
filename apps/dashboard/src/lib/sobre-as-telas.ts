@@ -415,7 +415,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
     naoEAqui: {
       procurando: "quando vence o licenciamento ou a próxima revisão",
-      vaEm: "Manutenção e vencimentos do caminhão",
+      vaEm: "Manutenção",
       href: "/frota",
     },
   },
@@ -425,10 +425,11 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "O que some do radar e volta como caminhão parado: revisão vencida, documento " +
       "no fim do prazo, pneu careca e multa esperando a indicação do condutor.",
     faz: [
-      "Ver de uma vez só o que já precisa de você, com a placa e quanto falta",
-      "Registrar manutenção, o que foi feito e quanto custou em peças e mão de obra, e saber o que está na oficina agora",
-      "Ver os pneus por número de fogo e medida do sulco, e quais já passaram do limite",
-      "Ver as multas em aberto, o valor e quantos dias faltam pra indicar quem estava dirigindo",
+      "Ver numa caixa de entrada o que precisa de você: caminhão parado, aviso do motorista, revisão, documento e multa com prazo",
+      "Decidir o aviso do motorista ali mesmo: abrir o conserto (com oficina e data) ou dizer por que não precisa",
+      "Concluir o conserto num formulário só: a revisão recomeça a contar, a conta vai pra Contas a pagar e o motorista fica sabendo",
+      "Programar a mesma revisão pra vários caminhões de uma vez",
+      "Cadastrar pneus, multas e a validade dos documentos do caminhão",
     ],
     naoEAqui: {
       procurando: "a CNH e os documentos do motorista",

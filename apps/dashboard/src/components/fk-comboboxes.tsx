@@ -264,3 +264,42 @@ export function MotoristaComboboxMulti({
     />
   );
 }
+
+export function VeiculoComboboxMulti({
+  value,
+  onChange,
+  placeholder = "Escolha os caminhões…",
+}: {
+  value: string[];
+  onChange: (values: string[]) => void;
+  placeholder?: string;
+}) {
+  return (
+    <AsyncComboboxMulti<Veiculo>
+      value={value}
+      onChange={onChange}
+      path="/admin/veiculos"
+      mapOption={veiculoOption}
+      searchPlaceholder="Buscar por placa…"
+      emptyMessage="Nenhum veículo encontrado."
+      placeholder={placeholder}
+    />
+  );
+}
+
+type Fornecedor = { id: string; nome: string; tipo?: string | null };
+const fornecedorOption = (f: Fornecedor): ComboboxOption => ({ value: f.id, label: f.nome });
+
+/** Oficina, borracharia, autopeças — quem faz o conserto (Fornecedor). */
+export function FornecedorCombobox(props: SingleProps) {
+  return (
+    <AsyncCombobox<Fornecedor>
+      {...props}
+      path="/admin/fornecedores"
+      mapOption={fornecedorOption}
+      searchPlaceholder="Buscar oficina…"
+      emptyMessage="Nenhuma oficina cadastrada."
+      placeholder={props.placeholder ?? "Escolha a oficina"}
+    />
+  );
+}

@@ -183,7 +183,7 @@ export class MotoristaService {
         receberResumoDiario: true,
         // A torneira da plataforma pro OCR de ticket. Vem junto porque o app
         // decide mostrar (ou não) a leitura automática a partir do /m/me.
-        conta: { select: { iaLeituraTicket: true } },
+        conta: { select: { iaLeituraTicket: true, telefoneParaMotoristas: true } },
       },
     });
     const { veiculos, conta, ...rest } = m;
@@ -199,6 +199,8 @@ export class MotoristaService {
       // 403 que o `catch {}` do app engolia. Mandar o valor conserta o rollout
       // e liga a trava da empresa de uma vez, sem mexer em nenhum dos dois apps.
       podeUsarOcrTicket: rest.podeUsarOcrTicket && conta.iaLeituraTicket,
+      // "Ligar pro escritório" (caminhão parado): só aparece se a empresa preencheu.
+      telefoneEscritorio: conta.telefoneParaMotoristas ?? null,
       veiculos: veiculos.map((v) => v.veiculo),
     };
   }

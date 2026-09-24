@@ -444,27 +444,30 @@ model Conta {
   // conferido. Tudo opcional — quem não emite documento não é obrigado a
   // preencher, e quem for emitir é cobrado na hora de emitir.
   /// A razão social. O `nome` acima é fantasia, e é ele que aparece no painel.
-  razaoSocial         String?
-  inscricaoEstadual   String?
-  inscricaoMunicipal  String?
+  razaoSocial            String?
+  inscricaoEstadual      String?
+  inscricaoMunicipal     String?
   /// Regime tributário: 1 Simples, 2 Simples com excesso, 3 Normal.
-  crt                 String?
+  crt                    String?
   /// Endereço fiscal. Separado do endereço de operação de propósito: o emitente
   /// pode ter matriz num lugar e pátio em outro.
-  logradouro          String?
-  numero              String?
-  complemento         String?
-  bairro              String?
-  cep                 String?
-  municipio           String?
+  logradouro             String?
+  numero                 String?
+  complemento            String?
+  bairro                 String?
+  cep                    String?
+  municipio              String?
   /// Código IBGE de 7 dígitos. Obrigatório no CT-e e no MDF-e.
-  codigoMunicipioIbge String?
-  uf                  String?
-  telefoneFiscal      String?
+  codigoMunicipioIbge    String?
+  uf                     String?
+  telefoneFiscal         String?
+  /// O telefone que o motorista vê no app pra ligar pro escritório (ex.: com
+  /// o caminhão parado). Diferente do fiscal, que vai na nota.
+  telefoneParaMotoristas String?
   /// Registro na ANTT. Sem ele não há CT-e, MDF-e nem CIOT.
-  rntrc               String?
+  rntrc                  String?
   /// ETC (empresa), CTC (cooperativa) ou TAC (autônomo).
-  tipoTransportador   String?
+  tipoTransportador      String?
 
   // --- emissão de CT-e (modelo 57) ---
   // Nada aqui tem default "o que costuma ser": CFOP, CST e alíquota são decisão
@@ -540,6 +543,7 @@ model Conta {
   custosFixosVeiculo            CustoFixoVeiculo[]
   manutencoesVeiculo            ManutencaoVeiculo[]
   problemasVeiculo              ProblemaVeiculo[]
+  leiturasOdometro              LeituraOdometro[]
   planosManutencao              PlanoManutencao[]
   documentosVeiculo             DocumentoVeiculo[]
   pneus                         Pneu[]
@@ -726,6 +730,7 @@ model User {
   baixasDadas               BaixaTitulo[]         @relation("DeuBaixa")
   manutencoesCriadas        ManutencaoVeiculo[]   @relation("CriouManutencao")
   problemasVeiculoDecididos ProblemaVeiculo[]     @relation("DecidiuProblemaVeiculo")
+  odometrosConferidos       LeituraOdometro[]     @relation("ConferiuOdometro")
   multasCriadas             Multa[]               @relation("CriouMulta")
   alertasResolvidos         AlertaOperacional[]   @relation("ResolveuAlerta")
   documentosFiscais         DocumentoFiscal[]     @relation("EmitiuDocumentoFiscal")
@@ -2047,6 +2052,7 @@ model Veiculo {
 
   manutencoes      ManutencaoVeiculo[]
   problemas        ProblemaVeiculo[]
+  leiturasOdometro LeituraOdometro[]
   planosManutencao PlanoManutencao[]
   documentos       DocumentoVeiculo[]
   pneus            Pneu[]
@@ -3143,6 +3149,8 @@ model ManutencaoVeiculo {
   tituloPagar   TituloPagar?     @relation(fields: [tituloPagarId], references: [id], onDelete: SetNull)
   tituloPagarId String?          @unique
   observacao    String?
+  /// Nota da oficina, fotos do serviço: chaves no storage (servidas pela API).
+  anexos        String[]         @default([])
   criadoPor     User?            @relation("CriouManutencao", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId   String?
   criadoEm      DateTime         @default(now())
@@ -3161,6 +3169,28 @@ model ManutencaoVeiculo {
   @@index([contaId])
   @@index([planoId])
   @@map("manutencoes_veiculo")
+}
+
+/// Odômetro CONFERIDO por alguém no painel do caminhão.
+///
+/// É a correção do km estimado (`common/km-atual.ts`): a leitura anotada no
+/// abastecimento pode ter dígito errado, a conferida não é descartada nunca e
+/// vira a nova âncora da conta. Append-only: corrigir é conferir de novo.
+model LeituraOdometro {
+  contaId     String   @default("__SEM_CONTA__")
+  conta       Conta    @relation(fields: [contaId], references: [id])
+  id          String   @id @default(uuid())
+  veiculo     Veiculo  @relation(fields: [veiculoId], references: [id], onDelete: Cascade)
+  veiculoId   String
+  odometro    Int
+  lidoEm      DateTime @db.Date
+  observacao  String?
+  criadoPor   User?    @relation("ConferiuOdometro", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId String?
+  criadoEm    DateTime @default(now())
+
+  @@index([contaId, veiculoId])
+  @@map("leituras_odometro")
 }
 
 /// O que o motorista avisou do caminhão pelo app: foto e descrição.
@@ -3190,6 +3220,10 @@ model ProblemaVeiculo {
   decididoPor    User?                 @relation("DecidiuProblemaVeiculo", fields: [decididoPorId], references: [id], onDelete: SetNull)
   decididoPorId  String?
   decididoEm     DateTime?
+  /// O motorista conferiu o conserto: FICOU_BOM ou VOLTOU (o problema voltou
+  /// — vira aviso novo). Fecha o ciclo sem ninguém precisar ligar pra ele.
+  confirmacao    String?
+  confirmadoEm   DateTime?
   /// "Dá pra continuar rodando?" — é o que ordena a fila do escritório.
   /// Nulo = aviso de app antigo, que não perguntava.
   podeRodar      PodeRodarProblema?

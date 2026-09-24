@@ -255,7 +255,7 @@ const GRUPOS: Grupo[] = [
       { href: "/veiculos", label: "Veículos", icon: Truck, perm: "veiculos.ver" },
       {
         href: "/frota",
-        label: "Manutenção e vencimentos do caminhão",
+        label: "Manutenção",
         icon: Wrench,
         perm: "manutencao.ver",
         partes: [
