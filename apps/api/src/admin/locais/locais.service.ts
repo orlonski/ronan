@@ -32,6 +32,8 @@ const METROS_POR_GRAU_LAT = 111_320; // ~constante; longitude encolhe com cos(la
 
 /** Raio (m) pra tarja "provável duplicata" na LISTA (fixo; o mapa tem raio ajustável). */
 const RAIO_DUPLICATA_M = 150;
+/** Quanto tempo as duplicatas guardadas valem antes de recalcular por trás. */
+const DUPLICATAS_TTL_MS = 5 * 60 * 1000;
 
 /**
  * Extrai um "marco" (estaca N ou KM N) do nome. Serve pra distinguir pontos de
@@ -357,7 +359,63 @@ export class LocaisService {
    * viagens. `provavel_lixo` = candidato com ≤1 viagem quando o principal tem ≥2.
    * Só IDENTIFICA — a mesclagem continua manual.
    */
-  async duplicatas() {
+  /**
+   * Locais que parecem ser o mesmo lugar, pras etiquetas da lista.
+   *
+   * Guardado por empresa: o cálculo varre os locais da conta inteira e custava
+   * ~0,5s em toda abertura da lista, pra uma resposta que quase nunca muda.
+   * Vencido, responde com o que tem e recalcula por trás. Mesclar, editar,
+   * homologar ou excluir aqui descarta na hora (`esquecerDuplicatas`) — é o
+   * que tornaria a etiqueta ERRADA (apontar pra local que não existe mais). O
+   * app e a importação só criam locais: no pior caso a etiqueta nova aparece
+   * alguns minutos depois.
+   */
+  async duplicatas(): Promise<Awaited<ReturnType<LocaisService["calcularDuplicatas"]>>> {
+    const contaId = contaIdAtual();
+    const guardado = this.duplicatasGuardadas.get(contaId);
+    if (guardado && Date.now() - guardado.em < DUPLICATAS_TTL_MS) return guardado.valor;
+    if (guardado) {
+      void this.recalcularDuplicatas(contaId).catch(() => {});
+      return guardado.valor;
+    }
+    return this.recalcularDuplicatas(contaId);
+  }
+
+  private readonly duplicatasGuardadas = new Map<
+    string,
+    { valor: Awaited<ReturnType<LocaisService["calcularDuplicatas"]>>; em: number }
+  >();
+  private readonly duplicatasEmCurso = new Map<string, ReturnType<LocaisService["calcularDuplicatas"]>>();
+  // Cálculo que começou antes de uma escrita não pode guardar o resultado velho.
+  private readonly duplicatasGeracao = new Map<string, number>();
+
+  private recalcularDuplicatas(contaId: string) {
+    const emCurso = this.duplicatasEmCurso.get(contaId);
+    if (emCurso) return emCurso;
+    const geracao = this.duplicatasGeracao.get(contaId) ?? 0;
+    const p = this.calcularDuplicatas()
+      .then((valor) => {
+        if ((this.duplicatasGeracao.get(contaId) ?? 0) === geracao) {
+          this.duplicatasGuardadas.set(contaId, { valor, em: Date.now() });
+        }
+        return valor;
+      })
+      .finally(() => {
+        if (this.duplicatasEmCurso.get(contaId) === p) this.duplicatasEmCurso.delete(contaId);
+      });
+    this.duplicatasEmCurso.set(contaId, p);
+    return p;
+  }
+
+  /** Chamar DEPOIS de gravar qualquer mudança de local por este serviço. */
+  private esquecerDuplicatas() {
+    const contaId = contaIdAtual();
+    this.duplicatasGuardadas.delete(contaId);
+    this.duplicatasEmCurso.delete(contaId);
+    this.duplicatasGeracao.set(contaId, (this.duplicatasGeracao.get(contaId) ?? 0) + 1);
+  }
+
+  private async calcularDuplicatas() {
     type Similar = {
       id: string;
       nome: string;
@@ -758,13 +816,15 @@ export class LocaisService {
     }).catch(() => {
       /* sem motorista no banco — segue sem audit */
     });
-    return this.prisma.local.update({
+    const local = await this.prisma.local.update({
       where: { id },
       data: {
         nivelConfianca: NivelConfiancaLocal.HUMANO,
         ultimaValidacaoEm: new Date(),
       },
     });
+    this.esquecerDuplicatas();
+    return local;
   }
 
   /**
@@ -855,6 +915,7 @@ export class LocaisService {
       .catch(() => {
         /* auditoria best-effort não bloqueia o merge */
       });
+    this.esquecerDuplicatas();
     return { ok: true, viagensMovidas };
   }
 
@@ -877,6 +938,7 @@ export class LocaisService {
       },
       include: LOCAL_INCLUDE,
     });
+    this.esquecerDuplicatas();
     return flattenLocal(local);
   }
 
@@ -913,6 +975,7 @@ export class LocaisService {
         include: LOCAL_INCLUDE,
       });
     });
+    this.esquecerDuplicatas();
     return flattenLocal(local);
   }
 
@@ -935,6 +998,7 @@ export class LocaisService {
     }
     // RotaCache sai cascade via schema
     await this.prisma.local.delete({ where: { id } });
+    this.esquecerDuplicatas();
     return { ok: true };
   }
 
