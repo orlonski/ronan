@@ -258,11 +258,15 @@ export class FrotaManutencaoService {
   }
 
   async removerManutencao(id: string) {
-    const m = await this.prisma.manutencaoVeiculo.findUnique({ where: { id } });
+    const m = await this.prisma.manutencaoVeiculo.findUnique({
+      where: { id },
+      include: { tituloPagar: { select: { status: true } } },
+    });
     if (!m) throw new NotFoundException("Manutenção não encontrada");
-    if (m.tituloPagarId) {
+    // A conta cancelada não prende mais: o dinheiro não vai sair.
+    if (m.tituloPagar && m.tituloPagar.status !== "CANCELADO") {
       throw new BadRequestException(
-        "Essa manutenção já virou conta a pagar. Cancele a conta antes de apagar.",
+        "Essa manutenção já virou conta a pagar. Cancele a conta em Contas a pagar antes de apagar.",
       );
     }
     // Lançada por engano a partir de um aviso: o aviso volta pra decisão, em

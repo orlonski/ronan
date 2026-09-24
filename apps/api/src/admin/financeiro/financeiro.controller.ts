@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import {
   AtualizarFaturaInput,
+  CancelarTituloPagarInput,
   CriarTituloPagarInput,
   DarBaixaInput,
   GerarFaturaInput,
@@ -109,6 +110,15 @@ export class FinanceiroController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.service.criarTituloPagar(body, user.id);
+  }
+
+  @RequerPermissao("financeiro.faturar")
+  @Post("pagar/:id/cancelar")
+  cancelarPagar(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(CancelarTituloPagarInput)) body: CancelarTituloPagarInput,
+  ) {
+    return this.service.cancelarTituloPagar(id, body.motivo);
   }
 
   @RequerPermissao("financeiro.baixar")

@@ -309,6 +309,39 @@ export class FinanceiroService {
   }
 
   /**
+   * CANCELAR CONTA A PAGAR — lançada errado, ou o serviço não aconteceu. Não
+   * apaga: fica como cancelada, com o motivo, e sai dos totais (que só somam
+   * ABERTO e PARCIAL). Até 24/09/2026 não havia como, e a manutenção que virou
+   * conta não podia mais ser excluída.
+   *
+   * Não cancela o que já tem dinheiro lançado (estorna as baixas antes) nem o
+   * que nasceu de um acerto do motorista: esse é do acerto, que tem regra
+   * própria (FECHADO não regenera, PAGO não reabre).
+   */
+  async cancelarTituloPagar(id: string, motivo: string) {
+    const t = await this.prisma.tituloPagar.findFirst({
+      where: { id },
+      select: { status: true, acertoId: true, observacao: true, _count: { select: { baixas: true } } },
+    });
+    if (!t) throw new NotFoundException("Conta não encontrada");
+    if (t.status === "CANCELADO") return { ok: true };
+    if (t._count.baixas > 0) {
+      throw new BadRequestException("Essa conta já tem pagamento lançado. Estorne o pagamento antes de cancelar.");
+    }
+    if (t.acertoId) {
+      throw new BadRequestException("Essa conta nasceu do acerto do motorista — resolva pelo acerto.");
+    }
+    await this.prisma.tituloPagar.update({
+      where: { id },
+      data: {
+        status: "CANCELADO",
+        observacao: [t.observacao, `Cancelada: ${motivo}`].filter(Boolean).join("\n"),
+      },
+    });
+    return { ok: true };
+  }
+
+  /**
    * Baixa num título, de qualquer um dos dois lados.
    *
    * O status NÃO é escrito à mão: é derivado da soma das baixas. Um booleano

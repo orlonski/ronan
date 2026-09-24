@@ -111,6 +111,12 @@ export const DarBaixaInput = z.object({
 });
 export type DarBaixaInput = z.infer<typeof DarBaixaInput>;
 
+/** Conta a pagar lançada errado ou que não vai ser paga (o serviço não aconteceu). */
+export const CancelarTituloPagarInput = z.object({
+  motivo: z.string().trim().min(3, "Diga por que a conta foi cancelada.").max(300),
+});
+export type CancelarTituloPagarInput = z.infer<typeof CancelarTituloPagarInput>;
+
 /** Conta a pagar lançada à mão: oficina, posto, seguro, parcela. */
 export const CriarTituloPagarInput = z
   .object({

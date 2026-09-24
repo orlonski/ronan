@@ -53,6 +53,8 @@ type Titulo = {
   fornecedor?: { nome: string } | null;
   veiculo?: { placa: string } | null;
   baixas?: { id: string; valor: string; data: string; meio: string }[];
+  acertoId?: string | null;
+  observacao?: string | null;
 };
 
 function brl(v: string | number): string {
@@ -237,6 +239,8 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
   const [baixando, setBaixando] = React.useState<string | null>(null);
   const [valorBaixa, setValorBaixa] = React.useState("");
   const [erro, setErro] = React.useState<string | null>(null);
+  const [cancelando, setCancelando] = React.useState<string | null>(null);
+  const [motivoCancelar, setMotivoCancelar] = React.useState("");
   const { confirmar, ConfirmDialog } = useConfirm();
 
   const lista = useQuery({
@@ -268,6 +272,28 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
       toast.error("Não consegui estornar", {
         description: e instanceof Error ? e.message : undefined,
       });
+    }
+  }
+
+  // Conta lançada errado ou que não vai ser paga: fica como cancelada, com o
+  // motivo, e sai dos totais. Só sem pagamento lançado e fora de acerto.
+  async function cancelarConta(id: string) {
+    if (!token) return;
+    if (motivoCancelar.trim().length < 3) return setErro("Diga por que a conta foi cancelada.");
+    setErro(null);
+    try {
+      await fetchApi(`/admin/financeiro/pagar/${id}/cancelar`, {
+        token,
+        method: "POST",
+        body: JSON.stringify({ motivo: motivoCancelar.trim() }),
+      });
+      setCancelando(null);
+      setMotivoCancelar("");
+      toast.success("Conta cancelada.");
+      await queryClient.invalidateQueries({ queryKey: ["titulos"] });
+      await queryClient.invalidateQueries({ queryKey: ["financeiro-resumo"] });
+    } catch (e) {
+      setErro((e as Error).message);
     }
   }
 
@@ -342,7 +368,9 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
 
       {titulos.map((t) => {
         const saldo = Number(t.valor) - Number(t.valorPago);
-        const venceu = atrasado(t.vencimento) && t.status !== "PAGO";
+        const venceu = atrasado(t.vencimento) && t.status !== "PAGO" && t.status !== "CANCELADO";
+        const podeCancelar =
+          tipo === "pagar" && t.status === "ABERTO" && (t.baixas ?? []).length === 0 && !t.acertoId;
         return (
           <Card key={t.id} className={`p-4 ${venceu ? "border-l-4 border-l-amber-500" : ""}`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -358,6 +386,9 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
                   {t.parcela && t.parcela > 1 && ` · parcela ${t.parcela}`}
                   {t.veiculo && ` · ${t.veiculo.placa}`}
                 </p>
+                {t.status === "CANCELADO" && t.observacao && (
+                  <p className="mt-0.5 whitespace-pre-line text-xs text-muted-foreground">{t.observacao}</p>
+                )}
               </div>
               <div className="text-right">
                 <p className="font-semibold tabular-nums">{brl(saldo)}</p>
@@ -431,6 +462,46 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
                         Estornar {brl(b.valor)}
                       </Button>
                     ))}
+                  </div>
+                )}
+              </Permitido>
+            )}
+
+            {podeCancelar && baixando !== t.id && (
+              <Permitido chave="financeiro.faturar">
+                {cancelando === t.id ? (
+                  <div className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
+                    <div className="min-w-64 flex-1 space-y-1">
+                      <Label htmlFor={`cancelar-${t.id}`}>Por que cancelar esta conta?</Label>
+                      <Input
+                        id={`cancelar-${t.id}`}
+                        maxLength={300}
+                        placeholder="Ex.: lançada em duplicidade; o serviço não foi feito"
+                        value={motivoCancelar}
+                        onChange={(e) => setMotivoCancelar(e.target.value)}
+                      />
+                    </div>
+                    <Button size="sm" variant="warning" onClick={() => void cancelarConta(t.id)}>
+                      Cancelar conta
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setCancelando(null)}>
+                      Voltar
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mt-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-muted-foreground"
+                      onClick={() => {
+                        setCancelando(t.id);
+                        setMotivoCancelar("");
+                        setErro(null);
+                      }}
+                    >
+                      Cancelar conta
+                    </Button>
                   </div>
                 )}
               </Permitido>
