@@ -141,6 +141,19 @@ export class FrotaManutencaoService {
 
   // ----------------------------------------------------------- plano e alerta
 
+  /**
+   * Os planos (a revisão de X em X km ou dias) pra tela cadastrar e conferir.
+   * Os alertas já liam os planos; faltava a lista — a tela pedia pra
+   * "cadastrar planos" sem ter onde (achado em 23/09/2026).
+   */
+  listarPlanos() {
+    return this.prisma.planoManutencao.findMany({
+      where: { ativo: true },
+      orderBy: [{ veiculo: { placa: "asc" } }, { descricao: "asc" }],
+      include: { veiculo: { select: { id: true, placa: true } } },
+    });
+  }
+
   criarPlano(input: CriarPlanoManutencaoInput) {
     return this.prisma.planoManutencao.create({
       data: {

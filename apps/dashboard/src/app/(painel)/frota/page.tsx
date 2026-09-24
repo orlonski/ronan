@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import {
   STATUS_MANUTENCAO_LABEL,
+  STATUS_MULTA,
   STATUS_MULTA_LABEL,
   TIPO_MANUTENCAO_LABEL,
   TIPOS_DOCUMENTO_VEICULO,
@@ -28,8 +29,10 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { LoadingCard } from "@/components/loading";
-import { VeiculoCombobox } from "@/components/fk-comboboxes";
+import { MotoristaCombobox, VeiculoCombobox } from "@/components/fk-comboboxes";
+import { useConfirm } from "@/components/confirm-dialog";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Veiculo = { id: string; placa: string };
 
@@ -104,11 +107,24 @@ export default function FrotaPage() {
   );
 }
 
-type Aba = "alertas" | "manutencoes" | "pneus" | "multas" | "documentos";
+type Aba = "alertas" | "manutencoes" | "planos" | "pneus" | "multas" | "documentos";
 
 function Conteudo() {
   const token = useAuthToken();
+  const { temPermissao } = usePermissoes();
   const [aba, setAba] = React.useState<Aba>("alertas");
+  // Cada aba fala com um recurso próprio da API (pneus, multas, documentos):
+  // quem não tem a chave não vê a aba, em vez de abrir e tomar 403.
+  const abas = (
+    [
+      ["alertas", null, "manutencao.ver"],
+      ["manutencoes", "Manutenções", "manutencao.ver"],
+      ["planos", "Planos de manutenção", "manutencao.ver"],
+      ["pneus", "Pneus", "pneus.ver"],
+      ["multas", "Multas", "multas.ver"],
+      ["documentos", "Documentos", "documentos-veiculo.ver"],
+    ] as const
+  ).filter(([, , perm]) => temPermissao(perm));
 
   const alertas = useQuery({
     queryKey: ["frota-alertas"],
@@ -133,15 +149,9 @@ function Conteudo() {
       </header>
 
       <div className="flex flex-wrap gap-1 border-b">
-        {(
-          [
-            ["alertas", total > 0 ? `Precisa de você (${total})` : "Precisa de você"],
-            ["manutencoes", "Manutenções"],
-            ["pneus", "Pneus"],
-            ["multas", "Multas"],
-            ["documentos", "Documentos"],
-          ] as const
-        ).map(([chave, label]) => (
+        {abas.map(([chave, rotulo]) => {
+          const label = rotulo ?? (total > 0 ? `Precisa de você (${total})` : "Precisa de você");
+          return (
           <button
             key={chave}
             type="button"
@@ -154,7 +164,8 @@ function Conteudo() {
           >
             {label}
           </button>
-        ))}
+          );
+        })}
       </div>
 
       {aba === "alertas" && (
@@ -164,6 +175,7 @@ function Conteudo() {
         </>
       )}
       {aba === "manutencoes" && <ListaManutencoes />}
+      {aba === "planos" && <ListaPlanos />}
       {aba === "pneus" && <ListaPneus />}
       {aba === "multas" && <ListaMultas />}
       {aba === "documentos" && <ListaDocumentos />}
@@ -184,8 +196,8 @@ function BlocoAlertas({ a }: { a: Alertas }) {
       <Card className="p-8 text-center">
         <p className="text-sm font-medium">Nada pendente na frota.</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Cadastre planos de manutenção e a validade dos documentos pra ser avisado antes de
-          o caminhão parar.
+          Cadastre os planos de manutenção (ex.: troca de óleo a cada 20.000 km) e a validade
+          dos documentos, nas abas acima, pra ser avisado antes de o caminhão parar.
         </p>
       </Card>
     );
@@ -544,80 +556,779 @@ function ListaManutencoes() {
   );
 }
 
-function ListaPneus() {
+/** "20.000" → 20000; vazio → null. */
+function inteiro(v: string): number | null {
+  const d = v.replace(/\D/g, "");
+  return d ? Number(d) : null;
+}
+
+/** "1.234,56" → 1234.56; vazio → null. */
+function decimal(v: string): number | null {
+  const t = v.trim();
+  if (!t) return null;
+  const n = Number(t.replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+type Plano = {
+  id: string;
+  descricao: string;
+  intervaloKm: number | null;
+  intervaloDias: number | null;
+  ultimoOdometro: number | null;
+  ultimaEm: string | null;
+  veiculo: Veiculo;
+};
+
+/**
+ * PLANOS DE MANUTENÇÃO: "troca de óleo a cada 20.000 km ou 6 meses". São eles
+ * que acendem o "Manutenção preventiva" em Precisa de você — e até 23/09/2026
+ * não tinham tela: a API gravava, o aviso pedia pra cadastrar, e não havia onde.
+ */
+function ListaPlanos() {
   const token = useAuthToken();
+  const queryClient = useQueryClient();
+  const { confirmar, ConfirmDialog } = useConfirm();
+  const [criando, setCriando] = React.useState(false);
+  const [erro, setErro] = React.useState<string | null>(null);
+  const vazio = {
+    veiculoId: undefined as string | undefined,
+    descricao: "",
+    intervaloKm: "",
+    intervaloDias: "",
+    ultimoOdometro: "",
+    ultimaEm: "",
+  };
+  const [form, setForm] = React.useState(vazio);
+
   const lista = useQuery({
-    queryKey: ["pneus"],
+    queryKey: ["planos-manutencao"],
     enabled: Boolean(token),
-    queryFn: () =>
-      fetchApi<{ data: Alertas["pneus"] }>("/admin/pneus?pageSize=200", { token: token! }),
+    queryFn: () => fetchApi<Plano[]>("/admin/manutencao/planos", { token: token! }),
   });
+
+  async function atualizar() {
+    await queryClient.invalidateQueries({ queryKey: ["planos-manutencao"] });
+    await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
+  }
+
+  async function salvar() {
+    if (!token) return;
+    if (!form.veiculoId) return setErro("Escolha o caminhão.");
+    if (form.descricao.trim().length < 3) return setErro("Diga qual é a manutenção.");
+    const km = inteiro(form.intervaloKm);
+    const dias = inteiro(form.intervaloDias);
+    if (km == null && dias == null) return setErro("Diga a cada quantos km ou a cada quantos dias.");
+    setErro(null);
+    try {
+      await fetchApi("/admin/manutencao/planos", {
+        token,
+        method: "POST",
+        body: JSON.stringify({
+          veiculoId: form.veiculoId,
+          descricao: form.descricao,
+          intervaloKm: km,
+          intervaloDias: dias,
+          ultimoOdometro: inteiro(form.ultimoOdometro),
+          ultimaEm: form.ultimaEm || null,
+        }),
+      });
+      setCriando(false);
+      setForm({ ...vazio, veiculoId: form.veiculoId });
+      await atualizar();
+    } catch (e) {
+      setErro((e as Error).message);
+    }
+  }
+
+  async function remover(p: Plano) {
+    if (!token) return;
+    const ok = await confirmar({
+      title: `Excluir o plano "${p.descricao}" do ${p.veiculo.placa}?`,
+      description: "O aviso de manutenção deste caminhão para de aparecer. As manutenções já lançadas continuam.",
+      confirmLabel: "Excluir plano",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    await fetchApi(`/admin/manutencao/planos/${p.id}`, { token, method: "DELETE" });
+    await atualizar();
+  }
+
+  const itens = lista.data ?? [];
 
   return (
     <div className="space-y-3">
-      {lista.isLoading && <LoadingCard />}
-      {(lista.data?.data ?? []).length === 0 && !lista.isLoading && (
-        <Card className="p-8 text-center text-sm text-muted-foreground">
-          Nenhum pneu cadastrado. O controle por número de fogo é o que permite saber o custo
-          por carcaça.
+      <ConfirmDialog />
+      <p className="text-sm text-muted-foreground">
+        A manutenção que se repete — a cada tantos km ou a cada tantos dias. O sistema avisa em
+        Precisa de você quando estiver chegando. O km atual vem do odômetro anotado nos
+        abastecimentos.
+      </p>
+      <Permitido chave="manutencao.criar">
+        <Button variant="outline" size="sm" onClick={() => setCriando((v) => !v)}>
+          <Plus className="h-3.5 w-3.5" /> Novo plano
+        </Button>
+      </Permitido>
+
+      {criando && (
+        <Card className="space-y-3 p-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label>Caminhão</Label>
+              <VeiculoCombobox
+                value={form.veiculoId}
+                onChange={(v) => setForm({ ...form, veiculoId: v })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="plano-desc">Manutenção</Label>
+              <Input
+                id="plano-desc"
+                placeholder="ex: Troca de óleo e filtros"
+                value={form.descricao}
+                onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="plano-km">A cada quantos km</Label>
+              <Input
+                id="plano-km"
+                inputMode="numeric"
+                placeholder="ex: 20000"
+                value={form.intervaloKm}
+                onChange={(e) => setForm({ ...form, intervaloKm: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="plano-dias">Ou a cada quantos dias</Label>
+              <Input
+                id="plano-dias"
+                inputMode="numeric"
+                placeholder="ex: 180"
+                value={form.intervaloDias}
+                onChange={(e) => setForm({ ...form, intervaloDias: e.target.value })}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Pode preencher os dois: vale o que chegar primeiro.
+          </p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="plano-ultodo">Última vez feita — odômetro</Label>
+              <Input
+                id="plano-ultodo"
+                inputMode="numeric"
+                value={form.ultimoOdometro}
+                onChange={(e) => setForm({ ...form, ultimoOdometro: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="plano-ultdata">Última vez feita — data</Label>
+              <Input
+                id="plano-ultdata"
+                type="date"
+                value={form.ultimaEm}
+                onChange={(e) => setForm({ ...form, ultimaEm: e.target.value })}
+              />
+            </div>
+          </div>
+          {erro && <p className="text-sm text-destructive">{erro}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setCriando(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" variant="success" onClick={() => void salvar()}>
+              Salvar plano
+            </Button>
+          </div>
         </Card>
       )}
-      {(lista.data?.data ?? []).map((p) => (
+
+      {lista.isLoading && <LoadingCard />}
+      {itens.length === 0 && !lista.isLoading && (
+        <Card className="p-8 text-center text-sm text-muted-foreground">
+          Nenhum plano cadastrado. Sem plano, o sistema não tem como avisar que a revisão está
+          chegando.
+        </Card>
+      )}
+      {itens.map((p) => (
         <Card key={p.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <div>
-            <p className="font-medium">Fogo {p.numeroFogo}</p>
+          <div className="min-w-0">
+            <p className="font-medium">
+              {p.veiculo.placa} · {p.descricao}
+            </p>
             <p className="text-xs text-muted-foreground">
-              {p.veiculo?.placa ?? "em estoque"}
-              {p.posicao && ` · posição ${p.posicao}`}
+              a cada{" "}
+              {[
+                p.intervaloKm != null && `${p.intervaloKm.toLocaleString("pt-BR")} km`,
+                p.intervaloDias != null && `${p.intervaloDias} dias`,
+              ]
+                .filter(Boolean)
+                .join(" ou ")}
+              {(p.ultimoOdometro != null || p.ultimaEm) &&
+                ` · última: ${[
+                  p.ultimoOdometro != null && `${p.ultimoOdometro.toLocaleString("pt-BR")} km`,
+                  p.ultimaEm && dataBR(p.ultimaEm),
+                ]
+                  .filter(Boolean)
+                  .join(", ")}`}
             </p>
           </div>
-          <Badge
-            className={`border-transparent ${
-              p.situacao === "CRITICO"
-                ? "bg-red-100 text-red-700"
-                : p.situacao === "ATENCAO"
-                  ? "bg-amber-100 text-amber-800"
-                  : "bg-slate-100 text-slate-700"
-            }`}
-          >
-            {p.sulcoMm != null ? `${p.sulcoMm}mm` : "sem medição"}
-          </Badge>
+          <Permitido chave="manutencao.excluir">
+            <Button size="sm" variant="outline" onClick={() => void remover(p)}>
+              Excluir
+            </Button>
+          </Permitido>
         </Card>
       ))}
     </div>
   );
 }
 
-function ListaMultas() {
+type Pneu = {
+  id: string;
+  numeroFogo: string;
+  marca: string | null;
+  medida: string | null;
+  posicao: string | null;
+  sulcoMm: string | number | null;
+  medidoEm: string | null;
+  valorCompra: string | number | null;
+  veiculo: Veiculo | null;
+};
+
+/** Mesmo corte dos alertas (`situacaoPneu` na API): até 1,6 mm é o limite legal; até 3 mm, atenção. */
+function situacaoSulco(mm: number | null): "CRITICO" | "ATENCAO" | null {
+  if (mm == null) return null;
+  if (mm <= 1.6) return "CRITICO";
+  if (mm <= 3) return "ATENCAO";
+  return null;
+}
+
+function ListaPneus() {
   const token = useAuthToken();
+  const queryClient = useQueryClient();
+  const { confirmar, ConfirmDialog } = useConfirm();
+  // null = fechado; "" = novo; id = editando.
+  const [editando, setEditando] = React.useState<string | null>(null);
+  const [erro, setErro] = React.useState<string | null>(null);
+  const vazio = {
+    numeroFogo: "",
+    marca: "",
+    medida: "",
+    veiculoId: undefined as string | undefined,
+    posicao: "",
+    sulcoMm: "",
+    valorCompra: "",
+  };
+  const [form, setForm] = React.useState(vazio);
+
   const lista = useQuery({
-    queryKey: ["multas"],
+    queryKey: ["pneus"],
     enabled: Boolean(token),
-    queryFn: () =>
-      fetchApi<{ data: Alertas["multas"] }>("/admin/multas?pageSize=100", { token: token! }),
+    queryFn: () => fetchApi<{ data: Pneu[] }>("/admin/pneus?pageSize=200", { token: token! }),
   });
+
+  function abrir(p?: Pneu) {
+    setErro(null);
+    if (!p) {
+      setForm(vazio);
+      setEditando("");
+      return;
+    }
+    setForm({
+      numeroFogo: p.numeroFogo,
+      marca: p.marca ?? "",
+      medida: p.medida ?? "",
+      veiculoId: p.veiculo?.id,
+      posicao: p.posicao ?? "",
+      sulcoMm: p.sulcoMm != null ? String(p.sulcoMm).replace(".", ",") : "",
+      valorCompra: p.valorCompra != null ? String(p.valorCompra).replace(".", ",") : "",
+    });
+    setEditando(p.id);
+  }
+
+  async function atualizar() {
+    await queryClient.invalidateQueries({ queryKey: ["pneus"] });
+    await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
+  }
+
+  async function salvar() {
+    if (!token || editando === null) return;
+    if (!form.numeroFogo.trim()) return setErro("Informe o número de fogo do pneu.");
+    setErro(null);
+    try {
+      await fetchApi(editando ? `/admin/pneus/${editando}` : "/admin/pneus", {
+        token,
+        method: editando ? "PATCH" : "POST",
+        body: JSON.stringify({
+          numeroFogo: form.numeroFogo,
+          marca: form.marca || null,
+          medida: form.medida || null,
+          veiculoId: form.veiculoId ?? null,
+          posicao: form.posicao || null,
+          sulcoMm: decimal(form.sulcoMm),
+          valorCompra: decimal(form.valorCompra),
+        }),
+      });
+      setEditando(null);
+      await atualizar();
+    } catch (e) {
+      setErro((e as Error).message);
+    }
+  }
+
+  async function tirarDeUso(p: Pneu) {
+    if (!token) return;
+    const ok = await confirmar({
+      title: `Tirar o pneu ${p.numeroFogo} de uso?`,
+      description: "Ele sai da lista e do caminhão. O histórico dele continua guardado.",
+      confirmLabel: "Tirar de uso",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    await fetchApi(`/admin/pneus/${p.id}`, { token, method: "DELETE" });
+    await atualizar();
+  }
+
+  const itens = lista.data?.data ?? [];
 
   return (
     <div className="space-y-3">
+      <ConfirmDialog />
+      <Permitido chave="pneus.criar">
+        <Button variant="outline" size="sm" onClick={() => abrir()}>
+          <Plus className="h-3.5 w-3.5" /> Cadastrar pneu
+        </Button>
+      </Permitido>
+
+      {editando !== null && (
+        <Card className="space-y-3 p-4">
+          <p className="text-sm font-semibold">{editando ? "Editar pneu" : "Cadastrar pneu"}</p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-1">
+              <Label htmlFor="pneu-fogo">Número de fogo</Label>
+              <Input
+                id="pneu-fogo"
+                value={form.numeroFogo}
+                onChange={(e) => setForm({ ...form, numeroFogo: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pneu-marca">Marca</Label>
+              <Input
+                id="pneu-marca"
+                value={form.marca}
+                onChange={(e) => setForm({ ...form, marca: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pneu-medida">Medida</Label>
+              <Input
+                id="pneu-medida"
+                placeholder="ex: 295/80 R22.5"
+                value={form.medida}
+                onChange={(e) => setForm({ ...form, medida: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label>Caminhão (vazio = em estoque)</Label>
+              <VeiculoCombobox
+                value={form.veiculoId}
+                onChange={(v) => setForm({ ...form, veiculoId: v })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pneu-pos">Posição</Label>
+              <Input
+                id="pneu-pos"
+                placeholder="ex: DE1, TD2"
+                value={form.posicao}
+                onChange={(e) => setForm({ ...form, posicao: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="pneu-sulco">Sulco medido (mm)</Label>
+              <Input
+                id="pneu-sulco"
+                inputMode="decimal"
+                placeholder="ex: 8,5"
+                value={form.sulcoMm}
+                onChange={(e) => setForm({ ...form, sulcoMm: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                1,6 mm é o limite legal. O sistema avisa a partir de 3 mm.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pneu-valor">Valor de compra (R$)</Label>
+              <Input
+                id="pneu-valor"
+                inputMode="decimal"
+                value={form.valorCompra}
+                onChange={(e) => setForm({ ...form, valorCompra: e.target.value })}
+              />
+            </div>
+          </div>
+          {erro && <p className="text-sm text-destructive">{erro}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setEditando(null)}>
+              Cancelar
+            </Button>
+            <Button size="sm" variant="success" onClick={() => void salvar()}>
+              Salvar pneu
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {lista.isLoading && <LoadingCard />}
-      {(lista.data?.data ?? []).length === 0 && !lista.isLoading && (
+      {itens.length === 0 && !lista.isLoading && (
+        <Card className="p-8 text-center text-sm text-muted-foreground">
+          Nenhum pneu cadastrado. O controle por número de fogo é o que permite saber o custo
+          por carcaça.
+        </Card>
+      )}
+      {itens.map((p) => {
+        const mm = p.sulcoMm != null ? Number(p.sulcoMm) : null;
+        const sit = situacaoSulco(mm);
+        return (
+          <Card key={p.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <p className="font-medium">Fogo {p.numeroFogo}</p>
+              <p className="text-xs text-muted-foreground">
+                {p.veiculo?.placa ?? "em estoque"}
+                {p.posicao && ` · posição ${p.posicao}`}
+                {[p.marca, p.medida].filter(Boolean).length > 0 &&
+                  ` · ${[p.marca, p.medida].filter(Boolean).join(" ")}`}
+                {p.medidoEm && ` · medido em ${dataBR(p.medidoEm)}`}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                className={`border-transparent ${
+                  sit === "CRITICO"
+                    ? "bg-red-100 text-red-700"
+                    : sit === "ATENCAO"
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-slate-100 text-slate-700"
+                }`}
+              >
+                {mm != null ? `${String(mm).replace(".", ",")} mm` : "sem medição"}
+              </Badge>
+              <Permitido chave="pneus.editar">
+                <Button size="sm" variant="outline" onClick={() => abrir(p)}>
+                  Editar
+                </Button>
+              </Permitido>
+              <Permitido chave="pneus.excluir">
+                <Button size="sm" variant="outline" onClick={() => void tirarDeUso(p)}>
+                  Tirar de uso
+                </Button>
+              </Permitido>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+type Multa = {
+  id: string;
+  infracao: string;
+  numeroAit: string | null;
+  gravidade: string | null;
+  local: string | null;
+  ocorridaEm: string;
+  valor: string;
+  vencimento: string | null;
+  prazoIndicacao: string | null;
+  status: StatusMultaTipo;
+  veiculo: Veiculo | null;
+  motorista: { id: string; nome: string } | null;
+};
+
+const GRAVIDADES = [
+  ["LEVE", "Leve (3 pontos)"],
+  ["MEDIA", "Média (4 pontos)"],
+  ["GRAVE", "Grave (5 pontos)"],
+  ["GRAVISSIMA", "Gravíssima (7 pontos)"],
+] as const;
+
+function ListaMultas() {
+  const token = useAuthToken();
+  const { temPermissao } = usePermissoes();
+  const podeEditar = temPermissao("multas.editar");
+  const queryClient = useQueryClient();
+  const [criando, setCriando] = React.useState(false);
+  const [erro, setErro] = React.useState<string | null>(null);
+  const vazio = {
+    infracao: "",
+    ocorridaEm: "",
+    valor: "",
+    veiculoId: undefined as string | undefined,
+    motoristaId: undefined as string | undefined,
+    numeroAit: "",
+    gravidade: "",
+    local: "",
+    vencimento: "",
+    prazoIndicacao: "",
+  };
+  const [form, setForm] = React.useState(vazio);
+
+  const lista = useQuery({
+    queryKey: ["multas"],
+    enabled: Boolean(token),
+    queryFn: () => fetchApi<{ data: Multa[] }>("/admin/multas?pageSize=100", { token: token! }),
+  });
+
+  async function atualizar() {
+    await queryClient.invalidateQueries({ queryKey: ["multas"] });
+    await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
+  }
+
+  async function salvar() {
+    if (!token) return;
+    if (form.infracao.trim().length < 3) return setErro("Diga qual foi a infração.");
+    if (!form.ocorridaEm) return setErro("Informe a data da infração.");
+    const valor = decimal(form.valor);
+    if (valor == null || valor <= 0) return setErro("Informe o valor da multa.");
+    setErro(null);
+    try {
+      await fetchApi("/admin/multas", {
+        token,
+        method: "POST",
+        body: JSON.stringify({
+          infracao: form.infracao,
+          ocorridaEm: form.ocorridaEm,
+          valor,
+          veiculoId: form.veiculoId ?? null,
+          motoristaId: form.motoristaId ?? null,
+          numeroAit: form.numeroAit || null,
+          gravidade: form.gravidade || null,
+          local: form.local || null,
+          vencimento: form.vencimento || null,
+          prazoIndicacao: form.prazoIndicacao || null,
+        }),
+      });
+      setCriando(false);
+      setForm(vazio);
+      await atualizar();
+    } catch (e) {
+      setErro((e as Error).message);
+    }
+  }
+
+  async function mudarStatus(id: string, status: StatusMultaTipo) {
+    if (!token) return;
+    await fetchApi(`/admin/multas/${id}`, {
+      token,
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+    await atualizar();
+  }
+
+  async function indicarCondutor(id: string, motoristaId: string | undefined) {
+    if (!token) return;
+    await fetchApi(`/admin/multas/${id}`, {
+      token,
+      method: "PATCH",
+      body: JSON.stringify({ motoristaId: motoristaId ?? null }),
+    });
+    await atualizar();
+  }
+
+  const itens = lista.data?.data ?? [];
+
+  return (
+    <div className="space-y-3">
+      <Permitido chave="multas.criar">
+        <Button variant="outline" size="sm" onClick={() => setCriando((v) => !v)}>
+          <Plus className="h-3.5 w-3.5" /> Registrar multa
+        </Button>
+      </Permitido>
+
+      {criando && (
+        <Card className="space-y-3 p-4">
+          <div className="space-y-1">
+            <Label htmlFor="multa-inf">Infração</Label>
+            <Input
+              id="multa-inf"
+              placeholder="ex: Excesso de velocidade até 20%"
+              value={form.infracao}
+              onChange={(e) => setForm({ ...form, infracao: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-1">
+              <Label htmlFor="multa-data">Data da infração</Label>
+              <Input
+                id="multa-data"
+                type="date"
+                value={form.ocorridaEm}
+                onChange={(e) => setForm({ ...form, ocorridaEm: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="multa-valor">Valor (R$)</Label>
+              <Input
+                id="multa-valor"
+                inputMode="decimal"
+                value={form.valor}
+                onChange={(e) => setForm({ ...form, valor: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="multa-grav">Gravidade</Label>
+              <Select
+                id="multa-grav"
+                value={form.gravidade}
+                onChange={(e) => setForm({ ...form, gravidade: e.target.value })}
+              >
+                <option value="">Não sei</option>
+                {GRAVIDADES.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label>Caminhão</Label>
+              <VeiculoCombobox
+                value={form.veiculoId}
+                onChange={(v) => setForm({ ...form, veiculoId: v })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Quem dirigia (se já souber)</Label>
+              <MotoristaCombobox
+                value={form.motoristaId}
+                onChange={(v) => setForm({ ...form, motoristaId: v })}
+                placeholder="Escolher motorista…"
+              />
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="multa-ait">Número do auto (AIT)</Label>
+              <Input
+                id="multa-ait"
+                value={form.numeroAit}
+                onChange={(e) => setForm({ ...form, numeroAit: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="multa-local">Local</Label>
+              <Input
+                id="multa-local"
+                placeholder="ex: BR-277, km 120"
+                value={form.local}
+                onChange={(e) => setForm({ ...form, local: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="multa-prazo">Prazo pra indicar o condutor</Label>
+              <Input
+                id="multa-prazo"
+                type="date"
+                value={form.prazoIndicacao}
+                onChange={(e) => setForm({ ...form, prazoIndicacao: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Perder esse prazo passa os pontos pra empresa. O sistema avisa antes.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="multa-venc">Vencimento do boleto</Label>
+              <Input
+                id="multa-venc"
+                type="date"
+                value={form.vencimento}
+                onChange={(e) => setForm({ ...form, vencimento: e.target.value })}
+              />
+            </div>
+          </div>
+          {erro && <p className="text-sm text-destructive">{erro}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setCriando(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" variant="success" onClick={() => void salvar()}>
+              Salvar multa
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {lista.isLoading && <LoadingCard />}
+      {itens.length === 0 && !lista.isLoading && (
         <Card className="p-8 text-center text-sm text-muted-foreground">Nenhuma multa registrada.</Card>
       )}
-      {(lista.data?.data ?? []).map((m) => (
-        <Card key={m.id} className="flex flex-wrap items-start justify-between gap-3 p-4">
-          <div className="min-w-0">
-            <p className="font-medium">{m.infracao}</p>
-            <p className="text-xs text-muted-foreground">
-              {m.veiculo?.placa ?? "sem placa"}
-              {m.motorista && ` · ${m.motorista.nome}`}
-            </p>
+      {itens.map((m) => (
+        <Card key={m.id} className="space-y-3 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-medium">{m.infracao}</p>
+              <p className="text-xs text-muted-foreground">
+                {m.veiculo?.placa ?? "sem placa"} · {dataBR(m.ocorridaEm)}
+                {m.local && ` · ${m.local}`}
+                {m.prazoIndicacao && ` · indicar até ${dataBR(m.prazoIndicacao)}`}
+                {m.vencimento && ` · vence ${dataBR(m.vencimento)}`}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="font-medium tabular-nums">{brl(m.valor)}</p>
+              <Badge className="mt-1 border-transparent bg-slate-100 text-slate-700">
+                {STATUS_MULTA_LABEL[m.status]}
+              </Badge>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="font-medium tabular-nums">{brl(m.valor)}</p>
-            <Badge className="mt-1 border-transparent bg-slate-100 text-slate-700">
-              {STATUS_MULTA_LABEL[m.status]}
-            </Badge>
-          </div>
+          {m.motorista && !podeEditar && (
+            <p className="text-xs text-muted-foreground">Quem dirigia: {m.motorista.nome}</p>
+          )}
+          <Permitido chave="multas.editar">
+            <div className="grid gap-3 border-t pt-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Quem dirigia</Label>
+                <MotoristaCombobox
+                  value={m.motorista?.id}
+                  initialOption={
+                    m.motorista ? { value: m.motorista.id, label: m.motorista.nome } : undefined
+                  }
+                  onChange={(v) => void indicarCondutor(m.id, v)}
+                  placeholder="Escolher motorista…"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor={`multa-st-${m.id}`}>Situação</Label>
+                <Select
+                  id={`multa-st-${m.id}`}
+                  value={m.status}
+                  onChange={(e) => void mudarStatus(m.id, e.target.value as StatusMultaTipo)}
+                >
+                  {STATUS_MULTA.map((st) => (
+                    <option key={st} value={st}>
+                      {STATUS_MULTA_LABEL[st]}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+          </Permitido>
         </Card>
       ))}
     </div>

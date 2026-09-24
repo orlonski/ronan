@@ -89,6 +89,12 @@ export class ManutencaoController {
     return this.service.removerManutencao(id);
   }
 
+  @RequerPermissao("manutencao.ver")
+  @Get("planos")
+  listarPlanos() {
+    return this.service.listarPlanos();
+  }
+
   @RequerPermissao("manutencao.criar")
   @Post("planos")
   criarPlano(
