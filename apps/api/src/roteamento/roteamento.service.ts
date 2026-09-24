@@ -61,6 +61,11 @@ type RotaResult =
     }
   | { km: null; erro: string };
 
+/** Chave de um par de locais no mapa de `geometriasCacheadas`. */
+export function chavePar(origemId: string, destinoId: string): string {
+  return `${origemId}>${destinoId}`;
+}
+
 export type RotaOption = {
   km: string;
   duracaoSegundos: number;
@@ -489,7 +494,47 @@ export class RoteamentoService {
       where: { localOrigemId_localDestinoId: { localOrigemId, localDestinoId } },
       select: { geometria: true, versaoRoteador: true, calculadoEm: true },
     });
-    if (!cached?.geometria) return null;
+    return cached ? this.geometriaConfiavel(cached) : null;
+  }
+
+  /**
+   * `geometriaCacheada` de vários pares numa consulta só — pra listagem, que
+   * antes pagava uma ida ao banco por linha. Mesmos critérios de confiança; o
+   * par que não está no mapa é "não sei". Chave: `chavePar(origem, destino)`.
+   */
+  async geometriasCacheadas(pares: Array<[string, string]>): Promise<Map<string, string>> {
+    const unicos = new Map<string, [string, string]>();
+    for (const [o, d] of pares) if (o !== d) unicos.set(chavePar(o, d), [o, d]);
+    const out = new Map<string, string>();
+    if (unicos.size === 0) return out;
+    const linhas = await this.prisma.rotaCache.findMany({
+      where: {
+        OR: [...unicos.values()].map(([localOrigemId, localDestinoId]) => ({
+          localOrigemId,
+          localDestinoId,
+        })),
+      },
+      select: {
+        localOrigemId: true,
+        localDestinoId: true,
+        geometria: true,
+        versaoRoteador: true,
+        calculadoEm: true,
+      },
+    });
+    for (const l of linhas) {
+      const g = this.geometriaConfiavel(l);
+      if (g) out.set(chavePar(l.localOrigemId, l.localDestinoId), g);
+    }
+    return out;
+  }
+
+  private geometriaConfiavel(cached: {
+    geometria: string | null;
+    versaoRoteador: number;
+    calculadoEm: Date;
+  }): string | null {
+    if (!cached.geometria) return null;
     if (cached.versaoRoteador !== ROUTER_VERSION) return null;
     if (!this.cacheValido(cached.calculadoEm)) return null;
     return cached.geometria;

@@ -38,7 +38,9 @@ async function request<T>(
     throw new ApiError(res.status, body);
   }
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // Nest devolve 200 com corpo vazio quando o handler retorna `null`.
+  const texto = await res.text();
+  return (texto ? JSON.parse(texto) : null) as T;
 }
 
 /** Cliente da API com token da sessão (server components / route handlers). */

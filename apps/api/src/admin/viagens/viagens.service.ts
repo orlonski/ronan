@@ -80,13 +80,14 @@ export class ViagensAdminService {
   /**
    * Pra cada viagem da lista, marca `temPedagioSemValor=true` quando a rota que
    * ela percorreu passa por pedágio cadastrado e o motorista não preencheu o
-   * valor. Roda em paralelo pra não somar latência. False (sem ruído) se:
+   * valor. False (sem ruído) se:
    * - já tem valor preenchido
    * - não deu pra checar a rota (sem cache de geometria confiável)
    * - falha na consulta de pedágios
    *
-   * `somenteCache`: a listagem é paginada e já faz 1 consulta por linha; pagar
-   * OSRM aqui multiplicaria isso por rede. O detalhe da viagem recalcula.
+   * Em lote e só com cache: a página inteira custa ~3 consultas. Linha a linha
+   * eram ~4 por viagem, todas disputando o pool ao mesmo tempo, e era a maior
+   * parte do tempo de abrir a lista. O detalhe da viagem recalcula.
    */
   private async marcarPedagiosSemValor<
     T extends {
@@ -96,25 +97,23 @@ export class ViagensAdminService {
       localDescargaId: string | null;
     },
   >(viagens: T[]): Promise<Array<T & { temPedagioSemValor: boolean }>> {
-    return Promise.all(
-      viagens.map(async (v) => {
-        if (v.valorPedagioTotal !== null && Number(v.valorPedagioTotal) > 0) {
-          return { ...v, temPedagioSemValor: false };
-        }
-        // EM_ANDAMENTO não tem locais definidos; já foi filtrada da listagem.
-        if (v.localCargaId === null || v.localDescargaId === null) {
-          return { ...v, temPedagioSemValor: false };
-        }
-        try {
-          const { pedagios } = await this.pedagiosConsulta.pedagiosDaViagem(v.id, {
-            somenteCache: true,
-          });
-          return { ...v, temPedagioSemValor: (pedagios?.length ?? 0) > 0 };
-        } catch {
-          return { ...v, temPedagioSemValor: false };
-        }
-      }),
+    // EM_ANDAMENTO não tem locais definidos; já foi filtrada da listagem.
+    const aChecar = viagens.filter(
+      (v) =>
+        !(v.valorPedagioTotal !== null && Number(v.valorPedagioTotal) > 0) &&
+        v.localCargaId !== null &&
+        v.localDescargaId !== null,
     );
+    let pedagios = new Map<string, { pedagios: unknown[] | null }>();
+    try {
+      pedagios = await this.pedagiosConsulta.pedagiosDasViagens(aChecar.map((v) => v.id));
+    } catch {
+      // Aviso é enfeite da lista: falhar aqui não pode derrubar a listagem.
+    }
+    return viagens.map((v) => ({
+      ...v,
+      temPedagioSemValor: (pedagios.get(v.id)?.pedagios?.length ?? 0) > 0,
+    }));
   }
 
   /** Praças na rota real desta viagem. Ver PedagiosRodoviaConsultaService. */

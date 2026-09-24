@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PedagiosRodoviaService } from "./pedagios-rodovia.service";
 import { PrismaService } from "../../prisma/prisma.service";
-import { RoteamentoService } from "../../roteamento/roteamento.service";
+import { RoteamentoService, chavePar } from "../../roteamento/roteamento.service";
 import { distanciaMetros } from "../../common/geo";
 
 const DISTANCIA_MAX_METROS = 150; // raio em volta da polyline pra considerar "na rota"
@@ -93,35 +93,93 @@ export class PedagiosRodoviaConsultaService {
     );
     if (!ida) return { pedagios: null };
 
-    // Perna de bota-fora: descarga→carga. Sem ela os pedágios da volta ficavam
-    // de fora, mesmo com o km dela já entrando no faturável.
-    const pernas: Array<[string, string]> = [];
-    let anterior = localDescargaId;
-    for (const t of viagem.trechos) {
-      if (t.tipo !== "RETORNO_BOTA_FORA") continue;
-      pernas.push([anterior, t.localId]);
-      anterior = t.localId;
-    }
-
     const geometrias = [ida];
-    for (const [origem, destino] of pernas) {
+    for (const [origem, destino] of pernasBotaFora(localDescargaId, viagem.trechos)) {
       const g = await this.geometriaDaPerna(origem, destino, opts);
       // Perna sem geometria = subcontagem silenciosa; melhor dizer "não sei".
       if (!g) return { pedagios: null };
       geometrias.push(g);
     }
 
-    const porId = new Map<string, PedagioNaRota>();
-    for (const g of geometrias) {
-      for (const p of await this.pedagiosNaGeometria(g)) {
-        // Mesma praça na ida e na volta = 1 praça na lista (o aviso conta
-        // praças distintas, não cobranças).
-        const jaVisto = porId.get(p.id);
-        if (!jaVisto || p.distanciaMetros < jaVisto.distanciaMetros) porId.set(p.id, p);
+    const listas: PedagioNaRota[][] = [];
+    for (const g of geometrias) listas.push(await this.pedagiosNaGeometria(g));
+    return { pedagios: juntarPracas(listas) };
+  }
+
+  /**
+   * `pedagiosDaViagem(id, { somenteCache: true })` de uma página inteira da
+   * listagem, em ~3 consultas no total em vez de ~4 por linha: as viagens de
+   * uma vez, o cache de rota de todos os pares de uma vez e as praças de um
+   * envelope que cobre todas as rotas. Mesma resposta, linha a linha — quem
+   * não aparece no mapa é viagem que não existe.
+   */
+  async pedagiosDasViagens(viagemIds: string[]): Promise<Map<string, PedagiosDaViagem>> {
+    const out = new Map<string, PedagiosDaViagem>();
+    if (viagemIds.length === 0) return out;
+    const viagens = await this.prisma.viagem.findMany({
+      where: { id: { in: viagemIds } },
+      select: {
+        id: true,
+        localCargaId: true,
+        localDescargaId: true,
+        rotaGeometria: true,
+        trechos: { select: { tipo: true, localId: true, ordem: true }, orderBy: { ordem: "asc" } },
+      },
+    });
+
+    const pares: Array<[string, string]> = [];
+    for (const v of viagens) {
+      if (!v.localCargaId || !v.localDescargaId) continue;
+      if (!v.rotaGeometria) pares.push([v.localCargaId, v.localDescargaId]);
+      pares.push(...pernasBotaFora(v.localDescargaId, v.trechos));
+    }
+    const cache = await this.roteamento.geometriasCacheadas(pares);
+
+    // Geometrias de cada viagem; null = "não sei", igual a pedagiosDaViagem.
+    const geometriasPorViagem = new Map<string, string[] | null>();
+    for (const v of viagens) {
+      const { localCargaId, localDescargaId } = v;
+      if (!localCargaId || !localDescargaId) {
+        geometriasPorViagem.set(v.id, null);
+        continue;
+      }
+      const ida = v.rotaGeometria ?? cache.get(chavePar(localCargaId, localDescargaId)) ?? null;
+      const pernas = pernasBotaFora(localDescargaId, v.trechos).map(
+        ([o, d]) => cache.get(chavePar(o, d)) ?? null,
+      );
+      const todas = ida ? [ida, ...pernas] : [];
+      geometriasPorViagem.set(v.id, ida && todas.every(Boolean) ? (todas as string[]) : null);
+    }
+
+    const pontosPorGeometria = new Map<string, Array<[number, number]>>();
+    for (const gs of geometriasPorViagem.values()) {
+      for (const g of gs ?? []) {
+        if (!pontosPorGeometria.has(g)) pontosPorGeometria.set(g, decodePolyline(g));
       }
     }
-    const pedagios = [...porId.values()].sort((a, b) => a.distanciaMetros - b.distanciaMetros);
-    return { pedagios };
+    const comRota = [...pontosPorGeometria.values()].filter((p) => p.length >= 2);
+    const candidatos =
+      comRota.length > 0 ? await this.pedagiosAdmin.listarNoEnvelope(bboxComFolga(comRota.flat())) : [];
+
+    for (const [id, gs] of geometriasPorViagem) {
+      if (!gs) {
+        out.set(id, { pedagios: null });
+        continue;
+      }
+      const listas = gs.map((g) => {
+        const pontos = pontosPorGeometria.get(g)!;
+        if (pontos.length < 2) return [];
+        const bbox = bboxComFolga(pontos);
+        return pracasPertoDaRota(
+          pontos,
+          candidatos.filter(
+            (c) => c.lat >= bbox.minLat && c.lat <= bbox.maxLat && c.lng >= bbox.minLng && c.lng <= bbox.maxLng,
+          ),
+        );
+      });
+      out.set(id, { pedagios: juntarPracas(listas) });
+    }
+    return out;
   }
 
   /**
@@ -158,27 +216,68 @@ export class PedagiosRodoviaConsultaService {
 
     const bbox = bboxComFolga(pontos);
     const candidatos = await this.pedagiosAdmin.listarNoEnvelope(bbox);
-    if (candidatos.length === 0) return [];
-
-    const proximos: PedagioNaRota[] = [];
-    for (const p of candidatos) {
-      const dist = menorDistanciaAteRota(p.lat, p.lng, pontos);
-      if (dist <= DISTANCIA_MAX_METROS) {
-        proximos.push({
-          id: p.id,
-          nome: p.nome,
-          rodovia: p.rodovia,
-          concessionaria: p.concessionaria,
-          distanciaMetros: Math.round(dist),
-          lat: p.lat,
-          lng: p.lng,
-          valorBase: p.valorBase == null ? null : p.valorBase.toFixed(2),
-        });
-      }
-    }
-    proximos.sort((a, b) => a.distanciaMetros - b.distanciaMetros);
-    return proximos;
+    return pracasPertoDaRota(pontos, candidatos);
   }
+}
+
+type PracaCandidata = Awaited<ReturnType<PedagiosRodoviaService["listarNoEnvelope"]>>[number];
+
+/** Das candidatas, as praças a até DISTANCIA_MAX_METROS da polyline, mais perto primeiro. */
+function pracasPertoDaRota(
+  pontos: Array<[number, number]>,
+  candidatos: PracaCandidata[],
+): PedagioNaRota[] {
+  const proximos: PedagioNaRota[] = [];
+  for (const p of candidatos) {
+    const dist = menorDistanciaAteRota(p.lat, p.lng, pontos);
+    if (dist <= DISTANCIA_MAX_METROS) {
+      proximos.push({
+        id: p.id,
+        nome: p.nome,
+        rodovia: p.rodovia,
+        concessionaria: p.concessionaria,
+        distanciaMetros: Math.round(dist),
+        lat: p.lat,
+        lng: p.lng,
+        valorBase: p.valorBase == null ? null : p.valorBase.toFixed(2),
+      });
+    }
+  }
+  proximos.sort((a, b) => a.distanciaMetros - b.distanciaMetros);
+  return proximos;
+}
+
+/**
+ * Pernas de bota-fora: descarga→carga. Sem elas os pedágios da volta ficavam
+ * de fora, mesmo com o km delas já entrando no faturável.
+ */
+function pernasBotaFora(
+  localDescargaId: string,
+  trechos: Array<{ tipo: string; localId: string }>,
+): Array<[string, string]> {
+  const pernas: Array<[string, string]> = [];
+  let anterior = localDescargaId;
+  for (const t of trechos) {
+    if (t.tipo !== "RETORNO_BOTA_FORA") continue;
+    pernas.push([anterior, t.localId]);
+    anterior = t.localId;
+  }
+  return pernas;
+}
+
+/**
+ * Mesma praça na ida e na volta = 1 praça na lista (o aviso conta praças
+ * distintas, não cobranças).
+ */
+function juntarPracas(listas: PedagioNaRota[][]): PedagioNaRota[] {
+  const porId = new Map<string, PedagioNaRota>();
+  for (const lista of listas) {
+    for (const p of lista) {
+      const jaVisto = porId.get(p.id);
+      if (!jaVisto || p.distanciaMetros < jaVisto.distanciaMetros) porId.set(p.id, p);
+    }
+  }
+  return [...porId.values()].sort((a, b) => a.distanciaMetros - b.distanciaMetros);
 }
 
 // ===== Helpers geométricos =====

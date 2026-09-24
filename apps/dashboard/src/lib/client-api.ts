@@ -96,8 +96,7 @@ export async function fetchApi<T>(
           try { body = await retry.json(); } catch { body = null; }
           throw new ApiError(retry.status, body);
         }
-        if (retry.status === 204) return undefined as T;
-        return (await retry.json()) as T;
+        return lerCorpo<T>(retry);
       }
       // Token novo também rejeitado: sessão realmente inválida.
       if (typeof window !== "undefined") signOut({ callbackUrl: "/login" });
@@ -116,8 +115,19 @@ export async function fetchApi<T>(
     try { body = await res.json(); } catch { body = null; }
     throw new ApiError(res.status, body);
   }
+  return lerCorpo<T>(res);
+}
+
+/**
+ * Corpo da resposta de sucesso. Endpoint do Nest que devolve `null` responde
+ * 200 com corpo VAZIO — e `res.json()` nisso lança. A query falhava, o React
+ * Query repetia 3 vezes (1s, 2s, 4s de espera) e cada troca de tela disparava
+ * 4 buscas do tour em vez de 1.
+ */
+async function lerCorpo<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  const texto = await res.text();
+  return (texto ? JSON.parse(texto) : null) as T;
 }
 
 export function useAuthToken(): string | undefined {
