@@ -1749,6 +1749,11 @@ model MotoristaPosicao {
   @@index([motoristaId, capturadoEm])
   @@index([capturadoEm])
   @@index([contaId])
+  // Mapa da frota: "última posição desde X" por capturadoEm OU recebidoEm. Com
+  // um índice por coluna, começando pela conta, o Postgres junta os dois
+  // (BitmapOr); sem eles lia todas as posições da empresa (até 90 dias).
+  @@index([contaId, capturadoEm])
+  @@index([contaId, recebidoEm])
   @@map("motorista_posicoes")
 }
 
