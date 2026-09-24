@@ -9,8 +9,15 @@ import { useAuthToken } from "@/lib/client-api";
 
 export type FotoVisualizavel = {
   id: string;
-  /** Caminho na API da foto INTEIRA, ex.: `/admin/abastecimentos/<id>/fotos/<fotoId>`. */
-  caminho: string;
+  /**
+   * De onde vem a foto INTEIRA — um dos dois:
+   * - `caminho`: rota da API que exige login (painel), ex.
+   *   `/admin/abastecimentos/<id>/fotos/<fotoId>` — baixada com o token;
+   * - `url`: endereço que o navegador abre direto (comprovante público, onde o
+   *   token do link já autoriza) — vai no `<img src>`, sem fetch.
+   */
+  caminho?: string;
+  url?: string;
   rotacao: number;
   /** Blob URL que a tela já tem (miniatura ou a própria foto): aparece na hora. */
   previa?: string;
@@ -85,17 +92,23 @@ export function VisualizadorFotos({
   const salvas = fotos.map((f) => `${f.id}:${f.rotacao}`).join("|");
   useEffect(() => setGiro({}), [salvas]);
 
-  const inteira = useFotoInteira(foto?.caminho);
-  const src = inteira.data ?? foto?.previa;
+  const inteira = useFotoInteira(foto?.url ? undefined : foto?.caminho);
+  const src = foto?.url ?? inteira.data ?? foto?.previa;
 
   // Adianta a próxima: passar de foto não pode ser esperar de novo.
   useEffect(() => {
-    if (!aberto || total < 2 || !token) return;
+    if (!aberto || total < 2) return;
     const prox = fotos[(indice + 1) % total];
     if (!prox) return;
+    if (prox.url) {
+      new Image().src = prox.url;
+      return;
+    }
+    if (!token || !prox.caminho) return;
+    const caminho = prox.caminho;
     void qc.prefetchQuery({
-      queryKey: ["foto-inteira", prox.caminho],
-      queryFn: () => baixar(prox.caminho, token),
+      queryKey: ["foto-inteira", caminho],
+      queryFn: () => baixar(caminho, token),
       staleTime: 30 * 60_000,
     });
   }, [aberto, indice, total, fotos, token, qc]);

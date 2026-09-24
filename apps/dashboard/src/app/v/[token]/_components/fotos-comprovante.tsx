@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ImageOff, X } from "lucide-react";
+import { ImageOff } from "lucide-react";
+import { VisualizadorFotos } from "@/components/visualizador-fotos";
 
 export type FotoPublica = { id: string; rotacao: number };
 
@@ -14,7 +15,7 @@ export type FotoPublica = { id: string; rotacao: number };
  * CORS, e funciona no 4G ruim do celular do cliente.
  */
 export function FotosComprovante({ fotos, urlComprovante }: { fotos: FotoPublica[]; urlComprovante: string }) {
-  const [aberta, setAberta] = useState<FotoPublica | null>(null);
+  const [aberta, setAberta] = useState<number | null>(null);
 
   if (fotos.length === 0) return null;
 
@@ -23,34 +24,24 @@ export function FotosComprovante({ fotos, urlComprovante }: { fotos: FotoPublica
       {/* Largura cheia no celular: o ticket de balança é o que o cliente quer
           conferir de perto, e em duas colunas o número não se lê. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {fotos.map((f) => (
-          <FotoCard key={f.id} foto={f} urlComprovante={urlComprovante} onAbrir={() => setAberta(f)} />
+        {fotos.map((f, i) => (
+          <FotoCard key={f.id} foto={f} urlComprovante={urlComprovante} onAbrir={() => setAberta(i)} />
         ))}
       </div>
 
-      {aberta && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 print:hidden"
-          onClick={() => setAberta(null)}
-          role="dialog"
-          aria-label="Foto ampliada"
-        >
-          <button
-            type="button"
-            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white"
-            aria-label="Fechar"
-          >
-            <X className="h-6 w-6" />
-          </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`${urlComprovante}/fotos/${aberta.id}`}
-            alt="Ticket de balança"
-            className="max-h-full max-w-full object-contain"
-            style={{ transform: `rotate(${aberta.rotacao}deg)` }}
-          />
-        </div>
-      )}
+      {/* O mesmo visualizador do painel: zoom (pinça no celular), arrastar,
+          passar entre as fotos. Sem girar — quem vê o comprovante só lê. */}
+      <VisualizadorFotos
+          fotos={fotos.map((f) => ({
+            id: f.id,
+            url: `${urlComprovante}/fotos/${f.id}`,
+            rotacao: f.rotacao,
+          }))}
+          indice={aberta}
+          onIndice={setAberta}
+          onFechar={() => setAberta(null)}
+          titulo="Ticket de balança"
+        />
     </>
   );
 }
