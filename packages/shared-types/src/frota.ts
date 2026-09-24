@@ -93,6 +93,21 @@ export const CriarPlanoManutencaoInput = z
   });
 export type CriarPlanoManutencaoInput = z.infer<typeof CriarPlanoManutencaoInput>;
 
+/** Editar o plano: mesmos campos, sem trocar de caminhão. */
+export const AtualizarPlanoManutencaoInput = z
+  .object({
+    descricao: z.string().trim().min(3).max(120),
+    intervaloKm: z.number().int().positive().max(999999).nullish(),
+    intervaloDias: z.number().int().positive().max(3650).nullish(),
+    ultimoOdometro: z.number().int().nonnegative().max(9999999).nullish(),
+    ultimaEm: DATA.nullish(),
+  })
+  .refine((d) => d.intervaloKm != null || d.intervaloDias != null, {
+    message: "Diga a cada quantos km ou a cada quantos dias.",
+    path: ["intervaloKm"],
+  });
+export type AtualizarPlanoManutencaoInput = z.infer<typeof AtualizarPlanoManutencaoInput>;
+
 export const SalvarDocumentoVeiculoInput = z.object({
   veiculoId: z.string().uuid(),
   tipo: z.string().trim().min(2).max(30),
@@ -160,11 +175,25 @@ export const AvisarProblemaVeiculoInput = z.object({
   descricao: z.string().trim().min(3, "Conte o que está acontecendo.").max(1000),
   /** Quando ele avisou no aparelho — o envio pode ter esperado sinal. */
   avisadoEm: z.coerce.date().optional(),
+  /**
+   * "Dá pra continuar rodando?". Opcional porque o app anterior não
+   * perguntava, e o aviso dele pode estar na fila esperando sinal.
+   */
+  podeRodar: z.enum(["SIM", "COM_CUIDADO", "NAO"]).nullish(),
+  /** Onde parou — o app só manda quando `podeRodar` é NAO. */
+  lat: z.coerce.number().min(-90).max(90).nullish(),
+  lng: z.coerce.number().min(-180).max(180).nullish(),
 });
 export type AvisarProblemaVeiculoInput = z.infer<typeof AvisarProblemaVeiculoInput>;
 
 export const STATUS_PROBLEMA_VEICULO = ["ABERTO", "VIROU_MANUTENCAO", "DESCARTADO"] as const;
 export type StatusProblemaVeiculoTipo = (typeof STATUS_PROBLEMA_VEICULO)[number];
+
+export const PODE_RODAR_LABEL: Record<"SIM" | "COM_CUIDADO" | "NAO", string> = {
+  SIM: "Dá pra rodar",
+  COM_CUIDADO: "Dá pra rodar com cuidado",
+  NAO: "Caminhão parado",
+};
 
 /** O escritório decidindo o aviso que não vira manutenção. */
 export const DescartarProblemaVeiculoInput = z.object({

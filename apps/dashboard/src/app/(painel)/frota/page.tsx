@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   CircleDot,
@@ -12,6 +13,7 @@ import {
   Wrench,
 } from "lucide-react";
 import {
+  PODE_RODAR_LABEL,
   STATUS_MANUTENCAO_LABEL,
   STATUS_MULTA,
   STATUS_MULTA_LABEL,
@@ -78,6 +80,7 @@ type Alertas = {
     descricao: string;
     avisadoEm: string;
     fotos: number;
+    podeRodar: "SIM" | "COM_CUIDADO" | "NAO" | null;
     veiculo: Veiculo | null;
     motorista: { id: string; nome: string };
   }[];
@@ -122,7 +125,12 @@ type Aba = "alertas" | "avisos" | "manutencoes" | "planos" | "pneus" | "multas" 
 function Conteudo() {
   const token = useAuthToken();
   const { temPermissao } = usePermissoes();
-  const [aba, setAba] = React.useState<Aba>("alertas");
+  // O sininho do aviso do motorista chega com `?aba=avisos`.
+  const abaDaUrl = useSearchParams().get("aba");
+  const [aba, setAba] = React.useState<Aba>(abaDaUrl === "avisos" ? "avisos" : "alertas");
+  // "Lançar feita" no alerta de preventiva abre Manutenções já com o caminhão
+  // e o plano — é o plano marcado que zera a contagem.
+  const [prefill, setPrefill] = React.useState<{ veiculo: Veiculo; planoId: string; descricao: string } | null>(null);
   // Cada aba fala com um recurso próprio da API (pneus, multas, documentos):
   // quem não tem a chave não vê a aba, em vez de abrir e tomar 403.
   const abas = (
@@ -183,11 +191,22 @@ function Conteudo() {
       {aba === "alertas" && (
         <>
           {alertas.isLoading && <LoadingCard />}
-          {alertas.data && <BlocoAlertas a={alertas.data} onVerAvisos={() => setAba("avisos")} />}
+          {alertas.data && (
+            <BlocoAlertas
+              a={alertas.data}
+              onVerAvisos={() => setAba("avisos")}
+              onLancarPlano={(p) => {
+                setPrefill(p);
+                setAba("manutencoes");
+              }}
+            />
+          )}
         </>
       )}
       {aba === "avisos" && <ListaAvisos />}
-      {aba === "manutencoes" && <ListaManutencoes />}
+      {aba === "manutencoes" && (
+        <ListaManutencoes prefill={prefill} onPrefillUsado={() => setPrefill(null)} />
+      )}
       {aba === "planos" && <ListaPlanos />}
       {aba === "pneus" && <ListaPneus />}
       {aba === "multas" && <ListaMultas />}
@@ -196,7 +215,15 @@ function Conteudo() {
   );
 }
 
-function BlocoAlertas({ a, onVerAvisos }: { a: Alertas; onVerAvisos: () => void }) {
+function BlocoAlertas({
+  a,
+  onVerAvisos,
+  onLancarPlano,
+}: {
+  a: Alertas;
+  onVerAvisos: () => void;
+  onLancarPlano: (p: { veiculo: Veiculo; planoId: string; descricao: string }) => void;
+}) {
   const avisos = a.avisosMotorista ?? [];
   const nada =
     avisos.length === 0 &&
@@ -229,6 +256,9 @@ function BlocoAlertas({ a, onVerAvisos }: { a: Alertas; onVerAvisos: () => void 
             {avisos.slice(0, 5).map((v) => (
               <li key={v.id} className="flex flex-wrap justify-between gap-2">
                 <span className="min-w-0 truncate">
+                  {v.podeRodar === "NAO" && (
+                    <Badge className="mr-2 border-transparent bg-red-100 text-red-700">Parado</Badge>
+                  )}
                   <span className="font-medium">{v.veiculo?.placa ?? "sem placa"}</span> ·{" "}
                   {v.descricao}
                 </span>
@@ -271,10 +301,11 @@ function BlocoAlertas({ a, onVerAvisos }: { a: Alertas; onVerAvisos: () => void 
           </p>
           <ul className="space-y-2 text-sm">
             {a.manutencoes.map((m) => (
-              <li key={m.planoId} className="flex flex-wrap items-baseline justify-between gap-2">
+              <li key={m.planoId} className="flex flex-wrap items-center justify-between gap-2">
                 <span>
                   <span className="font-medium">{m.veiculo.placa}</span> · {m.descricao}
                 </span>
+                <span className="flex items-center gap-2">
                 <Badge
                   className={`border-transparent ${
                     m.situacao === "VENCIDO"
@@ -289,6 +320,18 @@ function BlocoAlertas({ a, onVerAvisos }: { a: Alertas; onVerAvisos: () => void 
                       ? ` · ${Math.abs(m.diasRestante)} dias`
                       : ""}
                 </Badge>
+                <Permitido chave="manutencao.criar">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      onLancarPlano({ veiculo: m.veiculo, planoId: m.planoId, descricao: m.descricao })
+                    }
+                  >
+                    Lançar feita
+                  </Button>
+                </Permitido>
+                </span>
               </li>
             ))}
           </ul>
@@ -398,6 +441,9 @@ type Aviso = {
   avisadoEm: string;
   status: "ABERTO" | "VIROU_MANUTENCAO" | "DESCARTADO";
   fotos: number;
+  podeRodar: "SIM" | "COM_CUIDADO" | "NAO" | null;
+  lat: number | null;
+  lng: number | null;
   motivoDescarte: string | null;
   decididoEm: string | null;
   manutencaoId: string | null;
@@ -504,6 +550,16 @@ function ListaAvisos() {
   );
 }
 
+function SeloPodeRodar({ v }: { v: "SIM" | "COM_CUIDADO" | "NAO" }) {
+  const cls =
+    v === "NAO"
+      ? "bg-red-100 text-red-700"
+      : v === "COM_CUIDADO"
+        ? "bg-amber-100 text-amber-800"
+        : "bg-slate-100 text-slate-700";
+  return <Badge className={`border-transparent ${cls}`}>{PODE_RODAR_LABEL[v]}</Badge>;
+}
+
 function CardAviso({ a, onMudou }: { a: Aviso; onMudou: () => void }) {
   const token = useAuthToken();
   const [modo, setModo] = React.useState<"nada" | "abrir" | "descartar">("nada");
@@ -562,6 +618,7 @@ function CardAviso({ a, onMudou }: { a: Aviso; onMudou: () => void }) {
             avisou em {new Date(a.avisadoEm).toLocaleString("pt-BR")}
           </p>
         </div>
+        {a.status === "ABERTO" && a.podeRodar && <SeloPodeRodar v={a.podeRodar} />}
         {a.status === "VIROU_MANUTENCAO" && (
           <Badge className="border-transparent bg-emerald-100 text-emerald-700">Virou manutenção</Badge>
         )}
@@ -570,6 +627,16 @@ function CardAviso({ a, onMudou }: { a: Aviso; onMudou: () => void }) {
         )}
       </div>
       <p className="whitespace-pre-wrap text-sm">{a.descricao}</p>
+      {a.lat != null && a.lng != null && (
+        <a
+          href={`https://www.google.com/maps?q=${a.lat},${a.lng}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block text-sm font-medium text-blue-700 underline-offset-2 hover:underline"
+        >
+          Ver no mapa onde o caminhão parou →
+        </a>
+      )}
       {a.fotos > 0 && (
         <div className="flex flex-wrap gap-2">
           {Array.from({ length: a.fotos }, (_, i) => (
@@ -606,6 +673,7 @@ function CardAviso({ a, onMudou }: { a: Aviso; onMudou: () => void }) {
             <div className="space-y-1">
               <Label>Caminhão</Label>
               <VeiculoCombobox
+                triggerClassName="sm:w-full"
                 value={veiculoId}
                 initialOption={a.veiculo ? { value: a.veiculo.id, label: a.veiculo.placa } : undefined}
                 onChange={setVeiculoId}
@@ -664,11 +732,18 @@ function CardAviso({ a, onMudou }: { a: Aviso; onMudou: () => void }) {
   );
 }
 
-function ListaManutencoes() {
+function ListaManutencoes({
+  prefill,
+  onPrefillUsado,
+}: {
+  prefill: { veiculo: Veiculo; planoId: string; descricao: string } | null;
+  onPrefillUsado: () => void;
+}) {
   const token = useAuthToken();
   const queryClient = useQueryClient();
   const [criando, setCriando] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
+  const [veiculoInicial, setVeiculoInicial] = React.useState<Veiculo | null>(null);
   const [form, setForm] = React.useState({
     veiculoId: undefined as string | undefined,
     tipo: "PREVENTIVA" as TipoManutencaoTipo,
@@ -676,7 +751,33 @@ function ListaManutencoes() {
     odometro: "",
     valorPecas: "",
     valorMaoObra: "",
+    planoId: "",
   });
+
+  // Veio do "Lançar feita" do alerta: abre o formulário já preenchido.
+  React.useEffect(() => {
+    if (!prefill) return;
+    setVeiculoInicial(prefill.veiculo);
+    setForm((f) => ({
+      ...f,
+      veiculoId: prefill.veiculo.id,
+      tipo: "PREVENTIVA",
+      descricao: prefill.descricao,
+      planoId: prefill.planoId,
+    }));
+    setCriando(true);
+    onPrefillUsado();
+  }, [prefill, onPrefillUsado]);
+
+  // Os planos do caminhão escolhido: marcar o plano é o que zera a contagem
+  // dele. Sem isto o plano ficava "vencido" pra sempre depois do serviço feito.
+  const planos = useQuery({
+    queryKey: ["planos-manutencao"],
+    enabled: Boolean(token) && criando,
+    queryFn: () => fetchApi<Plano[]>("/admin/manutencao/planos", { token: token! }),
+  });
+  const planosDoVeiculo = (planos.data ?? []).filter((p) => p.veiculo.id === form.veiculoId);
+  const planoEscolhido = planosDoVeiculo.find((p) => p.id === form.planoId);
 
   const lista = useQuery({
     queryKey: ["manutencoes"],
@@ -689,6 +790,9 @@ function ListaManutencoes() {
     if (!token) return;
     if (!form.veiculoId) return setErro("Escolha o caminhão.");
     if (form.descricao.trim().length < 3) return setErro("Diga o que foi feito.");
+    if (planoEscolhido?.intervaloKm != null && !form.odometro.trim()) {
+      return setErro("Informe o odômetro: é ele que reinicia a contagem por km do plano.");
+    }
     setErro(null);
     try {
       await fetchApi("/admin/manutencao", {
@@ -705,11 +809,13 @@ function ListaManutencoes() {
           valorMaoObra: form.valorMaoObra
             ? Number(form.valorMaoObra.replace(/\./g, "").replace(",", "."))
             : null,
+          planoId: planoEscolhido ? planoEscolhido.id : null,
         }),
       });
       setCriando(false);
-      setForm({ ...form, descricao: "", odometro: "", valorPecas: "", valorMaoObra: "" });
+      setForm({ ...form, descricao: "", odometro: "", valorPecas: "", valorMaoObra: "", planoId: "" });
       await queryClient.invalidateQueries({ queryKey: ["manutencoes"] });
+      await queryClient.invalidateQueries({ queryKey: ["planos-manutencao"] });
       await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
     } catch (e) {
       setErro((e as Error).message);
@@ -741,8 +847,12 @@ function ListaManutencoes() {
             <div className="space-y-1">
               <Label>Caminhão</Label>
               <VeiculoCombobox
+                triggerClassName="sm:w-full"
                 value={form.veiculoId}
-                onChange={(v) => setForm({ ...form, veiculoId: v })}
+                initialOption={
+                  veiculoInicial ? { value: veiculoInicial.id, label: veiculoInicial.placa } : undefined
+                }
+                onChange={(v) => setForm({ ...form, veiculoId: v, planoId: "" })}
               />
             </div>
             <div className="space-y-1">
@@ -760,6 +870,34 @@ function ListaManutencoes() {
               </Select>
             </div>
           </div>
+          {planosDoVeiculo.length > 0 && (
+            <div className="space-y-1">
+              <Label htmlFor="man-plano">É de algum plano de manutenção?</Label>
+              <Select
+                id="man-plano"
+                value={form.planoId}
+                onChange={(e) => {
+                  const pl = planosDoVeiculo.find((p) => p.id === e.target.value);
+                  setForm({
+                    ...form,
+                    planoId: e.target.value,
+                    descricao: form.descricao || pl?.descricao || "",
+                  });
+                }}
+              >
+                <option value="">Não, é avulsa</option>
+                {planosDoVeiculo.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.descricao}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Marcando o plano, a contagem dele recomeça a partir desta manutenção
+                {planoEscolhido?.intervaloKm != null ? " (e do odômetro informado)" : ""}.
+              </p>
+            </div>
+          )}
           <div className="space-y-1">
             <Label htmlFor="man-desc">O que foi feito</Label>
             <Input
@@ -898,7 +1036,9 @@ function ListaPlanos() {
   const token = useAuthToken();
   const queryClient = useQueryClient();
   const { confirmar, ConfirmDialog } = useConfirm();
-  const [criando, setCriando] = React.useState(false);
+  // null = fechado; "" = novo; id = editando.
+  const [editando, setEditando] = React.useState<string | null>(null);
+  const criando = editando !== null;
   const [erro, setErro] = React.useState<string | null>(null);
   const vazio = {
     veiculoId: undefined as string | undefined,
@@ -930,11 +1070,11 @@ function ListaPlanos() {
     if (km == null && dias == null) return setErro("Diga a cada quantos km ou a cada quantos dias.");
     setErro(null);
     try {
-      await fetchApi("/admin/manutencao/planos", {
+      await fetchApi(editando ? `/admin/manutencao/planos/${editando}` : "/admin/manutencao/planos", {
         token,
-        method: "POST",
+        method: editando ? "PATCH" : "POST",
         body: JSON.stringify({
-          veiculoId: form.veiculoId,
+          ...(editando ? {} : { veiculoId: form.veiculoId }),
           descricao: form.descricao,
           intervaloKm: km,
           intervaloDias: dias,
@@ -942,7 +1082,7 @@ function ListaPlanos() {
           ultimaEm: form.ultimaEm || null,
         }),
       });
-      setCriando(false);
+      setEditando(null);
       setForm({ ...vazio, veiculoId: form.veiculoId });
       await atualizar();
     } catch (e) {
@@ -974,7 +1114,15 @@ function ListaPlanos() {
         abastecimentos.
       </p>
       <Permitido chave="manutencao.criar">
-        <Button variant="outline" size="sm" onClick={() => setCriando((v) => !v)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setErro(null);
+            setForm(vazio);
+            setEditando(editando === "" ? null : "");
+          }}
+        >
           <Plus className="h-3.5 w-3.5" /> Novo plano
         </Button>
       </Permitido>
@@ -984,10 +1132,17 @@ function ListaPlanos() {
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
               <Label>Caminhão</Label>
-              <VeiculoCombobox
-                value={form.veiculoId}
-                onChange={(v) => setForm({ ...form, veiculoId: v })}
-              />
+              {editando ? (
+                <p className="flex h-9 items-center text-sm font-medium">
+                  {itens.find((p) => p.id === editando)?.veiculo.placa}
+                </p>
+              ) : (
+                <VeiculoCombobox
+                  triggerClassName="sm:w-full"
+                  value={form.veiculoId}
+                  onChange={(v) => setForm({ ...form, veiculoId: v })}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label htmlFor="plano-desc">Manutenção</Label>
@@ -1022,7 +1177,9 @@ function ListaPlanos() {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Pode preencher os dois: vale o que chegar primeiro.
+            Pode preencher os dois: vale o que chegar primeiro. O aviso por km usa o odômetro
+            anotado nos abastecimentos deste caminhão — sem odômetro anotado, só o aviso por dias
+            funciona.
           </p>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
@@ -1046,7 +1203,7 @@ function ListaPlanos() {
           </div>
           {erro && <p className="text-sm text-destructive">{erro}</p>}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setCriando(false)}>
+            <Button variant="outline" size="sm" onClick={() => setEditando(null)}>
               Cancelar
             </Button>
             <Button size="sm" variant="success" onClick={() => void salvar()}>
@@ -1086,11 +1243,33 @@ function ListaPlanos() {
                   .join(", ")}`}
             </p>
           </div>
-          <Permitido chave="manutencao.excluir">
-            <Button size="sm" variant="outline" onClick={() => void remover(p)}>
-              Excluir
-            </Button>
-          </Permitido>
+          <div className="flex gap-2">
+            <Permitido chave="manutencao.editar">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setErro(null);
+                  setForm({
+                    veiculoId: p.veiculo.id,
+                    descricao: p.descricao,
+                    intervaloKm: p.intervaloKm != null ? String(p.intervaloKm) : "",
+                    intervaloDias: p.intervaloDias != null ? String(p.intervaloDias) : "",
+                    ultimoOdometro: p.ultimoOdometro != null ? String(p.ultimoOdometro) : "",
+                    ultimaEm: p.ultimaEm ? p.ultimaEm.slice(0, 10) : "",
+                  });
+                  setEditando(p.id);
+                }}
+              >
+                Editar
+              </Button>
+            </Permitido>
+            <Permitido chave="manutencao.excluir">
+              <Button size="sm" variant="outline" onClick={() => void remover(p)}>
+                Excluir
+              </Button>
+            </Permitido>
+          </div>
         </Card>
       ))}
     </div>
@@ -1248,6 +1427,7 @@ function ListaPneus() {
             <div className="space-y-1">
               <Label>Caminhão (vazio = em estoque)</Label>
               <VeiculoCombobox
+                triggerClassName="sm:w-full"
                 value={form.veiculoId}
                 onChange={(v) => setForm({ ...form, veiculoId: v })}
               />
@@ -1516,6 +1696,7 @@ function ListaMultas() {
             <div className="space-y-1">
               <Label>Caminhão</Label>
               <VeiculoCombobox
+                triggerClassName="sm:w-full"
                 value={form.veiculoId}
                 onChange={(v) => setForm({ ...form, veiculoId: v })}
               />
@@ -1523,6 +1704,7 @@ function ListaMultas() {
             <div className="space-y-1">
               <Label>Quem dirigia (se já souber)</Label>
               <MotoristaCombobox
+                  triggerClassName="sm:w-full"
                 value={form.motoristaId}
                 onChange={(v) => setForm({ ...form, motoristaId: v })}
                 placeholder="Escolher motorista…"
@@ -1614,6 +1796,7 @@ function ListaMultas() {
               <div className="space-y-1">
                 <Label>Quem dirigia</Label>
                 <MotoristaCombobox
+                  triggerClassName="sm:w-full"
                   value={m.motorista?.id}
                   initialOption={
                     m.motorista ? { value: m.motorista.id, label: m.motorista.nome } : undefined
@@ -1647,6 +1830,8 @@ function ListaMultas() {
 function ListaDocumentos() {
   const token = useAuthToken();
   const queryClient = useQueryClient();
+  const { confirmar, ConfirmDialog } = useConfirm();
+  const [veiculoInicial, setVeiculoInicial] = React.useState<Veiculo | null>(null);
   const [form, setForm] = React.useState({
     veiculoId: undefined as string | undefined,
     tipo: "CRLV",
@@ -1679,8 +1864,30 @@ function ListaDocumentos() {
     await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
   }
 
+  /** Editar = o mesmo caminhão e documento com a data nova (o salvar troca a validade). */
+  function editar(d: Alertas["documentos"][number]) {
+    setVeiculoInicial(d.veiculo);
+    setForm({ veiculoId: d.veiculo.id, tipo: d.tipo, validade: d.validade ? d.validade.slice(0, 10) : "" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function excluir(d: Alertas["documentos"][number]) {
+    if (!token) return;
+    const ok = await confirmar({
+      title: `Excluir o ${d.tipo} do ${d.veiculo.placa}?`,
+      description: "O aviso de vencimento deste documento para de aparecer.",
+      confirmLabel: "Excluir documento",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    await fetchApi(`/admin/documentos-veiculo/${d.id}`, { token, method: "DELETE" });
+    await queryClient.invalidateQueries({ queryKey: ["documentos-veiculo"] });
+    await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
+  }
+
   return (
     <div className="space-y-3">
+      <ConfirmDialog />
       <Permitido chave="documentos-veiculo.editar">
         <Card className="space-y-3 p-4">
           <p className="text-sm font-semibold">Cadastrar validade</p>
@@ -1688,7 +1895,11 @@ function ListaDocumentos() {
             <div className="space-y-1">
               <Label>Caminhão</Label>
               <VeiculoCombobox
+                triggerClassName="sm:w-full"
                 value={form.veiculoId}
+                initialOption={
+                  veiculoInicial ? { value: veiculoInicial.id, label: veiculoInicial.placa } : undefined
+                }
                 onChange={(v) => setForm({ ...form, veiculoId: v })}
               />
             </div>
@@ -1736,6 +1947,7 @@ function ListaDocumentos() {
               vence {dataBR(d.validade)}
             </p>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
           {d.diasRestantes != null && d.diasRestantes <= 45 && (
             <Badge
               className={`border-transparent ${
@@ -1746,6 +1958,15 @@ function ListaDocumentos() {
               {d.diasRestantes < 0 ? "vencido" : `${d.diasRestantes} dias`}
             </Badge>
           )}
+          <Permitido chave="documentos-veiculo.editar">
+            <Button size="sm" variant="outline" onClick={() => editar(d)}>
+              Editar
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => void excluir(d)}>
+              Excluir
+            </Button>
+          </Permitido>
+          </div>
         </Card>
       ))}
     </div>

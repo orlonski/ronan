@@ -2561,3 +2561,36 @@ export function useVisualizacoesStory(storyId: string | null, enabled: boolean) 
       ),
   });
 }
+
+
+export type MeuProblemaVeiculo = {
+  id: string;
+  clientId: string;
+  descricao: string;
+  avisadoEm: string;
+  status: "ABERTO" | "VIROU_MANUTENCAO" | "DESCARTADO";
+  podeRodar: "SIM" | "COM_CUIDADO" | "NAO" | null;
+  motivoDescarte: string | null;
+  decididoEm: string | null;
+  fotos: number;
+  veiculo: { placa: string } | null;
+  manutencao: { status: string } | null;
+};
+
+/**
+ * Os avisos de problema no caminhão que ele mandou, com o que o escritório
+ * decidiu. Cache-first como o resto do app: abre na hora, mesmo sem sinal.
+ */
+export function useMeusProblemas() {
+  const cacheKey = "q:meus-problemas";
+  const buscarRede = async (): Promise<MeuProblemaVeiculo[]> => {
+    const fresh = await api.get<MeuProblemaVeiculo[]>("/m/problemas-veiculo");
+    void cachePut(cacheKey, fresh).catch(() => {});
+    return fresh;
+  };
+  return useQuery({
+    queryKey: ["meus-problemas"],
+    staleTime: 60_000,
+    queryFn: () => cacheFirst<MeuProblemaVeiculo[]>(["meus-problemas"], cacheKey, buscarRede),
+  });
+}

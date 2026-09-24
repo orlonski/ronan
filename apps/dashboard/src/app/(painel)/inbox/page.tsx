@@ -28,6 +28,7 @@ const TIPO_LABEL: Record<string, string> = {
   "motorista-cadastro": "Novo cadastro",
   "motorista-senha-reset": "Redefinição de senha",
   "alerta-torre": "Alerta da torre",
+  "problema-veiculo": "Problema no caminhão",
   "conta-auto-cadastro": "Empresa nova",
   "lead-novo": "Contato pelo site",
 };

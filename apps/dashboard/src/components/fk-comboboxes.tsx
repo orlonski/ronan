@@ -217,14 +217,17 @@ export function MotoristaCombobox({
   onChange,
   initialOption,
   placeholder = "Filtrar por motorista…",
+  triggerClassName,
 }: {
   value: string | undefined;
   onChange: (id: string | undefined) => void;
   initialOption?: ComboboxOption;
   placeholder?: string;
+  triggerClassName?: string;
 }) {
   return (
     <AsyncCombobox<Motorista>
+      triggerClassName={triggerClassName}
       value={value}
       onChange={onChange}
       initialOption={initialOption}

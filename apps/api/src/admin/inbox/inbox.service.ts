@@ -30,7 +30,9 @@ export type TipoNotificacaoAdmin =
   // torre mandava isto como "nova-viagem" (o primeiro da lista, escolhido só
   // pra passar no typecheck), e o sininho anunciava "Nova viagem" pra um
   // caminhão parado há três dias.
-  | "alerta-torre";
+  | "alerta-torre"
+  // O motorista avisou problema no caminhão pelo app (Manutenção).
+  | "problema-veiculo";
 
 export type DispararNotificacaoInput = {
   tipo: TipoNotificacaoAdmin;

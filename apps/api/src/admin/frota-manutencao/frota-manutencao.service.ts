@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type {
   AbrirManutencaoDoProblemaInput,
   AtualizarManutencaoInput,
+  AtualizarPlanoManutencaoInput,
   AvisarProblemaVeiculoInput,
   AtualizarMultaInput,
   CriarManutencaoInput,
@@ -17,6 +18,8 @@ import { filtroEscopo, SEM_ESCOPO, type EscopoAdmin } from "../../common/escopo/
 import { avaliarPlano, diasParaIndicar, situacaoPneu } from "../../common/manutencao";
 import { checarArquivoEnviado, MIMES_IMAGEM } from "../../common/arquivo-enviado";
 import { UploadsService } from "../../uploads/uploads.service";
+import { AdminInboxService } from "../inbox/inbox.service";
+import { PushService } from "../../push/push.service";
 
 /** Fotos por aviso: o que mostra o problema sem virar álbum. */
 export const MAX_FOTOS_PROBLEMA = 3;
@@ -28,10 +31,19 @@ function diaUtc(iso: string): Date {
 
 @Injectable()
 export class FrotaManutencaoService {
+  private readonly log = new Logger(FrotaManutencaoService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
+    private readonly inbox: AdminInboxService,
+    private readonly push: PushService,
   ) {}
+
+  /** Parado primeiro, depois "com cuidado", depois o resto; mais novo antes. */
+  private static ordemUrgencia(p: { podeRodar: string | null; avisadoEm: Date }) {
+    return p.podeRodar === "NAO" ? 0 : p.podeRodar === "COM_CUIDADO" ? 1 : 2;
+  }
 
   // ------------------------------------------------------------- manutenção
 
@@ -174,6 +186,21 @@ export class FrotaManutencaoService {
     });
   }
 
+  async atualizarPlano(id: string, input: AtualizarPlanoManutencaoInput) {
+    const p = await this.prisma.planoManutencao.findFirst({ where: { id }, select: { id: true } });
+    if (!p) throw new NotFoundException("Plano não encontrado");
+    return this.prisma.planoManutencao.update({
+      where: { id },
+      data: {
+        descricao: input.descricao,
+        intervaloKm: input.intervaloKm ?? null,
+        intervaloDias: input.intervaloDias ?? null,
+        ultimoOdometro: input.ultimoOdometro ?? null,
+        ultimaEm: input.ultimaEm ? diaUtc(input.ultimaEm) : null,
+      },
+    });
+  }
+
   async removerPlano(id: string) {
     await this.prisma.planoManutencao.delete({ where: { id } });
     return { ok: true };
@@ -227,10 +254,14 @@ export class FrotaManutencaoService {
         descricao: true,
         avisadoEm: true,
         fotos: true,
+        podeRodar: true,
         veiculo: { select: { id: true, placa: true } },
         motorista: { select: { id: true, nome: true } },
       },
     });
+    avisos.sort(
+      (a, b) => FrotaManutencaoService.ordemUrgencia(a) - FrotaManutencaoService.ordemUrgencia(b),
+    );
 
     // O odômetro mais recente de cada veículo sai do abastecimento — é o único
     // lugar onde ele é informado de verdade, e por isso o plano por km depende
@@ -353,7 +384,7 @@ export class FrotaManutencaoService {
     }
 
     try {
-      return await this.prisma.problemaVeiculo.create({
+      const novo = await this.prisma.problemaVeiculo.create({
         data: {
           clientId: input.clientId,
           motoristaId,
@@ -361,9 +392,16 @@ export class FrotaManutencaoService {
           descricao: input.descricao,
           fotos: chaves,
           avisadoEm: input.avisadoEm ?? new Date(),
+          podeRodar: input.podeRodar ?? null,
+          // A posição só vale junto de "parei": é o que o escritório precisa
+          // pra mandar socorro, e não tem por que guardar fora disso.
+          lat: input.podeRodar === "NAO" ? (input.lat ?? null) : null,
+          lng: input.podeRodar === "NAO" ? (input.lng ?? null) : null,
         },
         select: { id: true, status: true },
       });
+      await this.avisarEscritorio(novo.id);
+      return novo;
     } catch (e) {
       // Dois envios do mesmo item ao mesmo tempo: o outro ganhou a corrida.
       if ((e as { code?: string }).code === "P2002") {
@@ -376,6 +414,90 @@ export class FrotaManutencaoService {
       }
       throw e;
     }
+  }
+
+  /**
+   * O sininho do painel: sem isto o aviso só era visto por quem abrisse a tela
+   * de Manutenção. Vai pra quem vê manutenção. Best-effort — o aviso já está
+   * gravado, e falhar aqui não pode devolver erro pro celular (reenviaria).
+   */
+  private async avisarEscritorio(problemaId: string) {
+    try {
+      const p = await this.prisma.problemaVeiculo.findFirst({
+        where: { id: problemaId },
+        select: {
+          descricao: true,
+          podeRodar: true,
+          motoristaId: true,
+          veiculoId: true,
+          veiculo: { select: { placa: true } },
+          motorista: { select: { nome: true } },
+        },
+      });
+      if (!p) return;
+      const placa = p.veiculo?.placa ?? "caminhão sem placa";
+      await this.inbox.disparar({
+        tipo: "problema-veiculo",
+        titulo:
+          p.podeRodar === "NAO"
+            ? `Caminhão parado: ${placa}`
+            : `${p.motorista.nome} avisou problema no ${placa}`,
+        corpo: p.descricao.slice(0, 200),
+        dados: { problemaId, motoristaId: p.motoristaId, veiculoId: p.veiculoId },
+        permissao: "manutencao.ver",
+      });
+    } catch (e) {
+      this.log.warn(`Sininho do aviso ${problemaId} não saiu: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  /**
+   * Conta pro motorista o que o escritório decidiu. Sem isto ele avisava e
+   * nunca sabia se alguém viu — e parceiro que não tem resposta para de avisar.
+   */
+  private async contarProMotorista(problemaId: string, titulo: string, corpo: string, usuarioId: string) {
+    try {
+      const p = await this.prisma.problemaVeiculo.findFirst({
+        where: { id: problemaId },
+        select: { motoristaId: true, motorista: { select: { expoPushToken: true } } },
+      });
+      if (!p) return;
+      await this.push.enviar({
+        motoristaId: p.motoristaId,
+        token: p.motorista.expoPushToken ?? "",
+        titulo,
+        corpo,
+        dados: { problemaId },
+        tipo: "problema-veiculo-decidido",
+        criadoPorId: usuarioId,
+      });
+    } catch (e) {
+      this.log.warn(`Aviso ao motorista (${problemaId}) não saiu: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  /** Os avisos que ESTE motorista mandou, pra ele acompanhar no app. */
+  meusProblemas(motoristaId: string) {
+    return this.prisma.problemaVeiculo
+      .findMany({
+        where: { motoristaId },
+        orderBy: { avisadoEm: "desc" },
+        take: 50,
+        select: {
+          id: true,
+          clientId: true,
+          descricao: true,
+          avisadoEm: true,
+          status: true,
+          podeRodar: true,
+          motivoDescarte: true,
+          decididoEm: true,
+          fotos: true,
+          veiculo: { select: { placa: true } },
+          manutencao: { select: { status: true } },
+        },
+      })
+      .then((l) => l.map(({ fotos, ...p }) => ({ ...p, fotos: fotos.length })));
   }
 
   /** Os avisos, pro escritório. Sem filtro = os que esperam decisão. */
@@ -392,6 +514,9 @@ export class FrotaManutencaoService {
           avisadoEm: true,
           status: true,
           fotos: true,
+          podeRodar: true,
+          lat: true,
+          lng: true,
           motivoDescarte: true,
           decididoEm: true,
           manutencaoId: true,
@@ -401,7 +526,17 @@ export class FrotaManutencaoService {
         },
       })
       // A chave do storage não sai daqui: a tela pede a foto pelo índice.
-      .then((l) => l.map(({ fotos, ...p }) => ({ ...p, fotos: fotos.length })));
+      .then((l) =>
+        l
+          .map(({ fotos, ...p }) => ({ ...p, fotos: fotos.length }))
+          // Esperando decisão: o caminhão parado vai pro topo.
+          .sort((a, b) =>
+            valido === "ABERTO"
+              ? FrotaManutencaoService.ordemUrgencia(a) - FrotaManutencaoService.ordemUrgencia(b) ||
+                b.avisadoEm.getTime() - a.avisadoEm.getTime()
+              : 0,
+          ),
+      );
   }
 
   /** A chave da foto `indice` do aviso, pra API servir (o bucket não é público). */
@@ -456,6 +591,14 @@ export class FrotaManutencaoService {
         },
       });
       return { manutencaoId: m.id };
+    }).then(async (r) => {
+      await this.contarProMotorista(
+        id,
+        "Seu aviso virou manutenção",
+        `O escritório abriu o conserto: ${p.descricao.slice(0, 120)}`,
+        usuarioId,
+      );
+      return r;
     });
   }
 
@@ -473,6 +616,12 @@ export class FrotaManutencaoService {
         decididoEm: new Date(),
       },
     });
+    await this.contarProMotorista(
+      id,
+      "O escritório viu seu aviso",
+      `Não vai virar conserto agora: ${motivo}`,
+      usuarioId,
+    );
     return { ok: true };
   }
 

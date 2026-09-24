@@ -307,6 +307,11 @@ export type PendingProblemaVeiculo = {
   /** Pra tela de Pendentes mostrar a placa sem ir buscar na rede. */
   placa: string | null;
   descricao: string;
+  /** "Dá pra continuar rodando?" (item de antes da pergunta não tem). */
+  podeRodar?: "SIM" | "COM_CUIDADO" | "NAO";
+  /** Onde parou — só quando `podeRodar` é NAO e o GPS respondeu. */
+  lat?: number | null;
+  lng?: number | null;
   /** Cópias em `documentDirectory` — o iOS esvazia `Caches/` quando quer. */
   fotos: { tipo: "PROBLEMA"; uri: string; mime: string }[];
   /** Quando ele avisou (o envio pode esperar dias por sinal). */

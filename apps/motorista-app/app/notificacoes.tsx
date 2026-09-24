@@ -36,6 +36,9 @@ export default function NotificacoesScreen() {
     const viagemId = typeof dados.viagemId === "string" ? dados.viagemId : null;
     if (viagemId) {
       router.push(`/viagens/${viagemId}`);
+    } else if (typeof dados.problemaId === "string") {
+      // Resposta do escritório a um aviso de problema no caminhão.
+      router.push("/meus-avisos");
     }
   }
 

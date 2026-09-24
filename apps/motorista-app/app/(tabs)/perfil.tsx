@@ -6,6 +6,7 @@ import {
   Building2,
   CalendarDays,
   FileText,
+  Wrench,
   HandCoins,
   ChevronRight,
   HelpCircle,
@@ -73,6 +74,8 @@ function PerfilDaEmpresa() {
   const verProgramacao = usePermite("app.programacao.ver");
   const verAcertos = usePermite("app.acertos.ver", !ehRegistrado);
   const verDocumentos = usePermite("app.documentos.enviar");
+  // Motorista CLT também avisa: quem corta é o acesso (mora no cadastro de motorista).
+  const verAvisos = usePermite("app.problema.avisar");
   const salvarPrefs = useSalvarPreferenciasNotificacao();
   const [showChange, setShowChange] = useState(false);
   const [senhaAtual, setSenhaAtual] = useState("");
@@ -325,6 +328,19 @@ function PerfilDaEmpresa() {
                     icon={<FileText size={20} color="#13316b" />}
                     title="Meus documentos"
                     onPress={() => router.push("/documentos-da-obra")}
+                  />
+                </>
+              )}
+              {/* A porta fixa dos avisos do caminhão: o botão do Início só
+                  manda aviso novo, e a resposta do escritório tem que ter onde
+                  ser relida depois que a notificação some. */}
+              {verAvisos && (
+                <>
+                  <View className="h-px bg-border" />
+                  <ActionRow
+                    icon={<Wrench size={20} color="#13316b" />}
+                    title="Meus avisos do caminhão"
+                    onPress={() => router.push("/meus-avisos")}
                   />
                 </>
               )}

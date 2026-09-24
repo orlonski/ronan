@@ -22,6 +22,8 @@ export type TipoNotificacaoAdmin =
   | "motorista-cadastro"
   | "motorista-senha-reset"
   | "alerta-torre"
+  // O motorista avisou problema no caminhão pelo app.
+  | "problema-veiculo"
   // Os dois da PLATAFORMA. Existiam no backend e não aqui, então caíam no
   // fallback e apareciam no sininho como slug cru ("conta-auto-cadastro").
   | "conta-auto-cadastro"

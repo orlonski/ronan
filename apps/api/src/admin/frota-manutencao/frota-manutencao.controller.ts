@@ -24,6 +24,7 @@ import {
   AvisarProblemaVeiculoInput,
   DescartarProblemaVeiculoInput,
   AtualizarMultaInput,
+  AtualizarPlanoManutencaoInput,
   CriarManutencaoInput,
   CriarMultaInput,
   CriarPlanoManutencaoInput,
@@ -182,6 +183,15 @@ export class ManutencaoController {
     return this.service.criarPlano(body);
   }
 
+  @RequerPermissao("manutencao.editar")
+  @Patch("planos/:id")
+  atualizarPlano(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(AtualizarPlanoManutencaoInput)) body: AtualizarPlanoManutencaoInput,
+  ) {
+    return this.service.atualizarPlano(id, body);
+  }
+
   @RequerPermissao("manutencao.excluir")
   @Delete("planos/:id")
   removerPlano(@Param("id") id: string) {
@@ -302,6 +312,12 @@ export class ProblemasVeiculoMotoristaController {
     private readonly service: FrotaManutencaoService,
     private readonly prisma: PrismaService,
   ) {}
+
+  /** Os avisos que ele mandou, com o que o escritório decidiu. */
+  @Get()
+  meus(@CurrentUser() user: AuthMotorista) {
+    return this.service.meusProblemas(user.id);
+  }
 
   @Post()
   @UseInterceptors(

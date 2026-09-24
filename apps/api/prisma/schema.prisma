@@ -3184,6 +3184,13 @@ model ProblemaVeiculo {
   decididoPor    User?                 @relation("DecidiuProblemaVeiculo", fields: [decididoPorId], references: [id], onDelete: SetNull)
   decididoPorId  String?
   decididoEm     DateTime?
+  /// "Dá pra continuar rodando?" — é o que ordena a fila do escritório.
+  /// Nulo = aviso de app antigo, que não perguntava.
+  podeRodar      PodeRodarProblema?
+  /// Onde o caminhão ficou, quando ele disse que PAROU (só nesse caso o app
+  /// pega a posição).
+  lat            Float?
+  lng            Float?
   /// Quando o motorista avisou no aparelho (pode ter esperado sinal).
   avisadoEm      DateTime
   criadoEm       DateTime              @default(now())
@@ -3191,6 +3198,12 @@ model ProblemaVeiculo {
   @@unique([contaId, clientId])
   @@index([contaId, status])
   @@map("problemas_veiculo")
+}
+
+enum PodeRodarProblema {
+  SIM
+  COM_CUIDADO
+  NAO
 }
 
 enum StatusProblemaVeiculo {

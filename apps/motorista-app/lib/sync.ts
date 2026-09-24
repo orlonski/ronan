@@ -1704,6 +1704,11 @@ async function processProblemaVeiculo(item: PendingProblemaVeiculo): Promise<voi
     if (item.veiculoId) fd.append("veiculoId", item.veiculoId);
     fd.append("descricao", item.descricao);
     fd.append("avisadoEm", item.avisadoEm);
+    if (item.podeRodar) fd.append("podeRodar", item.podeRodar);
+    if (item.lat != null && item.lng != null) {
+      fd.append("lat", String(item.lat));
+      fd.append("lng", String(item.lng));
+    }
     fotos.forEach((f, i) => {
       fd.append("fotos", {
         uri: f.uri,
@@ -1738,6 +1743,9 @@ export async function enqueueProblemaVeiculo(e: {
   veiculoId: string | null;
   placa: string | null;
   descricao: string;
+  podeRodar: "SIM" | "COM_CUIDADO" | "NAO";
+  lat?: number | null;
+  lng?: number | null;
   fotos: { uri: string; mime: string }[];
 }): Promise<void> {
   const clientId = uuidPonto();
@@ -1753,6 +1761,9 @@ export async function enqueueProblemaVeiculo(e: {
     veiculoId: e.veiculoId,
     placa: e.placa,
     descricao: e.descricao,
+    podeRodar: e.podeRodar,
+    lat: e.lat ?? null,
+    lng: e.lng ?? null,
     fotos,
     avisadoEm: new Date().toISOString(),
     status: "pending",
@@ -1761,6 +1772,8 @@ export async function enqueueProblemaVeiculo(e: {
   });
   notify();
   void drain();
+  // A lista "Meus avisos" mostra o que ainda está na fila; o que subir aparece
+  // quando ela revalidar.
 }
 
 async function drainPonto(): Promise<void> {

@@ -14,6 +14,19 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { showAlert } from "@/lib/alert";
 import { useCatalogos, useMe } from "@/lib/queries";
 import { enqueueProblemaVeiculo } from "@/lib/sync";
+import { pegarCoordsPrecisa } from "@/lib/geo";
+
+type PodeRodar = "SIM" | "COM_CUIDADO" | "NAO";
+
+/**
+ * A pergunta que ordena a fila do escritório. Nada vem marcado: quem sabe se
+ * o caminhão anda é ele (e marcar sozinho já acusou motorista nesta casa).
+ */
+const OPCOES_RODAR: { v: PodeRodar; titulo: string; texto: string }[] = [
+  { v: "SIM", titulo: "Sim, dá pra rodar", texto: "Dá pra esperar a próxima parada" },
+  { v: "COM_CUIDADO", titulo: "Dá, com cuidado", texto: "Estou rodando devagar ou evitando carga" },
+  { v: "NAO", titulo: "Não, parei", texto: "O caminhão está parado. Mandamos onde você está" },
+];
 
 const MAX_FOTOS = 3;
 
@@ -40,6 +53,7 @@ function Conteudo() {
   const val = useValidacaoGuiada();
   const [veiculoId, setVeiculoId] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [podeRodar, setPodeRodar] = useState<PodeRodar | null>(null);
   const [fotos, setFotos] = useState<CapturedPhoto[]>([]);
   const [enviando, setEnviando] = useState(false);
 
@@ -66,21 +80,43 @@ function Conteudo() {
     if (descricao.trim().length < 3) {
       return void val.apontar("descricao", "Conte o que está acontecendo");
     }
+    if (!podeRodar) {
+      return void val.apontar("podeRodar", "Diga se dá pra continuar rodando");
+    }
     setEnviando(true);
     try {
+      // Parado: a posição é o que o escritório precisa pra mandar socorro. O
+      // GPS funciona sem internet; se não responder, o aviso vai sem ela.
+      let lat: number | null = null;
+      let lng: number | null = null;
+      if (podeRodar === "NAO") {
+        const gps = await pegarCoordsPrecisa({ alvoMetros: 50, maxMs: 8_000 });
+        if (gps.ok) {
+          lat = gps.coords.lat;
+          lng = gps.coords.lng;
+        }
+      }
       await enqueueProblemaVeiculo({
+        podeRodar,
+        lat,
+        lng,
         veiculoId: veiculoId || null,
         placa: cat.data?.veiculos.find((v) => v.id === veiculoId)?.placa ?? null,
         descricao: descricao.trim(),
         fotos,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      await showAlert({
+      const escolha = await showAlert({
         title: "Aviso guardado",
-        message: "Vai pro escritório assim que tiver sinal. Obrigado por avisar.",
-        buttons: [{ label: "Voltar pro início" }],
+        message:
+          "Vai pro escritório assim que tiver sinal. Quando decidirem, você recebe uma notificação.",
+        buttons: [
+          { label: "Ver meus avisos", value: "meus" },
+          { label: "Voltar pro início", value: "inicio" },
+        ],
       });
-      router.back();
+      if (escolha === "meus") router.replace("/meus-avisos");
+      else router.back();
     } catch {
       await showAlert({
         title: "Não consegui guardar o aviso",
@@ -142,6 +178,28 @@ function Conteudo() {
               onFocus={() => setTimeout(() => val.scrollRef.current?.scrollToEnd({ animated: true }), 250)}
             />
             {val.erroDe("descricao") ? <ErroCampo msg={val.erroDe("descricao")!} /> : null}
+          </View>
+
+          <View className="gap-2" onLayout={val.onLayoutCampo("podeRodar")}>
+            <Label error={!!val.erroDe("podeRodar")}>Dá pra continuar rodando?</Label>
+            {OPCOES_RODAR.map((o) => (
+              <Pressable
+                key={o.v}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: podeRodar === o.v }}
+                onPress={() => {
+                  val.limpar();
+                  setPodeRodar(o.v);
+                }}
+                className={`rounded-xl border-2 p-3 ${
+                  podeRodar === o.v ? "border-brand bg-brand/10" : "border-border"
+                }`}
+              >
+                <Text className="text-base font-semibold text-foreground">{o.titulo}</Text>
+                <Text className="text-sm text-muted-foreground">{o.texto}</Text>
+              </Pressable>
+            ))}
+            {val.erroDe("podeRodar") ? <ErroCampo msg={val.erroDe("podeRodar")!} /> : null}
           </View>
 
           <View className="gap-2">

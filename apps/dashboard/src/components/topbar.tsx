@@ -14,6 +14,7 @@ import {
   PiggyBank,
   TriangleAlert,
   UserPlus,
+  Wrench,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -163,6 +164,8 @@ export function IconeTipo({ tipo }: { tipo: string }) {
   // três dias chegava com a prancheta azul de lançamento.
   if (tipo === "alerta-torre")
     return <TriangleAlert className={`${cls} text-red-600`} />;
+  if (tipo === "problema-veiculo")
+    return <Wrench className={`${cls} text-amber-600`} />;
   if (tipo === "conta-auto-cadastro" || tipo === "lead-novo")
     return <Building2 className={`${cls} text-emerald-600`} />;
   if (tipo === "nova-viagem")
@@ -204,6 +207,8 @@ export function rotaParaNotificacao(n: AdminNotificacao): string | null {
   // Alerta vai pra TORRE, sempre — é a única tela onde ele se resolve. Ia pra
   // /viagens/:id, que não tem ação nenhuma pra isso.
   if (n.tipo === "alerta-torre") return "/torre";
+  // O aviso se decide na aba "Avisos do motorista" da Manutenção.
+  if (n.tipo === "problema-veiculo") return "/frota?aba=avisos";
   if (n.tipo === "nova-viagem" && dados.viagemId) {
     return `/viagens/${dados.viagemId}`;
   }

@@ -515,6 +515,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             router.push("/documentos-da-obra");
           } else if (kind === "mensagem-admin") {
             router.push("/notificacoes");
+          } else if (kind === "problema-veiculo-decidido") {
+            // O escritório decidiu o aviso dele: abre a lista com a situação.
+            void queryClient.invalidateQueries({ queryKey: ["meus-problemas"] });
+            router.push("/meus-avisos");
           }
         });
       } catch {
