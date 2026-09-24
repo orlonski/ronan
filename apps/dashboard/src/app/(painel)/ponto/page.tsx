@@ -18,7 +18,7 @@ import { EstadoVazio } from "@/components/estado-vazio";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { hojeSP } from "@/lib/datetime-br";
-import { PATH, PrecisaFundamento, useConfigPonto } from "./_lib";
+import { ComecarPonto, PATH, PrecisaFundamento, useConfigPonto } from "./_lib";
 
 type LinhaDia = {
   funcionarioId: string;
@@ -64,6 +64,7 @@ function Conteudo() {
 
   return (
     <div className="space-y-4">
+      <ComecarPonto />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold">

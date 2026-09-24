@@ -141,6 +141,21 @@ const ReabrirInput = z.object({ motivo: z.string().trim().min(3, "Escreva por qu
 export class PontoAdminController {
   constructor(private readonly service: PontoAdminService) {}
 
+  /** Qualquer tela de ponto mostra o quadro "Pra começar o ponto". */
+  @RequerPermissao(
+    "ponto.ver",
+    "funcionarios.ver",
+    "jornadas.ver",
+    "config-ponto.ver",
+    "espelho-ponto.ver",
+    "correcoes-ponto.ver",
+    "fechamento-ponto.ver",
+  )
+  @Get("comecar")
+  comecar() {
+    return this.service.comecar();
+  }
+
   @RequerPermissao("ponto.ver")
   @Get("dia")
   dia(@Query("data", new ZodValidationPipe(DIA)) data: string) {

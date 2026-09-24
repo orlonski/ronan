@@ -477,6 +477,27 @@ export class PontoAdminService {
 
   // ─────────────────────────── jornadas ───────────────────────────
 
+  /**
+   * O que falta pra empresa começar o ponto — alimenta o quadro "Pra começar
+   * o ponto" no alto das telas (pedido do dono, 23/09/2026: a Schaba ia ter
+   * que perguntar a ordem). Só contagens: quem tem qualquer tela de ponto pode
+   * ver, então nada aqui pode ser dado de pessoa.
+   */
+  async comecar() {
+    const [config, jornadas, funcionarios, marcacao] = await Promise.all([
+      this.prisma.configPonto.findFirst({ select: { fundamento: true } }),
+      this.prisma.modeloJornada.count({ where: { ativo: true } }),
+      this.prisma.funcionario.count({ where: { ativo: true } }),
+      this.prisma.marcacao.findFirst({ select: { id: true } }),
+    ]);
+    return {
+      fundamento: !!config?.fundamento,
+      jornadas,
+      funcionarios,
+      jaBateram: !!marcacao,
+    };
+  }
+
   listarModelos() {
     return this.prisma.modeloJornada.findMany({
       where: { ativo: true },

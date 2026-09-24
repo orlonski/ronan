@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
-import { PATH, useConfigPonto } from "../_lib";
+import { ComecarPonto, PATH, useConfigPonto } from "../_lib";
 
 /**
  * AS REGRAS DE PONTO da empresa — e, antes de tudo, o fundamento.
@@ -91,6 +91,7 @@ function Conteudo() {
 
   return (
     <div className="space-y-4">
+      <ComecarPonto />
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold">
           <SlidersHorizontal className="h-6 w-6 text-muted-foreground" />
