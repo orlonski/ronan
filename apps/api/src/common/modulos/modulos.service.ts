@@ -2,10 +2,15 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { MODULOS, MODULOS_PADRAO, type ModuloChave } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { modulosDaConta } from "../conta/teto-da-conta";
+import { comConta } from "../conta/conta-context";
+import { PermissoesService } from "../../admin/permissoes/permissoes.service";
 
 @Injectable()
 export class ModulosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly permissoes: PermissoesService,
+  ) {}
 
   /** O catálogo + o que esta conta tem. É o que a tela de Empresas mostra. */
   async daConta(contaId: string) {
@@ -53,7 +58,7 @@ export class ModulosService {
       );
     }
 
-    return this.prisma.moduloContratado.upsert({
+    const linha = await this.prisma.moduloContratado.upsert({
       where: { contaId_chave: { contaId: args.contaId, chave: args.chave } },
       create: {
         contaId: args.contaId,
@@ -71,6 +76,13 @@ export class ModulosService {
         ligadoPorId: args.usuarioId,
       },
     });
+
+    // Aplica na hora, como o teto faz (`contas.service.definirTeto`). Sem isto
+    // o Administrador da empresa só ganhava as telas do módulo no próximo boot
+    // da API: a Schaba ligou o Ponto em 23/09/2026 e ninguém lá tinha nada de
+    // ponto. Desligar poda os papéis na hora pelo mesmo caminho.
+    await comConta(args.contaId, () => this.permissoes.seedPapeisSistema());
+    return linha;
   }
 
   /**

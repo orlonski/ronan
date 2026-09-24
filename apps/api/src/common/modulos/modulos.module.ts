@@ -5,6 +5,7 @@ import { ModuloGuard } from "./modulo.guard";
 import { ModulosBootCheck } from "./modulos.boot-check";
 import { ModulosService } from "./modulos.service";
 import { ModulosController } from "./modulos.controller";
+import { PermissoesModule } from "../../admin/permissoes/permissoes.module";
 
 /**
  * Contrato: o que a empresa comprou.
@@ -14,7 +15,7 @@ import { ModulosController } from "./modulos.controller";
  */
 @Global()
 @Module({
-  imports: [DiscoveryModule],
+  imports: [DiscoveryModule, PermissoesModule],
   controllers: [ModulosController],
   providers: [
     ModulosService,
