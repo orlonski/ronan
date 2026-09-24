@@ -3682,6 +3682,9 @@ model Local {
   @@index([nivelConfianca])
   @@index([contaId])
   @@index([contaId, ativo])
+  // Duplicatas geográficas e "local mais próximo" filtram por faixa de latitude
+  // dentro da conta; sem ele o self-join de duplicatas comparava todos com todos.
+  @@index([contaId, lat])
   @@map("locais")
 }
 
