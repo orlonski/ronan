@@ -25,8 +25,11 @@ export type MenuDescricao = {
     label: string;
     href: string;
     perm?: string;
-    /** As outras abas do item (o `ou` do menu), em ordem. */
-    abas: { href: string; perm?: string }[];
+    /**
+     * As outras abas do item (o `ou` do menu), em ordem, e depois as partes
+     * internas da tela com permissão própria (`partes`), que trazem o rótulo.
+     */
+    abas: { href: string; perm?: string; label?: string }[];
   }[];
 }[];
 
@@ -96,7 +99,7 @@ export function agruparRecursosPorMenu(
         { recurso: recursoDe(item.perm), rotulo: item.label, aba: false },
         ...item.abas.map((a) => {
           const r = recursoDe(a.perm);
-          const nomeAba = rotulos.aba?.(a.href) ?? (r ? nomeRecurso(r) : a.href);
+          const nomeAba = a.label ?? rotulos.aba?.(a.href) ?? (r ? nomeRecurso(r) : a.href);
           return { recurso: r, rotulo: `${item.label} › ${nomeAba}`, aba: true };
         }),
       ];

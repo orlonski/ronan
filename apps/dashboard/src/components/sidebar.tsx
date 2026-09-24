@@ -100,6 +100,13 @@ type Item = {
    * diferentes cada um.
    */
   ou?: { href: string; perm?: string }[];
+  /**
+   * Partes DENTRO desta tela que têm permissão própria (aba interna, seção,
+   * botão que abre outra coisa). Não mudam o menu nem quem abre a tela — só
+   * dizem à matriz de papéis onde a permissão mora. Sem isto, Pneus e Multas
+   * apareciam em "Sem item próprio no menu" e ninguém achava (24/09/2026).
+   */
+  partes?: { perm: string; label: string }[];
 };
 
 type Grupo = {
@@ -237,9 +244,26 @@ const GRUPOS: Grupo[] = [
     titulo: "Frota e pessoas",
     coach: "grupo-frota-e-pessoas",
     itens: [
-      { href: "/motoristas", label: "Motoristas", icon: HardHat, perm: "motoristas.ver", ou: [{ href: "/modalidades", perm: "modalidades.ver" }] },
+      {
+        href: "/motoristas",
+        label: "Motoristas",
+        icon: HardHat,
+        perm: "motoristas.ver",
+        ou: [{ href: "/modalidades", perm: "modalidades.ver" }],
+        partes: [{ perm: "coletas.ver", label: "Pedir documentos por link" }],
+      },
       { href: "/veiculos", label: "Veículos", icon: Truck, perm: "veiculos.ver" },
-      { href: "/frota", label: "Manutenção e vencimentos do caminhão", icon: Wrench, perm: "manutencao.ver" },
+      {
+        href: "/frota",
+        label: "Manutenção e vencimentos do caminhão",
+        icon: Wrench,
+        perm: "manutencao.ver",
+        partes: [
+          { perm: "pneus.ver", label: "Pneus" },
+          { perm: "multas.ver", label: "Multas" },
+          { perm: "documentos-veiculo.ver", label: "Documentos do caminhão" },
+        ],
+      },
       { href: "/transportadoras", label: "Transportadoras", icon: Building, perm: "transportadoras.ver" },
       // "Documentos exigidos" saiu daqui em 23/09/2026: virou a aba "Documentos
       // que pedimos" de Minha empresa, e aparece também na página de cada
@@ -262,7 +286,13 @@ const GRUPOS: Grupo[] = [
       { href: "/ponto", label: "Ponto do dia", icon: Clock, perm: "ponto.ver" },
       { href: "/ponto/competencia", label: "Fechar o mês", icon: CalendarCheck, perm: "fechamento-ponto.ver" },
       { href: "/ponto/correcoes", label: "Acerto de ponto", icon: PenLine, perm: "correcoes-ponto.ver" },
-      { href: "/ponto/funcionarios", label: "Quem bate ponto", icon: Users, perm: "funcionarios.ver" },
+      {
+        href: "/ponto/funcionarios",
+        label: "Quem bate ponto",
+        icon: Users,
+        perm: "funcionarios.ver",
+        partes: [{ perm: "espelho-ponto.ver", label: "Espelho de ponto" }],
+      },
       { href: "/ponto/jornadas", label: "Jornadas e escalas", icon: CalendarRange, perm: "jornadas.ver" },
       { href: "/ponto/configuracoes", label: "Regras de ponto", icon: SlidersHorizontal, perm: "config-ponto.ver" },
     ],
@@ -287,6 +317,8 @@ const GRUPOS: Grupo[] = [
           { href: "/tabelas-preco", perm: "tabelas-preco.ver" },
           { href: "/regras-minimo", perm: "regras-minimo.ver" },
         ],
+        // As obras moram dentro da página de cada cliente.
+        partes: [{ perm: "clientes.ver", label: "Obras" }],
       },
       { href: "/locais", label: "Locais", icon: MapPin, perm: "locais.ver", ou: [{ href: "/configuracoes/busca-locais", perm: "config-busca-locais.ver" }] },
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },
@@ -388,7 +420,10 @@ export function estruturaDoMenu(): MenuDescricao {
         label: i.label,
         href: i.href,
         perm: i.perm,
-        abas: (i.ou ?? []).map((o) => ({ href: o.href, perm: o.perm })),
+        abas: [
+          ...(i.ou ?? []).map((o) => ({ href: o.href, perm: o.perm })),
+          ...(i.partes ?? []).map((p) => ({ href: i.href, perm: p.perm, label: p.label })),
+        ],
       })),
     })),
   ];

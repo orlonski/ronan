@@ -39,8 +39,9 @@ function menuDoSidebar(): MenuDescricao {
     : [];
 
   // Varre os tokens em ordem: `titulo` abre grupo, `href`+`label` abre item,
-  // `href` sem label abre aba (do `ou`), `perm` pertence ao último aberto.
-  const token = /titulo:\s*"([^"]+)"|href:\s*"([^"]+)"(?:,\s*label:\s*"([^"]+)")?|perm:\s*"([^"]+)"|soPlataforma:\s*true/g;
+  // `href` sem label abre aba (do `ou`), `perm`+`label` é uma parte interna da
+  // tela (`partes`), `perm` sozinho pertence ao último aberto.
+  const token = /titulo:\s*"([^"]+)"|href:\s*"([^"]+)"(?:,\s*label:\s*"([^"]+)")?|perm:\s*"([^"]+)",\s*label:\s*"([^"]+)"|perm:\s*"([^"]+)"|soPlataforma:\s*true/g;
   let ultimo: { perm?: string } | null = null;
   for (const m of trecho.matchAll(token)) {
     const grupo = menu[menu.length - 1];
@@ -55,8 +56,12 @@ function menuDoSidebar(): MenuDescricao {
       const aba: { href: string; perm?: string } = { href: m[2] };
       grupo!.itens[grupo!.itens.length - 1]!.abas.push(aba);
       ultimo = aba;
-    } else if (m[4]) {
-      if (ultimo) ultimo.perm = m[4];
+    } else if (m[4] && m[5]) {
+      const item = grupo!.itens[grupo!.itens.length - 1]!;
+      item.abas.push({ href: item.href, perm: m[4], label: m[5] });
+      // A parte não "abre" nada: o próximo `perm` solto não é dela.
+    } else if (m[6]) {
+      if (ultimo) ultimo.perm = m[6];
     } else {
       grupo!.soPlataforma = true;
     }
@@ -91,6 +96,33 @@ describe("matriz de papéis agrupada pelo menu", () => {
       expect(secoes.filter((s) => s.linhas.length === 0)).toEqual([]);
     });
   }
+
+  /**
+   * Parte interna da tela com permissão própria mora debaixo do item dela.
+   *
+   * Pneus, Multas e Documentos do caminhão são abas DENTRO de Manutenção; Obras
+   * mora na página do cliente. Caíam em "Sem item próprio no menu" e o dono não
+   * achava onde liberar (24/09/2026). Em "Sem item próprio" sobra só o que
+   * realmente não tem tela no painel.
+   */
+  it("partes internas da tela aparecem debaixo do item, e só sobra o que não tem tela", () => {
+    const secoes = agruparRecursosPorMenu(menuDoSidebar(), RECURSOS, {
+      recurso: (r) => RECURSOS_LABEL[r],
+    });
+    const linha = (recurso: string) =>
+      secoes.flatMap((sec) => sec.linhas.map((l) => ({ ...l, secao: sec.titulo }))).find((l) => l.recurso === recurso);
+    expect(linha("pneus")).toMatchObject({ rotulo: "Manutenção e vencimentos do caminhão › Pneus", aba: true });
+    expect(linha("multas")?.rotulo).toBe("Manutenção e vencimentos do caminhão › Multas");
+    expect(linha("documentos-veiculo")?.rotulo).toBe(
+      "Manutenção e vencimentos do caminhão › Documentos do caminhão",
+    );
+    expect(linha("clientes")?.rotulo).toBe("Clientes › Obras");
+    expect(linha("coletas")?.rotulo).toBe("Motoristas › Pedir documentos por link");
+    expect(linha("espelho-ponto")?.rotulo).toBe("Quem bate ponto › Espelho de ponto");
+    const sobras = secoes.find((sec) => sec.titulo === SECAO_SEM_ITEM_NO_MENU)?.linhas.map((l) => l.recurso) ?? [];
+    // Sem tela no painel (só API) e a da plataforma. Entrar aqui é decisão.
+    expect(sobras.sort()).toEqual(["config-ia", "custos-veiculo", "fornecedores"]);
+  });
 
   it("aba vira sub-linha do item, com o rótulo \"Item › Aba\"", () => {
     const secoes = agruparRecursosPorMenu(menuDoSidebar(), RECURSOS, {
