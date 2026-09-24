@@ -19,7 +19,7 @@ import {
 import { pedirTour } from "@/lib/tour";
 
 /**
- * O caminho até a primeira viagem, num lugar que não some.
+ * O caminho até o primeiro motorista convidado, num lugar que não some.
  *
  * O card da home some quando o último passo fecha — o que é certo pra home e
  * errado pro produto: quem contrata um auxiliar em março não tem pra onde
@@ -69,7 +69,7 @@ export default function ComecarPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Começar</h1>
           <p className="text-sm text-muted-foreground">
-            O caminho até a primeira viagem chegar no painel.
+            O caminho até o primeiro motorista entrar na sua equipe.
           </p>
         </div>
         <Button

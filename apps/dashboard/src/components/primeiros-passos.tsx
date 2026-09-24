@@ -43,7 +43,7 @@ export function usePrimeirosPassos() {
 }
 
 /**
- * O caminho da conta vazia até a primeira viagem.
+ * O caminho da conta vazia até o primeiro motorista convidado.
  *
  * Some da home quando tudo está feito, e não tem botão de fechar: fechar seria
  * esconder o que ainda falta. O que ele NÃO faz mais é sumir pra sempre — a
@@ -106,8 +106,8 @@ export function ListaDePassos({ passos }: { passos: Passo[] }) {
               </span>
               {ehProximo && <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />}
             </Link>
-            {/* Este é o único passo que o dono NÃO cumpre sozinho: a viagem
-                nasce no celular do motorista. */}
+            {/* Este passo é do motorista, não do dono: ele baixa o app e se
+                cadastra pelo celular. Aqui só vai o link. */}
             {ehProximo && p.chave === "app" && <LinksLoja recuado />}
           </li>
         );
@@ -124,7 +124,7 @@ export function Cabecalho({ passos }: { passos: Passo[] }) {
         <div>
           <h2 className="text-lg font-semibold">Primeiros passos</h2>
           <p className="text-sm text-muted-foreground">
-            Faltam algumas coisas para você lançar sua primeira viagem.
+            Faltam algumas coisas para o seu primeiro motorista começar a lançar.
           </p>
         </div>
         <span className="text-sm text-muted-foreground">

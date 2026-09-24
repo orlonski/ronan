@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Search, UserPlus } from "lucide-react";
@@ -50,6 +50,18 @@ export function ConvidarMotoristaDialog() {
   const token = useAuthToken();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+
+  /**
+   * `/motoristas#convidar` já chega com o diálogo aberto — é o link do último
+   * passo de "Começar". Âncora, e não `?convidar=1`: a tabela lê todo query
+   * param desconhecido como FILTRO (e ainda o guarda no navegador), e a lista
+   * abria dizendo "nenhum registro bate com o que você pediu".
+   */
+  useEffect(() => {
+    if (window.location.hash !== "#convidar") return;
+    setOpen(true);
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, []);
   const [cpf, setCpf] = useState("");
   const [resultado, setResultado] = useState<Resultado | null>(null);
 

@@ -35,8 +35,8 @@ function prismaFake(contagens: Record<string, number>, modulos: string[]) {
      * As duas contagens de viagem saem da MESMA tabela e só se distinguem pelo
      * `where`: uma exclui o prefixo `import:`, a outra exige. Um mock que
      * ignorasse o filtro devolveria o mesmo número pras duas e deixaria passar
-     * justamente o bug que interessa — histórico importado marcando o passo
-     * "Receba a primeira viagem do app".
+     * justamente o bug que interessa — histórico importado tornando a conta
+     * `veterana`.
      */
     viagem: {
       count: vi.fn(({ where }: { where?: Record<string, unknown> } = {}) => {
@@ -143,9 +143,44 @@ describe("primeiros passos", () => {
     const r = await montar(
       { veiculo: 0, motorista: 0, local: 0, empresa: 0, cliente: 0, viagem: 0, tabelaPreco: 0 },
       ["comercial"],
-    ).listar({ permissoes: ["viagens.ver"], plataforma: false });
-    // Só sobra o que "viagens.ver" permite.
-    expect(r.passos.map((p) => p.chave)).toEqual(["viagem"]);
+    ).listar({ permissoes: ["motoristas.ver"], plataforma: false });
+    // Ver motoristas deixa mandar o app; convidar exige `motoristas.criar`.
+    expect(r.passos.map((p) => p.chave)).toEqual(["app"]);
+  });
+
+  /**
+   * O caminho termina quando a empresa convida o motorista pelo CPF.
+   *
+   * Ele baixa o app e se cadastra sozinho; o que falta à empresa é o convite.
+   * A primeira viagem já foi o último passo, e cobrava do dono algo que só o
+   * motorista faz.
+   */
+  describe("fim do caminho", () => {
+    const SEM_MOTORISTA = {
+      veiculo: 1, motorista: 0, local: 2, empresa: 1, cliente: 1, viagem: 0,
+      viagemImportada: 0, tabelaPreco: 0,
+    };
+
+    it("o convite por CPF é o último passo, e a viagem não é passo", async () => {
+      const r = await montar(SEM_MOTORISTA, MODULOS).listar({
+        permissoes: TODAS_PERMS,
+        plataforma: false,
+      });
+      const chaves = r.passos.map((p) => p.chave);
+      expect(chaves.at(-1)).toBe("convite");
+      expect(chaves.indexOf("app")).toBe(chaves.length - 2);
+      expect(chaves).not.toContain("viagem");
+      expect(r.concluido).toBe(false);
+    });
+
+    it("fecha com o motorista convidado, antes de qualquer viagem", async () => {
+      const r = await montar({ ...SEM_MOTORISTA, motorista: 1 }, MODULOS).listar({
+        permissoes: TODAS_PERMS,
+        plataforma: false,
+      });
+      expect(r.concluido).toBe(true);
+      expect(r.veterana).toBe(false);
+    });
   });
 
   it("some com o item quando dá pra criar mas não dá pra abrir a tela", async () => {
@@ -207,22 +242,21 @@ describe("primeiros passos", () => {
       expect(r.ofertas.map((o) => o.chave)).toContain("historico");
     });
 
-    it("planilha importada NÃO marca 'primeira viagem do app'", async () => {
-      // O caso que mais importa: o dono sobe o histórico, o painel acende, e o
-      // motorista continua sem ter instalado nada. Dizer que a viagem chegou
-      // seria o checklist mentir e sumir antes do ciclo acontecer uma vez.
+    it("planilha importada NÃO marca o motorista como convidado", async () => {
+      // O dono sobe o histórico, o painel acende, e ninguém foi convidado.
       montar({ ...VAZIA, viagemImportada: 40 }, MODULOS);
       const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
 
       expect(r.ofertas.find((o) => o.chave === "historico")?.cumprido).toBe(true);
-      expect(r.passos.find((p) => p.chave === "viagem")?.cumprido).toBe(false);
+      expect(r.passos.find((p) => p.chave === "convite")?.cumprido).toBe(false);
+      expect(r.veterana).toBe(false);
     });
 
     it("viagem do app não marca o atalho", async () => {
       montar({ ...VAZIA, viagem: 3 }, MODULOS);
       const r = await servico.listar({ permissoes: TODAS_PERMS, plataforma: false });
 
-      expect(r.passos.find((p) => p.chave === "viagem")?.cumprido).toBe(true);
+      expect(r.veterana).toBe(true);
       expect(r.ofertas.find((o) => o.chave === "historico")?.cumprido).toBe(false);
     });
 

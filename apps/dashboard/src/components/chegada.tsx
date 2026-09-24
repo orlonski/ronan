@@ -58,7 +58,7 @@ export function Chegada({
           <h2 className="text-xl font-semibold tracking-tight">Comece por aqui</h2>
           <p className="max-w-prose text-sm text-muted-foreground">
             O motorista lança a viagem pelo celular, na hora da carga, e ela chega aqui pronta
-            pra você conferir e fechar o mês. Estes são os passos até a primeira.
+            pra você conferir e fechar o mês. Estes são os passos até ele estar na sua equipe.
           </p>
         </div>
 

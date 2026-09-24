@@ -38,18 +38,17 @@ const PREFIXO_IMPORTACAO = "import:";
 type Exigencia = { passo: string; perm: string };
 
 const EXIGENCIAS: Exigencia[] = [
-  { passo: "motorista", perm: "motoristas.criar" },
   { passo: "veiculo", perm: "veiculos.criar" },
   { passo: "local", perm: "locais.criar" },
   { passo: "empresa", perm: "empresas.criar" },
   { passo: "app", perm: "motoristas.ver" },
-  { passo: "viagem", perm: "viagens.ver" },
+  { passo: "convite", perm: "motoristas.criar" },
   { passo: "preco", perm: "tabelas-preco.criar" },
   { passo: "historico", perm: "importacao.executar" },
 ];
 
 /**
- * O caminho da conta vazia até a primeira viagem.
+ * O caminho da conta vazia até o primeiro motorista convidado.
  *
  * Uma empresa recém-criada ganha o vocabulário (materiais, tipos de evento,
  * campos de fechamento) mas nenhuma entidade operacional — e viagem exige
@@ -79,23 +78,21 @@ export class PrimeirosPassosService {
       clientes,
       viagens,
       importadas,
-      motoristasNoApp,
       precos,
     ] = await Promise.all([
         // Todo passo só pergunta "já tem?" (`> 0`; locais, `> 1`), então a
         // contagem para no primeiro que acha. Contar tudo percorria o histórico
         // inteiro de viagens a cada abertura da home, pra dizer "sim" de novo.
         this.prisma.veiculo.count({ take: 1 }),
+        // Conta o convite ainda PENDENTE de propósito: o caminho termina quando
+        // a empresa convida, e o sim é do motorista, não um passo dela.
         this.prisma.motorista.count({ take: 1 }),
         this.prisma.local.count({ take: 2 }),
         this.prisma.cliente.count({ take: 1 }),
-        // Viagem em andamento não conta como "já rodou": o ciclo pode ter sido
-        // aberto e abandonado, e o passo é sobre ter chegado ao fim uma vez.
-        //
-        // E viagem IMPORTADA não conta aqui: ela prova que o histórico subiu,
-        // não que o motorista lançou. Marcar "Receba a primeira viagem" com uma
-        // planilha seria o checklist dizendo meia-verdade e sumindo antes de o
-        // ciclo que o produto promete ter acontecido uma vez.
+        // Não é passo: é o que diz se a conta é `veterana`. Viagem em andamento
+        // não conta como "já rodou" — o ciclo pode ter sido aberto e
+        // abandonado. E viagem IMPORTADA também não: ela prova que o histórico
+        // subiu, não que o motorista lançou.
         this.prisma.viagem.count({
           where: {
             status: { notIn: STATUS_FORA_FECHAMENTO },
@@ -104,38 +101,23 @@ export class PrimeirosPassosService {
           take: 1,
         }),
         this.prisma.viagem.count({ where: { clientId: { startsWith: PREFIXO_IMPORTACAO } }, take: 1 }),
-        // O passo da viagem é o único que o dono NÃO cumpre sozinho: quem lança
-        // é o motorista, pelo celular. Sem este passo no meio, a lista pedia um
-        // resultado sem nunca pedir a ação que o produz.
-        this.prisma.motorista.count({ where: { ultimoLoginEm: { not: null } }, take: 1 }),
         this.prisma.tabelaPreco.count({ take: 1 }),
       ]);
 
     const passos: PrimeiroPasso[] = [
-      // O motorista vem PRIMEIRO porque o cadastro dele aceita a placa, e a
-      // placa cria o caminhão junto — quem começa por aqui marca dois itens de
-      // uma vez. Começar pelo caminhão faria a pessoa cadastrar a mesma placa
-      // duas vezes sem entender por quê.
-      {
-        chave: "motorista",
-        titulo: "Cadastre um motorista",
-        descricao:
-          "Informe a placa dele no cadastro e o caminhão já entra junto. Ele recebe um convite e lança as viagens pelo celular.",
-        rota: "/motoristas/novo",
-        cumprido: motoristas > 0,
-      },
+      // O caminhão vem antes porque o convite por CPF não leva placa: quem
+      // chega pelo convite entra só com a pessoa, e a viagem precisa dos dois.
       {
         chave: "veiculo",
-        titulo: "Tenha pelo menos um caminhão",
-        descricao:
-          "Se você informou a placa ao cadastrar o motorista, isto já está feito. Senão, cadastre aqui — nenhuma viagem sai sem caminhão.",
+        titulo: "Cadastre um caminhão",
+        descricao: "Nenhuma viagem sai sem caminhão. Basta a placa pra começar.",
         rota: "/veiculos/novo",
         cumprido: veiculos > 0,
       },
       // Dois locais, não um: a viagem exige `localCargaId` E `localDescargaId`
-      // (shared-types/viagem.ts). Com `locais > 0` a pessoa cumpria os seis
-      // passos, ia dormir tranquila, e o motorista continuava travado no app
-      // sem ter onde descarregar.
+      // (shared-types/viagem.ts). Com `locais > 0` a pessoa cumpria os passos,
+      // ia dormir tranquila, e o motorista continuava travado no app sem ter
+      // onde descarregar.
       {
         chave: "local",
         titulo: "Cadastre onde você carrega e onde descarrega",
@@ -155,24 +137,33 @@ export class PrimeirosPassosService {
         rota: "/empresas/novo",
         cumprido: clientes > 0,
       },
+      /**
+       * Os dois últimos são o motorista entrando, na ordem em que acontece:
+       * ELE baixa o app e cria o cadastro com o CPF dele (sem código de
+       * empresa), e DEPOIS a empresa convida esse CPF. Antes do convite a
+       * pessoa não tem vínculo nenhum com esta conta — o painel não tem como
+       * saber que ela baixou —, então os dois fecham juntos quando o primeiro
+       * motorista entra na lista, convite aceito ou não.
+       *
+       * O caminho TERMINA no convite. A primeira viagem já foi passo, e fazia
+       * o checklist cobrar do dono algo que só o motorista faz: com o
+       * motorista convidado, a parte da empresa acabou.
+       */
       {
         chave: "app",
         titulo: "Mande o app pro motorista",
         descricao:
-          "Ele baixa, entra com o CPF e a senha que você cadastrou, e a primeira viagem chega aqui sozinha. Sem isso, o painel fica vazio por mais cadastro que você faça.",
+          "Ele baixa e cria o cadastro com o CPF dele — não precisa de código de empresa nem de senha sua.",
         rota: "/motoristas",
-        cumprido: motoristasNoApp > 0,
+        cumprido: motoristas > 0,
       },
-      // Não existe criar viagem pelo painel: o controller só tem PATCH, e não
-      // há tela de nova viagem. A viagem nasce no celular do motorista, e é
-      // isso que o texto tem que dizer.
       {
-        chave: "viagem",
-        titulo: "Receba a primeira viagem do app",
+        chave: "convite",
+        titulo: "Convide o motorista pelo CPF",
         descricao:
-          "Quem lança é o motorista, pelo celular, na hora da carga. Aqui você confere, corrige e fecha o mês. Histórico importado não vale para este passo — ele é sobre o ciclo rodando.",
-        rota: "/viagens",
-        cumprido: viagens > 0,
+          "Depois que ele se cadastrou, digite o CPF dele aqui. Ele aceita o convite no celular e já pode lançar viagem.",
+        rota: "/motoristas#convidar",
+        cumprido: motoristas > 0,
       },
     ];
 
