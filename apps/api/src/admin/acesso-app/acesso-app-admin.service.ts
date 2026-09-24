@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
@@ -22,6 +21,7 @@ import {
   type TravasServidorAppInput,
 } from "@ronan/shared-types";
 import { AcessoAppService, ondeExcecaoViva } from "../../common/acesso-app/acesso-app.service";
+import type { DecisaoTabela } from "../../common/acesso-app/resolver";
 import { contaIdAtual } from "../../common/conta/conta-context";
 import { type EscopoAdmin, filtroEscopo } from "../../common/escopo/escopo";
 import { soDigitos } from "../../common/regime-vigente";
@@ -324,7 +324,7 @@ export class AcessoAppAdminService {
       regras.find(
         (r) => r.vinculo === "MOTORISTA" && r.regime === "QUALQUER" && r.modalidadeId === modalidadeId && !r.transportadoraId,
       );
-    return [
+    const colunas = [
       {
         chave: "SEM_MODALIDADE",
         nome: "Sem modalidade",
@@ -353,38 +353,72 @@ export class AcessoAppAdminService {
         pessoas: funcionarios.filter((f) => !temMotorista.has(soDigitos(f.cpf))).length,
       },
     ];
+    // Quem do grupo está diferente dele só por causa da ficha antiga — a
+    // tela mostra ao lado de cada item, com o "Valer pra todos".
+    if (cfg.fonte !== "REGRAS") return colunas.map((c) => ({ ...c, herdadas: {} }));
+    const { rascunho, grupos } = await this.rascunhoDaTabela(colunas, cfg);
+    const herdadas = await this.acesso.herdadasPorGrupo(rascunho, grupos);
+    return colunas.map((c) => ({ ...c, herdadas: herdadas.get(c.chave) ?? {} }));
   }
 
   /**
-   * O que muda se estas colunas forem salvas — o mesmo cálculo de verdade,
-   * com a tabela em rascunho. Modalidade que ainda não tem configuração ganha
-   * um perfil e uma regra de rascunho.
+   * A tabela em rascunho, como o resolvedor a entende: os perfis com o que
+   * foi marcado, a regra de rascunho de cada modalidade que ainda não tem
+   * configuração própria e as DECISÕES — os itens que o escritório decidiu
+   * pro grupo inteiro (os que mudaram + os de "valer pra todos"). A decisão
+   * é o que derruba a exceção herdada da ficha antiga (`herdadasSuperadas`).
    */
-  async simularTabela(dados: SalvarTabelaAppInput) {
-    const cfg = await this.exigirRegras();
-    const regras = await this.prisma.regraAcessoApp.findMany({ orderBy: { ordem: "asc" } });
+  private async rascunhoDaTabela(
+    colunas: { chave: string; capacidades: string[]; valerPraTodos?: string[] }[],
+    cfg: { perfilPadraoMotoristaId: string | null; perfilPadraoFuncionarioId: string | null },
+  ) {
+    const [regras, perfisAtuais] = await Promise.all([
+      this.prisma.regraAcessoApp.findMany({ orderBy: { ordem: "asc" } }),
+      this.prisma.perfilAcessoApp.findMany({ select: { id: true, capacidades: true } }),
+    ]);
+    const capsDe = (id: string | null) => perfisAtuais.find((p) => p.id === id)?.capacidades ?? [];
     const perfis: { id: string; capacidades: CapacidadeApp[]; ativo: boolean }[] = [];
     // O rascunho de regras vai como a tela as mandaria (id opcional, sem ordem).
     const novasRegras: Record<string, unknown>[] = regras.map(
       ({ ordem: _o, criadoEm: _c, alteradoEm: _a, criadoPorId: _p, alteradoPorId: _q, contaId: _t, ...r }) => r,
     );
-    for (const c of dados.colunas) {
+    const decisoes: DecisaoTabela[] = [];
+    const grupos: { chave: string; perfilId: string; capacidades: string[] }[] = [];
+    for (const c of colunas) {
       const alvo = await this.alvoDaColuna(c.chave, cfg, regras);
-      if (alvo.perfilId) {
-        perfis.push({ id: alvo.perfilId, capacidades: c.capacidades, ativo: true });
-      } else if (alvo.modalidadeId) {
-        const id = randomUUID();
-        perfis.push({ id, capacidades: c.capacidades, ativo: true });
-        novasRegras.push(this.regraDaModalidade(alvo.modalidadeId, alvo.nome, id));
+      let perfilId = alvo.perfilId;
+      // Modalidade sem configuração própria recebe hoje o de "sem modalidade".
+      const antes = new Set(perfilId ? capsDe(perfilId) : capsDe(cfg.perfilPadraoMotoristaId));
+      if (!perfilId && alvo.modalidadeId) {
+        perfilId = `__rascunho_${alvo.modalidadeId}`;
+        novasRegras.push(this.regraDaModalidade(alvo.modalidadeId, alvo.nome, perfilId));
       }
+      if (!perfilId) continue;
+      perfis.push({ id: perfilId, capacidades: c.capacidades as CapacidadeApp[], ativo: true });
+      const depois = new Set<string>(c.capacidades);
+      const decididas = new Set<string>(c.valerPraTodos ?? []);
+      for (const x of depois) if (!antes.has(x)) decididas.add(x);
+      for (const x of antes) if (!depois.has(x)) decididas.add(x);
+      if (decididas.size) decisoes.push({ perfilId, capacidades: decididas });
+      grupos.push({ chave: c.chave, perfilId, capacidades: c.capacidades });
     }
-    return this.acesso.simular({ perfis, regras: novasRegras as never });
+    return { rascunho: { perfis, regras: novasRegras as never }, decisoes, grupos, regras };
+  }
+
+  /** O que muda se estas colunas forem salvas — o mesmo cálculo de verdade. */
+  async simularTabela(dados: SalvarTabelaAppInput) {
+    const cfg = await this.exigirRegras();
+    const { rascunho, decisoes } = await this.rascunhoDaTabela(dados.colunas, cfg);
+    return this.acesso.simular(rascunho, decisoes);
   }
 
   async salvarTabela(dados: SalvarTabelaAppInput, autorId: string, escopo: EscopoAdmin) {
     this.exigirGlobal(escopo);
     const cfg = await this.exigirRegras();
-    const regras = await this.prisma.regraAcessoApp.findMany({ orderBy: { ordem: "asc" } });
+    const { rascunho, decisoes, regras } = await this.rascunhoDaTabela(dados.colunas, cfg);
+    // Calculado ANTES de gravar, com o mesmo rascunho da prévia: cai
+    // exatamente o que o escritório viu cair.
+    const caem = await this.acesso.herdadasQueCaem(rascunho, decisoes);
     await this.prisma.$transaction(async (tx) => {
       let proximaOrdem = regras.length ? Math.max(...regras.map((r) => r.ordem)) + 1 : 0;
       for (const c of dados.colunas) {
@@ -421,6 +455,21 @@ export class AcessoAppAdminService {
           });
           await tx.logAcessoApp.create({
             data: { tipo: "TABELA_SALVA", autorId, alvoId: perfil.id, ganhou: [...depois], causa: alvo.nome },
+          });
+        }
+      }
+      // A foto da ficha antiga dá lugar à decisão do grupo. Revogada, não
+      // apagada: fica na trilha quem salvou e quando.
+      const agora = new Date();
+      const motivo = "A tabela passou a valer pra todo o grupo neste item.";
+      for (const e of caem) {
+        const r = await tx.excecaoAcessoApp.updateMany({
+          where: { id: e.id, revogadaEm: null },
+          data: { revogadaEm: agora, revogadaPorId: autorId, chaveViva: null, motivoRevogacao: motivo },
+        });
+        if (r.count) {
+          await tx.logAcessoApp.create({
+            data: { tipo: "EXCECAO_REVOGADA", autorId, cpf: e.cpf, alvoId: e.id, motivo },
           });
         }
       }

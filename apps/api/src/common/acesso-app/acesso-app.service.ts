@@ -31,7 +31,9 @@ import {
   type ColunasAcesso,
 } from "./espelho-colunas";
 import {
+  herdadasSuperadas,
   resolverAcessoApp,
+  type DecisaoTabela,
   type ContaAcessoCtx,
   type ExcecaoAcessoCtx,
   type PessoaAcesso,
@@ -196,6 +198,7 @@ export class AcessoAppService {
             motivo: true,
             expiraEm: true,
             revogadaEm: true,
+            origem: true,
           },
         }),
       ]);
@@ -520,12 +523,24 @@ export class AcessoAppService {
    * O que muda pra quem, se o rascunho for salvo. Compara o cálculo de hoje
    * com o cálculo com o rascunho — os dois pelo mesmo resolvedor.
    */
-  async simular(rascunho: SimularAcessoAppInput): Promise<{ total: number; mudam: MudancaAcessoApp[] }> {
+  async simular(
+    rascunho: SimularAcessoAppInput,
+    decisoes: DecisaoTabela[] = [],
+  ): Promise<{ total: number; mudam: MudancaAcessoApp[]; herdadas: number }> {
     await this.garantirConfig();
     const agora = new Date();
     const { ctx, pessoas, excecoesPorCpf, nomes } = await this.carregarContexto(this.prisma, agora);
     const antes = this.calcular(pessoas, ctx, excecoesPorCpf, agora);
-    const depois = this.calcular(pessoas, this.aplicarRascunho(ctx, rascunho), excecoesPorCpf, agora);
+    const ctxDepois = this.aplicarRascunho(ctx, rascunho);
+    // As herdadas que a decisão supera saem do cálculo do "depois": é o que
+    // faz a prévia mostrar pelo nome quem passa a ver o item.
+    const caem = new Set(
+      herdadasSuperadas(pessoas.values(), ctxDepois, excecoesPorCpf, decisoes, agora).map((e) => e.id),
+    );
+    const excecoesDepois = new Map(
+      [...excecoesPorCpf].map(([cpf, lista]) => [cpf, lista.filter((e) => !caem.has(e.id))]),
+    );
+    const depois = this.calcular(pessoas, ctxDepois, excecoesDepois, agora);
     const mudam: MudancaAcessoApp[] = [];
     for (const [cpf, a] of antes) {
       const d = depois.get(cpf)!;
@@ -545,7 +560,53 @@ export class AcessoAppService {
       });
     }
     mudam.sort((x, y) => y.perdeu.length - x.perdeu.length || x.nome.localeCompare(y.nome));
-    return { total: mudam.length, mudam: mudam.slice(0, 500) };
+    return { total: mudam.length, mudam: mudam.slice(0, 500), herdadas: caem.size };
+  }
+
+  /**
+   * As exceções herdadas que este rascunho + decisões fazem cair — o mesmo
+   * cálculo da prévia, pra quem salva revogar exatamente o que foi mostrado.
+   */
+  async herdadasQueCaem(rascunho: SimularAcessoAppInput, decisoes: DecisaoTabela[]) {
+    const agora = new Date();
+    const { ctx, pessoas, excecoesPorCpf } = await this.carregarContexto(this.prisma, agora);
+    return herdadasSuperadas(pessoas.values(), this.aplicarRascunho(ctx, rascunho), excecoesPorCpf, decisoes, agora);
+  }
+
+  /**
+   * Por coluna da tabela e item: quantas pessoas do grupo estão diferentes
+   * dele só por causa da ficha antiga (herdada que CONTRADIZ o grupo). É o
+   * "3 pessoas deste tipo não veem isto" ao lado da caixinha.
+   */
+  async herdadasPorGrupo(
+    rascunho: SimularAcessoAppInput,
+    grupos: { chave: string; perfilId: string; capacidades: readonly string[] }[],
+  ): Promise<Map<string, Record<string, { naoVeem: number; tambemVeem: number }>>> {
+    const agora = new Date();
+    const { ctx, pessoas, excecoesPorCpf } = await this.carregarContexto(this.prisma, agora);
+    const ctxGrupos = this.aplicarRascunho(ctx, rascunho);
+    const todas = new Set<string>(CAPACIDADES_APP.map((c) => c.chave));
+    const out = new Map<string, Record<string, { naoVeem: number; tambemVeem: number }>>();
+    for (const g of grupos) {
+      const tem = new Set(g.capacidades);
+      const porItem: Record<string, { naoVeem: number; tambemVeem: number }> = {};
+      const caem = herdadasSuperadas(
+        pessoas.values(),
+        ctxGrupos,
+        excecoesPorCpf,
+        [{ perfilId: g.perfilId, capacidades: todas }],
+        agora,
+      );
+      for (const e of caem) {
+        const contradiz = e.efeito === "NEGAR" ? tem.has(e.capacidade) : !tem.has(e.capacidade);
+        if (!contradiz) continue;
+        const n = (porItem[e.capacidade] ??= { naoVeem: 0, tambemVeem: 0 });
+        if (e.efeito === "NEGAR") n.naoVeem++;
+        else n.tambemVeem++;
+      }
+      out.set(g.chave, porItem);
+    }
+    return out;
   }
 
   /**

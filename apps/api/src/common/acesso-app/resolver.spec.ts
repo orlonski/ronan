@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CamadaCorte } from "@ronan/shared-types";
 import {
+  herdadasSuperadas,
   resolverAcessoApp,
   type ContaAcessoCtx,
   type ExcecaoAcessoCtx,
@@ -380,5 +381,54 @@ describe("uma pessoa, um tipo: o motorista CLT recebe só o tipo do motorista", 
     const ex = [{ id: "e1", capacidade: "app.ponto.espelho", efeito: "CONCEDER" as const, motivo: "m", expiraEm: null, revogadaEm: null }];
     const r = resolverAcessoApp(pessoa({ funcionario, regime: "EMPREGADO" }), ctx, ex, AGORA);
     expect(r.efetivo).toContain("app.ponto.espelho");
+  });
+});
+
+describe("decisão na tabela vence a exceção herdada da ficha antiga", () => {
+  const LOCAIS = "app.locais.verTodos";
+  const herdada = (cpf: string, efeito: "CONCEDER" | "NEGAR", capacidade = LOCAIS) =>
+    excecao({ id: `h-${cpf}-${capacidade}`, capacidade, efeito, origem: "MIGRACAO" });
+  const ctx = conta({
+    perfis: [perfil("frete", ["app.viagem.lancar", LOCAIS]), perfil("tac", ["app.viagem.lancar"])],
+    regras: [regra({ perfilId: "tac", vinculo: "MOTORISTA", modalidadeId: "mod-tac" })],
+  });
+  const semModalidade = pessoa({ cpf: "111" });
+  const tac = pessoa({ cpf: "222", motorista: motorista({ id: "m2", modalidadeId: "mod-tac" }) });
+  const decisao = (perfilId: string, caps: string[]) => [{ perfilId, capacidades: new Set(caps) }];
+
+  it("o 'não vê' herdado cai quando o item é decidido no grupo — e a pessoa passa a ver", () => {
+    const ex = new Map([["111", [herdada("111", "NEGAR")]]]);
+    expect(resolverAcessoApp(semModalidade, ctx, ex.get("111")!, AGORA).efetivo).not.toContain(LOCAIS);
+    const cai = herdadasSuperadas([semModalidade], ctx, ex, decisao("frete", [LOCAIS]), AGORA);
+    expect(cai.map((e) => e.id)).toEqual(["h-111-app.locais.verTodos"]);
+    expect(resolverAcessoApp(semModalidade, ctx, [], AGORA).efetivo).toContain(LOCAIS);
+  });
+
+  it("exceção MANUAL nunca cai: essa alguém decidiu", () => {
+    const ex = new Map([["111", [excecao({ id: "man", capacidade: LOCAIS, efeito: "NEGAR", origem: "MANUAL" })]]]);
+    expect(herdadasSuperadas([semModalidade], ctx, ex, decisao("frete", [LOCAIS]), AGORA)).toEqual([]);
+  });
+
+  it("só o item decidido: a herdada de outro item fica", () => {
+    const ex = new Map([["111", [herdada("111", "NEGAR", "app.historico.ver")]]]);
+    expect(herdadasSuperadas([semModalidade], ctx, ex, decisao("frete", [LOCAIS]), AGORA)).toEqual([]);
+  });
+
+  it("só quem está no grupo: decidir 'sem modalidade' não mexe em quem é de outra modalidade", () => {
+    const ex = new Map([["222", [herdada("222", "NEGAR")]]]);
+    expect(herdadasSuperadas([tac], ctx, ex, decisao("frete", [LOCAIS]), AGORA)).toEqual([]);
+    expect(herdadasSuperadas([tac], ctx, ex, decisao("tac", [LOCAIS]), AGORA)).toHaveLength(1);
+  });
+
+  it("vale pros dois lados: o 'também vê' herdado cai se o grupo decidiu que não vê", () => {
+    const ex = new Map([["222", [herdada("222", "CONCEDER")]]]);
+    expect(herdadasSuperadas([tac], ctx, ex, decisao("tac", [LOCAIS]), AGORA)).toHaveLength(1);
+  });
+
+  it("exceção já revogada ou vencida não entra na conta", () => {
+    const ex = new Map([
+      ["111", [{ ...herdada("111", "NEGAR"), revogadaEm: new Date("2026-09-01T00:00:00Z") }]],
+    ]);
+    expect(herdadasSuperadas([semModalidade], ctx, ex, decisao("frete", [LOCAIS]), AGORA)).toEqual([]);
   });
 });

@@ -60,6 +60,15 @@ export function ConfirmarMudanca({
               )}
               {ganham > 0 && <> · {ganham} ganham</>}.
             </p>
+            {!!simulacao.herdadas && (
+              <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                {simulacao.herdadas === 1
+                  ? "1 diferença que veio da ficha antiga deixa de valer"
+                  : `${simulacao.herdadas} diferenças que vieram da ficha antiga deixam de valer`}
+                : a partir de agora vale o que está marcado no grupo. O que foi dado ou tirado
+                de alguém à mão, com motivo, continua como está.
+              </p>
+            )}
             {perdem > 0 && (
               <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                 Quem estiver sem sinal ainda vê o que perdeu até sincronizar. O que lançar

@@ -165,15 +165,21 @@ function EditorDoTipo({ painel, coluna }: { painel: PainelAcessoApp; coluna: Col
   const podeEditar = painel.fonte === "REGRAS" && temPermissao("perfis-acesso.editar");
   const inicial = useMemo(() => new Set(coluna.capacidades as CapacidadeApp[]), [coluna]);
   const [marcadas, setMarcadas] = useState<Set<CapacidadeApp>>(inicial);
+  // "Valer pra todos": item que não mudou, mas que o escritório quer que
+  // valha pro grupo inteiro — derruba a diferença herdada da ficha antiga.
+  const [valer, setValer] = useState<Set<CapacidadeApp>>(new Set());
   const [vendo, setVendo] = useState(false);
   const [simulacao, setSimulacao] = useState<Simulacao | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  useEffect(() => setMarcadas(inicial), [inicial]);
+  useEffect(() => {
+    setMarcadas(inicial);
+    setValer(new Set());
+  }, [inicial]);
 
   // Ferramenta da plataforma (gravar o uso da tela) não é da empresa marcar.
   const itens = CAPACIDADES_APP.filter((c) => c.tipo !== "PLATAFORMA");
   const alterado =
-    marcadas.size !== inicial.size || [...marcadas].some((c) => !inicial.has(c));
+    valer.size > 0 || marcadas.size !== inicial.size || [...marcadas].some((c) => !inicial.has(c));
   const custa = plataforma && itens.some((c) => c.custa && marcadas.has(c.chave));
   const nomeTipo = coluna.nome;
   const tipo = coluna.chave;
@@ -188,7 +194,16 @@ function EditorDoTipo({ painel, coluna }: { painel: PainelAcessoApp; coluna: Col
   }
 
   // Só a coluna que está na tela: as outras ficam como estão.
-  const corpoTabela = () => ({ colunas: [{ chave: coluna.chave, capacidades: [...marcadas] }] });
+  const corpoTabela = () => ({
+    colunas: [{ chave: coluna.chave, capacidades: [...marcadas], valerPraTodos: [...valer] }],
+  });
+
+  /** Quantas pessoas do grupo estão diferentes deste item por causa da ficha antiga. */
+  function diferentes(c: CapacidadeApp): number {
+    const h = coluna.herdadas?.[c];
+    if (!h) return 0;
+    return marcadas.has(c) ? h.naoVeem : h.tambemVeem;
+  }
 
   async function salvar() {
     setOcupado(true);
@@ -198,8 +213,9 @@ function EditorDoTipo({ painel, coluna }: { painel: PainelAcessoApp; coluna: Col
         token,
         body: JSON.stringify(corpoTabela()),
       });
-      // Ninguém perde nada: salva direto. Alguém perde: mostra quem, antes.
-      if (s.mudam.some((m) => m.perdeu.length > 0)) setSimulacao(s);
+      // Ninguém perde nada: salva direto. Alguém perde, ou alguma diferença
+      // da ficha antiga cai: mostra quem, antes.
+      if (s.herdadas || s.mudam.some((m) => m.perdeu.length > 0)) setSimulacao(s);
       else await gravar();
     } catch (e) {
       toast.error((e as Error).message);
@@ -274,6 +290,8 @@ function EditorDoTipo({ painel, coluna }: { painel: PainelAcessoApp; coluna: Col
                 {doGrupo.map((c) => {
                   const indisponivel = motivoIndisponivel(c, tipo);
                   const aviso = avisoDoItem(c, tipo);
+                  const mudou = marcadas.has(c.chave) !== inicial.has(c.chave);
+                  const nDiferentes = indisponivel ? 0 : diferentes(c.chave);
                   return (
                     <label
                       key={c.chave}
@@ -307,6 +325,35 @@ function EditorDoTipo({ painel, coluna }: { painel: PainelAcessoApp; coluna: Col
                           )}
                         </span>
                         <span className="block text-xs text-muted-foreground">{c.efeito}</span>
+                        {nDiferentes > 0 && (
+                          <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
+                            {mudou || valer.has(c.chave) ? (
+                              <>Salvando, vale pra todos deste tipo — inclusive {nDiferentes === 1 ? "1 pessoa" : `${nDiferentes} pessoas`} que a ficha antiga deixava diferente.</>
+                            ) : (
+                              <>
+                                {nDiferentes === 1 ? "1 pessoa" : `${nDiferentes} pessoas`} deste tipo{" "}
+                                {marcadas.has(c.chave) ? "não veem" : "também veem"} isto, por causa da ficha antiga.
+                              </>
+                            )}
+                            {podeEditar && !mudou && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setValer((prev) => {
+                                    const n = new Set(prev);
+                                    if (n.has(c.chave)) n.delete(c.chave);
+                                    else n.add(c.chave);
+                                    return n;
+                                  });
+                                }}
+                                className="font-medium text-blue-600 hover:underline"
+                              >
+                                {valer.has(c.chave) ? "Desfazer" : "Valer pra todos"}
+                              </button>
+                            )}
+                          </span>
+                        )}
                       </span>
                     </label>
                   );
@@ -327,7 +374,13 @@ function EditorDoTipo({ painel, coluna }: { painel: PainelAcessoApp; coluna: Col
       {podeEditar && (
         <div className="flex items-center justify-end gap-2 border-t pt-4">
           {alterado && (
-            <Button variant="outline" onClick={() => setMarcadas(inicial)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMarcadas(inicial);
+                setValer(new Set());
+              }}
+            >
               Desfazer
             </Button>
           )}

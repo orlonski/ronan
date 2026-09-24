@@ -580,7 +580,18 @@ export const SalvarTabelaAppInput = z.object({
    * cadastro de motorista) ou o id de uma modalidade (Motoristas › Modalidades).
    */
   colunas: z
-    .array(z.object({ chave: z.string().min(1).max(64), capacidades: z.array(CapacidadeAppSchema) }))
+    .array(
+      z.object({
+        chave: z.string().min(1).max(64),
+        capacidades: z.array(CapacidadeAppSchema),
+        /**
+         * Itens que o escritório mandou valer pro grupo inteiro sem mudá-los
+         * ("Valer pra todos"): derrubam a exceção herdada da ficha antiga de
+         * quem está no grupo. Item que mudou já é decisão — não precisa vir aqui.
+         */
+        valerPraTodos: z.array(CapacidadeAppSchema).max(100).optional(),
+      }),
+    )
     .min(1)
     .max(50),
 });

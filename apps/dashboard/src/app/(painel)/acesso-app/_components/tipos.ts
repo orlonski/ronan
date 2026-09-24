@@ -48,8 +48,14 @@ export type ColunaApp = {
   capacidades: string[];
   herda: boolean;
   pessoas: number;
+  /**
+   * Por item: quantas pessoas do grupo estão diferentes dele só por causa da
+   * ficha antiga (exceção herdada na virada pra tabela).
+   */
+  herdadas: Record<string, { naoVeem: number; tambemVeem: number }>;
 };
 
-export type Simulacao = { total: number; mudam: MudancaAcessoApp[] };
+/** `herdadas`: quantas diferenças da ficha antiga deixam de valer ao salvar. */
+export type Simulacao = { total: number; mudam: MudancaAcessoApp[]; herdadas?: number };
 
 export const CHAVE_PAINEL = ["/admin/acesso-app"];

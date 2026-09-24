@@ -78,6 +78,8 @@ export type ExcecaoAcessoCtx = {
   motivo: string;
   expiraEm: Date | null;
   revogadaEm: Date | null;
+  /** MANUAL (alguém decidiu) | MIGRACAO (foto da ficha antiga na virada). */
+  origem?: string;
 };
 
 export type ContaAcessoCtx = {
@@ -367,4 +369,54 @@ export function resolverAcessoApp(
   const ordem = (s: Set<CapacidadeApp>) =>
     CAPACIDADES_APP.map((d) => d.chave).filter((c) => s.has(c));
   return { efetivo: ordem(efetivo), sombra: ordem(sombra), base, explicacao, proximaMudanca };
+}
+
+/** Um item salvo na tabela: "todo mundo deste perfil vê (ou não vê) isto". */
+export type DecisaoTabela = { perfilId: string; capacidades: ReadonlySet<string> };
+
+/**
+ * DECISÃO NOVA VENCE FOTO DO PASSADO.
+ *
+ * Na virada pra tabela, cada diferença da ficha antiga virou exceção
+ * (`origem: MIGRACAO`, "Já era assim na ficha dele") pra ninguém perder nada.
+ * Só que exceção vence o grupo — então marcar um item no grupo não chegava em
+ * quem a foto dizia "não vê", e o escritório voltava a liberar motorista a
+ * motorista (Schaba, 24/09/2026: 8 sem "Buscar local pelo nome").
+ *
+ * A foto não é decisão de ninguém; salvar o item no grupo é. Então: quem cai
+ * no perfil decidido perde as exceções HERDADAS daqueles itens. Exceção
+ * MANUAL (alguém escreveu o motivo) nunca é tocada — essa é decisão.
+ *
+ * `conta` é o contexto já com o rascunho: quem está no grupo é quem estará
+ * nele depois de salvar (modalidade que ganha configuração própria inclusa).
+ * Função pura; quem revoga é o `AcessoAppService`.
+ */
+export function herdadasSuperadas(
+  pessoas: Iterable<PessoaAcesso>,
+  conta: ContaAcessoCtx,
+  excecoesPorCpf: ReadonlyMap<string, readonly ExcecaoAcessoCtx[]>,
+  decisoes: readonly DecisaoTabela[],
+  agora: Date,
+): (ExcecaoAcessoCtx & { cpf: string })[] {
+  if (!decisoes.length) return [];
+  const out: (ExcecaoAcessoCtx & { cpf: string })[] = [];
+  for (const p of pessoas) {
+    const herdadas = (excecoesPorCpf.get(p.cpf) ?? []).filter(
+      (e) => e.origem === "MIGRACAO" && excecaoViva(e, agora),
+    );
+    if (!herdadas.length) continue;
+    // Uma pessoa, um tipo — o mesmo critério da base do resolvedor.
+    const base = p.motorista
+      ? baseDoVinculo("MOTORISTA", p, conta)
+      : p.funcionario
+        ? baseDoVinculo("FUNCIONARIO", p, conta)
+        : null;
+    if (!base) continue;
+    const decididas = new Set<string>();
+    for (const d of decisoes) {
+      if (d.perfilId === base.perfilId) for (const c of d.capacidades) decididas.add(c);
+    }
+    for (const e of herdadas) if (decididas.has(e.capacidade)) out.push({ ...e, cpf: p.cpf });
+  }
+  return out;
 }
