@@ -26,6 +26,7 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.viagem.lancar",
   "app.viagem.guiada",
   "app.viagem.gpsClassico",
+  "app.historico.ver",
   "app.ticket.ocr",
   "app.km.referencia",
   "app.locais.verTodos",
@@ -154,6 +155,23 @@ const DEFS: CapacidadeAppDef[] = [
     gate: "SERVIDOR",
     aoPerder: "VALA",
     colunaLegada: { coluna: "podeIniciarViagem", espelha: true },
+  },
+  {
+    // Quem manda no app é a empresa (dono, 23/09/2026): até aqui o histórico
+    // não tinha interruptor nenhum. Nasce LIGADO pra todos — sem coluna
+    // legada, cai na regra das capacidades novas de `capacidadesDasColunas`, e
+    // a migration 20260924000000 põe a chave nos perfis e acessos que já
+    // existiam. Só esconde na tela: `/m/viagens` também serve a lançamento,
+    // edição e pendentes, e barrar no servidor quebraria o offline.
+    chave: "app.historico.ver",
+    label: "Ver o histórico de viagens",
+    efeito: "A aba Histórico e as viagens recentes do Início: o que ele lançou e o resumo do mês.",
+    grupo: "Viagens",
+    tipo: "EMPRESA",
+    vinculo: "MOTORISTA",
+    modulo: "operacao",
+    gate: "SO_TELA",
+    aoPerder: "RECUSAR",
   },
   {
     chave: "app.ticket.ocr",
