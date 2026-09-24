@@ -123,6 +123,17 @@ cálculo é indistinguível de "não sei se está certa".
 pedágio devolvido, abastecimento devolvido, desconto com motivo escrito — nunca de
 um total solto (`common/acerto-motorista.ts`, `apps/motorista-app/app/meus-acertos.tsx`).
 
+### 15. Ele avisa que o caminhão tá com problema, e não sabe se alguém viu
+**Como ele diz:** "falei que o pneu tava careca. Cadê a resposta?"
+**O que custa:** ele fica sem saber se pode seguir rodando, e sem resposta o parceiro
+para de avisar — aí o escritório perde justo o dado que evitaria o caminhão parar na
+pista.
+**O que mata:** botão "Problema no caminhão" no Início — foto, descrição e se dá pra
+continuar rodando — cai na hora na aba Avisos da Manutenção, com notificação pro
+escritório; quando decidem, o motorista recebe notificação e vê o status em "Meus
+avisos" (`apps/motorista-app/app/avisar-problema.tsx`, `meus-avisos.tsx`,
+`admin/frota-manutencao/frota-manutencao.service.ts`).
+
 ---
 
 ## De onde vem isto, e o que falta
