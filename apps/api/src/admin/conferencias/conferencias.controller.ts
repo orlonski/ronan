@@ -8,6 +8,9 @@ import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorato
 import { ConferenciaFilaService } from "../../conferencia-ticket/conferencia-fila.service";
 import { ConferenciaConfig } from "../../conferencia-ticket/conferencia.config";
 import type { VereditoConferencia } from "@prisma/client";
+import { PrismaService } from "../../prisma/prisma.service";
+import { contaIdAtual } from "../../common/conta/conta-context";
+import { ehContaDaPlataforma } from "../../common/conta/eh-plataforma";
 
 /** O que a tela pode pedir. Fora daqui o filtro é descartado. */
 const VEREDITOS: VereditoConferencia[] = [
@@ -35,14 +38,26 @@ export class ConferenciasController {
   constructor(
     private readonly fila: ConferenciaFilaService,
     private readonly config: ConferenciaConfig,
+    private readonly prisma: PrismaService,
   ) {}
+
+  /**
+   * O custo da IA é da plataforma: quanto a Movatruck paga por leitura não é
+   * assunto do cliente (pedido do dono, 23/09/2026). Sai AQUI, na resposta —
+   * esconder só na tela deixava o valor a um F12 de distância, e a linha de
+   * cada ticket nem escondia.
+   */
+  private verCusto() {
+    return ehContaDaPlataforma(this.prisma, contaIdAtual());
+  }
 
   @Get("resumo")
   @RequerPermissao("conferencia-ticket.ver")
   async resumo() {
-    const r = await this.fila.resumo();
+    const { custoUsd24h, ...r } = await this.fila.resumo();
     return {
       ...r,
+      ...((await this.verCusto()) ? { custoUsd24h } : {}),
       // A tela precisa dizer em voz alta quando está em sombra: veredito
       // gravado com viagem intocada é fácil de confundir com "não funcionou".
       modoSombra: this.config.modoSombra,
@@ -59,13 +74,13 @@ export class ConferenciasController {
    */
   @Get()
   @RequerPermissao("conferencia-ticket.ver")
-  listar(
+  async listar(
     @Query("limite") limite?: string,
     @Query("veredito") veredito?: string,
     @Query("campo") campo?: string,
     @Query("tipo") tipo?: string,
   ) {
-    return this.fila.listar({
+    const lista = await this.fila.listar({
       limite: limite ? Number(limite) : 50,
       veredito: VEREDITOS.includes(veredito as VereditoConferencia)
         ? (veredito as VereditoConferencia)
@@ -73,6 +88,8 @@ export class ConferenciasController {
       campo: CAMPOS.includes(campo ?? "") ? campo : undefined,
       tipo: tipo === "divergencia" || tipo === "incerteza" ? tipo : undefined,
     });
+    if (await this.verCusto()) return lista;
+    return lista.map(({ custoUsd: _custo, ...c }) => c);
   }
 
   /**

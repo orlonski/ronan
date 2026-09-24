@@ -32,7 +32,8 @@ type Conferencia = {
   divergencias: Divergencia[] | null;
   incertezas: Incerteza[] | null;
   acao: string | null;
-  custoUsd: string | null;
+  /** Só vem pra plataforma: a API tira da resposta do cliente. */
+  custoUsd?: string | null;
   duracaoMs: number | null;
   passadas: number;
   modelo: string | null;
@@ -61,7 +62,8 @@ type Resumo = {
   executando: number;
   ultimas24h: number;
   concluidas: number;
-  custoUsd24h: number;
+  /** Só vem pra plataforma. */
+  custoUsd24h?: number;
   porVeredito: Record<string, number>;
   modoSombra: boolean;
   ativa: boolean;
