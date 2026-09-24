@@ -54,11 +54,15 @@ function Conteudo() {
     queryFn: () => fetchApi<{ data: string; linhas: LinhaDia[] }>(`${PATH}/dia?data=${data}`, { token }),
   });
 
-  if (config.data && !config.data.fundamento) return <PrecisaFundamento />;
-
   const { temPermissao } = usePermissoes();
   const podeVerOnde = temPermissao("ponto.ver-localizacao");
   const [onde, setOnde] = useState<{ id: string; nome: string; hora: string } | null>(null);
+
+  // Depois de TODOS os hooks. Com o `return` acima deles, a tela quebrava
+  // (React #300) pra empresa sem acordo coletivo: a 1ª renderização (config
+  // ainda chegando) chamava os hooks, a 2ª saía antes — e o aviso que devia
+  // aparecer virava a tela de erro.
+  if (config.data && !config.data.fundamento) return <PrecisaFundamento />;
   const linhas = dia.data?.linhas ?? [];
   const bateram = linhas.filter((l) => l.marcacoes.length > 0).length;
 

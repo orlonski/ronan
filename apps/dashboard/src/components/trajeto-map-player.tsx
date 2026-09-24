@@ -71,12 +71,7 @@ export function TrajetoMapPlayer({ pontos }: { pontos: PontoPlayer[] }) {
   const [speed, setSpeed] = useState<Speed>(1);
   const [panTrigger, setPanTrigger] = useState(0);
 
-  if (pontos.length < 2) return null;
-
   const lastIndex = pontos.length - 1;
-  const inicio = pontos[0]!;
-  const fim = pontos[lastIndex]!;
-  const atual = pontos[currentIndex]!;
 
   // Animação: a cada 33ms (~30fps), avança N pontos baseado na velocidade.
   // Assume densidade de ~1 ponto/segundo de viagem; speed=60× ⇒ 2 pontos/frame
@@ -127,6 +122,13 @@ export function TrajetoMapPlayer({ pontos }: { pontos: PontoPlayer[] }) {
       pontos.slice(currentIndex).map((p) => [p.lat, p.lng] as [number, number]),
     [pontos, currentIndex],
   );
+
+  // Só depois de todos os hooks: com o `return` antes deles, a quantidade de
+  // pontos mudar entre renderizações derrubava a tela (React #300/#310).
+  if (pontos.length < 2) return null;
+  const inicio = pontos[0]!;
+  const fim = pontos[lastIndex]!;
+  const atual = pontos[Math.min(currentIndex, lastIndex)]!;
 
   const inicioTs = new Date(inicio.capturadoEm).getTime();
   const atualTs = new Date(atual.capturadoEm).getTime();
