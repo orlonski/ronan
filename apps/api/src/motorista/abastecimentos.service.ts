@@ -2,7 +2,6 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-  UnprocessableEntityException,
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { CriarAbastecimentoInput, FotoAbastecimentoInput } from "@ronan/shared-types";
@@ -124,7 +123,7 @@ export class AbastecimentosMotoristaService {
       if (!empresa) throw new ItemInexistenteException("empresaId");
     }
 
-    // Valida odômetro: deve ser >= o último registrado ANTES deste lançamento.
+    // Confere o odômetro contra o último registrado ANTES deste lançamento.
     //
     // A janela `data <= input.data` é essencial pro offline: o app é
     // offline-first e um abastecimento feito na terça pode só sincronizar na
@@ -132,18 +131,20 @@ export class AbastecimentosMotoristaService {
     // absolutos, esse lançamento atrasado era recusado por causa de um
     // abastecimento de quinta (de qualquer motorista do mesmo caminhão) — 422 é
     // erro permanente no app, então o lançamento morria preso na tela de
-    // Pendentes sem nunca subir. A proteção contra odômetro regressivo continua
-    // valendo, só que na ordem cronológica real.
+    // Pendentes sem nunca subir.
+    //
+    // ⚠️ E NÃO RECUSA mais (24/09/2026): menor que o anterior entra, carimbado
+    // com o anterior em `odometroAnterior`. Recusar travava o caminhão inteiro
+    // quando o erro era do lançamento ANTERIOR (um dígito a mais): todo
+    // abastecimento verdadeiro dali em diante caía no 422. O consumo já
+    // descarta trecho de km negativo (common/consumo.ts).
     const ultimo = await this.prisma.abastecimento.findFirst({
       where: { veiculoId: input.veiculoId, data: { lte: input.data } },
       orderBy: { data: "desc" },
       select: { odometro: true, data: true },
     });
-    if (ultimo && input.odometro < ultimo.odometro) {
-      throw new UnprocessableEntityException(
-        `Odômetro informado (${input.odometro} km) é menor que o último registrado pra esse veículo (${ultimo.odometro} km).`,
-      );
-    }
+    const odometroAnterior =
+      ultimo && input.odometro < ultimo.odometro ? ultimo.odometro : null;
 
     // Abastecimento em comboio: valor pode vir vazio. Sem valor, sem preço/litro.
     const precoLitro =
@@ -212,6 +213,7 @@ export class AbastecimentosMotoristaService {
         precoLitro,
         emComboio: rest.emComboio,
         odometro: rest.odometro,
+        odometroAnterior,
         postoNome: rest.postoNome,
         tanqueCheio: rest.tanqueCheio,
         observacao: rest.observacao,

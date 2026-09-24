@@ -67,6 +67,7 @@ type AbastecimentoDetalhe = {
   emComboio: boolean;
   precoLitro: string | null;
   odometro: number;
+  odometroAnterior?: number | null;
   postoNome: string | null;
   tanqueCheio: boolean;
   observacao: string | null;
@@ -228,7 +229,11 @@ export default function AbastecimentoDetalhePage({
             <Info
               icon={Gauge}
               label="Odômetro"
-              value={`${x.odometro.toLocaleString("pt-BR")} km`}
+              value={
+                x.odometroAnterior != null
+                  ? `${x.odometro.toLocaleString("pt-BR")} km — menor que o anterior (${x.odometroAnterior.toLocaleString("pt-BR")} km); confira qual dos dois está errado`
+                  : `${x.odometro.toLocaleString("pt-BR")} km`
+              }
             />
             <Info
               icon={x.tanqueCheio ? CheckCircle2 : CircleDashed}

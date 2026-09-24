@@ -94,6 +94,8 @@ type Manutencao = {
   odometro: number | null;
   previstaEm: string | null;
   valorTotal: string | null;
+  valorPecas?: string | null;
+  valorMaoObra?: string | null;
   veiculo: Veiculo;
   fornecedor: { id: string; nome: string } | null;
 };
@@ -752,6 +754,9 @@ function ListaManutencoes({
     valorPecas: "",
     valorMaoObra: "",
     planoId: "",
+    // Já foi feita (zera o plano e pode lançar a conta) ou ainda vai fazer.
+    situacao: "FEITA" as "FEITA" | "VAI_FAZER",
+    lancarConta: false,
   });
 
   // Veio do "Lançar feita" do alerta: abre o formulário já preenchido.
@@ -764,6 +769,7 @@ function ListaManutencoes({
       tipo: "PREVENTIVA",
       descricao: prefill.descricao,
       planoId: prefill.planoId,
+      situacao: "FEITA",
     }));
     setCriando(true);
     onPrefillUsado();
@@ -810,10 +816,12 @@ function ListaManutencoes({
             ? Number(form.valorMaoObra.replace(/\./g, "").replace(",", "."))
             : null,
           planoId: planoEscolhido ? planoEscolhido.id : null,
+          status: form.situacao === "FEITA" ? "CONCLUIDA" : "ABERTA",
+          gerarContaPagar: form.situacao === "FEITA" && form.lancarConta,
         }),
       });
       setCriando(false);
-      setForm({ ...form, descricao: "", odometro: "", valorPecas: "", valorMaoObra: "", planoId: "" });
+      setForm({ ...form, descricao: "", odometro: "", valorPecas: "", valorMaoObra: "", planoId: "", lancarConta: false });
       await queryClient.invalidateQueries({ queryKey: ["manutencoes"] });
       await queryClient.invalidateQueries({ queryKey: ["planos-manutencao"] });
       await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
@@ -827,10 +835,54 @@ function ListaManutencoes({
     await fetchApi(`/admin/manutencao/${id}`, {
       token,
       method: "PATCH",
-      body: JSON.stringify({ status, gerarContaPagar: status === "CONCLUIDA" }),
+      body: JSON.stringify({ status }),
     });
     await queryClient.invalidateQueries({ queryKey: ["manutencoes"] });
     await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
+  }
+
+  // "Concluir" abre um formulário curto: sem valor não há conta a lançar, e
+  // o odômetro da saída é o que zera o plano por km.
+  const [concluindo, setConcluindo] = React.useState<string | null>(null);
+  const [fim, setFim] = React.useState({ odometro: "", valorPecas: "", valorMaoObra: "", lancarConta: true });
+  const [erroFim, setErroFim] = React.useState<string | null>(null);
+  function abrirConclusao(m: Manutencao) {
+    setErroFim(null);
+    setFim({
+      odometro: m.odometro != null ? String(m.odometro) : "",
+      valorPecas: m.valorPecas ? String(m.valorPecas).replace(".", ",") : "",
+      valorMaoObra: m.valorMaoObra ? String(m.valorMaoObra).replace(".", ",") : "",
+      lancarConta: true,
+    });
+    setConcluindo(m.id);
+  }
+  async function concluir(id: string) {
+    if (!token) return;
+    const pecas = fim.valorPecas ? Number(fim.valorPecas.replace(/\./g, "").replace(",", ".")) : null;
+    const mao = fim.valorMaoObra ? Number(fim.valorMaoObra.replace(/\./g, "").replace(",", ".")) : null;
+    if (fim.lancarConta && !(pecas || mao)) {
+      return setErroFim("Informe o valor pra lançar em Contas a pagar, ou desmarque a opção.");
+    }
+    setErroFim(null);
+    try {
+      await fetchApi(`/admin/manutencao/${id}`, {
+        token,
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "CONCLUIDA",
+          odometro: fim.odometro ? Number(fim.odometro.replace(/\D/g, "")) : null,
+          valorPecas: pecas,
+          valorMaoObra: mao,
+          gerarContaPagar: fim.lancarConta,
+        }),
+      });
+      setConcluindo(null);
+      await queryClient.invalidateQueries({ queryKey: ["manutencoes"] });
+      await queryClient.invalidateQueries({ queryKey: ["frota-alertas"] });
+      await queryClient.invalidateQueries({ queryKey: ["planos-manutencao"] });
+    } catch (e) {
+      setErroFim((e as Error).message);
+    }
   }
 
   return (
@@ -899,7 +951,18 @@ function ListaManutencoes({
             </div>
           )}
           <div className="space-y-1">
-            <Label htmlFor="man-desc">O que foi feito</Label>
+            <Label htmlFor="man-situacao">Situação</Label>
+            <Select
+              id="man-situacao"
+              value={form.situacao}
+              onChange={(e) => setForm({ ...form, situacao: e.target.value as "FEITA" | "VAI_FAZER" })}
+            >
+              <option value="FEITA">Já foi feita</option>
+              <option value="VAI_FAZER">Ainda vai fazer (fica aberta)</option>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="man-desc">{form.situacao === "FEITA" ? "O que foi feito" : "O que vai ser feito"}</Label>
             <Input
               id="man-desc"
               placeholder="ex: Troca de óleo e filtros"
@@ -936,6 +999,16 @@ function ListaManutencoes({
               />
             </div>
           </div>
+          {form.situacao === "FEITA" && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.lancarConta}
+                onChange={(e) => setForm({ ...form, lancarConta: e.target.checked })}
+              />
+              Lançar o valor em Contas a pagar
+            </label>
+          )}
           {erro && <p className="text-sm text-destructive">{erro}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setCriando(false)}>
@@ -991,10 +1064,60 @@ function ListaManutencoes({
                     Entrou na oficina
                   </Button>
                 )}
-                <Button size="sm" variant="success" onClick={() => void mudarStatus(m.id, "CONCLUIDA")}>
-                  Concluir e lançar a conta
+                <Button size="sm" variant="success" onClick={() => abrirConclusao(m)}>
+                  Concluir
                 </Button>
               </div>
+              {concluindo === m.id && (
+                <div className="mt-3 space-y-3 rounded-md border p-3">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="space-y-1">
+                      <Label htmlFor={`fim-odo-${m.id}`}>Odômetro na saída</Label>
+                      <Input
+                        id={`fim-odo-${m.id}`}
+                        inputMode="numeric"
+                        value={fim.odometro}
+                        onChange={(e) => setFim({ ...fim, odometro: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`fim-pecas-${m.id}`}>Peças (R$)</Label>
+                      <Input
+                        id={`fim-pecas-${m.id}`}
+                        inputMode="decimal"
+                        value={fim.valorPecas}
+                        onChange={(e) => setFim({ ...fim, valorPecas: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`fim-mao-${m.id}`}>Mão de obra (R$)</Label>
+                      <Input
+                        id={`fim-mao-${m.id}`}
+                        inputMode="decimal"
+                        value={fim.valorMaoObra}
+                        onChange={(e) => setFim({ ...fim, valorMaoObra: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={fim.lancarConta}
+                      onChange={(e) => setFim({ ...fim, lancarConta: e.target.checked })}
+                    />
+                    Lançar o valor em Contas a pagar
+                  </label>
+                  {erroFim && <p className="text-sm text-destructive">{erroFim}</p>}
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setConcluindo(null)}>
+                      Voltar
+                    </Button>
+                    <Button size="sm" variant="success" onClick={() => void concluir(m.id)}>
+                      Concluir manutenção
+                    </Button>
+                  </div>
+                </div>
+              )}
             </Permitido>
           )}
         </Card>

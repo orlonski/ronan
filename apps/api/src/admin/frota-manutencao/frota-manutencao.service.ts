@@ -76,77 +76,113 @@ export class FrotaManutencaoService {
     const v = await this.prisma.veiculo.findUnique({ where: { id: input.veiculoId } });
     if (!v) throw new NotFoundException("Veículo não encontrado");
 
-    const { planoId, previstaEm, ...resto } = input;
+    const { planoId, previstaEm, status, gerarContaPagar, ...resto } = input;
     const total =
       (resto.valorPecas ?? 0) + (resto.valorMaoObra ?? 0) || null;
+    // Plano de OUTRO caminhão não se liga: zeraria a contagem errada.
+    const plano = planoId
+      ? await this.prisma.planoManutencao.findFirst({
+          where: { id: planoId, veiculoId: input.veiculoId },
+          select: { id: true },
+        })
+      : null;
+    const concluida = status === "CONCLUIDA";
+    const agora = new Date();
 
     const m = await this.prisma.manutencaoVeiculo.create({
       data: {
         ...resto,
+        status: concluida ? "CONCLUIDA" : "ABERTA",
+        ...(concluida ? { concluidaEm: agora } : {}),
         previstaEm: previstaEm ? diaUtc(previstaEm) : null,
         valorTotal: total,
+        planoId: plano?.id ?? null,
         criadoPorId: usuarioId,
       },
       include: { veiculo: { select: { id: true, placa: true } } },
     });
 
-    // Carimba a execução do plano preventivo. É isso que reinicia a contagem —
-    // sem isso o plano ficaria eternamente vencido mesmo depois de feito.
-    if (planoId) {
-      await this.prisma.planoManutencao.updateMany({
-        where: { id: planoId, veiculoId: input.veiculoId },
-        data: {
-          ultimoOdometro: input.odometro ?? undefined,
-          ultimaEm: new Date(),
-        },
-      });
+    // "Já foi feita": fecha tudo agora. Aberta: o plano espera a conclusão.
+    if (concluida) {
+      await this.zerarPlano(m.planoId, m.veiculoId, m.odometro, agora);
+      if (gerarContaPagar) await this.gerarConta(m.id, usuarioId);
     }
     return m;
   }
 
-  async atualizarManutencao(id: string, input: AtualizarManutencaoInput, usuarioId: string) {
-    const atual = await this.prisma.manutencaoVeiculo.findUnique({
-      where: { id },
+  /**
+   * Reinicia a contagem do plano que a OS cumpriu, com a data e o odômetro do
+   * SERVIÇO. É o que tira o plano de "vencido" — sem isto ele ficava vencido
+   * pra sempre depois do serviço feito. Odômetro ausente não apaga o anterior.
+   */
+  private async zerarPlano(
+    planoId: string | null,
+    veiculoId: string,
+    odometro: number | null,
+    quando: Date,
+  ) {
+    if (!planoId) return;
+    await this.prisma.planoManutencao.updateMany({
+      where: { id: planoId, veiculoId },
+      data: {
+        ...(odometro != null ? { ultimoOdometro: odometro } : {}),
+        ultimaEm: diaUtc(quando.toISOString().slice(0, 10)),
+      },
+    });
+  }
+
+  /**
+   * A conta a pagar da oficina. Só quando pedido, só uma vez e só com valor —
+   * gerar sozinho criaria título duplicado a cada edição; sem valor não há o
+   * que pagar (antes o botão prometia a conta e não lançava nada).
+   */
+  private async gerarConta(manutencaoId: string, usuarioId: string) {
+    const m = await this.prisma.manutencaoVeiculo.findUnique({
+      where: { id: manutencaoId },
       include: { veiculo: { select: { placa: true } } },
     });
+    if (!m || m.tituloPagarId || !m.valorTotal || Number(m.valorTotal) <= 0) return;
+    const titulo = await this.prisma.tituloPagar.create({
+      data: {
+        fornecedorId: m.fornecedorId,
+        veiculoId: m.veiculoId,
+        descricao: `Manutenção ${m.veiculo.placa}: ${m.descricao}`,
+        emissao: new Date(),
+        vencimento: new Date(),
+        valor: m.valorTotal,
+        criadoPorId: usuarioId,
+      },
+    });
+    await this.prisma.manutencaoVeiculo.update({
+      where: { id: manutencaoId },
+      data: { tituloPagarId: titulo.id },
+    });
+  }
+
+  async atualizarManutencao(id: string, input: AtualizarManutencaoInput, usuarioId: string) {
+    const atual = await this.prisma.manutencaoVeiculo.findUnique({ where: { id } });
     if (!atual) throw new NotFoundException("Manutenção não encontrada");
 
     const { gerarContaPagar, ...resto } = input;
     const pecas = resto.valorPecas ?? Number(atual.valorPecas ?? 0);
     const mao = resto.valorMaoObra ?? Number(atual.valorMaoObra ?? 0);
     const total = pecas + mao || null;
+    const concluindoAgora = input.status === "CONCLUIDA" && atual.status !== "CONCLUIDA";
+    const agora = new Date();
 
     const m = await this.prisma.manutencaoVeiculo.update({
       where: { id },
       data: {
         ...resto,
         valorTotal: total,
-        ...(input.status === "EM_ANDAMENTO" && !atual.iniciadaEm ? { iniciadaEm: new Date() } : {}),
-        ...(input.status === "CONCLUIDA" && !atual.concluidaEm
-          ? { concluidaEm: new Date() }
-          : {}),
+        ...(input.status === "EM_ANDAMENTO" && !atual.iniciadaEm ? { iniciadaEm: agora } : {}),
+        ...(input.status === "CONCLUIDA" && !atual.concluidaEm ? { concluidaEm: agora } : {}),
       },
     });
 
-    // A conta a pagar da oficina. Só quando pedido e só uma vez — gerar sozinho
-    // criaria título duplicado a cada edição do valor.
-    if (gerarContaPagar && total && !atual.tituloPagarId) {
-      const titulo = await this.prisma.tituloPagar.create({
-        data: {
-          fornecedorId: atual.fornecedorId,
-          veiculoId: atual.veiculoId,
-          descricao: `Manutenção ${atual.veiculo.placa}: ${atual.descricao}`,
-          emissao: new Date(),
-          vencimento: new Date(),
-          valor: total,
-          criadoPorId: usuarioId,
-        },
-      });
-      await this.prisma.manutencaoVeiculo.update({
-        where: { id },
-        data: { tituloPagarId: titulo.id },
-      });
-    }
+    // Concluir é o momento em que o plano ligado zera — com o odômetro da saída.
+    if (concluindoAgora) await this.zerarPlano(m.planoId, m.veiculoId, m.odometro, agora);
+    if (gerarContaPagar) await this.gerarConta(id, usuarioId);
     return m;
   }
 

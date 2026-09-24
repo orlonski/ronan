@@ -313,14 +313,25 @@ export default function NovoAbastecimento() {
         );
       }
     }
+    // Menor que o último: pergunta, NÃO barra. O errado quase sempre é o
+    // lançamento ANTERIOR (um dígito a mais) — barrar aqui travava todo
+    // abastecimento dali em diante. O escritório vê o carimbo e confere.
     if (
       ultimoOdometroDoVeiculo !== null &&
       odometroNum < ultimoOdometroDoVeiculo
     ) {
-      return void val.apontar(
-        "odometro",
-        `Odômetro (${odometroNum} km) é menor que o último registrado pra esse veículo (${ultimoOdometroDoVeiculo} km)`,
-      );
+      const escolha = await showAlert({
+        title: "Odômetro menor que o último",
+        message: `Você digitou ${odometroNum.toLocaleString("pt-BR")} km, e o último registrado pra esse caminhão foi ${ultimoOdometroDoVeiculo.toLocaleString("pt-BR")} km. Se está certo no painel do caminhão, pode lançar: o escritório confere.`,
+        variant: "warning",
+        buttons: [
+          { label: "Corrigir", value: "corrigir", style: "cancel" },
+          { label: "Está certo, lançar assim", value: "ok" },
+        ],
+      });
+      if (escolha !== "ok") {
+        return void val.apontar("odometro", "Confira o odômetro no painel do caminhão");
+      }
     }
 
     let dataFinal = data;
@@ -584,9 +595,9 @@ export default function NovoAbastecimento() {
                   const n = parseInt(odometro.replace(/\D/g, ""), 10);
                   const abaixo = Number.isFinite(n) && n < ultimoOdometroDoVeiculo;
                   return abaixo ? (
-                    <Text className="text-xs font-semibold text-destructive">
-                      Odômetro menor que o último registrado (
-                      {ultimoOdometroDoVeiculo.toLocaleString("pt-BR")} km). Confira o valor.
+                    <Text className="text-xs font-semibold text-amber-700">
+                      Menor que o último registrado (
+                      {ultimoOdometroDoVeiculo.toLocaleString("pt-BR")} km). Confira no painel do caminhão.
                     </Text>
                   ) : (
                     <Text className="text-xs text-muted-foreground">

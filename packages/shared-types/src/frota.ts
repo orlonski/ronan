@@ -58,8 +58,15 @@ export const CriarManutencaoInput = z.object({
   valorPecas: z.number().nonnegative().max(999999.99).nullish(),
   valorMaoObra: z.number().nonnegative().max(999999.99).nullish(),
   observacao: z.string().trim().max(500).nullish(),
-  /** Marca a execução deste plano preventivo ao concluir. */
+  /** O plano preventivo que esta OS cumpre — zera quando ela for concluída. */
   planoId: z.string().uuid().nullish(),
+  /**
+   * CONCLUIDA = lançando serviço que JÁ foi feito (zera o plano na hora).
+   * Ausente = ABERTA, como sempre foi.
+   */
+  status: z.enum(["ABERTA", "CONCLUIDA"]).optional(),
+  /** Com status CONCLUIDA: gera a conta a pagar do total, se houver valor. */
+  gerarContaPagar: z.boolean().optional(),
 });
 export type CriarManutencaoInput = z.infer<typeof CriarManutencaoInput>;
 

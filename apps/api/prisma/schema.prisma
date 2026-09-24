@@ -3150,10 +3150,16 @@ model ManutencaoVeiculo {
 
   /// O aviso do motorista que virou esta OS, quando veio de um.
   problema ProblemaVeiculo?
+  /// O plano preventivo que esta OS cumpre. O plano ZERA quando a OS é
+  /// concluída (não quando é criada): OS aberta hoje e feita semana que vem
+  /// zerava com a data de hoje, e OS aberta sem conclusão zerava sem serviço.
+  plano    PlanoManutencao? @relation(fields: [planoId], references: [id], onDelete: SetNull)
+  planoId  String?
 
   @@index([veiculoId, status])
   @@index([contaId, status])
   @@index([contaId])
+  @@index([planoId])
   @@map("manutencoes_veiculo")
 }
 
@@ -3219,10 +3225,10 @@ enum StatusProblemaVeiculo {
  * é a diferença pro odômetro atual que diz se está na hora.
  */
 model PlanoManutencao {
-  contaId        String    @default("__SEM_CONTA__")
-  conta          Conta     @relation(fields: [contaId], references: [id])
-  id             String    @id @default(uuid())
-  veiculo        Veiculo   @relation(fields: [veiculoId], references: [id], onDelete: Cascade)
+  contaId        String              @default("__SEM_CONTA__")
+  conta          Conta               @relation(fields: [contaId], references: [id])
+  id             String              @id @default(uuid())
+  veiculo        Veiculo             @relation(fields: [veiculoId], references: [id], onDelete: Cascade)
   veiculoId      String
   descricao      String
   /// A cada quantos km. Null = só por tempo.
@@ -3230,10 +3236,11 @@ model PlanoManutencao {
   /// A cada quantos dias. Null = só por km.
   intervaloDias  Int?
   ultimoOdometro Int?
-  ultimaEm       DateTime? @db.Date
-  ativo          Boolean   @default(true)
-  criadoEm       DateTime  @default(now())
-  alteradoEm     DateTime  @updatedAt
+  ultimaEm       DateTime?           @db.Date
+  ativo          Boolean             @default(true)
+  criadoEm       DateTime            @default(now())
+  alteradoEm     DateTime            @updatedAt
+  manutencoes    ManutencaoVeiculo[]
 
   @@index([veiculoId, ativo])
   @@index([contaId])
@@ -5229,6 +5236,12 @@ model Abastecimento {
   /// depois (admin pode editar). Distingue de "motorista esqueceu".
   emComboio            Boolean         @default(false)
   odometro             Int // km do hodômetro
+  /// O odômetro do lançamento anterior, gravado SÓ quando este veio MENOR que
+  /// ele. É carimbo pro escritório conferir, não recusa: até 24/09/2026 isto
+  /// era um 422, e um dígito a mais digitado uma vez travava todo abastecimento
+  /// seguinte daquele caminhão na tela de Pendentes (ver "lançamento nunca é
+  /// recusado"). Quase sempre quem está errado é o ANTERIOR, não este.
+  odometroAnterior     Int?
   postoNome            String?
   tanqueCheio          Boolean         @default(true)
   observacao           String?

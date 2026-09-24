@@ -47,6 +47,8 @@ type Abastecimento = {
   precoLitro: string | null;
   emComboio: boolean;
   odometro: number;
+  /** Só vem quando este odômetro ficou MENOR que o do lançamento anterior. */
+  odometroAnterior?: number | null;
   postoNome: string | null;
   tanqueCheio: boolean;
   veiculo: { id: string; placa: string; modelo: string | null };
@@ -190,6 +192,14 @@ export default function AbastecimentosPage() {
         cell: ({ row }) => (
           <span className="font-mono text-sm">
             {row.original.odometro.toLocaleString("pt-BR")}
+            {row.original.odometroAnterior != null && (
+              <span
+                className="ml-1 font-sans text-xs font-semibold text-amber-700"
+                title={`O lançamento anterior tinha ${row.original.odometroAnterior.toLocaleString("pt-BR")} km. Um dos dois está errado — quase sempre o anterior.`}
+              >
+                ⚠ menor que o anterior
+              </span>
+            )}
           </span>
         ),
       },
