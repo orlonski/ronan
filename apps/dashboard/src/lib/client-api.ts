@@ -10,6 +10,23 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 /** A base da API, pra quem precisa montar a chamada na mão (upload com FormData). */
 export const apiBaseUrl = API_URL;
 
+/**
+ * Leitura vai pela própria origem do painel, que repassa pra API (rewrite em
+ * `next.config.mjs`). Chamada com `Authorization` pra OUTRA origem obriga o
+ * navegador a perguntar antes (OPTIONS), e ele guarda a resposta por URL
+ * exata: cada filtro, página, busca ou ficha aberta era uma URL nova e pagava
+ * mais uma ida e volta até o servidor na França (~350ms medidos). Mesma
+ * origem não pergunta nada.
+ *
+ * Só GET: escrita e upload continuam indo direto — upload grande não passa por
+ * repasse com limite de corpo, e escrita é rara perto da navegação.
+ */
+const PROXY_LEITURA = "/api-proxy";
+function urlDaApi(path: string, method: string | undefined): string {
+  const leitura = !method || method.toUpperCase() === "GET";
+  return leitura && typeof window !== "undefined" ? `${PROXY_LEITURA}${path}` : `${API_URL}${path}`;
+}
+
 // Colapsa 401s concorrentes numa única renovação de sessão — quando o access
 // (15min) expira, várias queries batem 401 ao mesmo tempo; sem isso cada uma
 // dispararia um getSession/refresh. Espelha o dedup do app nativo.
@@ -71,7 +88,7 @@ export async function fetchApi<T>(
     headers.set("content-type", "application/json");
   }
 
-  const res = await fetch(`${API_URL}${path}`, { ...opts, headers });
+  const res = await fetch(urlDaApi(path, opts.method), { ...opts, headers });
   if (res.status === 401) {
     // O access token dura só 15min; um 401 quase sempre é ele vencido, não
     // sessão morta. Renova (roda o refresh silencioso do NextAuth) e repete a
@@ -89,7 +106,7 @@ export async function fetchApi<T>(
       if (opts.body && !isFormData && !retryHeaders.has("content-type")) {
         retryHeaders.set("content-type", "application/json");
       }
-      const retry = await fetch(`${API_URL}${path}`, { ...opts, headers: retryHeaders });
+      const retry = await fetch(urlDaApi(path, opts.method), { ...opts, headers: retryHeaders });
       if (retry.status !== 401) {
         if (!retry.ok) {
           let body: unknown;
