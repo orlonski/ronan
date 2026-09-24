@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
@@ -127,22 +127,23 @@ export function VisualizadorFotos({
   }, [aberto, ir, girar]);
 
   // Área útil e tamanho natural da foto, pra caber já girada.
-  const areaRef = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ w: 0, h: 0 });
   const [natural, setNatural] = useState({ w: 0, h: 0 });
   // Foto nova: esquece o tamanho da anterior, senão ela aparece distorcida
   // até carregar.
   useEffect(() => setNatural({ w: 0, h: 0 }), [foto?.id]);
-  useLayoutEffect(() => {
-    if (!aberto) return;
-    const el = areaRef.current;
+  // Mede quando a área APARECE (ref de callback). Um efeito no "abriu" rodava
+  // antes do diálogo montar a área: a medida ficava zero e a foto, invisível.
+  const observador = useRef<ResizeObserver | null>(null);
+  const areaRef = useCallback((el: HTMLDivElement | null) => {
+    observador.current?.disconnect();
+    observador.current = null;
     if (!el) return;
     const medir = () => setArea({ w: el.clientWidth, h: el.clientHeight });
     medir();
-    const ro = new ResizeObserver(medir);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [aberto]);
+    observador.current = new ResizeObserver(medir);
+    observador.current.observe(el);
+  }, []);
 
   const deitada = rotacao === 90 || rotacao === 270;
   const bw = deitada ? natural.h : natural.w;
@@ -173,7 +174,10 @@ export function VisualizadorFotos({
               centerOnInit
               centerZoomedOut
               doubleClick={{ mode: "toggle", step: 1.5 }}
-              wheel={{ step: 0.15 }}
+              // No modo suave (padrão da lib) o passo é multiplicado pelo giro da
+              // roda (~100 por clique): 0,003 dá +0,3 de zoom por clique. Com
+              // 0,15, um clique ia direto pro máximo.
+              wheel={{ step: 0.003 }}
             >
               {({ zoomIn, zoomOut, resetTransform }) => (
                 <>
