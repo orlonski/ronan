@@ -3,6 +3,7 @@ import { FonteGps } from "./enums";
 import { KmFonte } from "./km-atipico";
 import {
   LocalSnapshot,
+  ROTA_GEOMETRIA_MAX,
   TrechoViagemInput,
   VeiculoSnapshot,
   checarObrigatoriosDoModo,
@@ -190,7 +191,7 @@ export const FinalizarViagemBase = z.object({
   justificativaKm: z.string().min(10).max(500).optional(),
   // Polyline da rota escolhida pelo motorista no seletor de mapa (igual ao
   // CriarViagemInput). Backend guarda em Viagem.rotaGeometria.
-  rotaGeometria: z.string().max(20000).optional(),
+  rotaGeometria: z.string().max(ROTA_GEOMETRIA_MAX).optional(),
   // Trechos ADICIONAIS do trajeto (retorno do bota-fora hoje; entregas múltiplas
   // no futuro). O `km` acima já inclui a soma dos trechos. Backend valida e grava
   // em TrechoViagem. Ausente/[] = viagem normal carga→descarga.

@@ -3,6 +3,15 @@ import { FonteGps } from "./enums";
 import { KmFonte } from "./km-atipico";
 import { REGRAS_MODO_CLASSICO, type RegrasDoModo } from "./tipo-servico";
 
+// Teto do traçado da rota (polyline 5, `overview=full` do OSRM). Era 20.000,
+// dimensionado quando o mapa só cobria o Sul e as viagens tinham dezenas de km:
+// uma rota de 522 km já passava disso (mais de 38 caracteres por km) e o
+// lançamento era recusado. 500 mil dá 100 por km na maior rota rodoviária do
+// país (~5.000 km). NÃO simplificar o traçado pra caber: o painel
+// compara a geometria da viagem com a da alternativa por igualdade exata
+// (`emVigor`). A coluna é `text`, sem teto no banco.
+export const ROTA_GEOMETRIA_MAX = 500_000;
+
 export const ViagemPontoInput = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
@@ -115,7 +124,7 @@ export const CriarViagemBase = z.object({
   // Polyline (formato Google) da rota que o motorista escolheu no seletor de
   // mapa. Ausente quando não houve escolha (rota única, offline, tela sem
   // seletor). Backend guarda em Viagem.rotaGeometria (rota real no painel).
-  rotaGeometria: z.string().max(20000).optional(),
+  rotaGeometria: z.string().max(ROTA_GEOMETRIA_MAX).optional(),
   // Trechos ADICIONAIS do trajeto (retorno do bota-fora hoje; entregas múltiplas
   // no futuro). O `km` acima já inclui a soma dos trechos. Backend valida e grava
   // em TrechoViagem. Ausente/[] = viagem normal carga→descarga.
