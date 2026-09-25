@@ -54,6 +54,7 @@ import {
   useCriarViagem,
   useExtrairTicket,
   useMe,
+  useDistanciasEstrada,
   usePedagiosNaRota,
   useReferenciaKm,
   useRotasAlternativas,
@@ -264,7 +265,11 @@ export default function NovaViagem() {
   }, [modoEdit, params.editarClientId]);
 
   const rota = useCalcularRota(form.localCargaId, form.localDescargaId);
-  const pedagiosNaRota = usePedagiosNaRota(form.localCargaId, form.localDescargaId);
+  const pedagiosNaRota = usePedagiosNaRota(
+    form.localCargaId,
+    form.localDescargaId,
+    rotaGeometriaEscolhida,
+  );
   // Alternativas de estrada — o km sai sempre da rota direta calculada
   // (recomendada) e o motorista pode escolher outra estrada no mapa.
   const alternativas = useRotasAlternativas(
@@ -606,34 +611,54 @@ export default function NovaViagem() {
     return { lat: l.lat, lng: l.lng, nome: l.nome };
   }, [form.localCargaId, cat.data?.locais, extraLocais]);
 
-  const locaisFiltrados = useMemo(() => {
-    if (!cat.data) return { carga: [] as SelectOption[] };
+  // Locais de carga do cliente, do mais perto pro mais longe em LINHA RETA. A
+  // linha reta só ordena (e é o que se tem offline); o número mostrado online é
+  // o da estrada — ver `distanciasEstrada`.
+  const cargaOrdenada = useMemo(() => {
+    if (!cat.data) return [];
     const clienteId = form.clienteId || null;
     const todosIds = new Set(cat.data.locais.map((l) => l.id));
     const merged = [
       ...cat.data.locais,
       ...extraLocais.filter((l) => !todosIds.has(l.id)),
     ];
-    const noCliente = merged.filter(
-      (l) =>
-        !clienteId || l.clienteIds.length === 0 || l.clienteIds.includes(clienteId),
-    );
+    return merged
+      .filter(
+        (l) =>
+          (l.tipo === "CARGA" || l.tipo === "AMBOS") &&
+          (!clienteId || l.clienteIds.length === 0 || l.clienteIds.includes(clienteId)),
+      )
+      .map((l) => ({
+        l,
+        reta:
+          coords && l.lat != null && l.lng != null
+            ? haversineMetros(coords.lat, coords.lng, l.lat, l.lng)
+            : Infinity,
+      }))
+      .sort((a, b) => a.reta - b.reta);
+  }, [cat.data, form.clienteId, extraLocais, coords]);
 
-    // Calcula distância de cada local até a posição atual do motorista (se temos GPS).
-    // Pra ordenar pelos mais próximos. Locais sem lat/lng vão pro fim.
-    const distanciaDe = (l: (typeof noCliente)[number]): number => {
-      if (!coords || l.lat == null || l.lng == null) return Infinity;
-      return haversineMetros(coords.lat, coords.lng, l.lat, l.lng);
-    };
+  // Km pela estrada até cada local. "399 km" em linha reta ao lado do Mercado
+  // Municipal de SP lia como o km da viagem, que pela estrada passa de 450.
+  const distanciasEstrada = useDistanciasEstrada(
+    coords,
+    cargaOrdenada.filter((c) => Number.isFinite(c.reta)).map((c) => c.l.id),
+  );
 
-    const opt = (l: (typeof noCliente)[number]): SelectOption => {
-      const dist = distanciaDe(l);
-      const sublabelBase = `${l.cidade}/${l.uf}`;
-      const sublabel = Number.isFinite(dist)
-        ? // "de você": sem isso, "399 km" ao lado do local lê como o km da
-          // viagem — e é linha reta a partir do GPS, não estrada.
-          `${sublabelBase} · a ${formatarDistancia(dist)} de você`
-        : sublabelBase;
+  const locaisFiltrados = useMemo(() => {
+    const estrada = distanciasEstrada.data;
+    // Sem internet (ou servidor fora) a query falha: aí, e só aí, vale a linha
+    // reta — dizendo que é linha reta. Enquanto carrega, nenhum número.
+    const semEstrada = distanciasEstrada.isError;
+    const opt = ({ l, reta }: (typeof cargaOrdenada)[number]): SelectOption => {
+      const base = `${l.cidade}/${l.uf}`;
+      const metros = estrada?.[l.id];
+      let sublabel = base;
+      if (metros != null) {
+        sublabel = `${base} · a ${formatarDistancia(metros)} de você`;
+      } else if (Number.isFinite(reta) && (semEstrada || (estrada && metros === null))) {
+        sublabel = `${base} · ~${formatarDistancia(reta)} em linha reta`;
+      }
       return {
         value: l.id,
         label: l.nome,
@@ -643,16 +668,8 @@ export default function NovaViagem() {
         foto: l.lat != null && l.lng != null ? { lat: l.lat, lng: l.lng } : undefined,
       };
     };
-
-    const ordenar = (arr: typeof noCliente) =>
-      [...arr].sort((a, b) => distanciaDe(a) - distanciaDe(b));
-
-    return {
-      carga: ordenar(
-        noCliente.filter((l) => l.tipo === "CARGA" || l.tipo === "AMBOS"),
-      ).map(opt),
-    };
-  }, [cat.data, form.clienteId, extraLocais, coords]);
+    return { carga: cargaOrdenada.map(opt) };
+  }, [cargaOrdenada, distanciasEstrada.data, distanciasEstrada.isError]);
 
   function update<K extends keyof FormShape>(k: K, v: FormShape[K]) {
     setForm((f) => ({ ...f, [k]: v }));

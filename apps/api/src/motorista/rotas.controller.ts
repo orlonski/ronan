@@ -20,6 +20,14 @@ const NavegarInput = z.object({
   destinoId: z.string().uuid(),
 });
 
+// Distância pela estrada da posição atual até os locais da lista de escolha.
+// Teto de 200: a lista vem ordenada por linha reta e só os mais próximos importam.
+const DistanciasInput = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  localIds: z.array(z.string().uuid()).max(200),
+});
+
 @ApiTags("motorista/rotas")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
@@ -61,6 +69,25 @@ export class RotasMotoristaController {
     query: z.infer<typeof CalcularQuery>,
   ) {
     return this.roteamento.calcularComSemRetorno(query.origem, query.destino);
+  }
+
+  /**
+   * Km pela estrada de onde o motorista está até cada local — o número ao lado
+   * do local na lista de escolha. `null` = sem número (fora do mapa, sem
+   * coordenada): o app mostra a linha reta pra esse.
+   */
+  @Post("distancias")
+  @CapacidadeLivre("Cálculo de rota pro lançamento: quem lança já passou pela capacidade de lançar.")
+  async distancias(
+    @Body(new ZodValidationPipe(DistanciasInput))
+    body: z.infer<typeof DistanciasInput>,
+  ) {
+    return {
+      metros: await this.roteamento.distanciasAteLocais(
+        { lat: body.lat, lng: body.lng },
+        body.localIds,
+      ),
+    };
   }
 
   /**

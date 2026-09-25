@@ -58,6 +58,16 @@ class ForaDaCoberturaError extends Error {}
 type OsrmRoute = { distance: number; duration: number; geometry?: string };
 type OsrmWaypoint = { distance?: number };
 type OsrmResponse = { code: string; routes?: OsrmRoute[]; waypoints?: OsrmWaypoint[] };
+type OsrmTableResponse = {
+  code: string;
+  distances?: (number | null)[][];
+  sources?: OsrmWaypoint[];
+  destinations?: OsrmWaypoint[];
+};
+
+// Destinos por consulta `table`. O `osrm-routed` recusa acima de
+// `--max-table-size` (100 coordenadas no padrão, contando a origem).
+const TABELA_LOTE = 90;
 
 type ValhallaTrip = {
   summary?: { length: number; time: number };
@@ -353,6 +363,66 @@ export class RoteamentoService {
       if (err instanceof ForaDaCoberturaError) return { rotas: [], erro: ERRO_FORA_COBERTURA };
       return { rotas: [], erro: "Não foi possível calcular as rotas agora." };
     }
+  }
+
+  /**
+   * Distância PELA ESTRADA da posição do motorista até cada Local — é o número
+   * que aparece ao lado do local na lista de escolha. Antes era linha reta, e
+   * "399 km" ao lado do Mercado Municipal de SP lia como o km da viagem quando
+   * a estrada dava 450+. A linha reta fica só pro app sem internet.
+   *
+   * Uma consulta `table` do OSRM por lote (origem única × N destinos), que é a
+   * distância da rota MAIS RÁPIDA — a mesma que `calcularKm` recomenda.
+   * O `osrm-routed` recusa tabela acima de `--max-table-size` (100 no padrão),
+   * daí os lotes de TABELA_LOTE.
+   *
+   * Local sem coordenada, fora da cobertura (encaixe > ENCAIXE_MAX_M) ou sem
+   * caminho vira `null`: o app mostra a linha reta pra ele. Local de outra conta
+   * nem volta — a trava do Prisma filtra o `findMany`.
+   */
+  async distanciasAteLocais(
+    origem: { lat: number; lng: number },
+    localIds: string[],
+  ): Promise<Record<string, number | null>> {
+    const saida: Record<string, number | null> = {};
+    if (!this.osrmUrl || localIds.length === 0) return saida;
+
+    const locais = await this.prisma.local.findMany({
+      where: { id: { in: localIds } },
+      select: { id: true, lat: true, lng: true },
+    });
+    const comCoords = locais.filter(
+      (l): l is { id: string; lat: number; lng: number } => l.lat != null && l.lng != null,
+    );
+    for (const l of locais) saida[l.id] = null;
+
+    const lotes: (typeof comCoords)[] = [];
+    for (let i = 0; i < comCoords.length; i += TABELA_LOTE) {
+      lotes.push(comCoords.slice(i, i + TABELA_LOTE));
+    }
+    await Promise.all(
+      lotes.map(async (lote) => {
+        const coords = [origem, ...lote].map((p) => `${p.lng},${p.lat}`).join(";");
+        const url =
+          `${this.osrmUrl}/table/v1/driving/${coords}` +
+          `?sources=0&annotations=distance`;
+        try {
+          const res = await this.fetchTabelaOsrm(url);
+          if (res.code !== "Ok" || !res.distances?.[0]) return;
+          // Motorista longe de qualquer estrada do mapa: nenhum número serve.
+          if ((res.sources?.[0]?.distance ?? 0) > ENCAIXE_MAX_M) return;
+          lote.forEach((l, idx) => {
+            const metros = res.distances![0]![idx + 1];
+            const encaixe = res.destinations?.[idx + 1]?.distance ?? 0;
+            saida[l.id] =
+              metros != null && encaixe <= ENCAIXE_MAX_M ? Math.round(metros) : null;
+          });
+        } catch (err) {
+          this.logger.warn(`OSRM table falhou: ${(err as Error).message}`);
+        }
+      }),
+    );
+    return saida;
   }
 
   /**
@@ -743,6 +813,18 @@ export class RoteamentoService {
       throw new ForaDaCoberturaError(
         `ponto a ${Math.round(pior)} m da estrada mais próxima do mapa: ${coords}`,
       );
+    }
+  }
+
+  private async fetchTabelaOsrm(url: string): Promise<OsrmTableResponse> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
+      return (await res.json()) as OsrmTableResponse;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
