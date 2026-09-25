@@ -41,8 +41,23 @@ const VALHALLA_DESVIO_MAX = 1.3;
 // certo (sem retorno real) → devolve 1 opção só, sem escolha/fricção.
 const LIMIAR_DEDUP_KM = 0.3;
 
+// Distância máxima (m) entre o ponto do Local e a estrada onde o roteador o
+// encaixa. O OSRM, sem limite, leva o ponto pra estrada mais próxima QUE ELE
+// CONHECE — com o mapa só do Sul, uma viagem Campinas→BH virava "Ok" com uma
+// rota no norte do Paraná, km e polilinha inventados e cacheados. Acima do teto
+// a rota é recusada como fora da cobertura. 3 km deixa folga pra pátio de
+// pedreira longe da via mapeada e corta qualquer ponto de outro estado.
+const ENCAIXE_MAX_M = Number(process.env.ROTA_ENCAIXE_MAX_M) || 3000;
+
+const ERRO_FORA_COBERTURA =
+  "Esse local fica fora da área do mapa de rotas. Informe o km manualmente.";
+
+/** O roteador achou "uma" rota, mas só encaixando o ponto longe demais dele. */
+class ForaDaCoberturaError extends Error {}
+
 type OsrmRoute = { distance: number; duration: number; geometry?: string };
-type OsrmResponse = { code: string; routes?: OsrmRoute[] };
+type OsrmWaypoint = { distance?: number };
+type OsrmResponse = { code: string; routes?: OsrmRoute[]; waypoints?: OsrmWaypoint[] };
 
 type ValhallaTrip = {
   summary?: { length: number; time: number };
@@ -124,6 +139,7 @@ export class RoteamentoService {
       };
     } catch (e) {
       this.logger.warn(`Rota por coordenada falhou: ${(e as Error).message}`);
+      if (e instanceof ForaDaCoberturaError) return { km: null, erro: ERRO_FORA_COBERTURA };
       return { km: null, erro: "Não deu pra calcular a rota agora." };
     }
   }
@@ -220,6 +236,7 @@ export class RoteamentoService {
       this.logger.warn(
         `OSRM falhou ${localOrigemId}->${localDestinoId}: ${(err as Error).message}`,
       );
+      if (err instanceof ForaDaCoberturaError) return { km: null, erro: ERRO_FORA_COBERTURA };
       return { km: null, erro: "Não foi possível calcular a rota agora." };
     }
   }
@@ -333,6 +350,7 @@ export class RoteamentoService {
       this.logger.warn(
         `OSRM alternativas falhou ${localOrigemId}->${localDestinoId}: ${(err as Error).message}`,
       );
+      if (err instanceof ForaDaCoberturaError) return { rotas: [], erro: ERRO_FORA_COBERTURA };
       return { rotas: [], erro: "Não foi possível calcular as rotas agora." };
     }
   }
@@ -399,6 +417,7 @@ export class RoteamentoService {
         if (res.code !== "Ok" || !res.routes?.[0]) {
           return { rotas: [], erro: "Não foi possível calcular as rotas agora." };
         }
+        this.exigirEncaixeProximo(res, coords);
         const only = toOption(res.routes[0], false, true);
         await this.upsertCache(localOrigemId, localDestinoId, only);
         return { rotas: [only] };
@@ -408,6 +427,13 @@ export class RoteamentoService {
         this.fetchOsrm(`${base}&approaches=${encodeURIComponent(OSRM_APPROACHES)}`),
         this.fetchOsrm(base),
       ]);
+      // O encaixe é o mesmo nas duas variantes (mesmos pontos, mesmo mapa):
+      // basta uma resposta Ok pra saber se o par está dentro da cobertura.
+      for (const r of [comRes, semRes]) {
+        if (r.status === "fulfilled" && r.value.code === "Ok") {
+          this.exigirEncaixeProximo(r.value, coords);
+        }
+      }
       const comRoute =
         comRes.status === "fulfilled" && comRes.value.code === "Ok"
           ? comRes.value.routes?.[0]
@@ -448,6 +474,7 @@ export class RoteamentoService {
       this.logger.warn(
         `OSRM opções falhou ${localOrigemId}->${localDestinoId}: ${(err as Error).message}`,
       );
+      if (err instanceof ForaDaCoberturaError) return { rotas: [], erro: ERRO_FORA_COBERTURA };
       return { rotas: [], erro: "Não foi possível calcular as rotas agora." };
     }
   }
@@ -596,9 +623,12 @@ export class RoteamentoService {
     if (!this.valhallaUrl) return [];
 
     const body = {
+      // search_cutoff: mesmo teto de encaixe do OSRM. O default do Valhalla é
+      // 35 km — ponto fora do mapa virava alternativa "válida" e faturável.
+      // Estourou → HTTP 400 → cai no OSRM, que recusa pelo mesmo motivo.
       locations: [
-        { lat: lat1, lon: lng1 },
-        { lat: lat2, lon: lng2 },
+        { lat: lat1, lon: lng1, search_cutoff: ENCAIXE_MAX_M },
+        { lat: lat2, lon: lng2, search_cutoff: ENCAIXE_MAX_M },
       ],
       costing: "truck",
       alternates: VALHALLA_ALTERNATES,
@@ -685,6 +715,7 @@ export class RoteamentoService {
         `${base}&approaches=${encodeURIComponent(OSRM_APPROACHES)}`,
       );
       if (comCurb.code === "Ok" && comCurb.routes?.[0]) {
+        this.exigirEncaixeProximo(comCurb, coords);
         return comCurb.routes;
       }
       this.logger.warn(
@@ -696,7 +727,23 @@ export class RoteamentoService {
     if (data.code !== "Ok" || !data.routes?.[0]) {
       throw new Error(`OSRM resposta inválida: ${data.code}`);
     }
+    this.exigirEncaixeProximo(data, coords);
     return data.routes;
+  }
+
+  /**
+   * Recusa a rota quando algum ponto teve que andar mais que `ENCAIXE_MAX_M`
+   * até a estrada — sinal de que o Local está fora do mapa carregado (ver
+   * `ENCAIXE_MAX_M`). Sem `waypoints` na resposta não há como medir: deixa
+   * passar, como sempre foi.
+   */
+  private exigirEncaixeProximo(res: OsrmResponse, coords: string): void {
+    const pior = Math.max(0, ...(res.waypoints ?? []).map((w) => w.distance ?? 0));
+    if (pior > ENCAIXE_MAX_M) {
+      throw new ForaDaCoberturaError(
+        `ponto a ${Math.round(pior)} m da estrada mais próxima do mapa: ${coords}`,
+      );
+    }
   }
 
   /** GET no OSRM com timeout. Lança em erro de rede/HTTP; devolve o JSON cru
