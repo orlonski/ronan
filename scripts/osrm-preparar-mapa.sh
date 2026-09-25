@@ -9,14 +9,17 @@
 # API e do Postgres (e sem swap, o OOM killer escolhe a vítima). Aqui ele roda num
 # container com --memory: se estourar, morre só ele.
 #
-# Resultado em /opt/osrm-mapa/<REGIAO>/ (arquivos .osrm.*), prontos pra montar como
+# Resultado em /opt/osrm-mapa/<REGIAO>-<AAAAMMDD>/ (arquivos .osrm.*), prontos pra montar como
 # volume num osrm-routed. Nada no ar é trocado por este script. Acompanhar:
 #   tail -f /opt/osrm-mapa/preparo.log
 set -euo pipefail
 
 REGIAO="${REGIAO:-brazil}"
 BASE=/opt/osrm-mapa
-DIR="$BASE/$REGIAO"
+# Pasta nova a cada montagem: o serviço no ar serve uma pasta montada por bind, e
+# reescrever os arquivos dela por baixo derruba a rota. Depois de testar, troca-se
+# o "Caminho do Host" da montagem no Easypanel pra pasta nova e implanta.
+DIR="${DIR:-$BASE/$REGIAO-$(date +%Y%m%d)}"
 URL="https://download.geofabrik.de/south-america/${REGIAO}-latest.osm.pbf"
 [ "$REGIAO" = "sul" ] && URL="https://download.geofabrik.de/south-america/brazil/sul-latest.osm.pbf"
 
@@ -32,6 +35,9 @@ if ! swapon --show | grep -q /swapfile; then
   echo "swap de 16 GB ligada"
 fi
 
+if [ -e "$DIR/mapa.osrm.mldgr" ]; then
+  echo "$DIR já tem um mapa pronto — não sobrescrevo (pode ser o que está no ar)."; exit 1
+fi
 mkdir -p "$DIR"
 
 # O profile de caminhão é o MESMO do infra/osrm/Dockerfile (car.lua + 2 patches).

@@ -1,3 +1,7 @@
+# ⚠️ LEGADO: desde 25/09/2026 o serviço osrm NÃO é construído daqui — roda a imagem
+# osrm/osrm-backend servindo o mapa do Brasil montado por scripts/osrm-preparar-mapa.sh.
+# Ver infra/osrm/README.md. Este arquivo fica pro caminho de volta (mapa do Sul).
+#
 # OSRM (Open Source Routing Machine) com mapa Sul do Brasil pre-processado,
 # usando profile TRUCK derivado do car.lua oficial com 2 patches:
 #   1) hgv no inicio da access_tags_hierarchy -> respeita tag hgv:no/yes

@@ -3,7 +3,57 @@
 Container que calcula rota carga→descarga em KM real seguindo estradas (OpenStreetMap).
 Usado pelo `ronan-api` no endpoint `GET /m/rotas/calcular`.
 
-## Profile: caminhão (truck)
+## Como está em produção (desde 25/09/2026): Brasil inteiro, mapa em volume
+
+O serviço `osrm` do Easypanel **não é mais construído deste Dockerfile**. Ele roda a
+imagem pronta `osrm/osrm-backend:latest` servindo um mapa montado FORA do Easypanel:
+
+- **Fonte:** Imagem Docker `osrm/osrm-backend:latest`
+- **Montagem (bind):** `/opt/osrm-mapa/brazil` (host) → `/data`
+- **Comando:** `osrm-routed --algorithm mld --port 5000 /data/mapa.osrm`
+- RAM em uso: ~8,4 GB (o Sul usava 1,5 GB)
+
+Por quê: pré-processar o Brasil passa de 12 GB de RAM no pico, e o build do Easypanel
+roda sem teto na mesma VPS da API e do Postgres (que não tinha swap). O script
+`scripts/osrm-preparar-mapa.sh` monta o mapa num container com `--memory=12g` + swap,
+testa rotas numa porta interna e não troca nada do que está no ar. Levou ~2h15 na
+primeira vez (extract ~1h45, com swap; partition+customize ~15 min).
+
+### Atualizar o mapa
+
+```bash
+ssh -i ~/.ssh/id_ed25519_servidor root@149.102.138.127 'bash -s' < scripts/osrm-preparar-mapa.sh
+```
+
+O script monta numa pasta NOVA (`/opt/osrm-mapa/brazil-AAAAMMDD`) e se recusa a
+escrever numa pasta que já tem mapa — a que está no ar é servida por bind, e reescrever
+os arquivos dela por baixo derruba a rota. Quando o log disser PRONTO com os testes
+certos: Armazenamento → Editar a montagem → Caminho do Host pra pasta nova → Implantar.
+Depois, apagar a pasta antiga (~10 GB).
+
+### Testar o que está no ar
+
+O OSRM não tem domínio público. O teste sai de dentro do container da API:
+
+```bash
+ssh -i ~/.ssh/id_ed25519_servidor root@149.102.138.127 'bash -s' < scripts/osrm-testar.sh
+```
+
+### Voltar pro mapa do Sul
+
+Fonte → Github (`orlonski/ronan`, `main`, Dockerfile `infra/osrm/Dockerfile`), apagar
+o Comando e remover a montagem `/data` **antes** de implantar — com a montagem, o
+`/data` da imagem do Sul fica escondido e o `osrm-routed` não acha o arquivo.
+
+### Fora da cobertura
+
+A API recusa rota cujo ponto precisou andar mais de 3 km até a estrada
+(`ROTA_ENCAIXE_MAX_M`, ver `roteamento.service.ts`) — é o que protege o km faturado
+quando o mapa não cobre o lugar.
+
+## Dockerfile (legado: build do mapa pelo Easypanel)
+
+### Profile: caminhão (truck)
 
 O Dockerfile gera `truck.lua` patchando o `car.lua` oficial durante o build:
 
