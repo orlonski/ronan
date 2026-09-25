@@ -47,7 +47,7 @@ const LIMIAR_DEDUP_KM = 0.3;
 // rota no norte do Paraná, km e polilinha inventados e cacheados. Acima do teto
 // a rota é recusada como fora da cobertura. 3 km deixa folga pra pátio de
 // pedreira longe da via mapeada e corta qualquer ponto de outro estado.
-const ENCAIXE_MAX_M = Number(process.env.ROTA_ENCAIXE_MAX_M) || 3000;
+export const ENCAIXE_MAX_M = Number(process.env.ROTA_ENCAIXE_MAX_M) || 3000;
 
 const ERRO_FORA_COBERTURA =
   "Esse local fica fora da área do mapa de rotas. Informe o km manualmente.";
