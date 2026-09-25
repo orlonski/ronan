@@ -82,6 +82,8 @@ export default function ViagemDetalheScreen() {
   const pedagiosNaRota = usePedagiosNaRota(
     detalhe.data?.localCarga.id,
     detalhe.data?.localDescarga?.id,
+    // O mesmo traçado que o mapa desenha — senão os pedágios são de outra estrada.
+    detalhe.data?.rotaGeometria,
   );
   const excluir = useExcluirViagem();
   const informarPedagio = useInformarValorPedagio();

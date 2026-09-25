@@ -1635,16 +1635,26 @@ export function usePedagiosCadastrados() {
  * 3) Roda haversine ponto-segmento — mesma lógica do backend
  * 4) Fallback: se sem geometria local, tenta endpoint server
  */
-export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
+export function usePedagiosNaRota(
+  origemId?: string,
+  destinoId?: string,
+  /**
+   * Traçado que o motorista ESCOLHEU (ou o que a viagem guardou). Vence o
+   * cálculo do par: sem isso, o mapa desenhava a estrada escolhida e marcava
+   * os pedágios da rota recomendada — que pode ser outra estrada.
+   */
+  geometriaEscolhida?: string | null,
+) {
   const qc = useQueryClient();
   const cadastrados = usePedagiosCadastrados();
   const rotaQuery = useCalcularRota(origemId, destinoId);
   const rota = rotaQuery.data;
   const geometria =
-    rota && "geometria" in rota ? rota.geometria ?? null : null;
+    geometriaEscolhida ?? (rota && "geometria" in rota ? rota.geometria ?? null : null);
   const pedagios = cadastrados.data ?? [];
+  // Início E fim: alternativas do mesmo par começam iguais (mesma origem).
   const geomKey = geometria
-    ? geometria.length + ":" + geometria.slice(0, 8)
+    ? geometria.length + ":" + geometria.slice(0, 8) + ":" + geometria.slice(-8)
     : "none";
 
   return useQuery<PedagioNaRota[]>({
@@ -1667,6 +1677,10 @@ export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
       if (geometria && pedagios.length > 0) {
         return pedagiosNaRotaOffline(geometria, pedagios);
       }
+      // Rota escolhida mas catálogo de pedágios ainda não chegou: os fallbacks
+      // abaixo respondem pela rota do PAR, que pode ser outra estrada. Melhor
+      // nada por ora — a chave muda quando o catálogo carregar e isto recalcula.
+      if (geometriaEscolhida) return [];
       // 2) Sem polyline mas com coords dos locais — fallback linha reta
       // (margem grande, pode dar falso positivo). Marca aproximado:true
       // pra UI mostrar mensagem diferente.
@@ -1698,6 +1712,36 @@ export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
       } catch {
         return [];
       }
+    },
+  });
+}
+
+/**
+ * Km PELA ESTRADA da posição do motorista até cada local da lista de escolha
+ * (`POST /m/rotas/distancias`). Online-only: sem internet a query falha e a
+ * tela mostra a linha reta, dizendo que é linha reta.
+ *
+ * A posição entra arredondada (~1 km) na chave: o GPS oscila a cada leitura e
+ * refazer a tabela por 10 metros de diferença é desperdício.
+ */
+export function useDistanciasEstrada(
+  coords: { lat: number; lng: number } | null,
+  localIds: string[],
+) {
+  const lat = coords ? Math.round(coords.lat * 100) / 100 : null;
+  const lng = coords ? Math.round(coords.lng * 100) / 100 : null;
+  const ids = localIds.slice(0, 200);
+  return useQuery<Record<string, number | null>>({
+    queryKey: ["distancias-estrada", lat, lng, ids.join(",")],
+    enabled: lat != null && lng != null && ids.length > 0,
+    staleTime: 10 * 60_000,
+    retry: false,
+    queryFn: async () => {
+      const res = await api.post<{ metros: Record<string, number | null> }>(
+        "/m/rotas/distancias",
+        { lat, lng, localIds: ids },
+      );
+      return res.metros;
     },
   });
 }
