@@ -630,7 +630,9 @@ export default function NovaViagem() {
       const dist = distanciaDe(l);
       const sublabelBase = `${l.cidade}/${l.uf}`;
       const sublabel = Number.isFinite(dist)
-        ? `${sublabelBase} · ${formatarDistancia(dist)}`
+        ? // "de você": sem isso, "399 km" ao lado do local lê como o km da
+          // viagem — e é linha reta a partir do GPS, não estrada.
+          `${sublabelBase} · a ${formatarDistancia(dist)} de você`
         : sublabelBase;
       return {
         value: l.id,

@@ -519,7 +519,7 @@ export function LocalPorGps({
                   className="text-xs text-muted-foreground"
                   style={{ fontVariant: ["tabular-nums"] }}
                 >
-                  {formatarDistancia(m.distanciaMetros)} · {m.cidade}/{m.uf}
+                  a {formatarDistancia(m.distanciaMetros)} de você · {m.cidade}/{m.uf}
                   {m.vezesUsadoMotorista > 0 ? ` · usado ${m.vezesUsadoMotorista}x` : ""}
                 </Text>
                 {(() => {
