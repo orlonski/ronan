@@ -78,6 +78,17 @@ envelhecida e sem número pra justificar a troca no banco.
 **O que mata:** o real do motorista nunca é sobrescrito; alteração de km exige motivo
 escrito e vira auditoria (`common/km-motorista.ts`).
 
+### 9. Manutenção só aparece quando o caminhão já quebrou na estrada
+**Como ele diz:** "sei que troca óleo de tanto em tanto tempo, mas na correria do dia a
+dia ninguém fica de olho nisso pra todo caminhão."
+**O que custa:** manutenção corretiva sai mais caro que preventiva e ainda para o
+caminhão fora de hora — na pior hipótese, na estrada, com carga e prazo comprometidos.
+Frota grande não cabe em memória: um caminhão vence por km rodado, outro por tempo
+parado, e ninguém consegue cabecear isso planilha por veículo.
+**O que mata:** plano de manutenção por veículo com gatilho duplo — km OU tempo, o que
+vencer primeiro — e situação (em dia / chegando a hora / vencida) calculada sozinha
+(`common/manutencao.ts`, `admin/frota-manutencao/frota-manutencao.service.ts`).
+
 ---
 
 # Motorista parceiro
