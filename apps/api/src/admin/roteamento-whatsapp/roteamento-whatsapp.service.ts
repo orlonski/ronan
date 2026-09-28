@@ -329,7 +329,9 @@ export class AdminRoteamentoWhatsappService {
     return this.meta.criarTemplate(wabaId, {
       name: def.nome,
       language: def.idioma,
-      category: "UTILITY",
+      // Primeiro contato com lead é MARKETING pra Meta; mandar como UTILITY faz
+      // ela reclassificar ou recusar.
+      category: rotaDef.categoria === "marketing" ? "MARKETING" : "UTILITY",
       components: componentes,
     });
   }

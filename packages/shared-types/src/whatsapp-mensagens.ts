@@ -46,8 +46,11 @@ export type ProvedorWhatsapp = (typeof PROVEDORES_WHATSAPP)[number];
  * - `authentication`: código de uso único. Corpo FIXO pela Meta, o mais caro.
  * - `utility`: aviso sobre algo que já aconteceu (viagem, peso, resumo).
  * - `servico`: resposta dentro da janela de 24h. Texto livre e de graça.
+ * - `marketing`: primeiro contato com quem pediu pelo formulário de anúncio.
+ *   A Meta classifica assim tudo que apresenta ou oferece o produto — tentar
+ *   passar por `utility` faz o template ser reclassificado ou recusado.
  */
-export const CATEGORIAS_WHATSAPP = ["authentication", "utility", "servico"] as const;
+export const CATEGORIAS_WHATSAPP = ["authentication", "utility", "servico", "marketing"] as const;
 export type CategoriaWhatsapp = (typeof CATEGORIAS_WHATSAPP)[number];
 
 export type RotaWhatsappDef = {
@@ -257,6 +260,16 @@ export const ROTAS_WHATSAPP = [
     critica: false,
     escopo: "plataforma",
   },
+  {
+    chave: "BOAS_VINDAS_LEAD",
+    rotulo: "Primeiro contato com lead do formulário",
+    descricao:
+      "Sai em minutos pra quem preencheu o formulário do anúncio da Meta: se apresenta e oferece os dois caminhos (ligação ou teste guiado). A resposta cai no robô comercial.",
+    categoria: "marketing",
+    provedores: ["meta"],
+    critica: false,
+    escopo: "plataforma",
+  },
 ] as const satisfies readonly RotaWhatsappDef[];
 
 export type RotaWhatsapp = (typeof ROTAS_WHATSAPP)[number]["chave"];
@@ -300,6 +313,7 @@ export const CUSTO_ESTIMADO_BRL: Record<CategoriaWhatsapp, number> = {
   authentication: 0.17,
   utility: 0.045,
   servico: 0,
+  marketing: 0.35,
 };
 
 export function custoEstimado(
@@ -593,6 +607,26 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "Pediu pra falar com uma pessoa.",
       "31",
     ],
+  },
+  // O texto repete a mensagem dos dois caminhos do robô comercial DE
+  // PROPÓSITO (`sdr/roteiro-comercial.ts`, `caminhos`): quando o lead responde
+  // "1" ou "2", o roteiro reconhece a pergunta ("tem dois caminhos") e segue
+  // dali — sem repetir a abertura nem perguntar de novo o que o formulário já
+  // respondeu.
+  BOAS_VINDAS_LEAD: {
+    nome: "boas_vindas_lead",
+    idioma: "pt_BR",
+    corpo: [0],
+    textoAprovacao: [
+      "Oi, {{1}}! Aqui é a Movatruck. Recebemos seu pedido pra testar o sistema na sua transportadora.",
+      "",
+      "Pra você conhecer, tem dois caminhos:",
+      "*1.* Um consultor te liga e mostra o sistema funcionando, uns 10 minutos",
+      "*2.* Você cria sua conta e testa 30 dias grátis, sem cartão, e a gente te acompanha aqui em cada passo",
+      "",
+      "Qual prefere? É só responder 1 ou 2.",
+    ].join("\n"),
+    exemplo: ["Diego"],
   },
   COBRANCA_ABERTA: {
     nome: "cobranca_aberta",

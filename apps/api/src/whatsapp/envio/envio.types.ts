@@ -32,6 +32,13 @@ export type EnvioWhatsapp = {
    */
   params?: string[];
   sessaoId?: string | null;
+  /**
+   * Por qual número sai (só Meta). O padrão é o transacional. `comercial` é o
+   * número de vendas: a resposta do lead tem que cair no inbox Comercial do
+   * Chatwoot, onde o robô de vendas atende — pelo transacional ela cairia na
+   * operação, que não conhece lead.
+   */
+  remetente?: "comercial";
 };
 
 export type ResultadoEnvio = {

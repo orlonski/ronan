@@ -195,6 +195,30 @@ export class AtendimentoHumanoService {
     }
   }
 
+  /**
+   * Lead novo do formulário do anúncio: WhatsApp pra equipe + sininho, AGORA.
+   *
+   * Não passa pela trava de `avisar` (`alertaHumanoEm`) de propósito: esta é a
+   * chegada, não um pedido de gente. Se marcasse, o repasse de verdade que vier
+   * depois ("quero falar com alguém") sairia calado, achando que já avisou.
+   */
+  async avisarLeadNovo(leadId: string, situacao: string, conversaId: number): Promise<void> {
+    try {
+      const lead = await comoSistema(() =>
+        this.prisma.lead.findUnique({
+          where: { id: leadId },
+          select: { id: true, empresa: true, nome: true, telefone: true },
+        }),
+      );
+      if (!lead) return;
+      const cfg = await this.configuracao();
+      await this.enviar(cfg?.alertaComercialTelefones ?? [], lead, "(preencheu o formulário do anúncio)", situacao, conversaId);
+      await this.sininho(lead, situacao);
+    } catch (e) {
+      this.log.warn(`aviso de lead novo falhou para ${leadId}: ${String(e)}`);
+    }
+  }
+
   private quem(lead: { empresa: string; nome: string | null; telefone: string | null }): string {
     const empresa = empresaConhecida(lead.empresa);
     const pessoa = lead.nome ?? empresa ?? "Contato sem nome";

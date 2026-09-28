@@ -72,6 +72,33 @@ export const CENARIOS: Cenario[] = [
     espera: { repasses: 1, contem: "Conta criada!" },
   },
   {
+    nome: "Formulário da Meta: dono com 6 a 15 caminhões escolhe testar",
+    canal: "comercial",
+    origem: "adversarial",
+    passos: [
+      { formulario: { funcao: "Dono ou sócio", frota: "6 a 15" } },
+      { cliente: "2" },
+    ],
+    espera: { repasses: 0, ultimaContem: "criar a conta da sua transportadora" },
+  },
+  {
+    nome: "Formulário da Meta: dono escolhe a ligação",
+    canal: "comercial",
+    origem: "adversarial",
+    passos: [
+      { formulario: { funcao: "Gestor ou escritório", frota: "16 a 40" } },
+      { cliente: "1" },
+    ],
+    espera: { ultimaContem: "qual fica melhor" },
+  },
+  {
+    nome: "Formulário da Meta: motorista não recebe venda",
+    canal: "comercial",
+    origem: "adversarial",
+    passos: [{ formulario: { funcao: "Motorista", frota: "1 a 2" } }],
+    espera: { repasses: 0, alertas: 0 },
+  },
+  {
     nome: "Roteiro: conta como controla, escolhe pelo número",
     canal: "comercial",
     origem: "adversarial",

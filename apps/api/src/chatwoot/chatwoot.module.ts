@@ -5,6 +5,9 @@ import { ChatwootClientModule } from "./chatwoot-client.module";
 import { SdrModule } from "../sdr/sdr.module";
 import { ChatwootAgenteService } from "./chatwoot-agente.service";
 import { TesteGuiadoService } from "./teste-guiado.service";
+import { EvolutionModule } from "../whatsapp/evolution.module";
+import { MetaLeadsService } from "../captacao/meta-leads.service";
+import { MetaLeadsController } from "../captacao/meta-leads.controller";
 import { ChatwootWebhookController } from "./chatwoot-webhook.controller";
 
 /**
@@ -18,9 +21,9 @@ import { ChatwootWebhookController } from "./chatwoot-webhook.controller";
  * qualquer de alcançar dado de transportadora.
  */
 @Module({
-  imports: [WhatsappModule, SdrModule, ProspeccaoModule, ChatwootClientModule],
-  controllers: [ChatwootWebhookController],
-  providers: [ChatwootAgenteService, TesteGuiadoService],
+  imports: [WhatsappModule, SdrModule, ProspeccaoModule, ChatwootClientModule, EvolutionModule],
+  controllers: [ChatwootWebhookController, MetaLeadsController],
+  providers: [ChatwootAgenteService, TesteGuiadoService, MetaLeadsService],
   exports: [ChatwootClientModule],
 })
 export class ChatwootModule {}

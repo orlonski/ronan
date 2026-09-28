@@ -37,6 +37,8 @@ export type Lead = {
   scoreMotivo: string | null;
   status: string;
   origem: string;
+  /** Texto livre; no formulário do anúncio é a faixa ("6 a 15"). */
+  frota?: string | null;
   registradoEm: string | null;
   ultimoContato: string | null;
   enriquecidoEm: string | null;
@@ -440,6 +442,16 @@ function LinhaLead({ lead, onAbrir }: { lead: Lead; onAbrir: () => void }) {
               {/* Quem escreveu primeiro é o melhor lead da lista — merece
                   aparecer sem ter que abrir a ficha. */}
               <span className="text-emerald-700 dark:text-emerald-400">escreveu pelo WhatsApp</span>
+            </>
+          )}
+          {lead.origem === "META_FORMULARIO" && (
+            <>
+              <span>·</span>
+              {/* Veio do formulário do anúncio, já com função e frota
+                  respondidas: o que ele disse aparece aqui sem abrir a ficha. */}
+              <span className="text-emerald-700 dark:text-emerald-400">
+                formulário do anúncio{lead.frota ? ` · ${lead.frota} caminhões` : ""}
+              </span>
             </>
           )}
           {!lead.enriquecidoEm && (

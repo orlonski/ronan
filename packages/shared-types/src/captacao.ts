@@ -27,6 +27,9 @@ export const ORIGENS_LEAD = [
   // Abriu a conta sozinho pelo site. Já é cliente em teste, não é mais um
   // contato a trabalhar — entra no funil direto como ganho.
   "AUTO_CADASTRO",
+  // Preencheu o formulário de anúncio da Meta (Facebook/Instagram). Chega com
+  // função e faixa de frota respondidas — já vem qualificado.
+  "META_FORMULARIO",
 ] as const;
 export type OrigemLead = (typeof ORIGENS_LEAD)[number];
 

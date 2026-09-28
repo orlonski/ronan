@@ -25,6 +25,7 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
 import { ConfigService } from "@nestjs/config";
 import { TesteGuiadoService } from "../chatwoot/teste-guiado.service";
+import { MetaLeadsService } from "../captacao/meta-leads.service";
 import { ChatwootAgenteService } from "../chatwoot/chatwoot-agente.service";
 import { ChatwootClientService } from "../chatwoot/chatwoot-client.service";
 import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
@@ -62,7 +63,9 @@ type Passo =
   | { resolver: true }
   | { devolverAoRobo: true }
   /** O lead cria a conta de teste com o mesmo telefone, e o cron do teste guiado roda. */
-  | { contaCriada: true };
+  | { contaCriada: true }
+  /** Preencheu o formulário do anúncio da Meta (a varredura importou). */
+  | { formulario: { funcao: string; frota: string } };
 
 export type Cenario = {
   nome: string;
@@ -310,6 +313,45 @@ async function main() {
           content: texto,
           sender: { id: 1, phone_number: telefone, name: "Cliente Teste" },
         } as never);
+      } else if ("formulario" in p) {
+        linhas.push(`**FORMULÁRIO DA META:** ${p.formulario.funcao}, ${p.formulario.frota} caminhões`);
+        const metaLeads = new MetaLeadsService(
+          prisma,
+          modulo.get(EnvioWhatsappService),
+          // A conversa do cenário, no lugar de criar uma no Chatwoot de verdade.
+          {
+            abrirConversa: async (leadId: string) => {
+              await comoSistema(() =>
+                prisma.lead.update({ where: { id: leadId }, data: { chatwootContaId: 1, chatwootConversaId: conversa } }),
+              );
+              return { url: "", conversaId: conversa };
+            },
+          } as unknown as LeadChatwootService,
+          chatwoot as unknown as ChatwootClientService,
+          modulo.get(SdrService),
+          modulo.get(AtendimentoHumanoService),
+          modulo.get(ConfigService),
+        );
+        const boasVindas = alertas.length;
+        await metaLeads.importar({
+          id: `sim-${n}-${Date.now()}`,
+          form_id: "form-sim",
+          field_data: [
+            { name: "voce_e_dono_ou_gestor_da_transportadora_ou_motorista", values: [p.formulario.funcao] },
+            { name: "quantos_caminhoes_rodam_hoje", values: [p.formulario.frota] },
+            { name: "full_name", values: ["Cliente Teste"] },
+            { name: "phone_number", values: [telefone] },
+          ],
+        });
+        // O template sai pelo envio (não pelo Chatwoot): mostra aqui o que chegou.
+        for (const a of alertas.slice(boasVindas)) linhas.push(`> ENVIO: ${a}`);
+        const ultima = await comoSistema(() =>
+          prisma.mensagemLead.findFirst({
+            where: { lead: { telefone: { endsWith: telefone.slice(-8) } }, direcao: "SAIDA" },
+            orderBy: { criadoEm: "desc" },
+          }),
+        );
+        if (ultima) ordem.push({ quem: "R", texto: ultima.conteudo });
       } else if ("contaCriada" in p) {
         linhas.push(`**SITE:** criou a conta de teste com este telefone (e o cron do teste guiado rodou)`);
         const conta = await comoSistema(() =>

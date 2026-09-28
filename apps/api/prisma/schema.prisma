@@ -5788,6 +5788,20 @@ model Lead {
   /// O único lembrete de quem pegou o link e sumiu sem criar a conta.
   testeLembreteEm  DateTime?
 
+  /// Formulário de anúncio da Meta (`captacao/meta-leads.service.ts`).
+  ///
+  /// `metaLeadgenId` é o id do envio na Meta — único, é o que torna a importação
+  /// repetível: o varredor passa pelos mesmos leads a cada rodada e só cria o
+  /// que ainda não existe. Anúncio e campanha ficam guardados pra responder
+  /// "qual anúncio trouxe quem começou o teste".
+  metaLeadgenId   String?   @unique
+  metaFormId      String?
+  metaAdId        String?
+  metaAnuncio     String?
+  metaCampanha    String?
+  /// O que ele respondeu no formulário: "Dono ou sócio", "Motorista"…
+  funcaoInformada String?
+
   interacoes InteracaoLead[]
   mensagens  MensagemLead[]
 

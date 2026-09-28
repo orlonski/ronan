@@ -48,11 +48,18 @@ export class MetaProvedor implements ProvedorWhatsappClient {
   private readonly log = new Logger("MetaProvedor");
   private readonly token: string | undefined;
   private readonly phoneNumberId: string | undefined;
+  /** O número de vendas (+55 42 9156-3750). Sem ele, envio `comercial` falha — nunca cai no transacional. */
+  private readonly phoneNumberIdComercial: string | undefined;
   private readonly versao: string;
 
   constructor(config: ConfigService) {
     this.token = config.get<string>("META_WHATSAPP_TOKEN");
     this.phoneNumberId = config.get<string>("META_WHATSAPP_PHONE_NUMBER_ID");
+    // O id do número de vendas não é segredo (aparece em toda chamada da API);
+    // o padrão é o número de hoje (+55 42 9156-3750, WABA 27842803642079380),
+    // e o env vence quando o número mudar.
+    this.phoneNumberIdComercial =
+      config.get<string>("META_WHATSAPP_PHONE_NUMBER_ID_COMERCIAL") ?? "1275878725611464";
     this.versao = config.get<string>("META_GRAPH_VERSION") ?? VERSAO_PADRAO;
   }
 
@@ -77,7 +84,20 @@ export class MetaProvedor implements ProvedorWhatsappClient {
       return this.falha("POLITICA", "PAYLOAD_INVALIDO", (e as Error).message);
     }
 
-    return this.postar(corpo);
+    let remetente = this.phoneNumberId;
+    if (envio.remetente === "comercial") {
+      // Nunca cair no transacional: a resposta iria pra operação, e o lead
+      // conversaria com ninguém.
+      if (!this.phoneNumberIdComercial) {
+        return this.falha(
+          "POLITICA",
+          "SEM_NUMERO_COMERCIAL",
+          "Falta META_WHATSAPP_PHONE_NUMBER_ID_COMERCIAL no servidor.",
+        );
+      }
+      remetente = this.phoneNumberIdComercial;
+    }
+    return this.postar(corpo, remetente);
   }
 
   /**
@@ -392,8 +412,8 @@ export class MetaProvedor implements ProvedorWhatsappClient {
     }
   }
 
-  private async postar(corpo: Record<string, unknown>): Promise<ResultadoEnvio> {
-    const url = `https://graph.facebook.com/${this.versao}/${this.phoneNumberId}/messages`;
+  private async postar(corpo: Record<string, unknown>, remetente = this.phoneNumberId): Promise<ResultadoEnvio> {
+    const url = `https://graph.facebook.com/${this.versao}/${remetente}/messages`;
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), TIMEOUT_MS);
     try {
