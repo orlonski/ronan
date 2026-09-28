@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Copy, Loader2, MessageSquare, Phone, UserRound, X } from "lucide-react";
+import { Bot, Check, Copy, Loader2, MessageSquare, Phone, RotateCcw, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { telefoneDiscavel } from "@ronan/shared-types";
 import { Card } from "@/components/ui/card";
@@ -219,7 +219,11 @@ export function FichaLead({
   const devolverAoRobo = useMutation({
     mutationFn: () => fetchApi(`${caminho}/devolver-ao-robo`, { method: "POST", body: "{}", token }),
     onSuccess: () => {
-      toast.success("O robô volta a responder na próxima mensagem dele.");
+      toast.success(
+        lead?.sdrPausadoEm
+          ? "O robô volta a responder na próxima mensagem dele."
+          : "Conversa recomeçada: a próxima mensagem dele recebe a apresentação do zero.",
+      );
       void refetch();
       onMudou();
     },
@@ -373,6 +377,29 @@ export function FichaLead({
                     {devolverAoRobo.isPending ? "Devolvendo…" : "Devolver ao robô"}
                   </button>
                 )}
+              </Card>
+            )}
+
+            {/* Com o robô atendendo, "Devolver" não faz sentido, mas recomeçar
+                faz: o robô esquece o que foi dito e trata a próxima mensagem
+                como primeira conversa. Pedido do dono (28/09) pra testar do
+                zero sem precisar de um consultor assumir antes. */}
+            {!lead.sdrPausadoEm && lead.mensagens.length > 0 && podeEditar && (
+              <Card className="flex items-center gap-3 p-3 text-sm">
+                <Bot className="h-4 w-4 shrink-0" />
+                <p className="min-w-0 flex-1 leading-snug">
+                  O robô está atendendo. Recomeçar faz ele esquecer esta conversa e tratar a próxima
+                  mensagem como a primeira.
+                </p>
+                <button
+                  type="button"
+                  disabled={devolverAoRobo.isPending}
+                  onClick={() => devolverAoRobo.mutate()}
+                  className="flex shrink-0 items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  {devolverAoRobo.isPending ? "Recomeçando…" : "Recomeçar conversa"}
+                </button>
               </Card>
             )}
 
