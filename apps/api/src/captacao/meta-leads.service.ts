@@ -247,6 +247,50 @@ export class MetaLeadsService {
     return true;
   }
 
+  /**
+   * Cria um lead de TESTE no formulário, pela API da Meta — o mesmo que a
+   * "Ferramenta de teste de anúncios de lead", que não abre pra automação.
+   * A Meta aceita um lead de teste por formulário: o anterior é apagado antes.
+   * O lead segue o caminho de verdade na próxima varredura (ou em `importar`).
+   */
+  async criarLeadDeTeste(dados: { nome: string; telefone: string; funcao: string; frota: string }) {
+    const [form] = (await this.formularios()).filter((f) => !f.status || f.status === "ACTIVE");
+    if (!form) throw new Error("Nenhum formulário ativo na Página.");
+    const q = await this.graph<{ questions?: { key: string; label?: string; type?: string }[] }>(
+      `/${form.id}?fields=questions`,
+    );
+    const chave = (teste: (t: string) => boolean) =>
+      q.questions?.find((x) => teste(`${x.type ?? ""} ${x.key} ${x.label ?? ""}`.toLowerCase()))?.key;
+    const campos = [
+      { name: chave((t) => t.includes("full_name")) ?? "full_name", values: [dados.nome] },
+      { name: chave((t) => t.includes("phone")) ?? "phone_number", values: [dados.telefone] },
+      { name: chave((t) => t.includes("dono")), values: [dados.funcao] },
+      { name: chave((t) => t.includes("caminh")), values: [dados.frota] },
+    ].filter((c): c is { name: string; values: string[] } => Boolean(c.name));
+
+    const antigos = await this.graph<{ data?: { id: string }[] }>(`/${form.id}/test_leads`).catch(() => ({ data: [] }));
+    for (const a of antigos.data ?? []) {
+      // O novo ganha id novo: a varredura o trata como envio novo.
+      await this.chamarGraph(`/${a.id}`, "DELETE").catch(() => undefined);
+    }
+    const criado = await this.chamarGraph<{ id?: string }>(`/${form.id}/test_leads`, "POST", {
+      field_data: campos,
+    });
+    return { formulario: form.id, leadTeste: criado.id ?? null, campos: campos.map((c) => c.name) };
+  }
+
+  private async chamarGraph<T>(caminho: string, metodo: "POST" | "DELETE", corpo?: unknown): Promise<T> {
+    await this.graph(`/${this.pagina}?fields=id`); // garante o token da página
+    const res = await fetch(`https://graph.facebook.com/${this.versao}${caminho}`, {
+      method: metodo,
+      headers: { Authorization: `Bearer ${this.tokenDaPagina}`, "Content-Type": "application/json" },
+      body: corpo ? JSON.stringify(corpo) : undefined,
+    });
+    const j = (await res.json().catch(() => ({}))) as { error?: { message?: string; code?: number } } & T;
+    if (!res.ok || j.error) throw new Error(`Meta ${res.status}: ${j.error?.message ?? "sem detalhe"} (código ${j.error?.code ?? "?"})`);
+    return j;
+  }
+
   private async formularios(): Promise<Formulario[]> {
     const r = await this.graph<{ data?: Formulario[] }>(`/${this.pagina}/leadgen_forms?fields=id,name,status&limit=50`);
     return r.data ?? [];
