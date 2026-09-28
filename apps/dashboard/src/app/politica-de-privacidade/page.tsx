@@ -12,7 +12,7 @@ export default function PoliticaPrivacidadePage() {
       <header className="mb-8 border-b pb-6">
         <h1 className="text-3xl font-bold text-slate-900">Política de Privacidade</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Última atualização: 13 de agosto de 2026
+          Última atualização: 28 de setembro de 2026
         </p>
       </header>
 
@@ -249,6 +249,15 @@ export default function PoliticaPrivacidadePage() {
           Dados em trânsito são criptografados via HTTPS/TLS. Senhas são
           armazenadas com hash bcrypt. Tokens de autenticação ficam armazenados
           de forma segura (SecureStore no app, cookies HttpOnly no painel web).
+        </P>
+        <P>
+          <strong>Pixel da Meta na página de cadastro:</strong> a página onde uma
+          transportadora cria a conta de teste usa o pixel da Meta (Facebook e
+          Instagram) pra medir se quem chegou por um anúncio nosso começou o
+          teste. Ele grava um cookie da Meta no navegador. Não é usado em nenhuma
+          outra tela do painel nem no aplicativo, e não é carregado quando o
+          navegador sinaliza que não quer ser rastreado (Global Privacy Control
+          ou Do Not Track).
         </P>
 
         <H2>10. Crianças e adolescentes</H2>

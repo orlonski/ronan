@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import type { TermoPublico } from "@ronan/shared-types";
 import { apiBaseUrl } from "@/lib/client-api";
 import { MovatruckLogo } from "@/components/movatruck-logo";
+import { iniciarMetaPixel, rastrearMeta } from "@/lib/meta-pixel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
@@ -95,6 +96,12 @@ export default function CadastroPage() {
   const [termo, setTermo] = useState<TermoPublico | null>(null);
   const [aceitou, setAceitou] = useState(false);
 
+  // Pixel da Meta: é aqui que chega quem tocou no anúncio, e é aqui que o
+  // teste começa (ver `lib/meta-pixel.ts`).
+  useEffect(() => {
+    iniciarMetaPixel();
+  }, []);
+
   useEffect(() => {
     fetch(`${apiBaseUrl}/termos?tipo=USO`)
       .then((r) => (r.ok ? r.json() : null))
@@ -116,6 +123,8 @@ export default function CadastroPage() {
       })) as { destinoMascarado?: string };
       setDestino(r?.destinoMascarado ?? "");
       setPasso("codigo");
+      // Preencheu os dados e pediu o código: é um lead, ainda não um teste.
+      rastrearMeta("Lead");
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro inesperado.");
     } finally {
@@ -128,7 +137,10 @@ export default function CadastroPage() {
     setCarregando(true);
     setErro(null);
     try {
-      await chamar("confirmar", { telefone: form.telefone, codigo });
+      const conta = (await chamar("confirmar", { telefone: form.telefone, codigo })) as { id?: string } | null;
+      // O sucesso da campanha: o teste de 30 dias começou. O id da conta vai
+      // como eventID pra, quando o servidor também mandar, a Meta não contar 2x.
+      rastrearMeta("StartTrial", conta?.id ? `trial-${conta.id}` : undefined);
       // Entra direto: pedir pra ele fazer login logo depois de provar quem é
       // seria burocracia pura.
       const res = await signIn("credentials", {
