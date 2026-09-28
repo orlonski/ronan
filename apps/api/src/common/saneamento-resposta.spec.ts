@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanearResposta } from "./saneamento-resposta";
+import { sanearResposta, semTravessao } from "./saneamento-resposta";
 
 describe("sanearResposta", () => {
   it("recusa o texto que chegou na pedreira em 25/09/2026", () => {
@@ -26,7 +26,7 @@ describe("sanearResposta", () => {
       "Sai por *R$ 1.890,00* por mês pra até 10 caminhões 🚛",
       "O motorista lança pelo celular — ticket, peso, pedágio, abastecimento.",
     ]) {
-      expect(sanearResposta(t)).toEqual({ ok: true, texto: t });
+      expect(sanearResposta(t)).toEqual({ ok: true, texto: t.replace(" — ", ", ") });
     }
   });
 
@@ -39,5 +39,22 @@ describe("sanearResposta", () => {
     ]) {
       expect(sanearResposta(t).ok).toBe(false);
     }
+  });
+});
+
+describe("semTravessao", () => {
+  it("troca travessão por vírgula, sem deixar pontuação dobrada", () => {
+    expect(
+      semTravessao("O motorista lança pelo celular — ticket, peso, pedágio — e você fecha o mês."),
+    ).toBe("O motorista lança pelo celular, ticket, peso, pedágio, e você fecha o mês.");
+    expect(semTravessao("Tenho amanhã às 09:00 ou às 10:30 — qual fica melhor?")).toBe(
+      "Tenho amanhã às 09:00 ou às 10:30, qual fica melhor?",
+    );
+    expect(semTravessao("Pronto —.")).toBe("Pronto.");
+  });
+
+  it("nenhuma resposta aprovada sai com travessão", () => {
+    const r = sanearResposta("A ligação é rápida — o teste é bom se quiser mexer primeiro.");
+    expect(r.ok && r.texto.includes("—")).toBe(false);
   });
 });

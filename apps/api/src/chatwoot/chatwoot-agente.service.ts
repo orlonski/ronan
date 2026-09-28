@@ -412,7 +412,7 @@ export class ChatwootAgenteService {
       canal: "comercial",
       leadId,
       ultimaFala: texto,
-      situacao: "O robô não respondeu — precisa de uma pessoa.",
+      situacao: "O robô não respondeu. Precisa de uma pessoa.",
     });
   }
 

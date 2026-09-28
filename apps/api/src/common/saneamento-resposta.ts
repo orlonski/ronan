@@ -54,8 +54,22 @@ export type ResultadoSaneamento =
  * de verdade. Metalinguagem no texto final é recusada inteira — cortar a frase
  * esquisita e mandar o resto deixaria meia resposta sem sentido.
  */
+/**
+ * Travessão não vai pro WhatsApp — pedido do dono (28/09). É a marca mais
+ * reconhecível de texto de IA, e o modelo usa mesmo com a regra no prompt.
+ * Vira vírgula; "ticket, peso, pedágio — e você fecha" fica
+ * "ticket, peso, pedágio, e você fecha".
+ */
+export function semTravessao(texto: string): string {
+  return texto
+    .replace(/^\s*[—–]\s*/gm, "")
+    .replace(/\s*[—–]\s*/g, ", ")
+    .replace(/,\s*([,.!?:;])/g, "$1")
+    .replace(/ {2,}/g, " ");
+}
+
 export function sanearResposta(bruto: string): ResultadoSaneamento {
-  const texto = (bruto ?? "").replace(BLOCO_PENSAMENTO, "").trim();
+  const texto = semTravessao((bruto ?? "").replace(BLOCO_PENSAMENTO, "").trim());
   for (const padrao of METALINGUAGEM) {
     const m = padrao.exec(texto);
     if (m) {
