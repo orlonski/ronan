@@ -61,6 +61,21 @@ describe("ehPedidoDeHumano", () => {
     }
   });
 
+  it("negação nunca é pedido — o teste do dono em 27/09", () => {
+    for (const t of [
+      "Não quero falar com Fernando Nem sei quem é ele",
+      "nao quero falar com ninguem, so quero o preço",
+      "nem sei quem é o Fernando",
+      "o Fernando me mandou o link",
+    ]) {
+      expect(ehPedidoDeHumano(t, equipe)).toBe(false);
+    }
+  });
+
+  it("sem nome configurado, pedir alguém pelo nome ainda conta", () => {
+    expect(ehPedidoDeHumano("quero falar com o Diego", [])).toBe(true);
+  });
+
   it("conversa normal não vira pedido", () => {
     for (const t of [
       "Tenho transportadora a granel e quero conhecer a Movatruck.",

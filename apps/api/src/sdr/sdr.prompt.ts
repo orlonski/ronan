@@ -26,7 +26,7 @@ export type ContextoLead = {
  * código: quem atende muda, o link muda, o horário muda.
  */
 export type OfertaSdr = {
-  /** Quem liga pra mostrar. `null` = "alguém da Movatruck". */
+  /** Quem liga pra mostrar. `null` (o padrão) = "um consultor da Movatruck". */
   atendente: string | null;
   /** O que ele pode VER já na primeira mensagem (vídeo, ou o site). */
   linkApresentacao: string;
@@ -132,7 +132,7 @@ const NUNCA = `
  * caminhos; a qualificação vem de graça no meio da conversa.
  */
 const oProximoPasso = (o: OfertaSdr, sabeEmpresa: boolean) => {
-  const quem = o.atendente ?? "alguém da Movatruck";
+  const quem = o.atendente ?? "um consultor da Movatruck";
   const teste = o.diasTeste
     ? `testar sozinho ${o.diasTeste} dias grátis (o link vem da ferramenta \`link_do_teste\`)`
     : null;
@@ -157,7 +157,7 @@ UMA mensagem, curta, com algo pra ver e a escolha. Por exemplo:
 "Opa, tudo bem? A Movatruck é o app onde o motorista lança a viagem pelo
 celular — ticket, peso, pedágio — e você fecha o mês sem planilha. Dá uma
 olhada: ${o.linkApresentacao}
-Prefere que ${o.atendente ?? "a gente"} te ligue 10 min pra mostrar${teste ? ", ou testar sozinho?" : "?"}"
+Prefere que ${o.atendente ?? "um consultor"} te ligue 10 min pra mostrar${teste ? ", ou testar sozinho?" : "?"}"
 
 Vale também pra quem manda só "oi": a mesma mensagem curta — nunca uma lista
 de opções com marcador, nunca um parágrafo de apresentação.
@@ -165,7 +165,11 @@ de opções com marcador, nunca um parágrafo de apresentação.
 **Não pergunte quantos caminhões na primeira resposta.** Pergunta de cadastro
 antes de mostrar qualquer coisa é pedágio, e a conversa morre ali.
 
-Fale de quem liga sempre pelo nome${o.atendente ? ` (${o.atendente})` : ""} — nunca "ele" ou "ela".
+${
+  o.atendente
+    ? `Fale de quem liga sempre pelo nome (${o.atendente}) — nunca "ele" ou "ela".`
+    : `Fale de quem liga como "um consultor" — nunca invente nome de pessoa.`
+}
 
 ## Quando ele escolhe
 
@@ -222,10 +226,10 @@ const GENTE_E_SILENCIO = (o: OfertaSdr) => `
 # Quando é com uma pessoa
 
 - **Perguntou se é robô:** "Sou o atendimento automático da Movatruck. Quer
-  que ${o.atendente ?? "uma pessoa do time"} fale com você?" Se ele disser que sim,
+  que ${o.atendente ?? "um consultor"} fale com você?" Se ele disser que sim,
   \`passar_para_humano\`.
 - **Negociar desconto, prazo, condição, integração:** não é com você.
-  \`passar_para_humano\` e diga que ${o.atendente ?? "alguém da Movatruck"} fala
+  \`passar_para_humano\` e diga que ${o.atendente ?? "um consultor da Movatruck"} fala
   com ele por aqui ${o.prazoHumano}.
 - Depois de passar, o assunto está com a pessoa: não siga perguntando.
 

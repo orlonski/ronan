@@ -266,18 +266,36 @@ const PADROES_HUMANO: RegExp[] = [
   /\b(?:falar|conversar|atendimento)\s+com\s+(?:um|uma|alguem|algum|uma\s+pessoa|um\s+humano|gente|atendente|vendedor|consultor|responsavel)\b/,
   /\b(?:atendente|atendimento\s+humano|humano|pessoa\s+(?:de\s+verdade|real))\b/,
   /\bquem\s+(?:vai|vem|que\s+vai)\s+(?:me\s+)?atender\b/,
+  // "quero falar com o Diego": nome de quem ele já conhece é pedido de gente,
+  // mesmo sem o nome estar configurado em lugar nenhum.
+  /\b(?:quero|queria|preciso|posso|gostaria\s+de)\s+falar\s+com\s+(?:o|a)\s+\w{3,}/,
   /\bme\s+(?:liga|ligue|ligar|chama|chame)\b/,
   /\b(?:pode|podem|quero\s+que)\s+(?:me\s+)?ligar\b/,
   /\bvc\s+e\s+(?:um\s+)?robo\b.*\b(?:quero|prefiro)\s+(?:falar|gente|pessoa)/,
 ];
 
+/**
+ * "Não quero falar com ninguém", "nem sei quem é ele": negação nunca é pedido.
+ * O teste do dono pegou "Não quero falar com Fernando" virando repasse PRO
+ * Fernando — a regra casava o nome solto.
+ */
+const NEGACAO = /\b(?:nao|nem|nunca)\s+(?:\w+\s+){0,2}(?:quero|queria|preciso|falar|conversar|sei)\b/;
+
 export function ehPedidoDeHumano(texto: string, nomesEquipe: readonly string[] = []): boolean {
   const limpo = normalizar(texto);
+  if (NEGACAO.test(limpo)) return false;
   if (PADROES_HUMANO.some((p) => p.test(limpo))) return true;
+  // Nome só conta como PEDIDO ("falar com o Diego", "chama o Diego"), nunca
+  // solto na frase.
   return nomesEquipe
     .map((n) => normalizar(n))
     .filter((n) => n.length >= 3)
-    .some((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(limpo));
+    .some((n) => {
+      const nome = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(
+        `\\b(?:falar|conversar|fala|chama|chame|chamar|liga|ligue|passa|passe)\\s+(?:com\\s+)?(?:o|a|pro|pra)?\\s*${nome}\\b`,
+      ).test(limpo);
+    });
 }
 
 /**

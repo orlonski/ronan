@@ -35,7 +35,7 @@ describe("mensagemDeRepasse", () => {
     expect(mensagemDeRepasse("Fernando", H, sp("2026-09-28T22:00:00"))).toBe(
       "Certo! Fernando te responde por aqui amanhã a partir das 8h.",
     );
-    expect(mensagemDeRepasse(null, H, sp("2026-09-28T10:00:00"))).toContain("Alguém da Movatruck");
+    expect(mensagemDeRepasse(null, H, sp("2026-09-28T10:00:00"))).toContain("Um consultor da Movatruck");
   });
 });
 

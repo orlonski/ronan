@@ -114,12 +114,12 @@ export function AtendimentoHumanoConfig({
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <Label htmlFor="atendenteNome" className="text-xs">
-            Quem atende (o cliente vê este nome)
+            Nome de quem atende (opcional)
           </Label>
           <Input
             id="atendenteNome"
             value={nome}
-            placeholder="ex.: Fernando"
+            placeholder="vazio: o cliente lê “um consultor”"
             onChange={(e) => setNome(e.target.value)}
             onBlur={() => {
               if (nome.trim() === data.sdrAtendenteNome) return;

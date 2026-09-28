@@ -105,9 +105,10 @@ describe("o próximo passo", () => {
     expect(p).not.toContain("dias grátis");
   });
 
-  it("sem atendente configurado, não inventa nome", () => {
+  it("sem atendente configurado (o padrão), fala em consultor e não inventa nome", () => {
     const p = promptSdr(LEAD_INBOUND, { ...OFERTA, atendente: null });
-    expect(p).toContain("alguém da Movatruck");
+    expect(p).toContain("ligação de 10 minutos com um consultor da Movatruck");
+    expect(p).toContain("nunca invente nome de pessoa");
     expect(p).not.toContain("Fernando");
   });
 

@@ -57,7 +57,10 @@ export function mensagemDeRepasse(
   agora: Date = new Date(),
 ): string {
   // Sem artigo: o nome vem da configuração, e "o"/"a" seria chutar.
-  const quem = atendente?.trim() ? atendente.trim() : "Alguém da Movatruck";
+  // Sem nome configurado (o padrão): "um consultor". O dono não quer nome de
+  // pessoa dito do nada — a equipe vai crescer, e o cliente respondeu "nem sei
+  // quem é ele" quando o robô prometeu o Fernando.
+  const quem = atendente?.trim() ? atendente.trim() : "Um consultor da Movatruck";
   return dentroDoHorario(h, agora)
     ? `Certo! ${quem} vai falar com você por aqui em instantes.`
     : `Certo! ${quem} te responde por aqui ${proximaAbertura(h, agora)}.`;
