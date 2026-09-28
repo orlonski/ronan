@@ -333,6 +333,20 @@ export const CENARIOS: Cenario[] = [
     ],
     espera: { roboAtivo: true, ultimaSemResposta: false },
   },
+  {
+    nome: "Dono: testou, devolveu ao robô e mandou 'Oi'",
+    canal: "comercial",
+    origem: "teste-do-dono",
+    passos: [
+      { cliente: "Tenho transportadora a granel e quero conhecer a Movatruck." },
+      { cliente: "Posso testar primeiro Depois eu posso pedir pra me ligar ?" },
+      { cliente: "quero falar com uma pessoa" },
+      { devolverAoRobo: true },
+      { cliente: "Oi" },
+    ],
+    espera: { ultimaContem: "Opa! A Movatruck", roboAtivo: true, ultimaSemResposta: false },
+  },
+
   // ------------------------------------------------ casos que a QA listou ---
   {
     nome: "QA: '?' como primeira mensagem",

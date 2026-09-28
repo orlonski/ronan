@@ -57,7 +57,8 @@ type Passo =
   | { nota: string }
   | { atribuir: true }
   | { etiquetar: string }
-  | { resolver: true };
+  | { resolver: true }
+  | { devolverAoRobo: true };
 
 export type Cenario = {
   nome: string;
@@ -82,6 +83,8 @@ export type Cenario = {
     roboAtivo?: boolean;
     /** Algum texto do robô tem que conter isto. */
     contem?: string;
+    /** A ÚLTIMA fala do robô tem que conter isto. */
+    ultimaContem?: string;
   };
 };
 
@@ -296,6 +299,12 @@ async function main() {
           content: texto,
           sender: { id: 1, phone_number: telefone, name: "Cliente Teste" },
         } as never);
+      } else if ("devolverAoRobo" in p) {
+        linhas.push(`**PAINEL:** clicou "Devolver ao robô"`);
+        const lead = await comoSistema(() =>
+          prisma.lead.findFirst({ where: { telefone: { endsWith: telefone.replace(/\D/g, "").slice(-8) } }, select: { id: true } }),
+        );
+        if (lead) await modulo.get(ProspeccaoService).devolverAoRobo(lead.id);
       } else if ("equipe" in p || "nota" in p) {
         const nota = "nota" in p;
         const texto = nota ? p.nota : p.equipe;
@@ -408,6 +417,8 @@ async function main() {
       erros.push(`robô ${lead.sdrPausadoEm ? "fora" : "ativo"}, esperado ${e.roboAtivo ? "ativo" : "fora"}`);
     if (e.contem && !falas.some((f) => f.toLowerCase().includes(e.contem!.toLowerCase())))
       erros.push(`nenhuma fala contém "${e.contem}"`);
+    if (e.ultimaContem && !(falas[falas.length - 1] ?? "").toLowerCase().includes(e.ultimaContem.toLowerCase()))
+      erros.push(`última fala não contém "${e.ultimaContem}": "${(falas[falas.length - 1] ?? "").slice(0, 60)}"`);
 
     if (erros.length) falhas++;
     linhas.push(erros.length ? `\n**FALHOU:** ${erros.join(" · ")}` : "\n**PASSOU**", "", "---", "");

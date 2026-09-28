@@ -5768,6 +5768,11 @@ model Lead {
   /// O "já avisei, um consultor te responde aqui" — uma vez por ciclo, pra
   /// quem escreve de novo depois do repasse e ainda não teve resposta de gente.
   lembreteEsperaEm    DateTime?
+  /// Onde começa a conversa ATUAL. "Devolver ao robô" e conversa resolvida
+  /// abrem conversa nova: o robô não lê nada antes disto. Sem o marco, um
+  /// "Oi" depois de devolvido foi respondido como continuação do teste
+  /// anterior ("Pode sim, é só me chamar aqui…") — teste do dono, 28/09.
+  cicloIniciadoEm     DateTime?
 
   interacoes InteracaoLead[]
   mensagens  MensagemLead[]

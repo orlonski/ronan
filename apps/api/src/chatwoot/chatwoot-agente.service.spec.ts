@@ -114,7 +114,7 @@ function montar(
   const interacaoCreate = vi.fn(async () => ({}));
   const supressaoFindFirst = vi.fn(async () => (opts.suprimido ? { contato: "4299998888" } : null));
   const mensagemLeadFindFirst = vi.fn(async () =>
-    opts.ultimaFalaNossa ? { conteudo: opts.ultimaFalaNossa } : null,
+    opts.ultimaFalaNossa ? { conteudo: opts.ultimaFalaNossa, criadoEm: new Date() } : null,
   );
   const vincular = vi.fn(async () => {});
   const registrarOptOut = vi.fn(async () => ({ contato: "4299998888", tipo: "TELEFONE", leadsMarcados: 1 }));
@@ -151,6 +151,7 @@ function montar(
       registrarSaida,
       respostaDePreco: vi.fn(async () => null),
       frotaConhecida: vi.fn(async () => null),
+      inicioDaConversa: vi.fn(async () => new Date(Date.now() - 24 * 3_600_000)),
       registrarAgendamento: vi.fn(async () => ({})),
     } as unknown as SdrService,
     { vincular } as unknown as LeadChatwootService,
@@ -861,5 +862,19 @@ describe("achados da QA (28/09)", () => {
       changed_attributes: [{ status: { previous_value: "open", current_value: "resolved" } }],
     });
     expect(leadUpdate.mock.calls[0]?.[0].data.sdrPausadoEm).toBeNull();
+  });
+});
+
+describe("conversa nova depois de devolver ao robô — teste do dono, 28/09", () => {
+  it("'Oi' com a última fala nossa de horas atrás recebe a abertura, não continuação", async () => {
+    const { s, atender, responder } = montar({ identidade: DESCONHECIDO, ehLead: true, respostaSdr: RESPOSTA });
+    // Última fala nossa: 3h atrás.
+    (s as unknown as { prisma: { mensagemLead: { findFirst: unknown } } }).prisma.mensagemLead.findFirst = async () => ({
+      conteudo: "Pode sim, é só me chamar aqui.",
+      criadoEm: new Date(Date.now() - 3 * 3_600_000),
+    });
+    await s.processar(evento({ ...COMERCIAL, content: "Oi" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(responder.mock.calls[0]?.[2]).toMatch(/^Opa! A Movatruck/);
   });
 });

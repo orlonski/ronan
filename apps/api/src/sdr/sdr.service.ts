@@ -832,11 +832,23 @@ export class SdrService {
    * havido intervalo nenhum: o modelo emendava a frase anterior, e do outro
    * lado isso soa como robô que não percebeu o tempo passar.
    */
+  /**
+   * De onde o robô lê a conversa: as últimas 24h, ou o começo da conversa
+   * atual se ele for mais recente (devolvido ao robô, resolvida).
+   */
+  async inicioDaConversa(leadId: string): Promise<Date> {
+    const janela = new Date(Date.now() - JANELA_HORAS * 3_600_000);
+    const lead = await comoSistema(() =>
+      this.prisma.lead.findUnique({ where: { id: leadId }, select: { cicloIniciadoEm: true } }),
+    );
+    return lead?.cicloIniciadoEm && lead.cicloIniciadoEm > janela ? lead.cicloIniciadoEm : janela;
+  }
+
   private async historico(
     leadId: string,
     mensagemAtual: string,
   ): Promise<{ mensagens: AgentMessage[]; atual: string }> {
-    const desde = new Date(Date.now() - JANELA_HORAS * 3_600_000);
+    const desde = await this.inicioDaConversa(leadId);
     const linhas = await comoSistema(() =>
       this.prisma.mensagemLead.findMany({
         where: { leadId, criadoEm: { gte: desde } },

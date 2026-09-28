@@ -652,6 +652,22 @@ export class ChatwootAgenteService {
       if (await this.chatwoot.responder(contaChatwoot, conversaId, preco)) return;
     }
 
+    // 5f-0. "Oi", "bom dia" depois de 2h sem conversa: é conversa nova, e
+    //       recebe a abertura — não uma continuação do assunto de horas atrás.
+    const saudacao = /^\s*(?:oi+|ol[aá]|opa|bom\s+dia|boa\s+tarde|boa\s+noite|e\s*a[ií]|eae|salve)[\s!.,?]*$/i.test(texto);
+    if (saudacao && ultimaFalaNossa) {
+      const ultima = await this.ultimaFalaNossaComData(leadId);
+      if (ultima && Date.now() - ultima.criadoEm.getTime() > 2 * 3_600_000) {
+        const oferta = await this.atendimento.oferta();
+        const abertura = aberturaPadrao(oferta);
+        await this.sdr.registrarEntrada(leadId, texto);
+        if (await this.chatwoot.responder(contaChatwoot, conversaId, abertura)) {
+          await this.sdr.registrarSaida(leadId, abertura);
+        }
+        return;
+      }
+    }
+
     // 5f. Primeiro contato curto ("Ou", "oi", "👍", "?"): a abertura fixa,
     //     sempre igual. O modelo respondia "Ou" com o link do teste.
     if (!ultimaFalaNossa && texto && !/\?/.test(texto.replace(/^\s*\?\s*$/, "")) && texto.trim().split(/\s+/).length <= 25 && !ehPedidoDeParar(texto)) {
@@ -944,6 +960,7 @@ export class ChatwootAgenteService {
             alertaHumanoEm: null,
             alertaEscalonadoEm: null,
             lembreteEsperaEm: null,
+            cicloIniciadoEm: new Date(),
           },
         }),
       );
@@ -989,19 +1006,24 @@ export class ChatwootAgenteService {
 
   /** A última coisa que NÓS dissemos a ele nas últimas 24h, ou `null`. */
   private async ultimaFalaNossa(leadId: string): Promise<string | null> {
-    const m = await comoSistema(() =>
+    return (await this.ultimaFalaNossaComData(leadId))?.conteudo ?? null;
+  }
+
+  /** A última fala nossa DESTA conversa (respeita "devolver ao robô"), com a hora. */
+  private async ultimaFalaNossaComData(leadId: string) {
+    const desde = await this.sdr.inicioDaConversa(leadId);
+    return comoSistema(() =>
       this.prisma.mensagemLead.findFirst({
         where: {
           leadId,
           direcao: "SAIDA",
-          criadoEm: { gte: new Date(Date.now() - 24 * 3_600_000) },
+          criadoEm: { gte: desde },
           NOT: { conteudo: { startsWith: "[descartada" } },
         },
         orderBy: { criadoEm: "desc" },
-        select: { conteudo: true },
+        select: { conteudo: true, criadoEm: true },
       }),
     );
-    return m?.conteudo ?? null;
   }
 
   /**

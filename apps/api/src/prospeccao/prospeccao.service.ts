@@ -341,6 +341,8 @@ export class ProspeccaoService {
           alertaHumanoEm: null,
           alertaEscalonadoEm: null,
           lembreteEsperaEm: null,
+          // Conversa nova: o robô não lê o que veio antes (teste do dono, 28/09).
+          cicloIniciadoEm: new Date(),
         },
         select: { id: true, sdrPausadoEm: true },
       }),
