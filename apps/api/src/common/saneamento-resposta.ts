@@ -34,6 +34,8 @@ const METALINGUAGEM: RegExp[] = [
   /\b(?:chamar|chamei|chamo|usar|usei)\s+a\s+ferramenta\b/i,
   /\b(?:o|do|ao|pro|pelo)\s+lead\b/i,
   /\bprompt\b/i,
+  // "O valor sai pela ferramenta" — bastidor vazado que a QA pegou (28/09).
+  /\bpela\s+ferramenta\b/i,
   /\btool(?:_use|s)?\b/i,
   /\bsystem\b/i,
   /\binstruç(?:ão|ões)\s+(?:do|que)\s+(?:sistema|recebi)/i,

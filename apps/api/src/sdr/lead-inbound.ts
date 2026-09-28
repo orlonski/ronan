@@ -125,6 +125,10 @@ const PEDIDOS_DE_PARAR = new Set([
   "parar de receber",
   "nao me mande mais mensagens",
   "nao envie mais mensagens",
+  "bloquear",
+  "bloqueia",
+  "bloqueado",
+  "spam",
 ]);
 
 /**
@@ -142,13 +146,20 @@ const PEDIDOS_DE_PARAR = new Set([
  * parar de usar planilha" continuam sendo conversa de venda, não opt-out.
  */
 const PADROES_DE_PARAR: RegExp[] = [
-  /\bn(?:ao)?\s+(?:quero|queria|desejo)\s+(?:mais\s+)?(?:receber|ser\s+contatad|ser\s+incomodad|mensage|contato|nada)/,
+  // "contato" só com "mais" ou fechando a frase: "não quero contato por
+  // telefone, me manda aqui" é preferência de canal, não opt-out.
+  /\bn(?:ao)?\s+(?:quero|queria|desejo)\s+(?:mais\s+)?(?:receber|ser\s+contatad|ser\s+incomodad|mensage|nada)/,
+  /\bn(?:ao)?\s+(?:quero|queria|desejo)\s+mais\s+contato/,
+  /\bn(?:ao)?\s+(?:quero|queria|desejo)\s+contato\s*$/,
   /\b(?:para|pare|parem|parar|pra?r)\s+de\s+(?:me\s+)?(?:mandar|enviar|escrever|ligar|encher|perturbar)/,
   /\bme\s+(?:tira|tire|tirem|remova|remove|removam|exclua|exclui|apaga|apague|deleta|delete)\s+(?:da|dessa|desta|de\s+sua|do)\s+(?:lista|base|cadastro)/,
   /\bdescadastr/,
-  /\bnao\s+me\s+(?:mande|manda|mandem|envie|envia|escreva|escreve|procure|procura|perturbe|perturba|liga|ligue)/,
+  // Sem "liga/ligue": "não me liga, manda o preço aqui" é pedido de canal —
+  // e virava supressão global (achado da QA em 28/09).
+  /\bnao\s+me\s+(?:mande|manda|mandem|envie|envia|escreva|escreve|procure|procura|perturbe|perturba)/,
   /\bsair?\s+d(?:a|essa|esta)\s+lista/,
-  /\bnao\s+tenho\s+interesse/,
+  /\bnao\s+tenho\s+interesse(?!\s+(?:na|em|no|de)\s+(?:ligacao|telefone|chamada|ligar|falar))/,
+  /\b(?:vou|vo)\s+(?:te\s+|lhe\s+)?bloque|\bme\s+bloqueia\b|\be\s+spam\b/,
   /\bpara\s+com\s+(?:isso|essas?\s+mensagens?)/,
 ];
 
@@ -160,7 +171,11 @@ export function ehPedidoDeParar(texto: string): boolean {
     .replace(/[.!,;:]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  return PEDIDOS_DE_PARAR.has(limpo) || PADROES_DE_PARAR.some((p) => p.test(limpo));
+  if (PEDIDOS_DE_PARAR.has(limpo)) return true;
+  // Quem pergunta preço ou quer testar na mesma frase está conversando, não
+  // saindo — por mais que tenha um "não" no meio.
+  if (/\b(?:quero\s+testar|quanto|preco|valor|me\s+manda\s+o)\b/.test(limpo)) return false;
+  return PADROES_DE_PARAR.some((p) => p.test(limpo));
 }
 
 /** O texto sem acento, minúsculo e com espaço simples — a base das réguas abaixo. */
@@ -248,7 +263,12 @@ export function ehSoEncerramento(texto: string): boolean {
     .trim();
   if (!semEmoji) return texto.trim().length > 0; // só emoji
   const limpo = normalizar(semEmoji).replace(/[.!,;:?]+/g, "").trim();
-  return ENCERRAMENTOS.has(limpo) || /^k{3,}$/.test(limpo) || /^(?:ha){2,}$/.test(limpo);
+  return (
+    ENCERRAMENTOS.has(limpo) ||
+    /^k{3,}$/.test(limpo) ||
+    /^(?:ha){2,}$/.test(limpo) ||
+    /^x+d+$/.test(limpo)
+  );
 }
 
 /**
@@ -264,32 +284,31 @@ export function ehSoEncerramento(texto: string): boolean {
  */
 const PADROES_HUMANO: RegExp[] = [
   /\b(?:falar|conversar|atendimento)\s+com\s+(?:um|uma|alguem|algum|uma\s+pessoa|um\s+humano|gente|atendente|vendedor|consultor|responsavel)\b/,
-  /\b(?:atendente|atendimento\s+humano|humano|pessoa\s+(?:de\s+verdade|real))\b/,
+  // A palavra solta não basta ("o atendente de ontem me falou o preço", "sou
+  // humano sim kkk"): tem que vir com verbo de pedido.
+  /\b(?:quero|queria|preciso|prefiro|tem|teria|chama|chame|me\s+passa|me\s+passe|cade)\s+(?:um\s+|uma\s+|o\s+|a\s+|algum\s+)?(?:atendente|humano|pessoa(?:\s+de\s+verdade|\s+real)?|vendedor|consultor)\b/,
+  /\batendimento\s+humano\b/,
   /\bquem\s+(?:vai|vem|que\s+vai)\s+(?:me\s+)?atender\b/,
   // "quero falar com o Diego": nome de quem ele já conhece é pedido de gente,
   // mesmo sem o nome estar configurado em lugar nenhum.
   /\b(?:quero|queria|preciso|posso|gostaria\s+de)\s+falar\s+com\s+(?:o|a)\s+\w{3,}/,
   // Imperativo — pedido de AGORA. "Depois eu posso pedir pra me ligar?" é
-  // pergunta sobre o futuro de quem escolheu testar primeiro, e virou repasse
-  // no teste do dono (28/09).
+  // pergunta sobre o futuro, e virou repasse no teste do dono (28/09).
   /\bme\s+(?:liga|ligue|chama|chame)\b/,
   /\b(?:pode|podem|quero\s+que)\s+me\s+ligar\b/,
-  /\bvc\s+e\s+(?:um\s+)?robo\b.*\b(?:quero|prefiro)\s+(?:falar|gente|pessoa)/,
 ];
 
 /**
- * "Não quero falar com ninguém", "nem sei quem é ele": negação nunca é pedido.
- * O teste do dono pegou "Não quero falar com Fernando" virando repasse PRO
- * Fernando — a regra casava o nome solto.
+ * Negação do PEDIDO, não da frase: "Não quero falar com Fernando" não é
+ * pedido; "Não consigo cadastrar, preciso falar com alguém" é. A primeira
+ * versão negava a frase inteira e perdia o segundo caso (achado da QA, 28/09).
  */
-const NEGACAO = /\b(?:nao|nem|nunca)\s+(?:\w+\s+){0,2}(?:quero|queria|preciso|falar|conversar|sei)\b/;
-
-/** Quem fala em testar está escolhendo o teste — isso é com o robô, que manda o link. */
-const FALA_DE_TESTE = /\btest(?:ar|e|o)\b/;
+const NEGACAO_DO_PEDIDO =
+  /\b(?:nao|nem|nunca)\s+(?:quero|queria|preciso|precisa|precisam|vou)\s+(?:\w+\s+){0,2}(?:falar|conversar|ligacao|ligar|lig|ninguem|atendente|pessoa|consultor)|\bnem\s+sei\s+quem\b|\bninguem\s+(?:me\s+)?(?:lig|lique|precisa)|\b(?:nao|nem)\s+me\s+(?:liga|ligue|ligar|chama|chame)\b/;
 
 export function ehPedidoDeHumano(texto: string, nomesEquipe: readonly string[] = []): boolean {
   const limpo = normalizar(texto);
-  if (NEGACAO.test(limpo) || FALA_DE_TESTE.test(limpo)) return false;
+  if (NEGACAO_DO_PEDIDO.test(limpo)) return false;
   if (PADROES_HUMANO.some((p) => p.test(limpo))) return true;
   // Nome só conta como PEDIDO ("falar com o Diego", "chama o Diego"), nunca
   // solto na frase.
@@ -305,16 +324,79 @@ export function ehPedidoDeHumano(texto: string, nomesEquipe: readonly string[] =
 }
 
 /**
+ * Ele RECUSOU ligação ou pessoa ("não quero falar com Fulano", "não me liga")?
+ * Resposta fixa: o modelo, nesse caso, respondia "não tem nenhum Fulano aqui"
+ * — nome de pessoa, e ainda por cima falso (simulador, 28/09).
+ */
+export function recusouContato(texto: string): boolean {
+  const limpo = normalizar(texto);
+  return NEGACAO_DO_PEDIDO.test(limpo) && !/\?|\b(?:quanto|preco|valor|como)\b/.test(limpo);
+}
+
+/**
+ * Negociação de preço ("consegue fazer por 1200?", "tem desconto?"). Não é com
+ * o robô: numa rodada do simulador o modelo ignorou o pedido e repetiu o preço.
+ */
+export function ehNegociacaoDePreco(texto: string): boolean {
+  const limpo = normalizar(texto);
+  return /\b(?:desconto|abatimento|mais\s+barato|abaixa|abaixar|baixar\s+o\s+preco|melhorar\s+o\s+preco|consegue\s+(?:fazer|deixar)\s+(?:por|a)|faz\s+por|fazer\s+por|sai\s+por\s+\d|negociar|chorinho)\b/.test(
+    limpo,
+  );
+}
+
+/**
+ * "Quero agendar uma demonstração" (o botão do site manda isso). Resposta fixa
+ * com os horários: o modelo, às vezes, pedia "um dia e período" em vez de
+ * oferecer — e quem pediu demonstração quer data, não formulário.
+ */
+export function ehPedidoDeDemonstracao(texto: string): boolean {
+  return /\b(?:agendar|marcar|ver|quero)\s+(?:uma\s+)?(?:demo|demonstracao|apresentacao)\b/.test(
+    normalizar(texto),
+  );
+}
+
+/** O pedido é de LIGAÇÃO (e não de conversa por aqui)? Muda a frase do repasse. */
+export function pedeLigacao(texto: string): boolean {
+  return /\b(?:me\s+(?:liga|ligue)|(?:pode|podem|quero\s+que)\s+me\s+ligar|ligacao|telefonema)\b/.test(
+    normalizar(texto),
+  );
+}
+
+/** "Quem vai me atender?" — a frase do repasse responde o QUEM. */
+export function perguntaQuem(texto: string): boolean {
+  return /\bquem\b/.test(normalizar(texto));
+}
+
+/**
  * "Pode ser", "sim", "quero" — logo depois de o robô oferecer chamar alguém.
  *
  * O caso real: "Vc é um robo" → robô oferece uma pessoa → "Pode ser". Sozinho,
  * "pode ser" não é pedido de nada; depois da oferta, é o pedido mais claro que
  * existe.
  */
-const SIM = /^(?:sim|s|pode|pode ser|quero|claro|isso|ok|por favor|pf|pfv|bora|manda|pode sim|sim pode|sim por favor|quero sim|aceito)[.! ]*$/;
-const OFERTA_DE_HUMANO = /\b(?:chamar|chame|chamo|ligar|ligue|ligo|te\s+liga)\b.*\?|\bquer\s+(?:que|falar)\b.*\b(?:alguem|fernando|pessoa|equipe|ligue|chame|liga)\b/;
+/** Um "sim" curto, com complemento opcional ("pode ser a ligação", "ta bom"). */
+const SIM =
+  /^(?:sim|s|pode|pode\s+ser|pode\s+sim|quero|quero\s+sim|claro|isso|ok|okay|beleza|blz|fechado|ta\s+bom|tabom|bora|por\s+favor|pf|pfv|aceito|prefiro|manda|liga\s+sim)(?:\s+(?:sim|a\s+ligacao|ligacao|o\s+consultor|com\s+ele|pode|por\s+favor|obrigado))?[.! ]*$/;
+/**
+ * A oferta de PESSOA que o próprio prompt ensina ("Quer que um consultor fale
+ * com você?"). A de ligação com horário ("prefere que um consultor te ligue
+ * 10 min, ou testar?") NÃO entra: aceitar essa é com o robô, que marca.
+ */
+const OFERTA_DE_HUMANO =
+  /\bquer\s+que\s+(?:um\s+consultor|alguem|uma\s+pessoa|o\s+consultor)(?:\s+da\s+movatruck)?\s+(?:fale|falar|te\s+chame|chame|atenda|te\s+atenda)\b|\b(?:posso|quer\s+que\s+eu)\s+chame?(?:r)?\s+(?:um\s+consultor|alguem|uma\s+pessoa)\b/;
 
 export function aceitouOfertaDeHumano(texto: string, ultimaFalaNossa: string | null): boolean {
   if (!ultimaFalaNossa) return false;
-  return SIM.test(normalizar(texto)) && OFERTA_DE_HUMANO.test(normalizar(ultimaFalaNossa));
+  const limpo = normalizar(texto).replace(/[.!?,]+/g, "").trim();
+  return SIM.test(limpo) && OFERTA_DE_HUMANO.test(normalizar(ultimaFalaNossa));
+}
+
+/**
+ * A nossa última fala esperava resposta (terminou em pergunta, ou ofereceu
+ * horário)? Então "ok", "ta bom" e 👍 são RESPOSTA, não despedida — e engolir
+ * como encerramento deixou uma ligação aceita sem marcar.
+ */
+export function esperavaResposta(ultimaFalaNossa: string | null): boolean {
+  if (!ultimaFalaNossa) return false;
+  return /\?\s*$/.test(ultimaFalaNossa.trim()) || /\b\d{1,2}:\d{2}\b/.test(ultimaFalaNossa);
 }

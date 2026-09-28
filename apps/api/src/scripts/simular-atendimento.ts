@@ -62,8 +62,26 @@ export type Cenario = {
   nome: string;
   canal: "comercial" | "operacao";
   /** De onde saiu: "real" = conversa do Chatwoot; "adversarial" = feito pra quebrar. */
-  origem: "real" | "adversarial" | "teste-do-dono";
+  origem: "real" | "adversarial" | "teste-do-dono" | "qa";
   passos: Passo[];
+  /**
+   * O que TEM que acontecer. Conferido no fim — a QA de 28/09 cobrou que o
+   * simulador só imprimia, e transcrição boa de ler não é prova de nada.
+   */
+  espera?: {
+    /** Quantas vezes passou pra gente. */
+    repasses?: number;
+    /** Quantos alertas comerciais saíram. */
+    alertas?: number;
+    /** A ÚLTIMA mensagem do cliente tem que ficar sem resposta (ou ter). */
+    ultimaSemResposta?: boolean;
+    /** Opt-out gravado no fim. */
+    optOut?: boolean;
+    /** Robô ativo (true) ou fora da conversa (false) no fim. */
+    roboAtivo?: boolean;
+    /** Algum texto do robô tem que conter isto. */
+    contem?: string;
+  };
 };
 
 const INBOX = { comercial: 2, operacao: 1 };
@@ -74,6 +92,13 @@ class ChatwootFalso {
   readonly eventos = new Map<number, string[]>();
   private readonly etiquetas = new Map<number, Set<string>>();
   private readonly nossos = new Set<number>();
+  /**
+   * O que o Chatwoot de verdade devolve pelo webhook depois de cada ação
+   * nossa: o eco da mensagem do robô (com a marca) e os gestos do repasse.
+   * Sem isso o simulador não testa o robô "se assustando" com o próprio gesto.
+   */
+  readonly ecos: Record<string, unknown>[] = [];
+  repasses = 0;
 
   private anotarEvento(conversa: number, linha: string) {
     const l = this.eventos.get(conversa) ?? [];
@@ -87,25 +112,51 @@ class ChatwootFalso {
   linkDaConversa() {
     return null;
   }
+  private eco(conversa: number, id: number, texto: string, privada: boolean) {
+    this.ecos.push({
+      event: "message_created",
+      message_type: "outgoing",
+      id,
+      private: privada,
+      content: texto,
+      content_attributes: { movatruck_robo: true },
+      conversation: { id: conversa },
+      account: { id: 1 },
+      sender: { name: "Diego Davi Orlonski", type: "user" },
+    });
+  }
   async responder(_c: number, conversa: number, texto: string) {
     const id = this.proximoId++;
     this.nossos.add(id);
     this.anotarEvento(conversa, `ROBÔ: ${texto}`);
+    this.eco(conversa, id, texto, false);
     return true;
   }
   async anotar(_c: number, conversa: number, texto: string) {
-    this.nossos.add(this.proximoId++);
+    const id = this.proximoId++;
+    this.nossos.add(id);
     this.anotarEvento(conversa, `(nota interna do robô: ${texto})`);
+    this.eco(conversa, id, texto, true);
     return true;
   }
-  foiORobo(m: { id?: number }) {
+  foiORobo(m: { id?: number; content_attributes?: Record<string, unknown> }) {
+    if (m.content_attributes?.movatruck_robo) return true;
     return typeof m.id === "number" && this.nossos.has(m.id);
   }
   async passarParaHumano(_c: number, conversa: number, time?: number | null, extras: string[] = []) {
+    this.repasses++;
     const e = this.etiquetas.get(conversa) ?? new Set<string>();
     ["precisa-humano", ...extras].forEach((x) => e.add(x));
     this.etiquetas.set(conversa, e);
     this.anotarEvento(conversa, `[repasse pra gente · time ${time ?? "nenhum"} · etiquetas ${[...e].join(",")}]`);
+    this.ecos.push({
+      event: "conversation_updated",
+      id: conversa,
+      changed_attributes: [
+        { label_list: { previous_value: [], current_value: [...e] } },
+        ...(time ? [{ team_id: { previous_value: null, current_value: time } }] : []),
+      ],
+    });
   }
   async temEtiqueta(_c: number, conversa: number, etiqueta: string) {
     return this.etiquetas.get(conversa)?.has(etiqueta) ?? false;
@@ -172,16 +223,43 @@ async function main() {
   );
   agente.esperaRajadaMs = 0;
 
-  // Os alertas precisam de destino pra aparecer no relatório.
+  // A configuração de produção (28/09): times do Chatwoot, grade de ligação,
+  // sem nome de consultor, teste de 30 dias aberto. Os alertas precisam de
+  // destino pra aparecer no relatório.
   await comoSistema(() =>
     prisma.configuracaoPlataforma.update({
       where: { id: "singleton" },
-      data: { sdrAtivo: true, alertaComercialTelefones: ["5500000000000"] },
+      data: {
+        sdrAtivo: true,
+        alertaComercialTelefones: ["5500000000000"],
+        chatwootTimeComercialId: 1,
+        chatwootTimeOperacaoId: 2,
+        sdrHorariosDemo: ["09:00", "10:30", "14:00", "16:00"],
+        sdrAtendenteNome: null,
+        sdrNomesEquipe: [],
+        autoCadastroAberto: true,
+        diasTesteGratis: 30,
+      },
     }),
   );
+  await comoSistema(() => prisma.supressaoContato.deleteMany({ where: { contato: { startsWith: "99" } } }));
 
-  const linhas: string[] = ["# Simulação do atendimento no WhatsApp", ""];
+  const linhas: string[] = [
+    "# Simulação do atendimento no WhatsApp",
+    "",
+    `_Rodada em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} (o prazo das frases depende do horário)._`,
+    "",
+  ];
+  const resumo: string[] = [];
   let n = 0;
+  let falhas = 0;
+
+  // Os ecos do Chatwoot chegam depois de cada ação — processa até esvaziar.
+  const drenarEcos = async () => {
+    for (let guarda = 0; chatwoot.ecos.length > 0 && guarda < 50; guarda++) {
+      await agente.processar(chatwoot.ecos.shift() as never);
+    }
+  };
   for (const c of CENARIOS as Cenario[]) {
     if (filtro && !c.nome.toLowerCase().includes(filtro.toLowerCase())) continue;
     n++;
@@ -190,9 +268,12 @@ async function main() {
     await comoSistema(() =>
       prisma.lead.deleteMany({ where: { telefone: { endsWith: telefone.slice(-8) } } }),
     );
+    const repassesAntes = chatwoot.repasses;
     linhas.push(`## ${n}. ${c.nome}`, `_canal ${c.canal} · ${c.origem}_`, "");
     const alertasAntes = alertas.length;
 
+    let ultimoPassoCliente = false;
+    let ultimaFicouSemResposta = false;
     for (const p of c.passos) {
       const antes = chatwoot.eventos.get(conversa)?.length ?? 0;
       const base = {
@@ -233,8 +314,11 @@ async function main() {
           changed_attributes: [{ [chave]: { previous_value: null, current_value: valor } }],
         } as never);
       }
+      ultimoPassoCliente = "cliente" in p || "audio" in p;
+      await drenarEcos();
       const novos = (chatwoot.eventos.get(conversa) ?? []).slice(antes);
       if (novos.length === 0) linhas.push(`> _(robô não respondeu)_`);
+      ultimaFicouSemResposta = !novos.some((e) => e.startsWith("ROBÔ:"));
       for (const e of novos) linhas.push(`> ${e}`);
       linhas.push("");
     }
@@ -242,23 +326,51 @@ async function main() {
     const lead = await comoSistema(() =>
       prisma.lead.findFirst({
         where: { telefone: { endsWith: telefone.replace(/\D/g, "").slice(-8) } },
-        select: { sdrPausadoEm: true, primeiraRespostaHumanaEm: true, status: true },
+        select: { sdrPausadoEm: true, primeiraRespostaHumanaEm: true, status: true, optOut: true },
       }),
     );
     const novosAlertas = alertas.slice(alertasAntes);
+    const repasses = chatwoot.repasses - repassesAntes;
     linhas.push(
-      `_Fim: robô ${lead?.sdrPausadoEm ? "FORA da conversa" : "ativo"} · ` +
+      `_Fim: ${lead ? `robô ${lead.sdrPausadoEm ? "FORA da conversa" : "ativo"}` : "sem lead"} · ` +
         `${lead?.primeiraRespostaHumanaEm ? "gente já respondeu" : "gente ainda não respondeu"} · ` +
+        `opt-out ${lead?.optOut ? "SIM" : "não"} · repasses ${repasses} · ` +
         `alertas: ${novosAlertas.length ? novosAlertas.join(" ; ") : "nenhum"}_`,
-      "",
-      "---",
-      "",
     );
-    process.stdout.write(`${n}. ${c.nome}\n`);
+
+    // As conferências: as do cenário e as que valem pra toda fala do robô.
+    const erros: string[] = [];
+    const falas = (chatwoot.eventos.get(conversa) ?? [])
+      .filter((e) => e.startsWith("ROBÔ:"))
+      .map((e) => e.slice(6));
+    for (const f of falas) {
+      if (/[—–]/.test(f)) erros.push(`travessão: "${f.slice(0, 60)}"`);
+      if (/\bfernando\b/i.test(f)) erros.push(`nome de pessoa: "${f.slice(0, 60)}"`);
+      if ((f.match(/\?/g) ?? []).length > 1) erros.push(`duas perguntas: "${f.slice(0, 80)}"`);
+      if (f.replace(/https?:\/\/\S+/g, "").length > 330) erros.push(`longa (${f.length}): "${f.slice(0, 60)}…"`);
+    }
+    const e = c.espera ?? {};
+    if (e.repasses !== undefined && repasses !== e.repasses) erros.push(`repasses ${repasses}, esperado ${e.repasses}`);
+    if (e.alertas !== undefined && novosAlertas.length !== e.alertas)
+      erros.push(`alertas ${novosAlertas.length}, esperado ${e.alertas}`);
+    if (e.ultimaSemResposta !== undefined && ultimoPassoCliente && ultimaFicouSemResposta !== e.ultimaSemResposta)
+      erros.push(e.ultimaSemResposta ? "última mensagem devia ficar sem resposta" : "última mensagem ficou sem resposta");
+    if (e.optOut !== undefined && Boolean(lead?.optOut) !== e.optOut) erros.push(`opt-out ${lead?.optOut}, esperado ${e.optOut}`);
+    if (e.roboAtivo !== undefined && lead && !lead.sdrPausadoEm !== e.roboAtivo)
+      erros.push(`robô ${lead.sdrPausadoEm ? "fora" : "ativo"}, esperado ${e.roboAtivo ? "ativo" : "fora"}`);
+    if (e.contem && !falas.some((f) => f.toLowerCase().includes(e.contem!.toLowerCase())))
+      erros.push(`nenhuma fala contém "${e.contem}"`);
+
+    if (erros.length) falhas++;
+    linhas.push(erros.length ? `\n**FALHOU:** ${erros.join(" · ")}` : "\n**PASSOU**", "", "---", "");
+    resumo.push(`${erros.length ? "FALHOU" : "passou"} · ${n}. ${c.nome}${erros.length ? ` → ${erros.join(" · ")}` : ""}`);
+    process.stdout.write(`${erros.length ? "✗" : "✓"} ${n}. ${c.nome}\n`);
   }
 
+  linhas.splice(4, 0, "## Resumo", "", ...resumo.map((r) => `- ${r}`), "", `**${n - falhas} de ${n} passaram.**`, "");
   writeFileSync(saida, linhas.join("\n"));
-  console.log(`\n${n} cenários → ${saida}`);
+  console.log(`\n${n - falhas}/${n} passaram → ${saida}`);
+  process.exitCode = falhas > 0 ? 1 : 0;
   await modulo.close();
 }
 

@@ -10,7 +10,9 @@ import { empresaConhecida } from "./lead-inbound";
 import {
   dentroDoHorario,
   deveEscalonar,
+  mensagemDeLembrete,
   mensagemDeRepasse,
+  type MotivoRepasse,
   proximaAbertura,
   proximosHorarios,
   type HorarioAtendimento,
@@ -71,10 +73,23 @@ export class AtendimentoHumanoService {
    * suporte, e prometer o Fernando pra um motorista com dúvida de viagem seria
    * trocar uma promessa vaga por uma errada.
    */
-  async mensagemDeRepasse(canal: "comercial" | "operacao" = "comercial"): Promise<string> {
+  async mensagemDeRepasse(
+    canal: "comercial" | "operacao" = "comercial",
+    motivo: MotivoRepasse = "padrao",
+  ): Promise<string> {
     const cfg = await this.configuracao();
-    if (!cfg) return mensagemDeRepasse(null, { inicio: 8, fim: 18, dias: [1, 2, 3, 4, 5, 6] });
-    return mensagemDeRepasse(canal === "comercial" ? cfg.sdrAtendenteNome : null, this.horario(cfg));
+    const h = cfg ? this.horario(cfg) : { inicio: 8, fim: 18, dias: [1, 2, 3, 4, 5, 6] };
+    return mensagemDeRepasse(
+      canal === "comercial" ? (cfg?.sdrAtendenteNome ?? null) : null,
+      h,
+      new Date(),
+      canal === "operacao" ? "operacao" : motivo,
+    );
+  }
+
+  async mensagemDeLembrete(): Promise<string> {
+    const cfg = await this.configuracao();
+    return mensagemDeLembrete(cfg ? this.horario(cfg) : { inicio: 8, fim: 18, dias: [1, 2, 3, 4, 5, 6] });
   }
 
   /** O que o robô pode oferecer agora: quem liga, o que mostrar, quando. */
@@ -88,15 +103,16 @@ export class AtendimentoHumanoService {
       atendente: cfg.sdrAtendenteNome?.trim() || null,
       linkApresentacao: cfg.sdrLinkApresentacao,
       diasTeste: cfg.autoCadastroAberto ? cfg.diasTesteGratis : null,
+      linkTeste: cfg.autoCadastroAberto ? cfg.sdrLinkCadastro : null,
       prazoHumano: dentroDoHorario(h) ? "em instantes" : proximaAbertura(h),
     };
   }
 
   /** Os dois próximos horários de ligação livres na grade. */
-  async horariosLivres(): Promise<string[]> {
+  async horariosLivres(pref: { dia?: string; periodo?: "manha" | "tarde" } = {}): Promise<string[]> {
     const cfg = await this.configuracao();
     if (!cfg) return [];
-    return proximosHorarios(cfg.sdrHorariosDemo ?? [], this.horario(cfg));
+    return proximosHorarios(cfg.sdrHorariosDemo ?? [], this.horario(cfg), new Date(), 2, 60, pref);
   }
 
   /** Os nomes que, citados, pedem gente. Inclui quem atende. */
@@ -109,7 +125,10 @@ export class AtendimentoHumanoService {
   /** O time do Chatwoot que recebe a conversa, pelo canal. `null` = só etiqueta. */
   async timeDoCanal(canal: "comercial" | "operacao"): Promise<number | null> {
     const cfg = await this.configuracao();
-    return (canal === "comercial" ? cfg?.chatwootTimeComercialId : cfg?.chatwootTimeOperacaoId) ?? null;
+    const time = (canal === "comercial" ? cfg?.chatwootTimeComercialId : cfg?.chatwootTimeOperacaoId) ?? null;
+    // Sem time, a conversa fica só com etiqueta — e etiqueta ninguém olhava.
+    if (!time) this.log.error(`time do Chatwoot (${canal}) não configurado — repasse sem notificação`);
+    return time;
   }
 
   /**
@@ -120,7 +139,13 @@ export class AtendimentoHumanoService {
    * Nunca lança: é aviso, e aviso que falha não pode derrubar o repasse que o
    * prospect está esperando.
    */
-  async avisar(leadId: string, motivo: string, ultimaFala: string, conversaId: number): Promise<void> {
+  async avisar(
+    leadId: string,
+    motivo: string,
+    ultimaFala: string,
+    conversaId: number,
+    opcoes: { reforco?: boolean } = {},
+  ): Promise<void> {
     try {
       const lead = await comoSistema(() =>
         this.prisma.lead.findUnique({
@@ -128,18 +153,21 @@ export class AtendimentoHumanoService {
           select: { id: true, empresa: true, nome: true, telefone: true, alertaHumanoEm: true },
         }),
       );
-      if (!lead || lead.alertaHumanoEm) return;
-
-      // Marca ANTES de enviar: dois webhooks em paralelo não podem mandar dois
-      // avisos. O `updateMany` com a condição é a trava — só um deles muda a
-      // linha.
-      const marcado = await comoSistema(() =>
-        this.prisma.lead.updateMany({
-          where: { id: leadId, alertaHumanoEm: null },
-          data: { alertaHumanoEm: new Date() },
-        }),
-      );
-      if (marcado.count === 0) return;
+      if (!lead) return;
+      // Reforço (o cliente cobrou depois do repasse) passa por cima da trava de
+      // um-por-ciclo — quem chama garante que é uma vez só (`lembreteEsperaEm`).
+      if (!opcoes.reforco) {
+        if (lead.alertaHumanoEm) return;
+        // Marca ANTES de enviar: dois webhooks em paralelo não podem mandar
+        // dois avisos. O `updateMany` com a condição é a trava.
+        const marcado = await comoSistema(() =>
+          this.prisma.lead.updateMany({
+            where: { id: leadId, alertaHumanoEm: null },
+            data: { alertaHumanoEm: new Date() },
+          }),
+        );
+        if (marcado.count === 0) return;
+      }
 
       const cfg = await this.configuracao();
       await this.enviar(cfg?.alertaComercialTelefones ?? [], lead, ultimaFala, motivo, conversaId);

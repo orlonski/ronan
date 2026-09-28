@@ -340,6 +340,7 @@ export class ProspeccaoService {
           primeiraRespostaHumanaEm: null,
           alertaHumanoEm: null,
           alertaEscalonadoEm: null,
+          lembreteEsperaEm: null,
         },
         select: { id: true, sdrPausadoEm: true },
       }),

@@ -5765,6 +5765,9 @@ model Lead {
   alertaHumanoEm      DateTime?
   /// Quando o aviso subiu pro degrau de cima por ninguém ter respondido.
   alertaEscalonadoEm  DateTime?
+  /// O "já avisei, um consultor te responde aqui" — uma vez por ciclo, pra
+  /// quem escreve de novo depois do repasse e ainda não teve resposta de gente.
+  lembreteEsperaEm    DateTime?
 
   interacoes InteracaoLead[]
   mensagens  MensagemLead[]

@@ -10,6 +10,7 @@ import type { ConviteService } from "../whatsapp/convite.service";
 import type { SdrService, RespostaSdr } from "../sdr/sdr.service";
 import type { ConfigService } from "@nestjs/config";
 import type { AtendimentoHumanoService } from "../sdr/atendimento-humano.service";
+import { mensagemDeRepasse, type MotivoRepasse } from "../sdr/atendimento-humano.regua";
 
 const MOTORISTA: SessaoResolvida = {
   tipo: "MOTORISTA",
@@ -152,11 +153,16 @@ function montar(
         k === "CHATWOOT_INBOX_COMERCIAL" ? (opts.inboxComercial ?? "2") : undefined,
     } as unknown as ConfigService,
     {
-      mensagemDeRepasse: vi.fn(async (canal: string) =>
-        canal === "comercial"
-          ? "Certo! Fernando vai falar com você por aqui em instantes."
-          : "Certo! Alguém da Movatruck vai falar com você por aqui em instantes.",
+      // A régua de verdade, num horário fixo e aberto (segunda, 10h).
+      mensagemDeRepasse: vi.fn(async (canal: string, motivo?: string) =>
+        mensagemDeRepasse(
+          null,
+          { inicio: 8, fim: 18, dias: [1, 2, 3, 4, 5, 6] },
+          new Date("2026-09-28T10:00:00-03:00"),
+          (canal === "operacao" ? "operacao" : (motivo ?? "padrao")) as MotivoRepasse,
+        ),
       ),
+      mensagemDeLembrete: vi.fn(async () => "Já avisei a equipe. Um consultor da Movatruck te responde aqui em instantes."),
       nomesDaEquipe: vi.fn(async () => ["Fernando", "Diego"]),
       timeDoCanal: vi.fn(async (canal: string) => (canal === "comercial" ? 11 : 22)),
       avisar,
@@ -248,7 +254,7 @@ describe("o SDR não entra no número de operação", () => {
     await s.processar(evento({ ...OPERACAO, content: "Sobre a nota com divergência" }));
     expect(atender).not.toHaveBeenCalled();
     expect(leadCreate).not.toHaveBeenCalled();
-    expect(responder.mock.calls[0]?.[2]).toContain("Alguém da Movatruck");
+    expect(responder.mock.calls[0]?.[2]).toContain("O suporte da Movatruck");
     // Time da operação, não o comercial.
     expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 22, []);
   });
@@ -276,16 +282,18 @@ describe("o SDR não entra no número de operação", () => {
     expect(passarParaHumano).not.toHaveBeenCalled();
   });
 
-  it("lead que já existia e responde pela operação vai pro comercial, com alerta", async () => {
-    const { s, atender, passarParaHumano, avisar } = montar({
+  it("lead que escreve pela operação fica na operação: nota, time 2, sem alerta comercial — QA 28/09", async () => {
+    const { s, atender, passarParaHumano, avisar, anotar, responder } = montar({
       identidade: DESCONHECIDO,
       ehLead: true,
       respostaSdr: RESPOSTA,
     });
     await s.processar(evento({ ...OPERACAO, content: "recebi a mensagem de vocês, quanto é?" }));
     expect(atender).not.toHaveBeenCalled();
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 11, []);
-    expect(avisar).toHaveBeenCalledOnce();
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 22, []);
+    expect(avisar).not.toHaveBeenCalled();
+    expect(anotar.mock.calls[0]?.[2]).toContain("lista de captação");
+    expect(responder.mock.calls[0]?.[2]).toContain("suporte");
   });
 
   it("áudio na operação vai pra gente COM uma palavra de volta", async () => {
@@ -321,10 +329,10 @@ describe("o que o agente ignora", () => {
 });
 
 describe("quando o agente do motorista não dá conta", () => {
-  it("resposta vazia vira fila humana", async () => {
+  it("resposta vazia vira fila humana, com uma palavra pro motorista", async () => {
     const { s, responder, passarParaHumano } = montar({ resposta: "   " });
     await s.processar(evento(OPERACAO));
-    expect(responder).not.toHaveBeenCalled();
+    expect(responder).toHaveBeenCalledOnce();
     expect(repassou(passarParaHumano)).toBe(true);
   });
 
@@ -462,7 +470,7 @@ describe("o SDR atendendo prospect no comercial", () => {
       respostaSdr: null,
     });
     await s.processar(evento({ ...COMERCIAL, content: "quanto custa?" }));
-    expect(responder.mock.calls[0]?.[2]).toContain("Fernando vai falar com você");
+    expect(responder.mock.calls[0]?.[2]).toContain("Um consultor da Movatruck vai falar com você");
     expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 11, []);
     expect(avisar).toHaveBeenCalledOnce();
   });
@@ -479,10 +487,10 @@ describe("o SDR atendendo prospect no comercial", () => {
         ferramentas: ["passar_para_humano"],
       },
     });
-    await s.processar(evento({ ...COMERCIAL, content: "consegue fazer por 1200?" }));
+    await s.processar(evento({ ...COMERCIAL, content: "vocês integram com o Sankhya?" }));
     expect(responder).toHaveBeenCalledOnce();
     expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 11, []);
-    expect(avisar).toHaveBeenCalledWith("lead-1", "quer negociar preço", "consegue fazer por 1200?", 7);
+    expect(avisar).toHaveBeenCalledWith("lead-1", "quer negociar preço", "vocês integram com o Sankhya?", 7);
   });
 
   it("SDR que explode cai na fila humana, sem derrubar o webhook", async () => {
@@ -539,23 +547,25 @@ describe("o SDR atendendo prospect no comercial", () => {
     expect(repassou(passarParaHumano)).toBe(true);
   });
 
-  it("sem lead (operação), a etiqueta ainda evita repetir o aviso", async () => {
-    const { s, responder, passarParaHumano } = montar({
+  it("operação já com o suporte: nem aviso repetido, nem repasse que apagaria etiquetas", async () => {
+    const { s, responder, passarParaHumano, anotar } = montar({
       identidade: DESCONHECIDO,
       jaEtiquetada: true,
+      motoristaCadastrado: true,
     });
-    await s.processar(evento({ ...OPERACAO, content: "oi" }));
+    await s.processar(evento({ ...OPERACAO, content: "Ok" }));
     expect(responder).not.toHaveBeenCalled();
-    expect(repassou(passarParaHumano)).toBe(true);
+    expect(passarParaHumano).not.toHaveBeenCalled();
+    expect(anotar).not.toHaveBeenCalled();
   });
 
-  it("áudio no comercial vai pra uma pessoa, sem virar lead nem acordar o SDR", async () => {
-    const { s, atender, responder, leadCreate, avisar } = montar({ identidade: DESCONHECIDO, ehLead: true });
+  it("áudio no comercial: pede pra escrever, sem prometer consultor — QA 28/09", async () => {
+    const { s, atender, responder, passarParaHumano, avisar } = montar({ identidade: DESCONHECIDO, ehLead: true });
     await s.processar(evento({ ...COMERCIAL, content: "" }));
     expect(atender).not.toHaveBeenCalled();
-    expect(leadCreate).not.toHaveBeenCalled();
-    expect(responder).toHaveBeenCalled();
-    expect(avisar).toHaveBeenCalledOnce();
+    expect(responder.mock.calls[0]?.[2]).toContain("não consigo ouvir áudio");
+    expect(passarParaHumano).not.toHaveBeenCalled();
+    expect(avisar).not.toHaveBeenCalled();
   });
 });
 
@@ -574,7 +584,7 @@ describe("gente na conversa, robô fora", () => {
     await s.processar(evento({ ...COMERCIAL, content: "quero falar com o Fernando" }));
     expect(atender).not.toHaveBeenCalled();
     expect(responder).toHaveBeenCalledOnce();
-    expect(responder.mock.calls[0]?.[2]).toContain("Fernando");
+    expect(responder.mock.calls[0]?.[2]).toContain("consultor");
     expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 11, []);
     expect(avisar).toHaveBeenCalledOnce();
   });
@@ -591,7 +601,7 @@ describe("gente na conversa, robô fora", () => {
       identidade: DESCONHECIDO,
       ehLead: true,
       respostaSdr: RESPOSTA,
-      ultimaFalaNossa: "Sou o atendimento automático. Quer que o Fernando te chame agora?",
+      ultimaFalaNossa: "Sou o atendimento automático da Movatruck. Quer que um consultor fale com você?",
     });
     await s.processar(evento({ ...COMERCIAL, content: "Pode ser" }));
     expect(atender).not.toHaveBeenCalled();
@@ -749,7 +759,7 @@ describe("quando a pessoa pede pra parar", () => {
     );
     expect(atender).not.toHaveBeenCalled();
     expect(passarParaHumano).not.toHaveBeenCalled();
-    expect(responder).toHaveBeenCalledWith(1, 7, expect.stringContaining("tirei seu número"));
+    expect(responder).toHaveBeenCalledWith(1, 7, expect.stringContaining("não te mando mais mensagem"));
   });
 
   it("vale também no número de operação", async () => {
@@ -767,5 +777,56 @@ describe("quando a pessoa pede pra parar", () => {
     await s.processar(evento({ ...COMERCIAL, content: "não quero pagar caro nisso" }));
     expect(registrarOptOut).not.toHaveBeenCalled();
     expect(atender).toHaveBeenCalled();
+  });
+});
+
+describe("achados da QA (28/09)", () => {
+  it("'ok' logo depois de horários oferecidos NÃO é despedida: vai pro robô", async () => {
+    const { s, atender } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      respostaSdr: RESPOSTA,
+      ultimaFalaNossa: "Tenho hoje às 14:00 ou amanhã às 09:00. Qual fica melhor?",
+    });
+    await s.processar(evento({ ...COMERCIAL, content: "Ta bom" }));
+    expect(atender).toHaveBeenCalled();
+  });
+
+  it("'me liga agora' ouve 'te liga', não 'te responde por aqui'", async () => {
+    const { s, responder } = montar({ identidade: DESCONHECIDO, ehLead: true, respostaSdr: RESPOSTA });
+    await s.processar(evento({ ...COMERCIAL, content: "me liga agora" }));
+    expect(responder.mock.calls[0]?.[2]).toContain("te liga");
+  });
+
+  it("opt-out com gente na conversa: registra calado e deixa nota", async () => {
+    const { s, registrarOptOut, responder, anotar } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      pausado: true,
+    });
+    await s.processar(evento({ ...COMERCIAL, content: "SAIR" }));
+    expect(registrarOptOut).toHaveBeenCalled();
+    expect(responder).not.toHaveBeenCalled();
+    expect(anotar).toHaveBeenCalledOnce();
+  });
+
+  it("aviso automático não cria lead", async () => {
+    const { s, leadCreate } = montar({ identidade: DESCONHECIDO });
+    await s.processar(
+      evento({ ...COMERCIAL, content: "Agradecemos sua mensagem. Não estamos disponíveis no momento." }),
+    );
+    expect(leadCreate).not.toHaveBeenCalled();
+  });
+
+  it("conversa resolvida devolve o robô (decisão do dono)", async () => {
+    const { s, leadUpdate } = montar({
+      leadDaConversa: { id: "lead-1", sdrPausadoEm: new Date(), primeiraRespostaHumanaEm: new Date() },
+    });
+    await s.processar({
+      event: "conversation_status_changed",
+      id: 7,
+      changed_attributes: [{ status: { previous_value: "open", current_value: "resolved" } }],
+    });
+    expect(leadUpdate.mock.calls[0]?.[0].data.sdrPausadoEm).toBeNull();
   });
 });

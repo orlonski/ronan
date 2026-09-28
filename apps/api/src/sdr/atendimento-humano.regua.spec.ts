@@ -79,3 +79,23 @@ describe("proximosHorarios", () => {
     expect(proximosHorarios([], H, sp("2026-09-28T09:00:00"))).toEqual([]);
   });
 });
+
+describe("proximosHorarios com preferência — QA 28/09", () => {
+  const grade = ["09:00", "10:30", "14:00", "16:00"];
+  it("pediu tarde: só tarde", () => {
+    expect(proximosHorarios(grade, H, sp("2026-09-28T07:00:00"), 2, 60, { periodo: "tarde" })).toEqual([
+      "hoje às 14:00",
+      "hoje às 16:00",
+    ]);
+  });
+  it("pediu amanhã de manhã: amanhã de manhã", () => {
+    expect(
+      proximosHorarios(grade, H, sp("2026-09-28T07:00:00"), 2, 60, { dia: "amanhã", periodo: "manha" }),
+    ).toEqual(["amanhã às 09:00", "amanhã às 10:30"]);
+  });
+  it("pediu quinta", () => {
+    expect(proximosHorarios(grade, H, sp("2026-09-28T07:00:00"), 1, 60, { dia: "quinta" })).toEqual([
+      "quinta às 09:00",
+    ]);
+  });
+});

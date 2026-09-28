@@ -13,7 +13,7 @@ import { decifrar } from "../common/cripto";
 import { trechoForaDoPortugues } from "../common/idioma-resposta";
 import { sanearResposta } from "../common/saneamento-resposta";
 import { segredoDeCripto } from "../common/segredo-cripto";
-import { promptSdr, type ContextoLead } from "./sdr.prompt";
+import { aberturaPadrao, promptSdr, type ContextoLead } from "./sdr.prompt";
 import { AtendimentoHumanoService } from "./atendimento-humano.service";
 import { empresaConhecida } from "./lead-inbound";
 import { TOOLS_SDR } from "./sdr.tools";
@@ -56,14 +56,79 @@ export function prometeContatoDeGente(texto: string): boolean {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+  // Frase a frase, e só a AFIRMATIVA: "prefere que um consultor te ligue, ou
+  // testar?" e "se depois quiser, é só pedir que um consultor te liga" são
+  // oferta, não promessa — e o simulador pegou as duas forçando repasse.
+  // Promessa de verdade é CONFIRMAÇÃO: sem pergunta na mensagem ("Combinado:
+  // um consultor te liga amanhã às 9h."). Com pergunta, é oferta ("um
+  // consultor te liga 10 min… quer agendar?") — e o simulador pegou essa
+  // forçando repasse.
+  if (/\?/.test(t) && !/\bcombinado\b/.test(t)) return false;
+  return (t.match(/(?:https?:\/\/\S+|[.,](?=\d)|[^.!?\n])+[.!?]?/g) ?? [t]).some(
+    (f) => !/\b(?:se|caso|quer|querer|prefere|pode\s+pedir|so\s+pedir|ou\s+voce)\b/.test(f) && prometeNaFrase(f),
+  );
+}
+
+function prometeNaFrase(t: string): boolean {
   return [
     /\b(?:te|lhe)\s+liga\b/,
     /\bvai\s+(?:te\s+)?ligar\b/,
     /\bliga\s+(?:pra|para)\s+(?:voce|vc)\b/,
     /\bvai\s+te\s+(?:chamar|responder|procurar)\b/,
-    /\b(?:fala|vai\s+falar)\s+com\s+(?:voce|vc)\s+por\s+aqui\b/,
-    /\bte\s+(?:chama|responde)\s+por\s+aqui\b/,
+    /\b(?:fala|vai\s+falar)\s+com\s+(?:voce|vc)\b/,
+    /\bte\s+(?:chama|responde)\b/,
+    /\b(?:continua|segue)\s+(?:o\s+)?(?:seu\s+)?atendimento\b/,
+    /\b(?:entra|entrar|vai\s+entrar)\s+em\s+contato\b/,
+    /\bte\s+(?:retorno|retorna|retornamos)\b/,
   ].some((p) => p.test(t));
+}
+
+/** A oferta de ligação/teste — pra contar quantas vezes ela já saiu. */
+const OFERTA = /\bte\s+ligue\b|\bliga[cç][aã]o\s+de\s+10\b|\btestar\s+sozinho\b|\bdias\s+gr[aá]tis\b/i;
+
+/**
+ * Travas de forma que o modelo ignora mesmo com regra no prompt — a QA de
+ * 28/09 contou a mesma oferta cinco vezes numa conversa e duas perguntas por
+ * mensagem em sete.
+ *
+ * - Oferta que já saiu duas vezes (ou foi recusada): a frase com oferta cai.
+ * - Mais de uma pergunta: fica só a última, que é a que pede o próximo passo.
+ *
+ * Exportada pra teste. Nunca devolve vazio: se cortar tudo, devolve o original.
+ */
+export function aparar(texto: string, ofertasAnteriores: number, recusouLigacao: boolean): string {
+  // Link e número inteiros: cortar no ponto de "movatruck.com.br" entregou um
+  // link quebrado no simulador (28/09), e "R$ 1.890,00" não termina frase.
+  const frases: string[] =
+    texto.match(/(?:https?:\/\/\S+|[.,](?=\d)|[^.!?\n])+[.!?]*\s*|\n+/g) ?? [texto];
+  let saida = frases;
+  if (ofertasAnteriores >= 2 || recusouLigacao) {
+    saida = saida.filter((f) => !(OFERTA.test(f) && (ofertasAnteriores >= 2 || /\blig/i.test(f))));
+  }
+  const perguntas = saida.filter((f) => /\?\s*$/.test(f.trim()));
+  if (perguntas.length > 1) {
+    const ultima = perguntas[perguntas.length - 1];
+    saida = saida.filter((f) => !/\?\s*$/.test(f.trim()) || f === ultima);
+  }
+  // Comprida demais pro celular (a QA mediu 6 linhas): ficam as primeiras
+  // frases até ~300 caracteres, e a pergunta final, se houver.
+  const semLink = (f: string) => f.replace(/https?:\/\/\S+/g, "").length;
+  if (saida.reduce((n, f) => n + semLink(f), 0) > 320) {
+    const pergunta = [...saida].reverse().find((f) => /\?\s*$/.test(f.trim()));
+    const curtas: string[] = [];
+    let n = pergunta ? semLink(pergunta) : 0;
+    for (const f of saida) {
+      if (f === pergunta) continue;
+      if (curtas.length > 0 && n + semLink(f) > 300) break;
+      curtas.push(f);
+      n += semLink(f);
+    }
+    saida = pergunta ? [...curtas, pergunta] : curtas;
+  }
+  const final = saida.join("").replace(/\n{3,}/g, "\n\n").trim();
+  if (final) return final;
+  // A resposta inteira era a oferta repetida: não repete, só acusa o recebimento.
+  return ofertasAnteriores >= 2 || recusouLigacao ? "Anotado." : texto;
 }
 
 /** Quanto da conversa entra no contexto. Mesma régua do agente do motorista. */
@@ -271,9 +336,12 @@ export class SdrService {
     // deduplicam comparando o texto da última mensagem com `mensagemAtual`, e
     // carimbar só um dos dois faria a pergunta do prospect chegar duas vezes.
     const { mensagens, atual } = await this.historico(leadId, mensagem);
+    // Já falamos com ele? Na primeira mensagem, silêncio nunca é resposta.
+    const jaFalamos = mensagens.some((m) => m.role === "assistant");
+    const oferta = await this.atendimento.oferta();
 
     const texto = await provider.processar({
-      systemText: promptSdr(contexto, await this.atendimento.oferta()),
+      systemText: promptSdr(contexto, oferta),
       tools: TOOLS_SDR,
       historico: mensagens,
       mensagemAtual: atual,
@@ -318,7 +386,14 @@ export class SdrService {
     // a decisão — exatamente o que chegou na pedreira.
     if (calar && !pediuHumano) {
       if (texto) await this.gravar(leadId, "SAIDA", `[descartada — decidiu não responder] ${texto}`);
-      return { texto: "", silencio: true, passarParaHumano: false, motivoHumano: null, ferramentas };
+      if (jaFalamos) {
+        return { texto: "", silencio: true, passarParaHumano: false, motivoHumano: null, ferramentas };
+      }
+      // Primeiro contato ("Ou", "ok", "👍"): o lead que chega nunca fica sem
+      // uma palavra. Vai a abertura fixa.
+      const abertura = aberturaPadrao(oferta);
+      await this.gravar(leadId, "SAIDA", abertura);
+      return { texto: abertura, silencio: false, passarParaHumano: false, motivoHumano: null, ferramentas };
     }
 
     // Raciocínio vazado ("a ferramenta me passou", "Returning to idle") não
@@ -332,7 +407,13 @@ export class SdrService {
       await this.gravar(leadId, "SAIDA", `[descartada — ${saneada.motivo}] ${texto}`);
       return null;
     }
-    const final = saneada?.ok ? saneada.texto : "";
+    const ofertasAnteriores = mensagens.filter((m) => m.role === "assistant" && OFERTA.test(m.content)).length;
+    const recusouLigacao = mensagens.some(
+      (m) =>
+        m.role === "user" &&
+        /n[aã]o\s+(?:quero|precisa|preciso)\b.*\b(?:lig|pessoa|ningu|consultor)/i.test(m.content),
+    );
+    const final = saneada?.ok ? aparar(saneada.texto, ofertasAnteriores, recusouLigacao) : "";
 
     // Prometeu contato de gente sem chamar a ferramenta? Vale a promessa.
     // A bateria pegou o MiniMax-M3 escrevendo "Combinado: Fernando te liga
@@ -446,12 +527,17 @@ export class SdrService {
       }
 
       case "oferecer_horarios": {
-        const horarios = await this.atendimento.horariosLivres();
+        const horarios = await this.atendimento.horariosLivres({
+          dia: typeof input.dia === "string" ? input.dia : undefined,
+          periodo: input.periodo === "manha" || input.periodo === "tarde" ? input.periodo : undefined,
+        });
         return horarios.length > 0
           ? { horarios }
           : {
               horarios: [],
-              instrucao: "Sem grade de horários: pergunte qual período fica bom (manhã ou tarde) e passe pra uma pessoa.",
+              instrucao:
+                "Nenhum horário nessa preferência. Chame passar_para_humano e diga: " +
+                "'Vou pedir pro consultor combinar esse horário com você por aqui.'",
             };
       }
 
