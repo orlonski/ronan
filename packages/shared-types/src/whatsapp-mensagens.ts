@@ -582,6 +582,10 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "Última mensagem: {{2}}",
       "",
       "{{3}}",
+      "",
+      // A Meta recusa template que começa ou TERMINA em variável (subcode
+      // 2388299) — a frase fixa no fim existe por isso.
+      "Toque no botão pra abrir a conversa.",
     ].join("\n"),
     exemplo: [
       "Transportes Silva (42 99999-8888)",
