@@ -145,3 +145,135 @@ export function ehPedidoDeParar(texto: string): boolean {
     .trim();
   return PEDIDOS_DE_PARAR.has(limpo) || PADROES_DE_PARAR.some((p) => p.test(limpo));
 }
+
+/** O texto sem acento, minúsculo e com espaço simples — a base das réguas abaixo. */
+function normalizar(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * É a mensagem de ausência automática do WhatsApp Business de outra empresa?
+ *
+ * Existe porque o robô respondia essas mensagens — e numa delas mandou o
+ * próprio raciocínio pro cliente. Uma transportadora que recebe nosso contato
+ * devolve "S A Carlesso Transportes agradece seu contato. Em breve
+ * retornaremos", e isso não é conversa: é a secretária eletrônica dela.
+ * Responder faz dois robôs conversarem e queima a primeira impressão.
+ */
+const PADROES_AUSENCIA: RegExp[] = [
+  /\bagradece(?:mos)?\s+(?:o\s+|seu\s+|sua\s+|pelo\s+|pela\s+)?(?:seu\s+|sua\s+)?(?:contato|mensagem)/,
+  /\bnao\s+estamos\s+disponiveis\b/,
+  /\bno\s+momento\s+(?:nao\s+)?(?:estamos|podemos|nos\s+encontramos)/,
+  /\bem\s+breve\s+(?:retornaremos|responderemos|entraremos)/,
+  /\bresponderemos\s+(?:assim\s+que|o\s+mais\s+breve|em\s+breve)/,
+  /\bmensagem\s+automatica\b/,
+  /\bresposta\s+automatica\b/,
+  /\bnosso\s+horario\s+de\s+atendimento\b/,
+  /\bfora\s+do\s+(?:nosso\s+)?horario\s+de\s+atendimento\b/,
+];
+
+export function ehRespostaAutomatica(texto: string): boolean {
+  const limpo = normalizar(texto);
+  return PADROES_AUSENCIA.some((p) => p.test(limpo));
+}
+
+/**
+ * A mensagem só fecha a conversa — emoji, "ok", "valeu", "👍"?
+ *
+ * O robô respondia 👍 com 👍, 😊 com 😊, e assim por diante, até a pessoa
+ * parar. Quem manda "ok" depois de receber a resposta não está pedindo nada.
+ * Quem chama decide se vale: é encerramento DEPOIS de uma fala nossa; como
+ * primeira mensagem da conversa, "oi" continua merecendo resposta.
+ */
+const ENCERRAMENTOS = new Set([
+  "ok",
+  "okay",
+  "blz",
+  "beleza",
+  "valeu",
+  "vlw",
+  "obrigado",
+  "obrigada",
+  "obg",
+  "brigado",
+  "brigada",
+  "ta bom",
+  "tabom",
+  "ta",
+  "certo",
+  "show",
+  "top",
+  "tmj",
+  "tamo junto",
+  "ate",
+  "ate mais",
+  "falou",
+  "flw",
+  "kkk",
+  "kkkk",
+  "kkkkk",
+  "rs",
+  "rsrs",
+  "haha",
+  "hahaha",
+  "nada kkk",
+  "nada kakakak",
+]);
+
+export function ehSoEncerramento(texto: string): boolean {
+  const semEmoji = texto
+    .replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}‍️]/gu, "")
+    .trim();
+  if (!semEmoji) return texto.trim().length > 0; // só emoji
+  const limpo = normalizar(semEmoji).replace(/[.!,;:?]+/g, "").trim();
+  return ENCERRAMENTOS.has(limpo) || /^k{3,}$/.test(limpo) || /^(?:ha){2,}$/.test(limpo);
+}
+
+/**
+ * A pessoa está pedindo pra falar com gente?
+ *
+ * Regra fixa, ANTES do modelo, pela mesma razão do opt-out: promessa que
+ * depende de a IA entender é promessa que falha. "QUEM VAI ME ATENDER", em caixa
+ * alta, chegou depois de o robô já ter dito que chamava alguém — e ele
+ * respondeu "Não tenho essa informação" e cumprimentou de novo.
+ *
+ * `nomesEquipe` vem da configuração: citar o Fernando pelo nome é pedido de
+ * falar com o Fernando.
+ */
+const PADROES_HUMANO: RegExp[] = [
+  /\b(?:falar|conversar|atendimento)\s+com\s+(?:um|uma|alguem|algum|uma\s+pessoa|um\s+humano|gente|atendente|vendedor|consultor|responsavel)\b/,
+  /\b(?:atendente|atendimento\s+humano|humano|pessoa\s+(?:de\s+verdade|real))\b/,
+  /\bquem\s+(?:vai|vem|que\s+vai)\s+(?:me\s+)?atender\b/,
+  /\bme\s+(?:liga|ligue|ligar|chama|chame)\b/,
+  /\b(?:pode|podem|quero\s+que)\s+(?:me\s+)?ligar\b/,
+  /\bvc\s+e\s+(?:um\s+)?robo\b.*\b(?:quero|prefiro)\s+(?:falar|gente|pessoa)/,
+];
+
+export function ehPedidoDeHumano(texto: string, nomesEquipe: readonly string[] = []): boolean {
+  const limpo = normalizar(texto);
+  if (PADROES_HUMANO.some((p) => p.test(limpo))) return true;
+  return nomesEquipe
+    .map((n) => normalizar(n))
+    .filter((n) => n.length >= 3)
+    .some((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(limpo));
+}
+
+/**
+ * "Pode ser", "sim", "quero" — logo depois de o robô oferecer chamar alguém.
+ *
+ * O caso real: "Vc é um robo" → robô oferece uma pessoa → "Pode ser". Sozinho,
+ * "pode ser" não é pedido de nada; depois da oferta, é o pedido mais claro que
+ * existe.
+ */
+const SIM = /^(?:sim|s|pode|pode ser|quero|claro|isso|ok|por favor|pf|pfv|bora|manda|pode sim|sim pode|sim por favor|quero sim|aceito)[.! ]*$/;
+const OFERTA_DE_HUMANO = /\b(?:chamar|chame|chamo|ligar|ligue|ligo|te\s+liga)\b.*\?|\bquer\s+(?:que|falar)\b.*\b(?:alguem|fernando|pessoa|equipe|ligue|chame|liga)\b/;
+
+export function aceitouOfertaDeHumano(texto: string, ultimaFalaNossa: string | null): boolean {
+  if (!ultimaFalaNossa) return false;
+  return SIM.test(normalizar(texto)) && OFERTA_DE_HUMANO.test(normalizar(ultimaFalaNossa));
+}

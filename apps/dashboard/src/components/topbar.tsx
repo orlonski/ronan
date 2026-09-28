@@ -166,7 +166,7 @@ export function IconeTipo({ tipo }: { tipo: string }) {
     return <TriangleAlert className={`${cls} text-red-600`} />;
   if (tipo === "problema-veiculo")
     return <Wrench className={`${cls} text-amber-600`} />;
-  if (tipo === "conta-auto-cadastro" || tipo === "lead-novo")
+  if (tipo === "conta-auto-cadastro" || tipo === "lead-novo" || tipo === "lead-precisa-humano")
     return <Building2 className={`${cls} text-emerald-600`} />;
   if (tipo === "nova-viagem")
     return <ClipboardCheck className={`${cls} text-blue-600`} />;

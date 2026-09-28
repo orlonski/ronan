@@ -11,6 +11,7 @@ import { comMarcadorDeGap, minutosEntre } from "../common/gap-conversa";
 import { BASE_URL_MINIMAX } from "../common/ia/provedor-ia";
 import { decifrar } from "../common/cripto";
 import { trechoForaDoPortugues } from "../common/idioma-resposta";
+import { sanearResposta } from "../common/saneamento-resposta";
 import { segredoDeCripto } from "../common/segredo-cripto";
 import { promptSdr, type ContextoLead } from "./sdr.prompt";
 import { empresaConhecida } from "./lead-inbound";
@@ -49,6 +50,13 @@ const JANELA_HORAS = 24;
 
 export type RespostaSdr = {
   texto: string;
+  /**
+   * Ele decidiu NÃO responder — aviso automático, "ok", emoji. Não é falha:
+   * quem chama não envia nada e não manda pra fila. Silêncio de propósito é
+   * diferente de silêncio por erro, e misturar os dois fazia o "ok" de alguém
+   * virar "Recebi sua mensagem e já chamei alguém da equipe".
+   */
+  silencio: boolean;
   /** O modelo pediu uma pessoa — quem chamou decide o que fazer com isso. */
   passarParaHumano: boolean;
   motivoHumano: string | null;
@@ -179,6 +187,7 @@ export class SdrService {
           frotaQtd: true,
           origem: true,
           optOut: true,
+          sdrPausadoEm: true,
         },
       }),
     );
@@ -189,6 +198,14 @@ export class SdrService {
     if (lead.optOut) {
       this.log.log(`Lead ${leadId} pediu pra não ser contatado — SDR não responde.`);
       return null;
+    }
+    // Uma pessoa assumiu (ou o robô já entregou): daqui pra frente o robô não
+    // escreve. Quem chama já confere antes — isto é a segunda tranca, porque
+    // um robô falando por cima do vendedor é o erro que o dono mais cobrou.
+    if (lead.sdrPausadoEm) {
+      this.log.log(`Lead ${leadId} está com gente desde ${lead.sdrPausadoEm.toISOString()} — SDR calado.`);
+      await this.gravar(leadId, "ENTRADA", mensagem);
+      return { texto: "", silencio: true, passarParaHumano: false, motivoHumano: null, ferramentas: [] };
     }
 
     const contexto: ContextoLead = {
@@ -223,6 +240,7 @@ export class SdrService {
     await this.gravar(leadId, "ENTRADA", mensagem);
 
     let pediuHumano: string | null = null;
+    let calar = false;
     const ferramentas: string[] = [];
 
     // A ENTRADA já foi gravada acima, então ela é a última linha do histórico.
@@ -243,6 +261,7 @@ export class SdrService {
         if (nome === "passar_para_humano") {
           pediuHumano = String((input as { motivo?: unknown }).motivo ?? "sem motivo");
         }
+        if (nome === "nao_responder") calar = true;
         return saida;
       },
     });
@@ -265,10 +284,32 @@ export class SdrService {
       return null;
     }
 
-    if (texto) await this.gravar(leadId, "SAIDA", texto);
+    // Ele escolheu ficar calado. Se ainda assim escreveu alguma coisa, vale o
+    // silêncio: a ferramenta é a decisão, o texto costuma ser ele explicando
+    // a decisão — exatamente o que chegou na pedreira.
+    if (calar && !pediuHumano) {
+      if (texto) await this.gravar(leadId, "SAIDA", `[descartada — decidiu não responder] ${texto}`);
+      return { texto: "", silencio: true, passarParaHumano: false, motivoHumano: null, ferramentas };
+    }
+
+    // Raciocínio vazado ("a ferramenta me passou", "Returning to idle") não
+    // sai. Mesma lógica do idioma: grava pra auditoria e devolve null, que
+    // manda pra uma pessoa.
+    const saneada = texto ? sanearResposta(texto) : null;
+    if (saneada && !saneada.ok) {
+      this.log.warn(
+        `Resposta do ${provider.nome} (${modelo}) com ${saneada.motivo} não foi enviada: "${saneada.trecho}"`,
+      );
+      await this.gravar(leadId, "SAIDA", `[descartada — ${saneada.motivo}] ${texto}`);
+      return null;
+    }
+    const final = saneada?.ok ? saneada.texto : "";
+
+    if (final) await this.gravar(leadId, "SAIDA", final);
 
     return {
-      texto,
+      texto: final,
+      silencio: false,
       passarParaHumano: pediuHumano !== null,
       motivoHumano: pediuHumano,
       ferramentas,
@@ -366,6 +407,9 @@ export class SdrService {
         return { ok: true };
       }
 
+      case "nao_responder":
+        return { ok: true, instrucao: "Não escreva nada nesta resposta." };
+
       case "registrar_opt_out": {
         // Reusa o caminho da prospecção: a supressão vale pra todos os canais e
         // sobrevive ao lead ser reimportado do RNTRC.
@@ -379,6 +423,22 @@ export class SdrService {
       default:
         return { erro: "ferramenta desconhecida" };
     }
+  }
+
+  /**
+   * Guarda o que o prospect disse mesmo quando o robô não responde.
+   *
+   * A conversa com gente também precisa ficar na ficha — sem isto, o lead que
+   * pediu "quero falar com o Fernando" sumia do histórico no exato momento em
+   * que ficou importante.
+   */
+  registrarEntrada(leadId: string, texto: string) {
+    return this.gravar(leadId, "ENTRADA", texto);
+  }
+
+  /** Uma fala nossa, dita fora do modelo (repasse, confirmação fixa). */
+  registrarSaida(leadId: string, texto: string) {
+    return this.gravar(leadId, "SAIDA", texto);
   }
 
   private gravar(leadId: string, direcao: "ENTRADA" | "SAIDA", conteudo: string) {

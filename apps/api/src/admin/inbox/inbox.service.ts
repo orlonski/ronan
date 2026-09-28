@@ -22,6 +22,9 @@ export type TipoNotificacaoAdmin =
   | "conta-auto-cadastro"
   // Alguém pediu contato pelo formulário do site. Também é da plataforma.
   | "lead-novo"
+  // O robô do WhatsApp comercial entregou um lead pra gente (ele pediu uma
+  // pessoa, ou o robô não soube). Da plataforma: é venda esperando.
+  | "lead-precisa-humano"
   // Uma empresa chegou ao fim do teste e pediu pra continuar. Vai pro sininho
   // da PLATAFORMA — é o momento mais quente do funil, e esperar o cliente
   // insistir é como se perde uma venda que já estava dada.

@@ -19,6 +19,20 @@ const TIMEOUT_MS = 10_000;
 /** Etiqueta que marca conversa que o robô não deu conta. */
 export const LABEL_PRECISA_HUMANO = "precisa-humano";
 
+/**
+ * A marca que o robô põe em toda mensagem que manda.
+ *
+ * Existe porque o token da API é de um AGENTE de verdade (o do dono): no
+ * Chatwoot, o que o robô escreve aparece assinado pela mesma pessoa que também
+ * atende na mão. Sem a marca, "saiu uma mensagem do Diego" não diz se foi o
+ * robô ou o Diego — e é exatamente essa pergunta que decide se o robô tem que
+ * calar a boca.
+ */
+export const MARCA_ROBO = "movatruck_robo";
+
+/** Quanto tempo lembramos dos ids que acabamos de mandar. */
+const MEMORIA_ENVIADAS_MS = 15 * 60_000;
+
 @Injectable()
 export class ChatwootClientService {
   private readonly log = new Logger("ChatwootClient");
@@ -37,6 +51,12 @@ export class ChatwootClientService {
   /** Cache do que foi perguntado ao Chatwoot. `undefined` = ainda não perguntei. */
   private contaDescoberta: number | null | undefined;
   private inboxDescoberto: number | null | undefined;
+  /**
+   * Ids das mensagens que ESTE processo mandou, com quando. Segunda prova, ao
+   * lado da `MARCA_ROBO`: se o Chatwoot um dia descartar o atributo, o id
+   * ainda denuncia que a mensagem foi nossa.
+   */
+  private readonly enviadas = new Map<number, number>();
 
   constructor(config: ConfigService) {
     this.base = (config.get<string>("CHATWOOT_URL") ?? "").trim().replace(/\/+$/, "");
@@ -239,11 +259,73 @@ export class ChatwootClientService {
     return corpo?.source_id ?? corpo?.payload?.source_id ?? null;
   }
 
-  /** Responde na conversa como agente. */
+  /** Responde na conversa como agente — sempre com a marca do robô. */
   async responder(contaId: number, conversaId: number, texto: string): Promise<boolean> {
-    return this.chamar(`/api/v1/accounts/${contaId}/conversations/${conversaId}/messages`, {
-      content: texto,
-      message_type: "outgoing",
+    const r = await this.requisitar(
+      `/api/v1/accounts/${contaId}/conversations/${conversaId}/messages`,
+      {
+        metodo: "POST",
+        corpo: {
+          content: texto,
+          message_type: "outgoing",
+          content_attributes: { [MARCA_ROBO]: true },
+        },
+      },
+    );
+    const id = (r.corpo as { id?: number } | null)?.id;
+    if (r.ok && typeof id === "number") this.lembrarEnviada(id);
+    return r.ok;
+  }
+
+  /**
+   * Nota privada na conversa: só a equipe vê. Leva a marca do robô, senão o
+   * próprio webhook a leria como gente escrevendo e calaria o robô.
+   */
+  async anotar(contaId: number, conversaId: number, texto: string): Promise<boolean> {
+    const r = await this.requisitar(
+      `/api/v1/accounts/${contaId}/conversations/${conversaId}/messages`,
+      {
+        metodo: "POST",
+        corpo: {
+          content: texto,
+          message_type: "outgoing",
+          private: true,
+          content_attributes: { [MARCA_ROBO]: true },
+        },
+      },
+    );
+    const id = (r.corpo as { id?: number } | null)?.id;
+    if (r.ok && typeof id === "number") this.lembrarEnviada(id);
+    return r.ok;
+  }
+
+  private lembrarEnviada(id: number): void {
+    const agora = Date.now();
+    this.enviadas.set(id, agora);
+    for (const [k, quando] of this.enviadas) {
+      if (agora - quando > MEMORIA_ENVIADAS_MS) this.enviadas.delete(k);
+    }
+  }
+
+  /**
+   * Esta mensagem de saída foi o robô que mandou?
+   *
+   * `false` significa: foi uma PESSOA, pela tela do Chatwoot. É o sinal que
+   * tira o robô da conversa.
+   */
+  foiORobo(mensagem: { id?: number; content_attributes?: unknown }): boolean {
+    const attrs = mensagem.content_attributes as Record<string, unknown> | null | undefined;
+    if (attrs && attrs[MARCA_ROBO]) return true;
+    return typeof mensagem.id === "number" && this.enviadas.has(mensagem.id);
+  }
+
+  /**
+   * Entrega a conversa a um time. É o que faz o próprio Chatwoot notificar
+   * quem está no time — push no celular de quem tem o app.
+   */
+  async atribuirAoTime(contaId: number, conversaId: number, timeId: number): Promise<boolean> {
+    return this.chamar(`/api/v1/accounts/${contaId}/conversations/${conversaId}/assignments`, {
+      team_id: timeId,
     });
   }
 
@@ -254,13 +336,23 @@ export class ChatwootClientService {
    * As duas chamadas são independentes: falhar a etiqueta não pode impedir o
    * repasse pro humano, que é o que importa.
    */
-  async passarParaHumano(contaId: number, conversaId: number): Promise<void> {
+  async passarParaHumano(
+    contaId: number,
+    conversaId: number,
+    timeId?: number | null,
+    etiquetasExtras: string[] = [],
+  ): Promise<void> {
     await this.chamar(`/api/v1/accounts/${contaId}/conversations/${conversaId}/toggle_status`, {
       status: "open",
     });
+    // O endpoint SUBSTITUI a lista de etiquetas — a extra vai junto na mesma
+    // chamada, ou uma apagaria a outra.
     await this.chamar(`/api/v1/accounts/${contaId}/conversations/${conversaId}/labels`, {
-      labels: [LABEL_PRECISA_HUMANO],
+      labels: [LABEL_PRECISA_HUMANO, ...etiquetasExtras],
     });
+    // Sem time a etiqueta ficava lá e ninguém olhava — foi o que deixou dez
+    // conversas esperando desde 09/09. Com time, o Chatwoot avisa.
+    if (timeId) await this.atribuirAoTime(contaId, conversaId, timeId);
   }
 
   /**

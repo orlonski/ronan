@@ -27,7 +27,8 @@ export type TipoNotificacaoAdmin =
   // Os dois da PLATAFORMA. Existiam no backend e não aqui, então caíam no
   // fallback e apareciam no sininho como slug cru ("conta-auto-cadastro").
   | "conta-auto-cadastro"
-  | "lead-novo";
+  | "lead-novo"
+  | "lead-precisa-humano";
 
 export type AdminNotificacao = {
   id: string;

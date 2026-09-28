@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Logger } from "@nestjs/common";
+import { provedorDoModelo } from "../../../common/ia/provedor-ia";
 import type {
   AgentProcessarArgs,
   AgentProvider,
@@ -89,6 +90,14 @@ export class AnthropicProvider implements AgentProvider {
         // Ver comentário no provider do Gemini: consistência vale mais que
         // variedade num agente que responde sobre dado de banco.
         temperature: 0.2,
+        // O raciocínio do MiniMax vinha junto do texto e chegou num cliente
+        // ("Returning to idle / awaiting real inbound"). Pedir desligado fecha a
+        // porta do lado de lá; `sanearResposta` fecha do lado de cá. O
+        // parâmetro não existe assim na Anthropic, daí ser condicional — mesmo
+        // molde do leitor de ticket.
+        ...(provedorDoModelo(modelo) === "minimax"
+          ? ({ thinking: { type: "disabled" } } as unknown as Record<string, unknown>)
+          : {}),
         system,
         tools: anthropicTools,
         messages,
@@ -106,7 +115,11 @@ export class AnthropicProvider implements AgentProvider {
           .map((b) => b.text)
           .join("\n")
           .trim();
-        return textoFinal || "Não consegui formular uma resposta. Tenta de novo?";
+        // Vazio é resposta: quem chama manda pra uma pessoa. Uma frase de
+        // desculpa aqui ia pro WhatsApp como se fosse atendimento, e "Não
+        // consegui formular uma resposta. Tenta de novo?" repetido duas vezes
+        // já chegou num motorista.
+        return textoFinal;
       }
 
       const toolUses = resp.content.filter(
@@ -139,7 +152,8 @@ export class AnthropicProvider implements AgentProvider {
       messages.push({ role: "user", content: toolResults });
     }
 
-    return "Processei várias coisas mas não consegui chegar numa resposta final. Tenta perguntar de outro jeito.";
+    this.log.warn(`${MAX_TOOL_LOOPS} voltas de ferramenta sem resposta final — devolvendo vazio`);
+    return "";
   }
 }
 

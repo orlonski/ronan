@@ -112,7 +112,8 @@ export class GeminiProvider implements AgentProvider {
 
       if (calls.length === 0) {
         const texto = (resp.text ?? "").trim();
-        return texto || "Não consegui formular uma resposta. Tenta de novo?";
+        // Vazio vai pra uma pessoa — ver o provider da Anthropic.
+        return texto;
       }
 
       const modelParts: Part[] = calls.map((c) => ({
@@ -147,7 +148,7 @@ export class GeminiProvider implements AgentProvider {
       contents.push({ role: "user", parts: responseParts });
     }
 
-    return "Processei várias coisas mas não consegui chegar numa resposta final. Tenta perguntar de outro jeito.";
+    return "";
   }
 
   /**

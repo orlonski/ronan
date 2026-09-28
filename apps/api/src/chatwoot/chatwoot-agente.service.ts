@@ -11,42 +11,77 @@ import { LeadChatwootService } from "../prospeccao/lead-chatwoot.service";
 import {
   EMPRESA_A_DESCOBRIR,
   ORIGEM_INBOUND,
+  aceitouOfertaDeHumano,
+  ehPedidoDeHumano,
   ehPedidoDeParar,
+  ehRespostaAutomatica,
+  ehSoEncerramento,
   nomeDePessoa,
   telefoneDaCasa,
 } from "../sdr/lead-inbound";
 import { ProspeccaoService } from "../prospeccao/prospeccao.service";
+import { AtendimentoHumanoService } from "../sdr/atendimento-humano.service";
 
 /**
  * O agente que atende dentro do Chatwoot.
  *
- * **Quem escreve decide o que o agente pode fazer.** Telefone que bate com um
- * motorista aprovado ganha o agente com ferramentas do sistema; qualquer outro
- * número é tratado como prospect e vai pro SDR, que não tem ferramenta nenhuma
- * de dado de empresa. A fronteira é de segurança, não de organização: um agente
- * único com todas as ferramentas responderia "sua viagem de ontem foi pra Ponta
- * Grossa" pra quem digitasse um número por sorte.
+ * **O canal decide quem atende.** No número COMERCIAL, o SDR (sem ferramenta
+ * nenhuma de dado de empresa). No número de OPERAÇÃO, motorista aprovado fala
+ * com o agente do sistema e todo o resto vai pra uma pessoa — o SDR não entra
+ * ali: em setembro/2026 um motorista perguntando de ticket com divergência
+ * recebeu doze perguntas de venda, até dizer "Eu sou só motorista".
+ *
+ * **Gente na conversa, robô fora.** Qualquer gesto de uma pessoa no Chatwoot —
+ * escrever, deixar nota, atribuir, etiquetar, resolver — tira o robô daquela
+ * conversa até alguém devolver na ficha do lead. E pedido de gente ("quero
+ * falar com o Fernando", "quem vai me atender?") é regra fixa antes do modelo.
  *
  * Nada aqui manda mensagem pelo `EnvioWhatsappService`: quem fala com o
  * WhatsApp é o Chatwoot, dono do canal. Responder pelos dois caminhos entregaria
  * a mesma frase duas vezes ao motorista, e uma delas fora da conversa.
  */
 
-/** Resposta pra número que o sistema não conhece. Curta e sem promessa. */
-const TEXTO_DESCONHECIDO =
-  "Oi! Aqui é a Movatruck. Recebi sua mensagem e já chamei alguém da equipe pra te responder.";
+/**
+ * Quanto esperar por mais mensagens da mesma pessoa antes de responder.
+ *
+ * Quem digita "oi", "tudo bem?" e "quero saber o preço" em três balões recebia
+ * três respostas — cada balão é um webhook, e os três corriam em paralelo.
+ * Esperando um pouco, só a ÚLTIMA responde, lendo as três no histórico.
+ */
+const ESPERA_RAJADA_MS = 5_000;
+
+type AtributoMudado = Record<string, { previous_value?: unknown; current_value?: unknown }>;
 
 type EventoChatwoot = {
   event?: string;
+  /** Em `message_created`, o id da MENSAGEM; em `conversation_*`, o da CONVERSA. */
+  id?: number;
   message_type?: string;
   content?: string;
+  private?: boolean;
+  content_attributes?: unknown;
   conversation?: { id?: number; status?: string };
   account?: { id?: number };
-  // `id` é o CONTATO no Chatwoot (não o remetente da mensagem): é por ele
-  // que a ficha do lead volta pra barra lateral do atendimento.
-  sender?: { id?: number; phone_number?: string; identifier?: string; name?: string };
+  // Em mensagem de entrada, `id` é o CONTATO no Chatwoot (não o remetente da
+  // mensagem): é por ele que a ficha do lead volta pra barra lateral do
+  // atendimento. Em mensagem de saída, é o agente que escreveu.
+  sender?: { id?: number; phone_number?: string; identifier?: string; name?: string; type?: string };
   inbox?: { id?: number; name?: string };
+  /** Só nos eventos de conversa: o que mudou, chave → antes/depois. */
+  changed_attributes?: AtributoMudado[] | null;
+  status?: string;
 };
+
+/**
+ * Os atributos de conversa que só uma PESSOA muda.
+ *
+ * Fica de fora o que o próprio Chatwoot mexe sozinho a cada mensagem
+ * (`waiting_since`, `first_reply_created_at`, `last_activity_at`): sem esse
+ * filtro, a primeira resposta do robô já contaria como "gente assumiu" e ele
+ * se calaria depois de uma frase.
+ */
+const GESTOS_HUMANOS = new Set(["assignee_id", "team_id", "label_list", "priority", "status"]);
+
 
 /**
  * Onde a conversa mora no Chatwoot. Anda junto pelo fluxo porque é o que liga
@@ -71,6 +106,11 @@ export class ChatwootAgenteService {
    */
   private readonly inboxComercial: number | null;
 
+  /** Espera da rajada. Campo, e não constante, pra teste rodar sem relógio. */
+  esperaRajadaMs = ESPERA_RAJADA_MS;
+  /** A última mensagem de cada lead — quem chegou por último responde. */
+  private readonly ultimaDoLead = new Map<string, symbol>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessao: SessaoService,
@@ -81,6 +121,7 @@ export class ChatwootAgenteService {
     private readonly leadChatwoot: LeadChatwootService,
     private readonly prospeccao: ProspeccaoService,
     config: ConfigService,
+    private readonly atendimento: AtendimentoHumanoService,
   ) {
     const bruto = Number(config.get<string>("CHATWOOT_INBOX_COMERCIAL"));
     this.inboxComercial = Number.isInteger(bruto) && bruto > 0 ? bruto : null;
@@ -103,9 +144,18 @@ export class ChatwootAgenteService {
   }
 
   private async tratar(evento: EventoChatwoot): Promise<void> {
-    // Só mensagem que ENTROU. `outgoing` é o que nós mesmos acabamos de
-    // mandar — tratar isso seria o robô conversando consigo mesmo em loop.
-    if (evento.event !== "message_created" || evento.message_type !== "incoming") return;
+    if (evento.event === "conversation_updated" || evento.event === "conversation_status_changed") {
+      await this.gestoNaConversa(evento);
+      return;
+    }
+    if (evento.event !== "message_created") return;
+    // Saída: ou é o robô (ignora — tratar seria ele conversando consigo mesmo),
+    // ou é uma PESSOA escrevendo pela tela, e aí o robô sai da conversa.
+    if (evento.message_type === "outgoing") {
+      await this.falaDaEquipe(evento);
+      return;
+    }
+    if (evento.message_type !== "incoming") return;
 
     const texto = (evento.content ?? "").trim();
     const conversaId = evento.conversation?.id;
@@ -145,9 +195,10 @@ export class ChatwootAgenteService {
     }
 
     // Áudio e foto ainda não passam por aqui. Fingir que entendeu seria pior
-    // que entregar pra uma pessoa que entende.
+    // que entregar pra uma pessoa que entende — mas avisando: o áudio que
+    // chegou em 14/09 ficou sem uma palavra de volta.
     if (!texto) {
-      await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+      await this.avisarFilaHumana(ondeConversa, "operação: mídia sem texto", { canal: "operacao" });
       return;
     }
 
@@ -161,30 +212,46 @@ export class ChatwootAgenteService {
       // código de convite morreria na fila humana e ninguém novo se vincularia.
       if (await this.tentarVincular(texto, telefone, contaChatwoot, conversaId)) return;
 
-      // É um PROSPECT: alguém que a prospecção já conhece, ou que viu o site,
-      // o Instagram, ou que um cliente indicou. Resolver o lead antes de
-      // mandar pra fila humana é o que evita a conversa sumir — até aqui ela
-      // virava ticket no atendimento e o lado comercial nunca ficava sabendo
-      // que a empresa tinha procurado a gente.
-      const leadId = await this.resolverLead(telefone, nomeContato, texto, ondeConversa);
-
-      // "SAIR" tem que funcionar de verdade. É o que a gente promete no fim de
-      // toda mensagem de prospecção, e promessa de opt-out que depende de
-      // alguém ler o ticket é promessa quebrada.
+      // "SAIR" tem que funcionar de verdade, em qualquer canal.
       if (await this.pararDeContatar(texto, telefone, contaChatwoot, conversaId)) return;
 
-      // SDR ligado: quem responde é o atendimento comercial. `null` aqui não é
-      // mais "não está na base" — é opt-out ou falha; nos dois casos a
-      // conversa segue pro caminho de sempre, a fila humana.
-      if (leadId && (await this.atenderComoSdr(leadId, texto, contaChatwoot, conversaId))) {
+      // A secretária eletrônica de outra empresa não é conversa. Responder faz
+      // dois robôs conversarem — e foi respondendo uma dessas que o nosso
+      // mandou o próprio raciocínio pra uma pedreira.
+      if (ehRespostaAutomatica(texto)) {
+        await this.resolverLead(telefone, nomeContato, texto, ondeConversa, { criar: false });
+        this.log.log(`aviso automático de ausência na conversa ${conversaId} — sem resposta`);
         return;
       }
 
+      // Número de OPERAÇÃO: quem escreve aqui é motorista, cliente, balança —
+      // gente que o sistema deveria conhecer e não reconheceu. Nunca o SDR.
+      //
+      // Lead que JÁ existe (prospect que a gente procurou por este número)
+      // ganha o registro e vai pro comercial; número sem lead nenhum não vira
+      // lead — foi assim que motoristas da Schaba entraram na lista de
+      // captação como "Contato pelo WhatsApp".
+      const leadId = await this.resolverLead(telefone, nomeContato, texto, ondeConversa, {
+        criar: false,
+      });
+      const motorista = leadId ? null : await this.sessao.motoristaPorCadastro(telefone);
+      if (motorista) {
+        await this.chatwoot.anotar(
+          contaChatwoot,
+          conversaId,
+          `Motorista cadastrado: ${motorista.nome}${motorista.conta ? ` (${motorista.conta})` : ""}. ` +
+            "O WhatsApp dele ainda não está vinculado, então o robô não respondeu.",
+        );
+      }
       await this.avisarFilaHumana(
-        contaChatwoot,
-        conversaId,
-        `número não reconhecido — conversa ${conversaId}`,
-        leadId,
+        ondeConversa,
+        `operação: ${motorista ? "motorista sem vínculo" : "número não reconhecido"} — conversa ${conversaId}`,
+        {
+          canal: leadId ? "comercial" : "operacao",
+          leadId,
+          ultimaFala: texto,
+          etiqueta: motorista ? "motorista" : undefined,
+        },
       );
       return;
     }
@@ -216,7 +283,11 @@ export class ChatwootAgenteService {
         if (cfg.mensagemInativo?.trim()) {
           await this.chatwoot.responder(contaChatwoot, conversaId, cfg.mensagemInativo);
         }
-        await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+        await this.chatwoot.passarParaHumano(
+          contaChatwoot,
+          conversaId,
+          await this.atendimento.timeDoCanal("operacao"),
+        );
         return;
       }
 
@@ -252,10 +323,17 @@ export class ChatwootAgenteService {
    *
    * Sem agente do motorista, sem código de convite: só funil e SDR. Aqui todo
    * número desconhecido é prospect por definição — é o número que sai no
-   * Instagram e no site. Quem o SDR não atende (desligado, sem chave de IA,
-   * opt-out) vai pra fila humana com uma palavra — nunca em silêncio, porque
-   * silêncio no WhatsApp é a forma mais rápida de perder uma venda que já
-   * tinha chegado.
+   * Instagram e no site.
+   *
+   * A ordem importa, e cada degrau é uma lição de setembro/2026:
+   * 1. parar é parar (opt-out);
+   * 2. aviso automático de outra empresa não se responde;
+   * 3. conversa com gente → robô calado;
+   * 4. "ok"/emoji depois de uma fala nossa não se responde;
+   * 5. pedido de gente → frase com nome e prazo, alerta, e o robô sai;
+   * 6. só então o SDR.
+   * Quem o SDR não atende (desligado, sem chave, resposta recusada) vai pra
+   * uma pessoa com uma palavra — nunca em silêncio.
    */
   private async atenderNoComercial(
     texto: string,
@@ -265,13 +343,16 @@ export class ChatwootAgenteService {
   ): Promise<void> {
     const { contaId: contaChatwoot, conversaId } = onde;
 
-    // Áudio, foto e figurinha chegam com `content` vazio. O guard geral de
-    // mensagem sem texto mora depois do desvio pra cá, então sem isto um áudio
-    // seguia adiante: criava lead com resumo em branco, gravava uma linha vazia
-    // no histórico e mandava mensagem vazia pro modelo, que a recusa. O
-    // prospect ficava esperando uma resposta que nunca vinha.
+    // Áudio, foto e figurinha chegam com `content` vazio. O modelo não ouve
+    // áudio: vai pra uma pessoa, com aviso — ou em silêncio, se já tem gente.
     if (!texto) {
-      await this.avisarFilaHumana(contaChatwoot, conversaId, `comercial: mídia sem texto`);
+      const leadId = telefone ? await this.leadDoTelefone(telefone) : null;
+      if (leadId && (await this.comGente(leadId))) return;
+      await this.avisarFilaHumana(onde, "comercial: mídia sem texto", {
+        canal: "comercial",
+        leadId,
+        ultimaFala: "(mandou áudio ou foto)",
+      });
       return;
     }
 
@@ -279,14 +360,187 @@ export class ChatwootAgenteService {
 
     if (await this.pararDeContatar(texto, telefone, contaChatwoot, conversaId)) return;
 
-    if (leadId && (await this.atenderComoSdr(leadId, texto, contaChatwoot, conversaId))) return;
+    if (ehRespostaAutomatica(texto)) {
+      this.log.log(`aviso automático de ausência na conversa ${conversaId} — sem resposta`);
+      return;
+    }
 
-    await this.avisarFilaHumana(
-      contaChatwoot,
-      conversaId,
-      `comercial: conversa ${conversaId}`,
+    if (leadId && (await this.comGente(leadId))) {
+      // Gente cuidando: o robô só guarda o que ele disse, pra ficha contar a
+      // conversa inteira.
+      await this.sdr.registrarEntrada(leadId, texto);
+      this.log.log(`conversa ${conversaId} está com gente — robô calado`);
+      return;
+    }
+
+    const ultimaFalaNossa = leadId ? await this.ultimaFalaNossa(leadId) : null;
+
+    if (leadId && ultimaFalaNossa && ehSoEncerramento(texto)) {
+      await this.sdr.registrarEntrada(leadId, texto);
+      this.log.log(`"${texto}" encerra a conversa ${conversaId} — sem resposta`);
+      return;
+    }
+
+    const nomes = await this.atendimento.nomesDaEquipe();
+    if (ehPedidoDeHumano(texto, nomes) || aceitouOfertaDeHumano(texto, ultimaFalaNossa)) {
+      if (leadId) await this.sdr.registrarEntrada(leadId, texto);
+      await this.avisarFilaHumana(onde, `comercial: pediu gente — conversa ${conversaId}`, {
+        canal: "comercial",
+        leadId,
+        ultimaFala: texto,
+        situacao: "Pediu pra falar com uma pessoa.",
+      });
+      return;
+    }
+
+    if (leadId) {
+      // Mensagem em rajada: só a última responde, lendo as outras no histórico.
+      if (!(await this.souAUltima(leadId))) {
+        await this.sdr.registrarEntrada(leadId, texto);
+        return;
+      }
+      // Durante a espera alguém pode ter assumido.
+      if (await this.comGente(leadId)) {
+        await this.sdr.registrarEntrada(leadId, texto);
+        return;
+      }
+      if (await this.atenderComoSdr(leadId, texto, onde)) return;
+    }
+
+    await this.avisarFilaHumana(onde, `comercial: conversa ${conversaId}`, {
+      canal: "comercial",
       leadId,
+      ultimaFala: texto,
+      situacao: "O robô não respondeu — precisa de uma pessoa.",
+    });
+  }
+
+  /**
+   * Uma PESSOA escreveu na conversa pela tela do Chatwoot.
+   *
+   * O token da API é de um agente de verdade, então "saiu mensagem do Diego"
+   * pode ser o robô ou o Diego. `foiORobo` separa — e se foi gente, o robô sai
+   * da conversa na hora. Mensagem pública conta como a primeira resposta
+   * humana (é o que tira o lead de "esperando atendente"); nota privada só
+   * cala o robô.
+   */
+  private async falaDaEquipe(evento: EventoChatwoot): Promise<void> {
+    if (this.chatwoot.foiORobo(evento)) return;
+    const conversaId = evento.conversation?.id;
+    if (!conversaId) return;
+    const lead = await this.leadDaConversa(conversaId);
+    if (!lead) return;
+
+    const agora = new Date();
+    await comoSistema(() =>
+      this.prisma.lead.update({
+        where: { id: lead.id },
+        data: {
+          ...(lead.sdrPausadoEm ? {} : { sdrPausadoEm: agora }),
+          ...(!evento.private && !lead.primeiraRespostaHumanaEm
+            ? { primeiraRespostaHumanaEm: agora }
+            : {}),
+        },
+      }),
     );
+    if (!evento.private && evento.content?.trim()) {
+      const quem = evento.sender?.name?.trim() || "Equipe";
+      await this.sdr.registrarSaida(lead.id, `[${quem}] ${evento.content.trim()}`);
+    }
+    this.log.log(
+      `${evento.private ? "nota" : "mensagem"} de gente na conversa ${conversaId} — robô fora`,
+    );
+  }
+
+  /**
+   * Atribuir, etiquetar, mudar prioridade, resolver: gesto de gente na
+   * conversa, e o robô sai dela.
+   *
+   * O Chatwoot não diz QUEM fez a mudança. Os únicos gestos que o nosso próprio
+   * código faz (abrir, etiquetar `precisa-humano`, atribuir ao time) acontecem
+   * no repasse — quando o robô já está saindo de qualquer jeito.
+   */
+  private async gestoNaConversa(evento: EventoChatwoot): Promise<void> {
+    const conversaId = evento.id;
+    if (!conversaId) return;
+
+    const mudancas = (evento.changed_attributes ?? []).flatMap((m) => Object.entries(m ?? {}));
+    const gesto = mudancas.find(([chave, valor]) => {
+      if (!GESTOS_HUMANOS.has(chave)) return false;
+      const atual = valor?.current_value;
+      // Desatribuir ou tirar etiqueta não é assumir; reabrir também não.
+      if (chave === "status") return atual === "resolved" || atual === "snoozed";
+      if (chave === "label_list") return Array.isArray(atual) ? atual.length > 0 : Boolean(atual);
+      return atual !== null && atual !== undefined && atual !== "";
+    });
+    if (!gesto) return;
+
+    const lead = await this.leadDaConversa(conversaId);
+    if (!lead || lead.sdrPausadoEm) return;
+    await this.marcarHumanoAssumiu(lead.id);
+    this.log.log(`conversa ${conversaId}: ${gesto[0]} mudou — robô fora`);
+  }
+
+  private leadDaConversa(conversaId: number) {
+    return comoSistema(() =>
+      this.prisma.lead.findFirst({
+        where: { chatwootConversaId: conversaId },
+        select: { id: true, sdrPausadoEm: true, primeiraRespostaHumanaEm: true },
+        orderBy: { atualizadoEm: "desc" },
+      }),
+    );
+  }
+
+  /** O lead deste telefone, sem registrar nada. */
+  private async leadDoTelefone(telefone: string): Promise<string | null> {
+    const numero = telefoneDaCasa(telefone);
+    const lead = await comoSistema(() =>
+      this.prisma.lead.findFirst({
+        where: { telefone: { endsWith: numero.slice(-8) } },
+        select: { id: true },
+        orderBy: { criadoEm: "asc" },
+      }),
+    );
+    return lead?.id ?? null;
+  }
+
+  /** Tem gente cuidando desta conversa? Então o robô não fala. */
+  private async comGente(leadId: string): Promise<boolean> {
+    const lead = await comoSistema(() =>
+      this.prisma.lead.findUnique({ where: { id: leadId }, select: { sdrPausadoEm: true } }),
+    );
+    return Boolean(lead?.sdrPausadoEm);
+  }
+
+  /** A última coisa que NÓS dissemos a ele nas últimas 24h, ou `null`. */
+  private async ultimaFalaNossa(leadId: string): Promise<string | null> {
+    const m = await comoSistema(() =>
+      this.prisma.mensagemLead.findFirst({
+        where: {
+          leadId,
+          direcao: "SAIDA",
+          criadoEm: { gte: new Date(Date.now() - 24 * 3_600_000) },
+          NOT: { conteudo: { startsWith: "[descartada" } },
+        },
+        orderBy: { criadoEm: "desc" },
+        select: { conteudo: true },
+      }),
+    );
+    return m?.conteudo ?? null;
+  }
+
+  /**
+   * Espera a rajada acabar. `true` = esta é a última mensagem, e é ela que
+   * responde; `false` = chegou outra depois, e a outra responde pelas duas.
+   */
+  private async souAUltima(leadId: string): Promise<boolean> {
+    if (this.esperaRajadaMs <= 0) return true;
+    const minha = Symbol(leadId);
+    this.ultimaDoLead.set(leadId, minha);
+    await new Promise((r) => setTimeout(r, this.esperaRajadaMs));
+    const venceu = this.ultimaDoLead.get(leadId) === minha;
+    if (venceu) this.ultimaDoLead.delete(leadId);
+    return venceu;
   }
 
   /**
@@ -318,6 +572,7 @@ export class ChatwootAgenteService {
     nomeContato: string | null,
     texto: string,
     onde: OndeConversa,
+    opcoes: { criar: boolean } = { criar: true },
   ): Promise<string | null> {
     if (!telefone) return null;
     try {
@@ -337,6 +592,7 @@ export class ChatwootAgenteService {
         });
 
         if (!lead) {
+          if (!opcoes.criar) return { id: null, sdr: false };
           const novo = await this.criarLeadInbound(numero, nomeContato, texto);
           return { id: novo, sdr: novo !== null };
         }
@@ -383,6 +639,9 @@ export class ChatwootAgenteService {
       // transação nenhuma.
       if (achado.id) await this.leadChatwoot.vincular(achado.id, onde);
 
+      // No canal de operação o SDR não entra, mas o lead que já existia tem
+      // que ser devolvido mesmo assim: é ele que recebe o alerta do comercial.
+      if (!opcoes.criar) return achado.id && achado.sdr ? achado.id : null;
       return achado.sdr ? achado.id : null;
     } catch (e) {
       this.log.warn(`Não consegui resolver o lead da conversa: ${String(e)}`);
@@ -544,14 +803,12 @@ export class ChatwootAgenteService {
    * antes de o SDR existir; derrubar o webhook faria o Chatwoot reenviar e a
    * pessoa receber tudo duas vezes.
    */
-  private async atenderComoSdr(
-    leadId: string,
-    texto: string,
-    contaChatwoot: number,
-    conversaId: number,
-  ): Promise<boolean> {
+  private async atenderComoSdr(leadId: string, texto: string, onde: OndeConversa): Promise<boolean> {
+    const { contaId: contaChatwoot, conversaId } = onde;
     try {
       const resposta = await this.sdr.atender(leadId, texto);
+      // Silêncio decidido não é falha: não envia e não vai pra fila.
+      if (resposta?.silencio) return true;
       if (!resposta?.texto.trim()) return false;
 
       const enviado = await this.chatwoot.responder(contaChatwoot, conversaId, resposta.texto);
@@ -559,8 +816,14 @@ export class ChatwootAgenteService {
 
       if (resposta.passarParaHumano) {
         this.log.log(`SDR pediu humano na conversa ${conversaId}: ${resposta.motivoHumano}`);
-        await this.marcarHumanoAssumiu(leadId);
-        await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+        // A frase do SDR já saiu — o repasse não repete aviso nenhum.
+        await this.avisarFilaHumana(onde, `SDR: ${resposta.motivoHumano}`, {
+          canal: "comercial",
+          leadId,
+          ultimaFala: texto,
+          situacao: resposta.motivoHumano ?? "O robô passou pra uma pessoa.",
+          semAviso: true,
+        });
       }
       return true;
     } catch (e) {
@@ -587,11 +850,23 @@ export class ChatwootAgenteService {
    * que a conversa volte pra fila mesmo que alguém a tenha fechado no meio.
    */
   private async avisarFilaHumana(
-    contaChatwoot: number,
-    conversaId: number,
+    onde: OndeConversa,
     motivo: string,
-    leadId?: string | null,
+    opcoes: {
+      canal: "comercial" | "operacao";
+      leadId?: string | null;
+      /** O que a pessoa disse por último — vai no alerta. */
+      ultimaFala?: string;
+      /** Uma linha pro alerta dizer por que está chegando. */
+      situacao?: string;
+      /** A frase pro prospect já saiu (o SDR falou) — não repetir. */
+      semAviso?: boolean;
+      /** Etiqueta a mais, pra quem atende saber de cara do que se trata. */
+      etiqueta?: string;
+    },
   ): Promise<void> {
+    const { contaId: contaChatwoot, conversaId } = onde;
+    const { leadId } = opcoes;
     // Daqui pra frente quem cuida é gente. O robô sai de cena: sem isto, o
     // varredor de follow-up escreveria por cima de um vendedor no meio da
     // conversa, que é o jeito mais rápido de estragar uma venda com um robô.
@@ -601,13 +876,28 @@ export class ChatwootAgenteService {
       conversaId,
       LABEL_PRECISA_HUMANO,
     );
-    if (jaAvisado) {
+    if (jaAvisado || opcoes.semAviso) {
       this.log.log(`${motivo} — já estava na fila humana, sem repetir o aviso`);
     } else {
       this.log.log(`${motivo} — vai pra fila humana`);
-      await this.chatwoot.responder(contaChatwoot, conversaId, TEXTO_DESCONHECIDO);
+      const texto = await this.atendimento.mensagemDeRepasse(opcoes.canal);
+      const enviado = await this.chatwoot.responder(contaChatwoot, conversaId, texto);
+      if (enviado && leadId) await this.sdr.registrarSaida(leadId, texto);
     }
-    await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+    await this.chatwoot.passarParaHumano(
+      contaChatwoot,
+      conversaId,
+      await this.atendimento.timeDoCanal(opcoes.canal),
+      opcoes.etiqueta ? [opcoes.etiqueta] : [],
+    );
+    if (leadId && opcoes.canal === "comercial") {
+      await this.atendimento.avisar(
+        leadId,
+        opcoes.situacao ?? "Esperando uma pessoa.",
+        opcoes.ultimaFala ?? "",
+        conversaId,
+      );
+    }
   }
 
   private async tentarVincular(

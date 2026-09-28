@@ -82,6 +82,21 @@ export const TOOLS_SDR: AgentToolDefinition[] = [
     },
   },
   {
+    name: "nao_responder",
+    description:
+      "Não mandar nada desta vez. Use quando a mensagem dele não pede resposta: aviso " +
+      "automático de ausência de outra empresa, só um emoji, \"ok\", \"valeu\", despedida " +
+      "depois que a conversa já terminou. Chamando esta ferramenta, NÃO escreva texto nenhum — " +
+      "nem explicando por que não vai responder.",
+    input_schema: {
+      type: "object",
+      properties: {
+        motivo: { type: "string", description: "Em poucas palavras, por que não responder." },
+      },
+      required: ["motivo"],
+    },
+  },
+  {
     name: "registrar_opt_out",
     description:
       "Ele pediu pra não receber mais mensagem. Chame na hora, sem argumentar e sem " +

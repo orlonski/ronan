@@ -31,6 +31,7 @@ const TIPO_LABEL: Record<string, string> = {
   "problema-veiculo": "Problema no caminhão",
   "conta-auto-cadastro": "Empresa nova",
   "lead-novo": "Contato pelo site",
+  "lead-precisa-humano": "Lead esperando atendimento",
 };
 
 export default function InboxPage() {

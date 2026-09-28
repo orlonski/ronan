@@ -244,6 +244,19 @@ export const ROTAS_WHATSAPP = [
     critica: false,
     escopo: "plataforma",
   },
+  {
+    chave: "ALERTA_COMERCIAL",
+    rotulo: "Lead esperando atendimento",
+    descricao:
+      "Avisa a equipe comercial que um lead pediu pra falar com gente (ou ninguém respondeu no prazo), com o botão que abre a conversa no Chatwoot.",
+    categoria: "utility",
+    provedores: ["evolution", "meta"],
+    // Quem recebe é a EQUIPE da Movatruck, não cliente. Não trava ninguém no
+    // app, mas é o aviso que separa "alguém vai te chamar" de uma promessa
+    // quebrada — o robô disse isso dezenas de vezes sem avisar ninguém.
+    critica: false,
+    escopo: "plataforma",
+  },
 ] as const satisfies readonly RotaWhatsappDef[];
 
 export type RotaWhatsapp = (typeof ROTAS_WHATSAPP)[number]["chave"];
@@ -551,6 +564,32 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
   // template — o envio manda só o sufixo (params[5]). Trocar de gateway exige
   // template novo, e isso é uma característica do formato da Meta, não deste
   // código.
+  // Aviso INTERNO: vai pro celular do Fernando (e do dono, no escalonamento),
+  // nunca pra cliente. O link da conversa vai no botão pelo mesmo motivo do
+  // comprovante — URL em parâmetro de corpo a Meta trata como suspeita. O
+  // prefixo cadastrado no template é a conversa no Chatwoot:
+  // `https://atendimento.movatruck.com.br/app/accounts/1/conversations/` — o
+  // envio manda só o id (params[3]). Trocar o domínio do Chatwoot exige
+  // template novo.
+  ALERTA_COMERCIAL: {
+    nome: "alerta_comercial",
+    idioma: "pt_BR",
+    corpo: [0, 1, 2],
+    botao: { tipo: "URL", param: 3, texto: "Abrir a conversa" },
+    textoAprovacao: [
+      "🔔 *{{1}}* está esperando atendimento no WhatsApp da Movatruck.",
+      "",
+      "Última mensagem: {{2}}",
+      "",
+      "{{3}}",
+    ].join("\n"),
+    exemplo: [
+      "Transportes Silva (42 99999-8888)",
+      "Quero falar com o Fernando",
+      "Pediu pra falar com uma pessoa.",
+      "31",
+    ],
+  },
   COBRANCA_ABERTA: {
     nome: "cobranca_aberta",
     idioma: "pt_BR",

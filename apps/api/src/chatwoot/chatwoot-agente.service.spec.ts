@@ -9,6 +9,7 @@ import type { ProspeccaoService } from "../prospeccao/prospeccao.service";
 import type { ConviteService } from "../whatsapp/convite.service";
 import type { SdrService, RespostaSdr } from "../sdr/sdr.service";
 import type { ConfigService } from "@nestjs/config";
+import type { AtendimentoHumanoService } from "../sdr/atendimento-humano.service";
 
 const MOTORISTA: SessaoResolvida = {
   tipo: "MOTORISTA",
@@ -40,10 +41,20 @@ function montar(
     createErro?: string;
     /** O SDR explode (falha de IA, timeout). */
     sdrErro?: string;
-    /** Id do inbox comercial, como vem do env. */
+    /** Id do inbox comercial, como vem do env. Default: "2". */
     inboxComercial?: string;
     /** A conversa JÁ foi etiquetada como precisa-humano numa mensagem anterior. */
     jaEtiquetada?: boolean;
+    /** Uma pessoa já assumiu este lead. */
+    pausado?: boolean;
+    /** A última coisa que o robô disse a ele. */
+    ultimaFalaNossa?: string | null;
+    /** O número bate com um motorista cadastrado (sem WhatsApp vinculado). */
+    motoristaCadastrado?: boolean;
+    /** A mensagem de saída foi o robô que mandou. */
+    foiORobo?: boolean;
+    /** Lead ligado à conversa do Chatwoot (pros eventos de gente). */
+    leadDaConversa?: { id: string; sdrPausadoEm: Date | null; primeiraRespostaHumanaEm: Date | null } | null;
   } = {},
 ) {
   const create = vi.fn(async (_args: { data: { direcao: string } }) => ({}));
@@ -54,10 +65,12 @@ function montar(
   }));
   const processar = vi.fn(async () => opts.resposta ?? "Sua última viagem foi conferida.");
   const responder = vi.fn(async (_conta: number, _conversa: number, _texto: string) => true);
-  const passarParaHumano = vi.fn(async () => {});
+  const anotar = vi.fn(async (_conta: number, _conversa: number, _texto: string) => true);
+  const passarParaHumano = vi.fn(async (..._a: unknown[]) => {});
   // A conversa ainda não foi etiquetada: é o caso normal, a primeira mensagem.
   // O teste de não-repetição liga isto pra `true`.
   const temEtiqueta = vi.fn(async () => opts.jaEtiquetada ?? false);
+  const foiORobo = vi.fn(() => opts.foiORobo ?? false);
   const marcarMensagemRecebida = vi.fn(async () => {});
   const contaDoCodigo = vi.fn(async () => opts.contaDoCodigo ?? null);
   const consumir = vi.fn(async () => {
@@ -68,21 +81,28 @@ function montar(
     if (opts.sdrErro) throw new Error(opts.sdrErro);
     return opts.respostaSdr ?? null;
   });
+  const registrarEntrada = vi.fn(async () => ({}));
+  const registrarSaida = vi.fn(async () => ({}));
   let jaCriou = false;
-  const leadFindFirst = vi.fn(async (args: { where?: { origem?: string } }) => {
-    // A segunda busca, a do tratamento de corrida, procura por origem.
-    if (args?.where?.origem === "WHATSAPP_INBOUND") {
-      return jaCriou ? { id: "lead-corrida" } : null;
-    }
-    return opts.ehLead
-      ? {
-          id: "lead-1",
-          empresa: "Transportes Teste",
-          status: "NOVO",
-          optOut: opts.leadOptOut ?? false,
-        }
-      : null;
-  });
+  const leadFindFirst = vi.fn(
+    async (args: { where?: { origem?: string; chatwootConversaId?: number } }) => {
+      if (args?.where?.chatwootConversaId !== undefined) return opts.leadDaConversa ?? null;
+      // A segunda busca, a do tratamento de corrida, procura por origem.
+      if (args?.where?.origem === "WHATSAPP_INBOUND") {
+        return jaCriou ? { id: "lead-corrida" } : null;
+      }
+      return opts.ehLead
+        ? {
+            id: "lead-1",
+            empresa: "Transportes Teste",
+            status: "NOVO",
+            optOut: opts.leadOptOut ?? false,
+          }
+        : null;
+    },
+  );
+  const leadFindUnique = vi.fn(async () => ({ sdrPausadoEm: opts.pausado ? new Date() : null }));
+  const leadUpdate = vi.fn(async (_a: { data: Record<string, unknown> }) => ({}));
   const leadCreate = vi.fn(async (_args: { data: Record<string, unknown> }) => {
     if (opts.createErro) {
       jaCriou = true;
@@ -92,33 +112,58 @@ function montar(
   });
   const interacaoCreate = vi.fn(async () => ({}));
   const supressaoFindFirst = vi.fn(async () => (opts.suprimido ? { contato: "4299998888" } : null));
+  const mensagemLeadFindFirst = vi.fn(async () =>
+    opts.ultimaFalaNossa ? { conteudo: opts.ultimaFalaNossa } : null,
+  );
   const vincular = vi.fn(async () => {});
   const registrarOptOut = vi.fn(async () => ({ contato: "4299998888", tipo: "TELEFONE", leadsMarcados: 1 }));
+  const avisar = vi.fn(async () => {});
 
   const s = new ChatwootAgenteService(
     {
       whatsappMensagem: { create },
       motorista: { findUnique },
       configuracaoAgente: { findUnique: configFind },
-      lead: { findFirst: leadFindFirst, update: vi.fn(async () => ({})), create: leadCreate },
+      lead: {
+        findFirst: leadFindFirst,
+        findUnique: leadFindUnique,
+        update: leadUpdate,
+        create: leadCreate,
+      },
       interacaoLead: { create: interacaoCreate },
       supressaoContato: { findFirst: supressaoFindFirst },
+      mensagemLead: { findFirst: mensagemLeadFindFirst },
     } as unknown as PrismaService,
     {
       resolverPorTelefone: vi.fn(async () => opts.identidade ?? MOTORISTA),
+      motoristaPorCadastro: vi.fn(async () =>
+        opts.motoristaCadastrado ? { id: "m-9", nome: "Diego Motorista", conta: "Schaba" } : null,
+      ),
       marcarMensagemRecebida,
     } as unknown as SessaoService,
     { processar } as unknown as AgenteService,
     { contaDoCodigo, consumir } as unknown as ConviteService,
-    { responder, passarParaHumano, temEtiqueta } as unknown as ChatwootClientService,
-    { atender } as unknown as SdrService,
+    { responder, anotar, passarParaHumano, temEtiqueta, foiORobo } as unknown as ChatwootClientService,
+    { atender, registrarEntrada, registrarSaida } as unknown as SdrService,
     { vincular } as unknown as LeadChatwootService,
     { registrarOptOut } as unknown as ProspeccaoService,
     {
       get: (k: string) =>
-        k === "CHATWOOT_INBOX_COMERCIAL" ? (opts.inboxComercial ?? undefined) : undefined,
+        k === "CHATWOOT_INBOX_COMERCIAL" ? (opts.inboxComercial ?? "2") : undefined,
     } as unknown as ConfigService,
+    {
+      mensagemDeRepasse: vi.fn(async (canal: string) =>
+        canal === "comercial"
+          ? "Certo! O Fernando vai falar com você por aqui em instantes."
+          : "Certo! Alguém da Movatruck vai falar com você por aqui em instantes.",
+      ),
+      nomesDaEquipe: vi.fn(async () => ["Fernando", "Diego"]),
+      timeDoCanal: vi.fn(async (canal: string) => (canal === "comercial" ? 11 : 22)),
+      avisar,
+    } as unknown as AtendimentoHumanoService,
   );
+  // Sem relógio no teste: a espera da rajada é coberta num teste próprio.
+  s.esperaRajadaMs = 0;
   return {
     s,
     vincular,
@@ -127,12 +172,17 @@ function montar(
     findUnique,
     processar,
     responder,
+    anotar,
     passarParaHumano,
     temEtiqueta,
     consumir,
     atender,
     leadCreate,
+    leadUpdate,
     interacaoCreate,
+    registrarEntrada,
+    registrarSaida,
+    avisar,
   };
 }
 
@@ -146,10 +196,26 @@ const evento = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-describe("quem o agente atende", () => {
+
+const COMERCIAL = { inbox: { id: 2 } };
+const OPERACAO = { inbox: { id: 1 } };
+
+const RESPOSTA: RespostaSdr = {
+  texto: "Pra 8 caminhões, sai por *R$ 1.890,00* por mês.",
+  silencio: false,
+  passarParaHumano: false,
+  motivoHumano: null,
+  ferramentas: ["consultar_preco"],
+};
+
+/** O repasse aconteceu nesta conversa (conta 1, conversa 7). */
+const repassou = (fn: { mock: { calls: unknown[][] } }) =>
+  fn.mock.calls.some((c) => c[0] === 1 && c[1] === 7);
+
+describe("quem o agente atende (número de operação)", () => {
   it("motorista aprovado conversa com o agente", async () => {
     const { s, processar, responder } = montar();
-    await s.processar(evento());
+    await s.processar(evento(OPERACAO));
     expect(processar).toHaveBeenCalledOnce();
     expect(responder).toHaveBeenCalledWith(1, 7, "Sua última viagem foi conferida.");
   });
@@ -158,422 +224,487 @@ describe("quem o agente atende", () => {
     // A fronteira é de segurança: com ferramentas do sistema na mão, o agente
     // responderia dado de viagem pra quem digitasse um número por sorte.
     const { s, processar, passarParaHumano } = montar({ identidade: DESCONHECIDO });
-    await s.processar(evento());
+    await s.processar(evento(OPERACAO));
     expect(processar).not.toHaveBeenCalled();
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+    expect(repassou(passarParaHumano)).toBe(true);
   });
 
   it("motorista com cadastro em análise não conversa com o agente", async () => {
-    // `resolverPorTelefone` confere `ativo`, não `status` — aqui não existe
-    // guard nenhum, então a aprovação se confere na mão.
     const { s, processar, passarParaHumano } = montar({ status: "PENDENTE" });
-    await s.processar(evento());
+    await s.processar(evento(OPERACAO));
     expect(processar).not.toHaveBeenCalled();
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+    expect(repassou(passarParaHumano)).toBe(true);
+  });
+});
+
+describe("o SDR não entra no número de operação", () => {
+  it("desconhecido na operação vai pra gente, não pro robô de vendas nem vira lead", async () => {
+    // O caso real: motorista da Schaba perguntando de ticket com divergência
+    // recebeu doze perguntas de venda, até dizer "Eu sou só motorista".
+    const { s, atender, leadCreate, passarParaHumano, responder } = montar({
+      identidade: DESCONHECIDO,
+      respostaSdr: RESPOSTA,
+    });
+    await s.processar(evento({ ...OPERACAO, content: "Sobre a nota com divergência" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(leadCreate).not.toHaveBeenCalled();
+    expect(responder.mock.calls[0]?.[2]).toContain("Alguém da Movatruck");
+    // Time da operação, não o comercial.
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 22, []);
+  });
+
+  it("motorista cadastrado sem WhatsApp vinculado: nota pra equipe e etiqueta", async () => {
+    const { s, anotar, passarParaHumano, atender } = montar({
+      identidade: DESCONHECIDO,
+      motoristaCadastrado: true,
+    });
+    await s.processar(evento({ ...OPERACAO, content: "Gostaria de atualizar o app" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(anotar.mock.calls[0]?.[2]).toContain("Diego Motorista");
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 22, ["motorista"]);
+  });
+
+  it("aviso automático de ausência não recebe resposta nenhuma", async () => {
+    const { s, responder, passarParaHumano } = montar({ identidade: DESCONHECIDO });
+    await s.processar(
+      evento({
+        ...OPERACAO,
+        content: "Agradecemos sua mensagem. Não estamos disponíveis no momento, mas responderemos assim que possível.",
+      }),
+    );
+    expect(responder).not.toHaveBeenCalled();
+    expect(passarParaHumano).not.toHaveBeenCalled();
+  });
+
+  it("lead que já existia e responde pela operação vai pro comercial, com alerta", async () => {
+    const { s, atender, passarParaHumano, avisar } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      respostaSdr: RESPOSTA,
+    });
+    await s.processar(evento({ ...OPERACAO, content: "recebi a mensagem de vocês, quanto é?" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 11, []);
+    expect(avisar).toHaveBeenCalledOnce();
+  });
+
+  it("áudio na operação vai pra gente COM uma palavra de volta", async () => {
+    const { s, processar, responder, passarParaHumano } = montar();
+    await s.processar(evento({ ...OPERACAO, content: "" }));
+    expect(processar).not.toHaveBeenCalled();
+    expect(responder).toHaveBeenCalled();
+    expect(repassou(passarParaHumano)).toBe(true);
   });
 });
 
 describe("o que o agente ignora", () => {
-  it("ignora a mensagem que nós mesmos mandamos", async () => {
+  it("ignora a mensagem que o próprio robô mandou", async () => {
     // Sem isto o robô responde à própria resposta, em loop.
-    const { s, processar, responder } = montar();
+    const { s, processar, responder, leadUpdate } = montar({ foiORobo: true });
     await s.processar(evento({ message_type: "outgoing" }));
     expect(processar).not.toHaveBeenCalled();
     expect(responder).not.toHaveBeenCalled();
+    expect(leadUpdate).not.toHaveBeenCalled();
   });
 
-  it("ignora evento que não é mensagem criada", async () => {
-    const { s, processar } = montar();
-    await s.processar(evento({ event: "conversation_status_changed" }));
-    expect(processar).not.toHaveBeenCalled();
-  });
-
-  it("áudio e foto vão pra pessoa, não pro agente", async () => {
-    // Fingir que entendeu é pior que entregar pra quem entende.
-    const { s, processar, passarParaHumano } = montar();
-    await s.processar(evento({ content: "" }));
-    expect(processar).not.toHaveBeenCalled();
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+  it("evento de conversa sem gesto de gente não mexe em nada", async () => {
+    const { s, leadUpdate } = montar({
+      leadDaConversa: { id: "lead-1", sdrPausadoEm: null, primeiraRespostaHumanaEm: null },
+    });
+    await s.processar({
+      event: "conversation_updated",
+      id: 7,
+      changed_attributes: [{ first_reply_created_at: { previous_value: null, current_value: "x" } }],
+    });
+    expect(leadUpdate).not.toHaveBeenCalled();
   });
 });
 
-describe("quando o agente não dá conta", () => {
+describe("quando o agente do motorista não dá conta", () => {
   it("resposta vazia vira fila humana", async () => {
-    // Silêncio no WhatsApp é pior que demora: a pessoa fica olhando pro nada.
     const { s, responder, passarParaHumano } = montar({ resposta: "   " });
-    await s.processar(evento());
+    await s.processar(evento(OPERACAO));
     expect(responder).not.toHaveBeenCalled();
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+    expect(repassou(passarParaHumano)).toBe(true);
   });
 
   it("erro no meio do caminho não derruba o webhook", async () => {
-    // Quem chama já respondeu 200 pro Chatwoot; lançar aqui faria ele reenviar,
-    // e reenvio é o motorista recebendo a mesma resposta de novo.
     const { s } = montar();
     await expect(
       s.processar(evento({ conversation: undefined, account: undefined })),
     ).resolves.toBeUndefined();
   });
-});
 
-describe("histórico", () => {
   it("grava entrada e saída pro agente ter memória no próximo turno", async () => {
-    // O AgenteService monta o contexto a partir de `whatsapp_mensagens`, não do
-    // que o Chatwoot guarda: sem gravar, toda mensagem seria a primeira.
     const { s, create } = montar();
-    await s.processar(evento());
-    expect(create).toHaveBeenCalledTimes(2);
+    await s.processar(evento(OPERACAO));
     const direcoes = create.mock.calls.map((c) => c[0].data.direcao);
     expect(direcoes).toEqual(["ENTRADA", "SAIDA"]);
+  });
+
+  it("agente desligado no painel não responde pelo Chatwoot", async () => {
+    const { s, processar, passarParaHumano } = montar({ agenteAtivo: false });
+    await s.processar(evento(OPERACAO));
+    expect(processar).not.toHaveBeenCalled();
+    expect(repassou(passarParaHumano)).toBe(true);
   });
 });
 
 describe("vínculo por código de convite", () => {
   it("código válido vincula o telefone e não vira ticket", async () => {
-    // Sem este caminho o código morreria na fila humana e ninguém novo
-    // conseguiria se vincular pelo canal oficial.
     const { s, consumir, responder, passarParaHumano } = montar({
       identidade: DESCONHECIDO,
       contaDoCodigo: "conta-1",
     });
-    await s.processar(evento({ content: "A1B2C3" }));
+    await s.processar(evento({ ...OPERACAO, content: "A1B2C3" }));
     expect(consumir).toHaveBeenCalledOnce();
     expect(responder.mock.calls[0]?.[2]).toContain("vinculado");
     expect(passarParaHumano).not.toHaveBeenCalled();
   });
 
   it("código expirado responde o motivo, sem abrir ticket", async () => {
-    // Erro de digitação é de quem digitou; virar ticket a cada typo entope a fila.
     const { s, responder, passarParaHumano } = montar({
       identidade: DESCONHECIDO,
       contaDoCodigo: "conta-1",
       consumirErro: "Código expirou",
     });
-    await s.processar(evento({ content: "A1B2C3" }));
+    await s.processar(evento({ ...OPERACAO, content: "A1B2C3" }));
     expect(responder).toHaveBeenCalledWith(1, 7, "Código expirou");
     expect(passarParaHumano).not.toHaveBeenCalled();
   });
-
-  it("palavra curta que não é código segue pro caminho normal", async () => {
-    const { s, consumir, passarParaHumano } = montar({
-      identidade: DESCONHECIDO,
-      contaDoCodigo: null,
-    });
-    await s.processar(evento({ content: "oi" }));
-    expect(consumir).not.toHaveBeenCalled();
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
-  });
 });
 
-describe("a chave que liga e desliga", () => {
-  it("agente desligado no painel não responde pelo Chatwoot", async () => {
-    // Sem esta checagem, desligar o agente na tela não desligaria nada — o
-    // Chatwoot seguiria respondendo por um caminho que a tela não conhece.
-    const { s, processar, passarParaHumano } = montar({ agenteAtivo: false });
-    await s.processar(evento());
-    expect(processar).not.toHaveBeenCalled();
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
-  });
-});
-
-describe("o SDR atendendo prospect", () => {
-  const RESPOSTA: RespostaSdr = {
-    texto: "Pra 8 caminhões, sai por *R$ 1.890,00* por mês.",
-    passarParaHumano: false,
-    motivoHumano: null,
-    ferramentas: ["consultar_preco"],
-  };
-
-  it("prospect conhecido é atendido pelo SDR, sem virar ticket", async () => {
+describe("o SDR atendendo prospect no comercial", () => {
+  it("lead conhecido é atendido pelo SDR, sem virar ticket", async () => {
     const { s, responder, passarParaHumano, atender } = montar({
       identidade: DESCONHECIDO,
       ehLead: true,
       respostaSdr: RESPOSTA,
     });
-    await s.processar(evento({ content: "quanto custa?" }));
+    await s.processar(evento({ ...COMERCIAL, content: "quanto custa?" }));
     expect(atender).toHaveBeenCalledWith("lead-1", "quanto custa?");
     expect(responder).toHaveBeenCalledWith(1, 7, RESPOSTA.texto);
-    // O ponto todo: uma conversa que o SDR resolveu não ocupa fila humana.
     expect(passarParaHumano).not.toHaveBeenCalled();
   });
 
   it("quem escreveu sem estar na base vira lead e é atendido na hora", async () => {
-    // Era o contrário, e estava invertido: quem veio do Instagram, do site ou
-    // de indicação caía na fila humana, enquanto o lead frio do RNTRC — que
-    // nunca pediu nada — tinha atendimento. A procedência obrigatória é régua
-    // de prospecção ATIVA; quem escreve primeiro deu o número no ato.
-    const { s, atender, leadCreate, responder, passarParaHumano } = montar({
+    const { s, atender, leadCreate, responder } = montar({
       identidade: DESCONHECIDO,
-      ehLead: false,
       respostaSdr: RESPOSTA,
     });
-    await s.processar(evento({ content: "quanto custa?" }));
+    await s.processar(evento({ ...COMERCIAL, content: "quanto custa?" }));
     expect(leadCreate).toHaveBeenCalledOnce();
     expect(atender).toHaveBeenCalledWith("lead-novo", "quanto custa?");
     expect(responder).toHaveBeenCalledWith(1, 7, RESPOSTA.texto);
-    expect(passarParaHumano).not.toHaveBeenCalled();
   });
 
   it("o lead nasce com o telefone no formato da casa, sem o DDI", async () => {
-    // `registrarOptOut` compara telefone por igualdade exata. Gravar "55" na
-    // frente faria o opt-out marcar zero leads — e a pessoa seguiria
-    // recebendo mensagem depois de pedir pra parar.
     const { s, leadCreate } = montar({ identidade: DESCONHECIDO, respostaSdr: RESPOSTA });
-    await s.processar(evento({ content: "oi, vi o instagram de vocês" }));
+    await s.processar(evento({ ...COMERCIAL, content: "oi, vi o instagram de vocês" }));
     const dados = leadCreate.mock.calls[0]?.[0].data as Record<string, unknown>;
     expect(dados.telefone).toBe("4299998888");
     expect(dados.origem).toBe("WHATSAPP_INBOUND");
-    // NOVO é a fila de quem ainda não foi tocado, de onde saem as campanhas:
-    // quem já está conversando não pode receber um "oi" frio por cima.
     expect(dados.status).toBe("EM_CONTATO");
   });
 
   it("o nome do perfil vira a pessoa, mas o número disfarçado de nome não", async () => {
     const comNome = montar({ identidade: DESCONHECIDO, respostaSdr: RESPOSTA });
-    await comNome.s.processar(evento({ sender: { phone_number: "+554299998888", name: "Sérgio" } }));
+    await comNome.s.processar(
+      evento({ ...COMERCIAL, sender: { phone_number: "+554299998888", name: "Sérgio" } }),
+    );
     expect((comNome.leadCreate.mock.calls[0]?.[0].data as { nome: unknown }).nome).toBe("Sérgio");
 
-    // O Chatwoot preenche `name` com o próprio número quando o contato não tem
-    // nome no perfil — gravar isso faria o SDR chamar alguém de "+5542...".
     const semNome = montar({ identidade: DESCONHECIDO, respostaSdr: RESPOSTA });
     await semNome.s.processar(
-      evento({ sender: { phone_number: "+554299998888", name: "+55 42 99998888" } }),
+      evento({ ...COMERCIAL, sender: { phone_number: "+554299998888", name: "+55 42 99998888" } }),
     );
     expect((semNome.leadCreate.mock.calls[0]?.[0].data as { nome: unknown }).nome).toBeNull();
   });
 
   it("quem está em opt-out não é atendido nem vira lead novo", async () => {
-    // A busca não filtra `optOut` justamente por isto: filtrando, o lead ficava
-    // invisível e a criação abriria um cadastro novo pra quem pediu pra sumir.
-    const { s, atender, leadCreate, passarParaHumano, interacaoCreate } = montar({
+    const { s, atender, leadCreate, interacaoCreate } = montar({
       identidade: DESCONHECIDO,
       ehLead: true,
       leadOptOut: true,
       respostaSdr: RESPOSTA,
     });
-    await s.processar(evento({ content: "quanto custa?" }));
+    await s.processar(evento({ ...COMERCIAL, content: "quanto custa?" }));
     expect(leadCreate).not.toHaveBeenCalled();
     expect(atender).not.toHaveBeenCalled();
-    // A interação fica registrada: ele escreveu, e isso é fato do funil.
     expect(interacaoCreate).toHaveBeenCalledOnce();
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
   });
 
   it("número na supressão global não vira lead, mesmo sem cadastro", async () => {
-    const { s, atender, leadCreate, passarParaHumano } = montar({
+    const { s, atender, leadCreate } = montar({
       identidade: DESCONHECIDO,
-      ehLead: false,
       suprimido: true,
       respostaSdr: RESPOSTA,
     });
-    await s.processar(evento({ content: "quanto custa?" }));
+    await s.processar(evento({ ...COMERCIAL, content: "quanto custa?" }));
     expect(leadCreate).not.toHaveBeenCalled();
     expect(atender).not.toHaveBeenCalled();
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
   });
 
   it("duas mensagens ao mesmo tempo não viram dois leads", async () => {
-    // Webhooks paralelos disputam a criação; o índice único parcial derruba a
-    // segunda. Achar o lead que a primeira criou é a resposta certa — dois
-    // cadastros partiriam a conversa em duas e o SDR repetiria as perguntas.
-    const { s, atender, responder } = montar({
+    const { s, atender } = montar({
       identidade: DESCONHECIDO,
-      ehLead: false,
       createErro: "P2002",
       respostaSdr: RESPOSTA,
     });
-    await s.processar(evento({ content: "boa tarde" }));
+    await s.processar(evento({ ...COMERCIAL, content: "boa tarde" }));
     expect(atender).toHaveBeenCalledWith("lead-corrida", "boa tarde");
-    expect(responder).toHaveBeenCalledWith(1, 7, RESPOSTA.texto);
   });
 
-  it("SDR desligado devolve a conversa pra fila humana", async () => {
-    // `null` do SDR é "não é comigo" — desligado, sem chave de IA ou opt-out.
-    // Em todos esses casos o comportamento tem que ser o de antes dele existir.
-    const { s, responder, passarParaHumano } = montar({
+  it("SDR desligado devolve a conversa pra gente, com nome e prazo", async () => {
+    const { s, responder, passarParaHumano, avisar } = montar({
       identidade: DESCONHECIDO,
       ehLead: true,
       respostaSdr: null,
     });
-    await s.processar(evento({ content: "quanto custa?" }));
-    expect(responder.mock.calls[0]?.[2]).toContain("chamei alguém da equipe");
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+    await s.processar(evento({ ...COMERCIAL, content: "quanto custa?" }));
+    expect(responder.mock.calls[0]?.[2]).toContain("O Fernando vai falar com você");
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 11, []);
+    expect(avisar).toHaveBeenCalledOnce();
   });
 
-  it("quando o SDR pede humano, ele responde E encaminha", async () => {
-    // As duas coisas, não uma ou outra: a pessoa precisa ler "alguém vai te
-    // chamar" e a conversa precisa aparecer pra quem vai chamar.
-    const { s, responder, passarParaHumano } = montar({
+  it("quando o SDR pede humano, ele responde, encaminha e avisa — sem repetir frase", async () => {
+    const { s, responder, passarParaHumano, avisar } = montar({
       identidade: DESCONHECIDO,
       ehLead: true,
       respostaSdr: {
-        texto: "Alguém da Movatruck vai te chamar.",
+        texto: "Isso quem acerta é o Fernando — ele fala com você por aqui.",
+        silencio: false,
         passarParaHumano: true,
         motivoHumano: "quer negociar preço",
         ferramentas: ["passar_para_humano"],
       },
     });
-    await s.processar(evento({ content: "consegue fazer por 1200?" }));
-    expect(responder).toHaveBeenCalledWith(1, 7, "Alguém da Movatruck vai te chamar.");
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+    await s.processar(evento({ ...COMERCIAL, content: "consegue fazer por 1200?" }));
+    expect(responder).toHaveBeenCalledOnce();
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 11, []);
+    expect(avisar).toHaveBeenCalledWith("lead-1", "quer negociar preço", "consegue fazer por 1200?", 7);
   });
 
   it("SDR que explode cai na fila humana, sem derrubar o webhook", async () => {
-    // Erro aqui não pode virar exceção: o Chatwoot reenvia o webhook que falha,
-    // e reenviar significa a pessoa recebendo a mesma resposta de novo.
     const { s, responder, passarParaHumano } = montar({
       identidade: DESCONHECIDO,
       ehLead: true,
       sdrErro: "timeout do provider",
     });
-    await s.processar(evento({ content: "quanto custa?" }));
-    expect(responder.mock.calls[0]?.[2]).toContain("chamei alguém da equipe");
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+    await s.processar(evento({ ...COMERCIAL, content: "quanto custa?" }));
+    expect(responder).toHaveBeenCalledOnce();
+    expect(repassou(passarParaHumano)).toBe(true);
   });
 
-  it("motorista conhecido continua indo pro agente do sistema, não pro SDR", async () => {
-    // A regressão que importa: o SDR entrou no mesmo webhook do agente, e
-    // trocar os dois faria motorista receber conversa de venda.
-    const { s, processar, atender } = montar({ respostaSdr: RESPOSTA });
-    await s.processar(evento({ content: "e minha viagem de ontem?" }));
-    expect(processar).toHaveBeenCalledOnce();
-    expect(atender).not.toHaveBeenCalled();
-  });
-});
-
-/**
- * O canal por onde a pessoa escreveu decide quem atende.
- *
- * A fronteira é de segurança: o agente do motorista lê viagem, km e ticket de
- * uma empresa, e o comercial é o canal onde qualquer prospect escreve.
- */
-describe("canal comercial", () => {
-  const COMERCIAL = { inbox: { id: 2 } };
-
-  it("motorista conhecido que escreve no comercial NÃO fala com o agente dele", async () => {
-    const { s, processar, passarParaHumano } = montar({ inboxComercial: "2" });
-    await s.processar(evento(COMERCIAL));
-    expect(processar).not.toHaveBeenCalled();
-    expect(passarParaHumano).toHaveBeenCalled();
-  });
-
-  it("lead conhecido no comercial é atendido pelo SDR", async () => {
-    const { s, atender, responder } = montar({
-      inboxComercial: "2",
+  it("silêncio decidido pelo SDR não envia nada e não vai pra fila", async () => {
+    const { s, responder, passarParaHumano } = montar({
       identidade: DESCONHECIDO,
       ehLead: true,
-      respostaSdr: {
-        texto: "Oi! Posso te mostrar como funciona?",
-        passarParaHumano: false,
-        motivoHumano: null,
-        ferramentas: [],
-      },
+      respostaSdr: { ...RESPOSTA, texto: "", silencio: true },
     });
-    await s.processar(evento(COMERCIAL));
-    expect(atender).toHaveBeenCalled();
-    expect(responder).toHaveBeenCalledWith(1, 7, "Oi! Posso te mostrar como funciona?");
+    await s.processar(evento({ ...COMERCIAL, content: "hmm" }));
+    expect(responder).not.toHaveBeenCalled();
+    expect(passarParaHumano).not.toHaveBeenCalled();
   });
 
-  it("desconhecido no comercial não fica em silêncio", async () => {
-    const { s, responder, passarParaHumano } = montar({
-      inboxComercial: "2",
-      identidade: DESCONHECIDO,
-      ehLead: false,
-    });
+  it("motorista conhecido que escreve no comercial NÃO fala com o agente dele", async () => {
+    const { s, processar } = montar();
     await s.processar(evento(COMERCIAL));
-    expect(responder).toHaveBeenCalled();
-    expect(passarParaHumano).toHaveBeenCalled();
+    expect(processar).not.toHaveBeenCalled();
   });
 
   it("não repete o aviso de fila humana na segunda mensagem seguida", async () => {
-    // O bug que o dono encontrou testando: três "oi" em dez minutos viraram
-    // três respostas idênticas. Cada mensagem é um webhook novo, e nada lembrava
-    // do anterior — a etiqueta já aplicada é essa memória.
     const { s, responder, passarParaHumano } = montar({
-      inboxComercial: "2",
       identidade: DESCONHECIDO,
-      ehLead: false,
       jaEtiquetada: true,
+      respostaSdr: null,
     });
     await s.processar(evento(COMERCIAL));
     expect(responder).not.toHaveBeenCalled();
-    // O repasse continua: garante a conversa aberta na fila mesmo que alguém
-    // a tenha fechado no meio.
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+    expect(repassou(passarParaHumano)).toBe(true);
   });
 
   it("áudio no comercial vai pra uma pessoa, sem virar lead nem acordar o SDR", async () => {
-    // Mídia chega com `content` vazio. O guard geral de mensagem sem texto mora
-    // depois do desvio pro comercial, então sem tratamento aqui o áudio seguia:
-    // criava lead com resumo em branco e mandava mensagem vazia pro modelo.
-    const { s, atender, responder, passarParaHumano, leadCreate } = montar({
-      inboxComercial: "2",
-      identidade: DESCONHECIDO,
-      ehLead: true,
-    });
+    const { s, atender, responder, leadCreate, avisar } = montar({ identidade: DESCONHECIDO, ehLead: true });
     await s.processar(evento({ ...COMERCIAL, content: "" }));
     expect(atender).not.toHaveBeenCalled();
     expect(leadCreate).not.toHaveBeenCalled();
     expect(responder).toHaveBeenCalled();
-    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+    expect(avisar).toHaveBeenCalledOnce();
+  });
+});
+
+/**
+ * O pedido do dono, com as palavras dele: "se pedir pra falar com humano ou o
+ * Fernando (ou outra pessoa) marcar algo no Chatwoot, não ter mais interação
+ * do agente".
+ */
+describe("gente na conversa, robô fora", () => {
+  it("'quero falar com o Fernando' → uma frase, repasse, alerta — sem modelo", async () => {
+    const { s, atender, responder, passarParaHumano, avisar } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      respostaSdr: RESPOSTA,
+    });
+    await s.processar(evento({ ...COMERCIAL, content: "quero falar com o Fernando" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(responder).toHaveBeenCalledOnce();
+    expect(responder.mock.calls[0]?.[2]).toContain("Fernando");
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 11, []);
+    expect(avisar).toHaveBeenCalledOnce();
   });
 
-  it("no inbox de operação o motorista segue falando com o agente", async () => {
-    const { s, processar } = montar({ inboxComercial: "2" });
-    await s.processar(evento({ inbox: { id: 1 } }));
-    expect(processar).toHaveBeenCalled();
+  it("'QUEM VAI ME ATENDER' também é pedido de gente", async () => {
+    const { s, atender, avisar } = montar({ identidade: DESCONHECIDO, ehLead: true, respostaSdr: RESPOSTA });
+    await s.processar(evento({ ...COMERCIAL, content: "QUEM VAI ME ATENDER" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(avisar).toHaveBeenCalledOnce();
   });
 
-  it("sem inbox comercial configurado, nada muda", async () => {
-    const { s, processar } = montar();
-    await s.processar(evento(COMERCIAL));
-    expect(processar).toHaveBeenCalled();
+  it("'Pode ser' depois de o robô oferecer uma pessoa é aceite", async () => {
+    const { s, atender, avisar } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      respostaSdr: RESPOSTA,
+      ultimaFalaNossa: "Sou o atendimento automático. Quer que o Fernando te chame agora?",
+    });
+    await s.processar(evento({ ...COMERCIAL, content: "Pode ser" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(avisar).toHaveBeenCalledOnce();
+  });
+
+  it("com gente na conversa, mensagem nova do lead não acorda o robô", async () => {
+    const { s, atender, responder, passarParaHumano, registrarEntrada } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      pausado: true,
+      respostaSdr: RESPOSTA,
+    });
+    await s.processar(evento({ ...COMERCIAL, content: "N sei dq é a empresa" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(responder).not.toHaveBeenCalled();
+    expect(passarParaHumano).not.toHaveBeenCalled();
+    // A fala fica na ficha.
+    expect(registrarEntrada).toHaveBeenCalledWith("lead-1", "N sei dq é a empresa");
+  });
+
+  it("pessoa escrevendo pelo Chatwoot cala o robô e conta como primeira resposta", async () => {
+    const { s, leadUpdate, registrarSaida } = montar({
+      leadDaConversa: { id: "lead-1", sdrPausadoEm: null, primeiraRespostaHumanaEm: null },
+    });
+    await s.processar(
+      evento({
+        message_type: "outgoing",
+        content: "Olá Diana, sou o Fernando",
+        sender: { name: "Fernando", type: "user" },
+      }),
+    );
+    const dados = leadUpdate.mock.calls[0]?.[0].data;
+    expect(dados?.sdrPausadoEm).toBeInstanceOf(Date);
+    expect(dados?.primeiraRespostaHumanaEm).toBeInstanceOf(Date);
+    expect(registrarSaida).toHaveBeenCalledWith("lead-1", "[Fernando] Olá Diana, sou o Fernando");
+  });
+
+  it("nota privada cala o robô, mas não conta como resposta ao lead", async () => {
+    const { s, leadUpdate } = montar({
+      leadDaConversa: { id: "lead-1", sdrPausadoEm: null, primeiraRespostaHumanaEm: null },
+    });
+    await s.processar(
+      evento({ message_type: "outgoing", private: true, content: "vou ligar pra ela", sender: { type: "user" } }),
+    );
+    const dados = leadUpdate.mock.calls[0]?.[0].data;
+    expect(dados?.sdrPausadoEm).toBeInstanceOf(Date);
+    expect(dados?.primeiraRespostaHumanaEm).toBeUndefined();
+  });
+
+  it("atribuir a conversa no Chatwoot cala o robô", async () => {
+    const { s, leadUpdate } = montar({
+      leadDaConversa: { id: "lead-1", sdrPausadoEm: null, primeiraRespostaHumanaEm: null },
+    });
+    await s.processar({
+      event: "conversation_updated",
+      id: 7,
+      changed_attributes: [{ assignee_id: { previous_value: null, current_value: 3 } }],
+    });
+    expect(leadUpdate.mock.calls[0]?.[0].data.sdrPausadoEm).toBeInstanceOf(Date);
+  });
+
+  it("pôr etiqueta ou resolver também calam", async () => {
+    const mudancas: Record<string, { previous_value: unknown; current_value: unknown }>[] = [
+      { label_list: { previous_value: [], current_value: ["quente"] } },
+      { status: { previous_value: "open", current_value: "resolved" } },
+    ];
+    for (const mudanca of mudancas) {
+      const { s, leadUpdate } = montar({
+        leadDaConversa: { id: "lead-1", sdrPausadoEm: null, primeiraRespostaHumanaEm: null },
+      });
+      await s.processar({ event: "conversation_updated", id: 7, changed_attributes: [mudanca] });
+      expect(leadUpdate).toHaveBeenCalledOnce();
+    }
+  });
+});
+
+describe("ruído não se responde", () => {
+  it("aviso de ausência no comercial: silêncio", async () => {
+    const { s, atender, responder } = montar({ identidade: DESCONHECIDO, ehLead: true, respostaSdr: RESPOSTA });
+    await s.processar(
+      evento({ ...COMERCIAL, content: "S A carlesso Transportes Ltda agradece seu contato. Em breve retornaremos o contato... obrigado" }),
+    );
+    expect(atender).not.toHaveBeenCalled();
+    expect(responder).not.toHaveBeenCalled();
+  });
+
+  it("👍 depois de uma fala nossa: silêncio", async () => {
+    const { s, atender, responder } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      respostaSdr: RESPOSTA,
+      ultimaFalaNossa: "Beleza, até mais.",
+    });
+    await s.processar(evento({ ...COMERCIAL, content: "👍" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(responder).not.toHaveBeenCalled();
+  });
+
+  it("'oi' como primeira mensagem ainda é respondido", async () => {
+    const { s, atender } = montar({ identidade: DESCONHECIDO, ehLead: true, respostaSdr: RESPOSTA });
+    await s.processar(evento({ ...COMERCIAL, content: "Oi" }));
+    expect(atender).toHaveBeenCalled();
+  });
+});
+
+describe("rajada de mensagens", () => {
+  it("três balões seguidos viram UMA resposta", async () => {
+    const { s, atender, registrarEntrada } = montar({ identidade: DESCONHECIDO, ehLead: true, respostaSdr: RESPOSTA });
+    s.esperaRajadaMs = 30;
+    await Promise.all([
+      s.processar(evento({ ...COMERCIAL, content: "oi" })),
+      s.processar(evento({ ...COMERCIAL, content: "tudo bem?" })),
+      s.processar(evento({ ...COMERCIAL, content: "quero saber o preço" })),
+    ]);
+    expect(atender).toHaveBeenCalledOnce();
+    expect(atender).toHaveBeenCalledWith("lead-1", "quero saber o preço");
+    expect(registrarEntrada).toHaveBeenCalledTimes(2);
   });
 });
 
 describe("o lead e a conversa ficam ligados", () => {
   it("guarda conta, contato e conversa do Chatwoot no lead", async () => {
-    // É o que faz a ficha do painel abrir a conversa e o atendimento saber
-    // que aquele número é uma transportadora com CNPJ e nota.
     const { s, vincular } = montar({ identidade: DESCONHECIDO, ehLead: true });
-    await s.processar(evento({ sender: { id: 55, phone_number: "+554299998888" } }));
-    expect(vincular).toHaveBeenCalledWith("lead-1", {
-      contaId: 1,
-      contatoId: 55,
-      conversaId: 7,
-    });
+    await s.processar(evento({ ...COMERCIAL, sender: { id: 55, phone_number: "+554299998888" } }));
+    expect(vincular).toHaveBeenCalledWith("lead-1", { contaId: 1, contatoId: 55, conversaId: 7 });
   });
 
   it("vincula também quem pediu pra não ser contatado", async () => {
-    // Justamente aí é que importa: o "não contatar" precisa chegar na tela de
-    // quem está com o dedo no gatilho de responder.
-    const { s, vincular, atender } = montar({
-      identidade: DESCONHECIDO,
-      ehLead: true,
-      leadOptOut: true,
-    });
-    await s.processar(evento({ sender: { id: 55, phone_number: "+554299998888" } }));
+    const { s, vincular, atender } = montar({ identidade: DESCONHECIDO, ehLead: true, leadOptOut: true });
+    await s.processar(evento({ ...COMERCIAL, sender: { id: 55, phone_number: "+554299998888" } }));
     expect(atender).not.toHaveBeenCalled();
     expect(vincular).toHaveBeenCalledWith("lead-1", expect.objectContaining({ contatoId: 55 }));
   });
 
-  it("payload sem contato não impede o vínculo da conversa", async () => {
-    const { s, vincular } = montar({ identidade: DESCONHECIDO, ehLead: true });
-    await s.processar(evento());
-    expect(vincular).toHaveBeenCalledWith("lead-1", {
-      contaId: 1,
-      contatoId: null,
-      conversaId: 7,
-    });
-  });
-
   it("número na supressão não vira lead nem vínculo", async () => {
-    const { s, vincular, leadCreate } = montar({
-      identidade: DESCONHECIDO,
-      ehLead: false,
-      suprimido: true,
-    });
-    await s.processar(evento({ sender: { id: 55, phone_number: "+554299998888" } }));
+    const { s, vincular, leadCreate } = montar({ identidade: DESCONHECIDO, suprimido: true });
+    await s.processar(evento({ ...COMERCIAL, sender: { id: 55, phone_number: "+554299998888" } }));
     expect(leadCreate).not.toHaveBeenCalled();
     expect(vincular).not.toHaveBeenCalled();
   });
@@ -581,13 +712,11 @@ describe("o lead e a conversa ficam ligados", () => {
 
 describe("quando a pessoa pede pra parar", () => {
   it("SAIR tira da lista, confirma e não chama o SDR", async () => {
-    // É o que a mensagem de prospecção promete no fim. Promessa de opt-out
-    // que depende de alguém ler o ticket é promessa quebrada.
     const { s, registrarOptOut, atender, responder, passarParaHumano } = montar({
       identidade: DESCONHECIDO,
       ehLead: true,
     });
-    await s.processar(evento({ content: "SAIR" }));
+    await s.processar(evento({ ...COMERCIAL, content: "SAIR" }));
     expect(registrarOptOut).toHaveBeenCalledWith(
       "4299998888",
       expect.stringContaining("pediu no WhatsApp"),
@@ -598,25 +727,19 @@ describe("quando a pessoa pede pra parar", () => {
     expect(responder).toHaveBeenCalledWith(1, 7, expect.stringContaining("tirei seu número"));
   });
 
-  it("vale também no canal comercial", async () => {
-    const { s, registrarOptOut } = montar({
-      inboxComercial: "2",
-      identidade: DESCONHECIDO,
-      ehLead: true,
-    });
-    await s.processar(evento({ inbox: { id: 2 }, content: "não quero mais" }));
+  it("vale também no número de operação", async () => {
+    const { s, registrarOptOut } = montar({ identidade: DESCONHECIDO, ehLead: true });
+    await s.processar(evento({ ...OPERACAO, content: "não quero mais" }));
     expect(registrarOptOut).toHaveBeenCalled();
   });
 
   it("não confunde negociação com desistência", async () => {
-    // "não quero pagar caro" é conversa. Tirar da lista quem estava
-    // negociando é tão ruim quanto insistir com quem pediu pra sair.
     const { s, registrarOptOut, atender } = montar({
       identidade: DESCONHECIDO,
       ehLead: true,
-      respostaSdr: { texto: "Posso te explicar o preço", passarParaHumano: false, motivoHumano: null, ferramentas: [] },
+      respostaSdr: RESPOSTA,
     });
-    await s.processar(evento({ content: "não quero pagar caro nisso" }));
+    await s.processar(evento({ ...COMERCIAL, content: "não quero pagar caro nisso" }));
     expect(registrarOptOut).not.toHaveBeenCalled();
     expect(atender).toHaveBeenCalled();
   });

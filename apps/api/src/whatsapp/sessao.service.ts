@@ -42,11 +42,29 @@ export class SessaoService {
    * Quem chamar precisa abrir `comConta(resolvida.contaId)` antes de tocar em
    * qualquer dado — daqui pra frente tudo é dado de empresa.
    */
+  /**
+   * O mesmo celular brasileiro nas duas grafias: com e sem o nono dígito.
+   *
+   * A Meta entrega "554291088125" (12 dígitos) pra um número que o motorista
+   * cadastrou como "42991088125". Comparando por igualdade, o motorista da
+   * Schaba que respondia um aviso de ticket virava "número desconhecido" — e
+   * caía no robô de vendas.
+   */
+  static variantes(telefoneRaw: string): string[] {
+    const d = SessaoService.normalizar(telefoneRaw);
+    const saida = new Set([d]);
+    if (d.startsWith("55") && d.length === 12) {
+      saida.add(`${d.slice(0, 4)}9${d.slice(4)}`);
+    } else if (d.startsWith("55") && d.length === 13 && d[4] === "9") {
+      saida.add(`${d.slice(0, 4)}${d.slice(5)}`);
+    }
+    return [...saida];
+  }
+
   async resolverPorTelefone(telefoneRaw: string): Promise<SessaoResolvida> {
-    const telefone = SessaoService.normalizar(telefoneRaw);
     const sessoes = await comoSistema(() =>
       this.prisma.whatsappSessao.findMany({
-        where: { telefone },
+        where: { telefone: { in: SessaoService.variantes(telefoneRaw) } },
         include: {
           motorista: {
             select: { id: true, nome: true, ativo: true, expoPushToken: true, ultimoLoginEm: true },
@@ -85,6 +103,27 @@ export class SessaoService {
       nome: sessao.user!.nome,
       contaId: sessao.contaId,
     };
+  }
+
+  /**
+   * Um motorista CADASTRADO com este telefone, mesmo sem WhatsApp vinculado.
+   *
+   * Não abre ferramenta nenhuma — sem sessão vinculada, o agente do motorista
+   * continua fora. Serve só pra dizer a quem atende "é o motorista Fulano da
+   * empresa tal", em vez de "número desconhecido".
+   */
+  async motoristaPorCadastro(
+    telefoneRaw: string,
+  ): Promise<{ id: string; nome: string; conta: string | null } | null> {
+    const locais = SessaoService.variantes(telefoneRaw).map((v) => v.replace(/^55/, ""));
+    const m = await comoSistema(() =>
+      this.prisma.motorista.findFirst({
+        where: { telefone: { in: locais }, ativo: true },
+        select: { id: true, nome: true, conta: { select: { nome: true } } },
+        orderBy: { alteradoEm: "desc" },
+      }),
+    );
+    return m ? { id: m.id, nome: m.nome, conta: m.conta?.nome ?? null } : null;
   }
 
   async marcarMensagemRecebida(sessaoId: string): Promise<void> {

@@ -943,6 +943,43 @@ model ConfiguracaoPlataforma {
   /// Onde o prospect cria a conta sozinho. Configurável porque o domínio do
   /// painel já mudou uma vez e vai mudar de novo.
   sdrLinkCadastro   String  @default("https://app.movatruck.com.br/cadastro")
+  /// O que ele MOSTRA na primeira mensagem: vídeo curto quando existir, senão
+  /// o site. Quem chega pelo anúncio pediu pra conhecer — recebe algo pra ver,
+  /// não um formulário de perguntas.
+  sdrLinkApresentacao String @default("https://www.movatruck.com.br")
+
+  /// Quem atende quando o robô sai. O nome aparece pro prospect ("o Fernando
+  /// vai falar com você por aqui") — "alguém da equipe" sem nome e sem prazo
+  /// foi o que fez uma pessoa perguntar "QUEM VAI ME ATENDER" em caixa alta.
+  /// Vazio = "alguém da Movatruck".
+  sdrAtendenteNome String?
+  /// Nomes que, citados pelo prospect, entregam a conversa pra uma pessoa na
+  /// hora ("quero falar com o Fernando"). Regra fixa, antes do modelo: pedido
+  /// de gente não pode depender de uma IA entender.
+  sdrNomesEquipe   String[] @default([])
+  /// Horários que o robô oferece pra ligação de demonstração, "HH:MM" em São
+  /// Paulo. Ele oferece os dois próximos dentro do horário de atendimento.
+  sdrHorariosDemo  String[] @default([])
+
+  /// Times do Chatwoot que recebem a conversa quando o robô passa pra gente.
+  /// Atribuir ao time é o que faz o próprio Chatwoot notificar quem está nele.
+  /// Vazio = só a etiqueta, como antes.
+  chatwootTimeComercialId Int?
+  chatwootTimeOperacaoId  Int?
+
+  /// Quem recebe no WhatsApp o aviso de lead esperando gente (rota
+  /// ALERTA_COMERCIAL). Telefones com DDI, só dígitos.
+  alertaComercialTelefones String[] @default([])
+  /// Quem recebe quando ninguém respondeu no prazo. É o degrau de cima.
+  alertaEscalonarTelefones String[] @default([])
+  /// Minutos até escalonar, contados dentro do horário de atendimento.
+  alertaEscalonarMinutos   Int      @default(15)
+  /// Horário de atendimento humano, hora cheia em São Paulo, e dias da semana
+  /// (0 = domingo). Fora dele o robô diz quando alguém responde, e o prazo de
+  /// escalonamento só começa a contar na abertura.
+  atendimentoHoraInicio Int   @default(8)
+  atendimentoHoraFim    Int   @default(18)
+  atendimentoDias       Int[] @default([1, 2, 3, 4, 5, 6])
 
   /// O publicador do Instagram está ligado?
   ///
@@ -5714,7 +5751,20 @@ model Lead {
   /// Quando a conversa foi dada por encerrada. Nulo = ainda viva.
   conversaEncerradaEm DateTime?
   /// Um humano assumiu: o robô sai de cena e não escreve mais por cima dele.
+  ///
+  /// "Assumiu" é qualquer ação de gente na conversa (escrever, atribuir,
+  /// etiquetar, nota) OU o robô ter entregado a conversa. Por isso sozinho não
+  /// diz se alguém ATENDEU — quem diz é `primeiraRespostaHumanaEm`.
   sdrPausadoEm        DateTime?
+  /// A primeira vez que uma PESSOA escreveu pro lead neste ciclo. É o que
+  /// separa "esperando atendente" de "com atendente" — antes as duas coisas
+  /// apareciam iguais, e lead esperando parecia lead atendido.
+  primeiraRespostaHumanaEm DateTime?
+  /// Quando o aviso de "lead esperando gente" saiu. Idempotência do alerta: um
+  /// aviso por ciclo, não um por mensagem.
+  alertaHumanoEm      DateTime?
+  /// Quando o aviso subiu pro degrau de cima por ninguém ter respondido.
+  alertaEscalonadoEm  DateTime?
 
   interacoes InteracaoLead[]
   mensagens  MensagemLead[]
