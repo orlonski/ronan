@@ -9,6 +9,81 @@ import type { Cenario } from "./simular-atendimento";
  * dono pegou o que os testes de unidade não pegaram.
  */
 export const CENARIOS: Cenario[] = [
+  // ------------------------------------------------ o roteiro (28/09, tarde) ---
+  // A conversa do dono, palavra por palavra: explicou, largou o link, e morreu;
+  // "prefiro testar" recebeu "comece cadastrando um motorista".
+  {
+    nome: "Roteiro: a conversa do dono, do oi ao teste guiado",
+    canal: "comercial",
+    origem: "teste-do-dono",
+    passos: [
+      { cliente: "Tenho uma transportadora e quero conhecer a Movatruck" },
+      { cliente: "Legal" },
+      { cliente: "Prefiro testar" },
+      { cliente: "Não chegou o código" },
+      { contaCriada: true },
+      { cliente: "Beleza, obrigado" },
+    ],
+    espera: { repasses: 0, contem: "Conta criada!", roboAtivo: true },
+  },
+  {
+    nome: "Roteiro: conta como controla, escolhe pelo número",
+    canal: "comercial",
+    origem: "adversarial",
+    passos: [
+      { cliente: "Oi" },
+      { cliente: "uso planilha" },
+      { cliente: "2" },
+      { cliente: "pronto, criei" },
+    ],
+    espera: { repasses: 0, contem: "Entendi, planilha", ultimaContem: "Nesta ordem" },
+  },
+  {
+    nome: "Roteiro: escolhe a ligação",
+    canal: "comercial",
+    origem: "adversarial",
+    passos: [
+      { cliente: "Bom dia, quero conhecer o sistema" },
+      { cliente: "no caderno" },
+      { cliente: "1" },
+      { cliente: "o primeiro" },
+    ],
+    espera: { repasses: 1, contem: "te liga" },
+  },
+  {
+    nome: "Roteiro: pega o link e volta com oi",
+    canal: "comercial",
+    origem: "adversarial",
+    passos: [
+      { cliente: "quero testar" },
+      { cliente: "Oi" },
+    ],
+    espera: { repasses: 0, ultimaContem: "Conseguiu criar a conta?" },
+  },
+  {
+    nome: "Roteiro: trava no cadastro",
+    canal: "comercial",
+    origem: "adversarial",
+    passos: [
+      { cliente: "Oi" },
+      { cliente: "Prefiro testar" },
+      { cliente: "não consigo entrar, deu erro" },
+    ],
+    espera: { repasses: 1, alertas: 1 },
+  },
+  {
+    nome: "Roteiro: pergunta como cadastra local no meio do teste",
+    canal: "comercial",
+    origem: "adversarial",
+    passos: [
+      { cliente: "Oi" },
+      { cliente: "quero testar" },
+      { contaCriada: true },
+      { cliente: "onde eu cadastro a pedreira?" },
+    ],
+    espera: { repasses: 0, ultimaSemResposta: false },
+  },
+
   // ---------------------------------------------------------------- reais ---
   {
     nome: "Anúncio, e some",
@@ -344,7 +419,7 @@ export const CENARIOS: Cenario[] = [
       { devolverAoRobo: true },
       { cliente: "Oi" },
     ],
-    espera: { ultimaContem: "Opa! A Movatruck", roboAtivo: true, ultimaSemResposta: false },
+    espera: { ultimaContem: "Aqui é o atendimento da Movatruck", roboAtivo: true, ultimaSemResposta: false },
   },
 
   // ------------------------------------------------ casos que a QA listou ---

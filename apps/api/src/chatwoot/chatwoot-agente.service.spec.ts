@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import type { TesteGuiadoService } from "./teste-guiado.service";
 import { ChatwootAgenteService } from "./chatwoot-agente.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { SessaoService, SessaoResolvida } from "../whatsapp/sessao.service";
@@ -183,6 +184,12 @@ function montar(
       timeDoCanal: vi.fn(async (canal: string) => (canal === "comercial" ? 11 : 22)),
       avisar,
     } as unknown as AtendimentoHumanoService,
+    {
+      etapa: vi.fn(async () => ({ oferecido: false, guiado: false, comConta: false })),
+      marcarOferecido: vi.fn(async () => {}),
+      marcarGuia: vi.fn(async () => {}),
+      textoDoPasso2: vi.fn(async () => "Nesta ordem:"),
+    } as unknown as TesteGuiadoService,
   );
   // Sem relógio no teste: a espera da rajada é coberta num teste próprio.
   s.esperaRajadaMs = 0;
@@ -722,7 +729,7 @@ describe("ruído não se responde", () => {
     const { s, atender, responder } = montar({ identidade: DESCONHECIDO, ehLead: true, respostaSdr: RESPOSTA });
     await s.processar(evento({ ...COMERCIAL, content: "Oi" }));
     expect(atender).not.toHaveBeenCalled();
-    expect(responder.mock.calls[0]?.[2]).toMatch(/^Opa! A Movatruck/);
+    expect(responder.mock.calls[0]?.[2]).toMatch(/^Opa! Aqui é o atendimento da Movatruck/);
   });
 });
 
@@ -875,6 +882,6 @@ describe("conversa nova depois de devolver ao robô — teste do dono, 28/09", (
     });
     await s.processar(evento({ ...COMERCIAL, content: "Oi" }));
     expect(atender).not.toHaveBeenCalled();
-    expect(responder.mock.calls[0]?.[2]).toMatch(/^Opa! A Movatruck/);
+    expect(responder.mock.calls[0]?.[2]).toMatch(/^Opa! Aqui é o atendimento da Movatruck/);
   });
 });

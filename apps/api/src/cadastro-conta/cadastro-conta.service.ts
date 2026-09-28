@@ -13,6 +13,7 @@ import { AuthService } from "../auth/auth.service";
 import { ContasService } from "../admin/contas/contas.service";
 import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../whatsapp/sessao.service";
+import { sufixoTelefone } from "../sdr/lead-inbound";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
 
 /** Mesmas réguas do cadastro do motorista, que já rodam em produção. */
@@ -283,7 +284,7 @@ export class CadastroContaService {
     await this.descartar(telefone);
     this.log.log(`Empresa criada por auto-cadastro: ${pendente.empresa} (${conta.id})`);
     this.avisarPlataforma(pendente.empresa, pendente.adminNome, telefone);
-    this.registrarNoFunil(pendente);
+    this.registrarNoFunil(pendente, conta.id);
 
     return conta;
   }
@@ -338,14 +339,30 @@ export class CadastroContaService {
   }
 
   /** Ver o comentário acima de `segundosDesde`. */
-  private registrarNoFunil(pendente: {
-    empresa: string;
-    cnpj: string | null;
-    adminNome: string;
-    adminEmail: string;
-    telefone: string;
-  }): void {
+  private registrarNoFunil(
+    pendente: {
+      empresa: string;
+      cnpj: string | null;
+      adminNome: string;
+      adminEmail: string;
+      telefone: string;
+    },
+    contaId: string,
+  ): void {
     void comoSistema(async () => {
+      // Quem conversou com o robô comercial e criou a conta com o mesmo
+      // telefone: o lead da conversa passa a apontar pra conta. É por aqui que
+      // o robô descobre que o passo 1 do teste foi feito e manda o próximo
+      // (`chatwoot/teste-guiado.service.ts`). Pelos últimos 8 dígitos, porque
+      // o WhatsApp entrega o número com e sem o nono dígito.
+      const sufixo = sufixoTelefone(pendente.telefone);
+      if (sufixo.length === 8) {
+        await this.prisma.lead.updateMany({
+          where: { telefone: { endsWith: sufixo }, chatwootConversaId: { not: null } },
+          data: { contaId },
+        });
+      }
+
       // `cnpj` é único no Lead: quem já estava na base de prospecção vira
       // GANHOU em vez de virar linha duplicada.
       const existente = pendente.cnpj
@@ -361,6 +378,7 @@ export class CadastroContaService {
         origem: "AUTO_CADASTRO" as const,
         origemDado: "Auto-cadastro pelo site — preenchido pelo próprio titular",
         coletadoEm: new Date(),
+        contaId,
       };
 
       if (existente) {

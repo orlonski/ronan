@@ -4,6 +4,7 @@ import { ProspeccaoModule } from "../prospeccao/prospeccao.module";
 import { ChatwootClientModule } from "./chatwoot-client.module";
 import { SdrModule } from "../sdr/sdr.module";
 import { ChatwootAgenteService } from "./chatwoot-agente.service";
+import { TesteGuiadoService } from "./teste-guiado.service";
 import { ChatwootWebhookController } from "./chatwoot-webhook.controller";
 
 /**
@@ -19,7 +20,7 @@ import { ChatwootWebhookController } from "./chatwoot-webhook.controller";
 @Module({
   imports: [WhatsappModule, SdrModule, ProspeccaoModule, ChatwootClientModule],
   controllers: [ChatwootWebhookController],
-  providers: [ChatwootAgenteService],
+  providers: [ChatwootAgenteService, TesteGuiadoService],
   exports: [ChatwootClientModule],
 })
 export class ChatwootModule {}

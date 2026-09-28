@@ -24,7 +24,14 @@ import { Logger } from "@nestjs/common";
 /** Cliente mínimo, tipado por forma (mesmo motivo de `teto-da-conta.ts`). */
 type ClienteLock = {
   $queryRawUnsafe: <T>(sql: string, ...params: unknown[]) => Promise<T>;
+  $transaction?: <R>(
+    fn: (tx: { $queryRawUnsafe: <T>(sql: string, ...params: unknown[]) => Promise<T> }) => Promise<R>,
+    opcoes?: { maxWait?: number; timeout?: number },
+  ) => Promise<R>;
 };
+
+/** Teto de um job. Passou disso, a transação que segura o lock é abortada. */
+const DURACAO_MAXIMA_MS = 2 * 3_600_000;
 
 const log = new Logger("CronExclusivo");
 
@@ -58,6 +65,35 @@ export async function comLockDeCron(
   fn: () => Promise<void>,
 ): Promise<boolean> {
   const chave = chaveDoLock(nome);
+
+  /**
+   * Com o Prisma de verdade, o lock é de TRANSAÇÃO e mora numa conexão só.
+   *
+   * O lock de sessão (`pg_advisory_lock` + `unlock`) quebrava com o pool: o
+   * `SELECT` que pega o lock e o que solta podem sair por conexões diferentes,
+   * o `unlock` na conexão errada não solta nada (só avisa), e o lock fica preso
+   * na primeira. Aí o job pula em silêncio sempre que o disparo cai em outra
+   * conexão. Apareceu no simulador do atendimento (28/09): o cron do teste
+   * guiado rodou na primeira conversa e "já estava rodando" na segunda. Na
+   * transação, o lock sai junto com o COMMIT/ROLLBACK, na mesma conexão.
+   */
+  if (prisma.$transaction) {
+    return prisma.$transaction(
+      async (tx) => {
+        const r = await tx.$queryRawUnsafe<[{ ok: boolean }]>(
+          "SELECT pg_try_advisory_xact_lock($1) AS ok",
+          chave,
+        );
+        if (!r[0]?.ok) {
+          log.debug(`"${nome}" já está rodando em outra instância — pulando`);
+          return false;
+        }
+        await fn();
+        return true;
+      },
+      { maxWait: 10_000, timeout: DURACAO_MAXIMA_MS },
+    );
+  }
 
   const pegou = await prisma.$queryRawUnsafe<[{ ok: boolean }]>(
     "SELECT pg_try_advisory_lock($1) AS ok",

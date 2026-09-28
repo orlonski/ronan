@@ -105,6 +105,12 @@ export class AtendimentoHumanoService {
   }
 
   /** O que o robô pode oferecer agora: quem liga, o que mostrar, quando. */
+  /** Agora é horário de atendimento? Mensagem que o robô puxa sozinho só sai nele. */
+  async dentroDoHorarioAgora(): Promise<boolean> {
+    const cfg = await this.configuracao();
+    return cfg ? dentroDoHorario(this.horario(cfg), this.agora()) : false;
+  }
+
   async oferta(): Promise<OfertaSdr> {
     const cfg = await this.configuracao();
     if (!cfg) {

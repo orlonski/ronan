@@ -89,14 +89,14 @@ describe("o próximo passo", () => {
 
   it("oferece a ligação com o nome de quem liga e o teste com os dias", () => {
     const p = promptSdr(LEAD_INBOUND, OFERTA);
-    expect(p).toContain("ligação de 10 minutos com Fernando");
+    expect(p).toContain("Fernando te liga");
     expect(p).toContain("30 dias grátis");
     expect(p).toContain("https://www.movatruck.com.br");
   });
 
   it("proíbe a pergunta de frota na primeira resposta", () => {
     expect(promptSdr(LEAD_INBOUND, OFERTA)).toContain(
-      "Não pergunte quantos caminhões na primeira resposta",
+      "Não pergunte quantos caminhões",
     );
   });
 
@@ -107,9 +107,19 @@ describe("o próximo passo", () => {
 
   it("sem atendente configurado (o padrão), fala em consultor e não inventa nome", () => {
     const p = promptSdr(LEAD_INBOUND, { ...OFERTA, atendente: null });
-    expect(p).toContain("ligação de 10 minutos com um consultor da Movatruck");
+    expect(p).toContain("um consultor da Movatruck te liga");
     expect(p).toContain("nunca invente nome de pessoa");
     expect(p).not.toContain("Fernando");
+  });
+
+  it("guia o teste da transportadora pela ordem do painel, com o motorista por último", () => {
+    const p = promptSdr(LEAD_INBOUND, { ...OFERTA, linkTeste: "https://app.movatruck.com.br/cadastro" });
+    // O erro do teste do dono (28/09): mandar a transportadora "cadastrar um
+    // motorista e lançar uma viagem" como primeiro passo.
+    expect(p).not.toMatch(/Comece cadastrando um motorista/);
+    const ordem = ["*Caminhões:*", "*Locais:*", "*Clientes:*", "*Motoristas:*"].map((x) => p.indexOf(x));
+    expect(ordem.every((i) => i > 0)).toBe(true);
+    expect([...ordem].sort((a, b) => a - b)).toEqual(ordem);
   });
 
   it("manda calar com a ferramenta, e não escrever sobre a tarefa", () => {

@@ -14,6 +14,7 @@ import { trechoForaDoPortugues } from "../common/idioma-resposta";
 import { sanearResposta } from "../common/saneamento-resposta";
 import { segredoDeCripto } from "../common/segredo-cripto";
 import { aberturaPadrao, promptSdr, type ContextoLead } from "./sdr.prompt";
+import { primeiroNome } from "./roteiro-comercial";
 import { AtendimentoHumanoService } from "./atendimento-humano.service";
 import { empresaConhecida } from "./lead-inbound";
 import { TOOLS_SDR } from "./sdr.tools";
@@ -361,13 +362,24 @@ export class SdrService {
     const t = texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     // Número solto ("3") é a frota — a QA reprovou "Anotado." pra isso.
     const numeroSolto = /^\d{1,4}$/.test(t);
-    if (!numeroSolto && !/\b(?:quanto|preco|valor|custa|mensalidade)\b/.test(t)) return null;
+    const PRECO = /\b(?:quanto|preco|valor|custa|mensalidade)\b/;
+    // "Tenho 5 caminhões" em resposta a "quantos caminhões?", depois de ele ter
+    // perguntado o preço: é a frota que faltava pro preço. Sem isto ia pro
+    // modelo, que perguntou a frota de novo (simulador, 28/09).
+    const frotaAgora = /\b\d{1,4}\s+(?:caminh|carret|truck|veicul|cavalo|bitre)/.test(t);
+    if (!numeroSolto && !PRECO.test(t) && !frotaAgora) return null;
     // Robô desligado não responde nada — nem preço.
     if (!(await this.configuracao())?.sdrAtivo) return null;
     const lead = await comoSistema(() =>
       this.prisma.lead.findUnique({ where: { id: leadId }, select: { frotaQtd: true } }),
     );
     const { mensagens } = await this.historico(leadId, texto);
+    if (!numeroSolto && !PRECO.test(t)) {
+      const perguntouPreco = mensagens.some(
+        (m) => m.role === "user" && PRECO.test(m.content.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()),
+      );
+      if (!perguntouPreco) return null;
+    }
     const frota =
       frotaDita([...mensagens.filter((m) => m.role === "user").map((m) => m.content), texto]) ??
       lead?.frotaQtd ??
@@ -555,7 +567,7 @@ export class SdrService {
       }
       // Primeiro contato ("Ou", "ok", "👍"): o lead que chega nunca fica sem
       // uma palavra. Vai a abertura fixa.
-      const abertura = aberturaPadrao(oferta);
+      const abertura = aberturaPadrao(oferta, primeiroNome(lead.nome));
       await this.gravar(leadId, "SAIDA", abertura);
       return { texto: abertura, silencio: false, passarParaHumano: false, motivoHumano: null, ferramentas };
     }
@@ -569,7 +581,7 @@ export class SdrService {
       if (jaFalamos) {
         return { texto: "", silencio: true, passarParaHumano: false, motivoHumano: null, ferramentas };
       }
-      const abertura = aberturaPadrao(oferta);
+      const abertura = aberturaPadrao(oferta, primeiroNome(lead.nome));
       await this.gravar(leadId, "SAIDA", abertura);
       return { texto: abertura, silencio: false, passarParaHumano: false, motivoHumano: null, ferramentas };
     }

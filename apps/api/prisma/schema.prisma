@@ -5774,6 +5774,20 @@ model Lead {
   /// anterior ("Pode sim, é só me chamar aqui…") — teste do dono, 28/09.
   cicloIniciadoEm     DateTime?
 
+  /// O teste guiado pelo robô (`sdr/roteiro-comercial.ts`).
+  ///
+  /// `contaId` é a conta que ESTA pessoa criou no auto-cadastro, casada pelo
+  /// telefone. É o que deixa o robô dizer "vi que você já cadastrou o caminhão"
+  /// em vez de repetir a lista inteira. Coluna solta, sem FK: o lead é da
+  /// plataforma e a conta pode sumir sem que o histórico da conversa suma junto.
+  contaId          String?
+  /// Quando o link do teste saiu (o passo 1). Zera com a conversa nova.
+  testeOferecidoEm DateTime?
+  /// Quando o robô mandou o que cadastrar (o passo 2). Um por conversa.
+  testeGuiaEm      DateTime?
+  /// O único lembrete de quem pegou o link e sumiu sem criar a conta.
+  testeLembreteEm  DateTime?
+
   interacoes InteracaoLead[]
   mensagens  MensagemLead[]
 
@@ -5789,6 +5803,7 @@ model Lead {
   @@index([enriquecidoEm])
   /// A varredura do follow-up: conversa viva, ordenada pelo silêncio.
   @@index([conversaEncerradaEm, ultimoContato])
+  @@index([testeOferecidoEm])
   @@map("leads")
 }
 

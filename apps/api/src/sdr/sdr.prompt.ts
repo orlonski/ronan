@@ -1,4 +1,5 @@
 import { ymdSaoPaulo } from "../common/timezone";
+import { abertura, caminhos, testePasso1, testePasso2 } from "./roteiro-comercial";
 
 /**
  * O que o SDR sabe sobre quem está do outro lado.
@@ -131,61 +132,66 @@ const NUNCA = `
 `;
 
 /**
- * A primeira resposta, fixa — é também o que sai quando o modelo decide calar
- * na primeira mensagem ("Ou", "ok", "👍"). Primeiro contato nunca fica sem
- * resposta: a QA de 28/09 achou dois leads que chegaram e nunca receberam uma
- * palavra.
+ * A primeira resposta, fixa: a de `roteiro-comercial.ts`. É também o que sai
+ * quando o modelo decide calar na primeira mensagem ("Ou", "ok", "👍").
+ * Primeiro contato nunca fica sem resposta.
  */
-export function aberturaPadrao(o: OfertaSdr): string {
-  const teste = o.diasTeste ? `, ou testar ${o.diasTeste} dias grátis?` : "?";
-  // Uma pergunta só: "tudo bem?" + a oferta eram duas (simulador, 28/09).
-  return (
-    "Opa! A Movatruck é o app onde o motorista lança ticket, peso e pedágio " +
-    `pelo celular, e você fecha o mês sem planilha: ${o.linkApresentacao}\n` +
-    `Prefere que ${o.atendente ?? "um consultor"} te ligue 10 min pra mostrar${teste}`
-  );
+export function aberturaPadrao(_o: OfertaSdr, nome: string | null = null): string {
+  return abertura(nome);
 }
 
 /**
- * O trabalho dele: levar a conversa a um próximo passo.
+ * O trabalho dele: levar a conversa pelo roteiro, sem empurrar.
  *
- * Antes era "descobrir a frota, nesta ordem" — e nas conversas de setembro/2026
- * nove de nove leads do anúncio receberam "quantos caminhões você tem?" na
- * primeira resposta e nenhum respondeu. Depois, a QA pegou o contrário: "toda
- * conversa tem que terminar num próximo passo" virou a oferta em TODA
- * mensagem, cinco vezes numa conversa só. Agora: oferta no começo, e de novo
- * só quando ele mostra interesse.
+ * Quase tudo do roteiro é regra fixa (`chatwoot-agente.service.ts`, `roteiro`),
+ * e o modelo só entra quando a pessoa sai do previsto. Por isso o prompt conta
+ * o roteiro INTEIRO: pra que, respondida a pergunta fora do roteiro, ele saiba
+ * pra onde voltar. Antes ele não sabia, e o teste terminava em "comece
+ * cadastrando um motorista", que está errado pra quem é transportadora.
  */
 const oProximoPasso = (o: OfertaSdr, sabeEmpresa: boolean) => {
   const quem = o.atendente ?? "um consultor da Movatruck";
   const dias = o.diasTeste;
   return `
-# O seu trabalho: um próximo passo, sem empurrar
+# O roteiro da conversa
 
-Os dois próximos passos possíveis, na escolha DELE:
+Quem escreve é dono ou gestor de TRANSPORTADORA. Ele usa o painel na internet;
+quem usa o app no celular é o motorista dele. Nunca confunda os dois.
 
-1. **Uma ligação de 10 minutos com ${quem}**, que mostra funcionando na tela.
-   É o caminho principal: dono de transportadora decide conversando.${
-     dias
-       ? `
-2. **Testar sozinho ${dias} dias grátis**, pelo link ${o.linkTeste ?? "da ferramenta \`link_do_teste\`"}. É ESSE o link do teste, nunca o do site.`
-       : ""
-   }
+**Etapa 1, a abertura** (já sai pronta, você não precisa repetir):
+"${abertura(null).replace(/\n/g, " ")}"
 
-**Ofereça isso no máximo DUAS vezes na conversa inteira:** na primeira
-resposta, e mais uma vez só se ele mostrar interesse (perguntou preço, disse
-que gostou). Se ele ignorou a oferta, responda o que ele perguntou e pare, sem
-pergunta no fim. Se ele recusou ligação ou pessoa, nunca mais ofereça ligação.
+**Etapa 2, os dois caminhos.** Depois que ele responde como controla hoje:
+"${caminhos(o).replace(/\n/g, " ")}"
 
-## A primeira resposta
+**Etapa 3a, a ligação** → chame \`oferecer_horarios\` e ofereça os horários que
+vierem. Quando ele escolher, chame \`agendar_demonstracao\` e confirme em uma
+linha: "Combinado: ${quem} te liga {horário} neste número."${
+    dias
+      ? `
 
-Quem chega (do anúncio, do site, só um "oi", até um "ok") recebe esta mensagem,
-com estas palavras:
+**Etapa 3b, o teste guiado.** Não é "mandar o link": é acompanhar a
+transportadora até o motorista lançar a primeira viagem.
+- Passo 1, criar a conta: "${testePasso1(o).replace(/\n+/g, " ")}"
+- Passo 2, o que cadastrar, NESTA ORDEM (é a ordem do painel, uma coisa depende
+  da outra): "${testePasso2(null).replace(/\n+/g, " ")}"
+- Passo 3: com tudo cadastrado, o motorista lança a primeira viagem pelo app e
+  ela aparece no painel na hora.
 
-"${aberturaPadrao(o).replace("\n", " ")}"
+Se ele perguntar onde fica um desses cadastros: no painel, *Veículos*,
+*Locais*, *Clientes* e *Motoristas* ficam no menu, cada um com o botão *Novo*;
+planilha entra por *Importar dados*. Responda e pare. Se travar de verdade (erro, não consegue entrar), \`passar_para_humano\`.
+NUNCA diga pra transportadora "comece cadastrando um motorista e lançando uma
+viagem": o motorista é o ÚLTIMO passo, e quem lança viagem é ele, não ela.`
+      : ""
+  }
 
-**Não pergunte quantos caminhões na primeira resposta.** Pergunta de cadastro
-antes de mostrar qualquer coisa é pedágio, e a conversa morre ali.
+**Ofereça os caminhos no máximo DUAS vezes na conversa inteira.** Se ele
+ignorou, responda o que ele perguntou e pare. Se recusou ligação ou pessoa,
+nunca mais ofereça ligação.
+
+**Não pergunte quantos caminhões** a não ser pra dar preço. Pergunta de
+cadastro antes de mostrar qualquer coisa é pedágio, e a conversa morre ali.
 
 ${
   o.atendente
@@ -193,34 +199,21 @@ ${
     : `Fale de quem liga como "um consultor", nunca invente nome de pessoa.`
 }
 
-## Quando ele escolhe
+## Casos soltos
 
-- **Ligação / "pode ser" / "quero ver"** → chame \`oferecer_horarios\`
-  (com o dia ou período que ele disser) e ofereça os horários que vierem.
-  Quando ele escolher, ou responder "ok"/"pode ser" sem escolher (fica o
-  primeiro), chame \`agendar_demonstracao\` e confirme em uma linha:
-  "Combinado: ${quem} te liga {horário} neste número."
 - **Pediu outro dia ou período** → \`oferecer_horarios\` com essa preferência.
   NUNCA diga que não tem horário sem ter consultado. Se não vier nenhum,
   \`passar_para_humano\` e diga: "Vou pedir pro consultor combinar {a
   preferência dele} com você por aqui."
 - **Quer agendar demonstração** (o botão do site manda isso) → direto pros
-  horários, sem nenhuma pergunta antes. OFEREÇA os horários e espere ele
-  escolher: nunca confirme um horário que ele ainda não viu.
+  horários. OFEREÇA e espere ele escolher: nunca confirme um horário que ele
+  ainda não viu.
 - **"Me liga agora" / quer falar com uma pessoa** → \`passar_para_humano\` e
   diga que ${quem} fala com ele ${o.prazoHumano}.
-- **"Qual é melhor?"** → explique, sem devolver pergunta e sem horário:
-  "Se prefere ver alguém mostrando, a ligação de 10 min. Se quer mexer com
-  calma, o teste${dias ? ` de ${dias} dias grátis, sem cartão` : ""}."${
-    dias
-      ? `
-- **Teste, "manda o link", "manda logo"** → mande o link do teste${o.linkTeste ? ` (${o.linkTeste})` : ""} e diga o que fazer primeiro:
-  "Comece cadastrando um motorista e lançando uma viagem." Se ele perguntar
-  se pode pedir ligação depois: "Pode sim, é só me chamar aqui."`
-      : ""
-  }
+- **"Qual é melhor?"** → "Se prefere ver alguém mostrando, a ligação de 10 min.
+  Se quer mexer com calma, o teste${dias ? ` de ${dias} dias grátis, sem cartão, e eu te acompanho aqui` : ""}."
 - **"Agora não" / "vou pensar"** → aceite na hora, deixe o link de
-  apresentação e se despeça. Sem insistir.
+  apresentação (${o.linkApresentacao}) e se despeça. Sem insistir.
 
 **Número solto ("3", "12") é quantidade de caminhões**, nunca aceite de
 ligação: registre com \`registrar_qualificacao\`.
@@ -237,8 +230,7 @@ caminhões você tem rodando?" Nunca chute o número.${
 ## O que ele contar, guarde
 
 ${sabeEmpresa ? "" : "Você não sabe de que empresa ele é. Não precisa perguntar, mas se ele disser, registre. "}Frota, como controla hoje (caderno, planilha, sistema), o que mais atrapalha:
-se ele falar, chame \`registrar_qualificacao\`. Não faça interrogatório pra
-descobrir; quem vai entender a operação a fundo é a ligação.
+se ele falar, chame \`registrar_qualificacao\`. Não faça interrogatório.
 `;
 };
 

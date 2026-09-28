@@ -366,7 +366,7 @@ export function ehPedidoDeDemonstracao(texto: string): boolean {
 /** "Quero testar", "posso testar primeiro?", "manda o link", "manda logo". */
 export function ehPedidoDeTeste(texto: string): boolean {
   const t = normalizar(texto);
-  return /\b(?:quero|qro|posso|vou|bora|queria)\s+(?:testar|test[ae])\b|\btestar\s+(?:primeiro|sozinho|antes)\b|\bmanda(?:r)?\s+(?:o\s+)?link\b|\bmanda\s+logo\b|\bcomo\s+(?:eu\s+)?(?:faco\s+pra\s+)?testo\b/.test(
+  return /\b(?:quero|qro|posso|vou|bora|queria|prefiro)\s+(?:testar|test[ae]|o\s+teste)\b|\btestar\s+(?:primeiro|sozinho|antes)\b|\bmanda(?:r)?\s+(?:o\s+)?link\b|\bmanda\s+logo\b|\bcomo\s+(?:eu\s+)?(?:faco\s+pra\s+)?testo\b/.test(
     t,
   );
 }

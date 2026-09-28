@@ -24,6 +24,7 @@ import { comoSistema } from "../common/conta/conta-context";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
 import { ConfigService } from "@nestjs/config";
+import { TesteGuiadoService } from "../chatwoot/teste-guiado.service";
 import { ChatwootAgenteService } from "../chatwoot/chatwoot-agente.service";
 import { ChatwootClientService } from "../chatwoot/chatwoot-client.service";
 import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
@@ -38,6 +39,7 @@ import { ProspeccaoModule } from "../prospeccao/prospeccao.module";
 import { ProspeccaoService } from "../prospeccao/prospeccao.service";
 import { LeadChatwootService } from "../prospeccao/lead-chatwoot.service";
 import { frotaInformada } from "../sdr/sdr.service";
+import { ehAbertura, ehCaminhos, ehTestePasso1, ehTestePasso2 } from "../sdr/roteiro-comercial";
 
 @Module({
   imports: [
@@ -58,7 +60,9 @@ type Passo =
   | { atribuir: true }
   | { etiquetar: string }
   | { resolver: true }
-  | { devolverAoRobo: true };
+  | { devolverAoRobo: true }
+  /** O lead cria a conta de teste com o mesmo telefone, e o cron do teste guiado roda. */
+  | { contaCriada: true };
 
 export type Cenario = {
   nome: string;
@@ -213,6 +217,12 @@ async function main() {
   // Montado na mão: o módulo do WhatsApp arrasta meio sistema (viagens,
   // uploads, torre) que não tem nada a ver com quem atende a mensagem.
   // Real aqui é o que decide: SDR, captação, reconhecimento do motorista.
+  const testeGuiado = new TesteGuiadoService(
+    prisma,
+    chatwoot as unknown as ChatwootClientService,
+    modulo.get(SdrService),
+    modulo.get(AtendimentoHumanoService),
+  );
   const agente = new ChatwootAgenteService(
     prisma,
     new SessaoService(prisma),
@@ -224,6 +234,7 @@ async function main() {
     modulo.get(ProspeccaoService),
     modulo.get(ConfigService),
     modulo.get(AtendimentoHumanoService),
+    testeGuiado,
   );
   agente.esperaRajadaMs = 0;
 
@@ -299,6 +310,19 @@ async function main() {
           content: texto,
           sender: { id: 1, phone_number: telefone, name: "Cliente Teste" },
         } as never);
+      } else if ("contaCriada" in p) {
+        linhas.push(`**SITE:** criou a conta de teste com este telefone (e o cron do teste guiado rodou)`);
+        const conta = await comoSistema(() =>
+          prisma.conta.create({ data: { nome: `Simulador ${n}`, slug: `simulador-${n}-${Date.now()}` } }),
+        );
+        // O mesmo casamento do `cadastro-conta` (registrarNoFunil).
+        await comoSistema(() =>
+          prisma.lead.updateMany({
+            where: { telefone: { endsWith: telefone.slice(-8) }, chatwootConversaId: { not: null } },
+            data: { contaId: conta.id },
+          }),
+        );
+        await testeGuiado.varrer();
       } else if ("devolverAoRobo" in p) {
         linhas.push(`**PAINEL:** clicou "Devolver ao robô"`);
         const lead = await comoSistema(() =>
@@ -362,7 +386,12 @@ async function main() {
       if (/[—–]/.test(f)) erros.push(`travessão: "${f.slice(0, 60)}"`);
       if (/\bfernando\b/i.test(f)) erros.push(`nome de pessoa: "${f.slice(0, 60)}"`);
       if ((f.match(/\?/g) ?? []).length > 1) erros.push(`duas perguntas: "${f.slice(0, 80)}"`);
-      if (f.replace(/https?:\/\/\S+/g, "").length > 330) erros.push(`longa (${f.length}): "${f.slice(0, 60)}…"`);
+      // O guia do teste é lista de propósito (é o que a pessoa segue com o
+      // painel aberto); o resto tem que ser curto.
+      const guia = ehTestePasso1(f) || ehTestePasso2(f) || ehCaminhos(f) || ehAbertura(f);
+      if (!guia && f.replace(/https?:\/\/\S+/g, "").length > 330) erros.push(`longa (${f.length}): "${f.slice(0, 60)}…"`);
+      if (/comece\s+cadastrando\s+um\s+motorista|lan[cç]ando\s+uma\s+viagem/i.test(f))
+        erros.push(`mandou a transportadora começar pelo motorista: "${f.slice(0, 60)}"`);
     }
     // As que a QA final cobrou (28/09): passaram em 42/42 e não deviam.
     const ditoAntes: string[] = [];
