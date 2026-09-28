@@ -87,6 +87,13 @@ export class ProspeccaoController {
     return this.prospeccao.excluir(id);
   }
 
+  /** Depois de uma pessoa assumir, só um clique de gente devolve a conversa ao robô. */
+  @RequerPermissao("prospeccao.editar")
+  @Post("leads/:id/devolver-ao-robo")
+  async devolverAoRobo(@Param("id") id: string) {
+    return this.prospeccao.devolverAoRobo(id);
+  }
+
   /** Registra um toque. `PEDIU_OPT_OUT` já dispara a supressão. */
   @RequerPermissao("prospeccao.editar")
   @Post("leads/:id/interacoes")

@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ChatwootClientModule } from "../../chatwoot/chatwoot-client.module";
 import { AuthModule } from "../../auth/auth.module";
 import { PermissoesModule } from "../permissoes/permissoes.module";
 import { UploadsModule } from "../../uploads/uploads.module";
@@ -12,7 +13,7 @@ import { SdrModule } from "../../sdr/sdr.module";
  * `CamposLayoutModule` não entra nos imports porque é `@Global`.
  */
 @Module({
-  imports: [PermissoesModule, AuthModule, UploadsModule, SdrModule],
+  imports: [PermissoesModule, AuthModule, UploadsModule, SdrModule, ChatwootClientModule],
   controllers: [ContasController, MinhaEmpresaController, LogoPublicaController],
   providers: [ContasService, TrialService],
   exports: [ContasService],

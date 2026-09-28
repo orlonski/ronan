@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Loader2, MessageSquare, Phone, X } from "lucide-react";
+import { Bot, Check, Copy, Loader2, MessageSquare, Phone, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { telefoneDiscavel } from "@ronan/shared-types";
 import { Card } from "@/components/ui/card";
@@ -44,7 +44,28 @@ type LeadDetalhe = {
   /** A conversa no Chatwoot, montada pela API. Nulo pra quem nunca escreveu. */
   chatwootUrl: string | null;
   interacoes: Interacao[];
+  /** O robô saiu da conversa (gente assumiu, ou ele entregou). */
+  sdrPausadoEm: string | null;
+  /** Uma pessoa já escreveu pra ele. Sem isto, pausado = esperando gente. */
+  primeiraRespostaHumanaEm: string | null;
+  /** A conversa nos dois sentidos, em ordem. */
+  mensagens: { id: string; direcao: "ENTRADA" | "SAIDA"; conteudo: string; criadoEm: string }[];
 };
+
+/**
+ * Uma fala nossa, separada em quem disse e o quê.
+ *
+ * A fala de gente chega gravada como "[Fernando] texto" (o webhook do
+ * Chatwoot); a do robô chega crua; a que o saneamento barrou chega como
+ * "[descartada — motivo] texto" e NÃO foi enviada.
+ */
+function quemFalou(conteudo: string): { quem: "robo" | "gente" | "descartada"; nome?: string; texto: string } {
+  const descartada = /^\[descartada[^\]]*\]\s*/.exec(conteudo);
+  if (descartada) return { quem: "descartada", texto: conteudo.slice(descartada[0].length) };
+  const gente = /^\[([^\]]{1,40})\]\s*/.exec(conteudo);
+  if (gente) return { quem: "gente", nome: gente[1], texto: conteudo.slice(gente[0].length) };
+  return { quem: "robo", texto: conteudo };
+}
 
 const CANAIS = [
   { value: "LIGACAO", label: "Ligação" },
@@ -195,6 +216,16 @@ export function FichaLead({
     },
   });
 
+  const devolverAoRobo = useMutation({
+    mutationFn: () => fetchApi(`${caminho}/devolver-ao-robo`, { method: "POST", body: "{}", token }),
+    onSuccess: () => {
+      toast.success("O robô volta a responder na próxima mensagem dele.");
+      void refetch();
+      onMudou();
+    },
+    onError: (e: Error) => toast.error("Não deu pra devolver ao robô", { description: e.message }),
+  });
+
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
   const tel = telefoneBonito(lead?.telefone ?? null);
   const optOut = desfecho === "PEDIU_OPT_OUT";
@@ -307,6 +338,44 @@ export function FichaLead({
               )
             )}
 
+            {/* Quem está cuidando da conversa. "Esperando uma pessoa" em
+                vermelho porque é a única situação daqui que custa venda
+                agora: o robô prometeu gente e ninguém escreveu ainda. */}
+            {lead.sdrPausadoEm && (
+              <Card
+                className={`flex items-center gap-3 p-3 text-sm ${
+                  lead.primeiraRespostaHumanaEm
+                    ? ""
+                    : "border-rose-300 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30"
+                }`}
+              >
+                <UserRound className="h-4 w-4 shrink-0" />
+                <p className="min-w-0 flex-1 leading-snug">
+                  {lead.primeiraRespostaHumanaEm ? (
+                    <>Com uma pessoa desde {fmtDataHoraBR(lead.primeiraRespostaHumanaEm)}. O robô não responde.</>
+                  ) : (
+                    <>
+                      <span className="font-medium text-rose-700 dark:text-rose-400">
+                        Esperando uma pessoa
+                      </span>{" "}
+                      desde {fmtDataHoraBR(lead.sdrPausadoEm)}. O robô já saiu da conversa.
+                    </>
+                  )}
+                </p>
+                {podeEditar && (
+                  <button
+                    type="button"
+                    disabled={devolverAoRobo.isPending}
+                    onClick={() => devolverAoRobo.mutate()}
+                    className="flex shrink-0 items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+                  >
+                    <Bot className="h-3.5 w-3.5" />
+                    {devolverAoRobo.isPending ? "Devolvendo…" : "Devolver ao robô"}
+                  </button>
+                )}
+              </Card>
+            )}
+
             <Card className="divide-y text-sm">
               <Linha rotulo="CNPJ" valor={cnpjBonito(lead.cnpj)} mono copiar={copiar} copiado={copiado} />
               <Linha rotulo="RNTRC" valor={lead.rntrc} mono copiar={copiar} copiado={copiado} />
@@ -403,6 +472,45 @@ export function FichaLead({
                       : "Salvar contato"}
                 </button>
               </Card>
+            )}
+
+            {lead.mensagens.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Conversa no WhatsApp</p>
+                <Card className="space-y-2 p-3">
+                  {lead.mensagens.map((m) => {
+                    if (m.direcao === "ENTRADA") {
+                      return (
+                        <div key={m.id} className="max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm">
+                          <p className="whitespace-pre-wrap leading-relaxed">{m.conteudo}</p>
+                          <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">
+                            {fmtDataHoraBR(m.criadoEm)}
+                          </p>
+                        </div>
+                      );
+                    }
+                    const f = quemFalou(m.conteudo);
+                    return (
+                      <div
+                        key={m.id}
+                        className={`ml-auto max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                          f.quem === "descartada"
+                            ? "border border-dashed text-muted-foreground line-through"
+                            : f.quem === "gente"
+                              ? "bg-emerald-50 dark:bg-emerald-950/40"
+                              : "bg-sky-50 dark:bg-sky-950/40"
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap leading-relaxed">{f.texto}</p>
+                        <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">
+                          {f.quem === "gente" ? f.nome : f.quem === "robo" ? "robô" : "robô · não enviada"} ·{" "}
+                          {fmtDataHoraBR(m.criadoEm)}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </Card>
+              </div>
             )}
 
             <div className="space-y-2">

@@ -17,6 +17,7 @@ import {
   ehRespostaAutomatica,
   ehSoEncerramento,
   nomeDePessoa,
+  RESUMO_MENSAGEM_RECEBIDA,
   telefoneDaCasa,
 } from "../sdr/lead-inbound";
 import { ProspeccaoService } from "../prospeccao/prospeccao.service";
@@ -743,7 +744,7 @@ export class ChatwootAgenteService {
         leadId,
         canal: "WHATSAPP",
         desfecho: "RESPONDEU",
-        resumo: `Mandou mensagem no WhatsApp: "${texto.slice(0, 160)}"`,
+        resumo: `${RESUMO_MENSAGEM_RECEBIDA}: "${texto.slice(0, 160)}"`,
         // `autor` nulo é a convenção da tabela pra "veio da automação".
         autor: null,
       },

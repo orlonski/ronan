@@ -5,6 +5,7 @@ import { comLockDeCron } from "../common/cron-exclusivo";
 import { PrismaService } from "../prisma/prisma.service";
 import { acaoDoFollowup, type AcaoFollowup, type PrazosFollowup } from "./followup.regua";
 import { estadosDeConversa } from "../prospeccao/conversa-lead";
+import { ONDE_ELE_ESCREVEU } from "./lead-inbound";
 
 /**
  * O varredor das conversas que pararam.
@@ -111,7 +112,7 @@ export class FollowupService {
           // ter sido atendido, que é o contrário do que deveria acontecer.
           OR: [
             { mensagens: { some: {} } },
-            { interacoes: { some: { canal: "WHATSAPP" } } },
+            { interacoes: { some: ONDE_ELE_ESCREVEU } },
           ],
         },
         select: {

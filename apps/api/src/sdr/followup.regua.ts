@@ -50,6 +50,8 @@ export type EstadoConversa = {
   ultimoFollowupEm: Date | null;
   conversaEncerradaEm: Date | null;
   sdrPausadoEm: Date | null;
+  /** Uma PESSOA já escreveu pra ele neste ciclo. Sem isto, pausado = esperando. */
+  primeiraRespostaHumanaEm?: Date | null;
   optOut: boolean;
   status: string;
 };
@@ -178,11 +180,20 @@ export function acaoDoFollowup(
  * Mora aqui junto da régua porque é a MESMA classificação — dois lugares
  * decidindo o que é "parada" divergiriam no primeiro ajuste de prazo.
  */
-export type EstadoVisivel = "ativa" | "aguardando-nos" | "parada" | "encerrada" | "com-humano";
+export type EstadoVisivel =
+  | "ativa"
+  | "aguardando-nos"
+  | "esperando-atendente"
+  | "parada"
+  | "encerrada"
+  | "com-humano";
 
 export function estadoVisivel(c: EstadoConversa, p: PrazosFollowup, agora: Date): EstadoVisivel {
   if (c.conversaEncerradaEm) return "encerrada";
-  if (c.sdrPausadoEm) return "com-humano";
+  // O robô saiu da conversa. "Com atendente" só quando alguém ESCREVEU: antes
+  // as duas coisas apareciam iguais, e dez leads prometidos a uma pessoa
+  // pareciam atendidos na tela enquanto esperavam desde 09/09.
+  if (c.sdrPausadoEm) return c.primeiraRespostaHumanaEm ? "com-humano" : "esperando-atendente";
   if (!c.ultimaMensagemEm || !c.ultimaDirecao) return "ativa";
   if (c.ultimaDirecao === "ENTRADA") {
     // Ele falou e ninguém respondeu. Passou do gap de retomada, isso não é

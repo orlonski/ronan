@@ -5,6 +5,7 @@ import {
   type EstadoVisivel,
   type PrazosFollowup,
 } from "../sdr/followup.regua";
+import { ONDE_ELE_ESCREVEU } from "../sdr/lead-inbound";
 
 /**
  * O estado da conversa de cada lead, pra tela poder mostrar quem está parado.
@@ -32,7 +33,7 @@ export type ConversaDoLead = {
 type LinhaUltima = { leadId: string; direcao: string; criadoEm: Date };
 type LinhaEntrada = { leadId: string; criadoEm: Date };
 
-/**
+/*
  * Quem escreveu pra Movatruck e o SDR NÃO atendeu.
  *
  * `MensagemLead` só existe quando o robô respondeu. Todas as conversas que
@@ -40,10 +41,9 @@ type LinhaEntrada = { leadId: string; criadoEm: Date };
  * nenhuma lá, e eram justamente as que mais precisavam de olho: a pessoa
  * escreveu, ouviu "já chamei alguém da equipe" e ficou esperando.
  *
- * `InteracaoLead` de canal WHATSAPP é gravada SEMPRE que alguém escreve,
- * atendido ou não. É ela que fecha o buraco.
+ * A interação "Mandou mensagem no WhatsApp" é gravada SEMPRE que ele escreve,
+ * atendido ou não. É ela que fecha o buraco — e SÓ ela: ver `ONDE_ELE_ESCREVEU`.
  */
-const CANAL_WHATSAPP = "WHATSAPP";
 
 /** Os campos do lead que o estado precisa — o resto da linha não interessa. */
 export type LeadParaConversa = {
@@ -54,6 +54,7 @@ export type LeadParaConversa = {
   ultimoFollowupEm: Date | null;
   conversaEncerradaEm: Date | null;
   sdrPausadoEm: Date | null;
+  primeiraRespostaHumanaEm?: Date | null;
 };
 
 /**
@@ -74,7 +75,7 @@ export async function estadosDeConversa(
 
   const escreveu = await prisma.interacaoLead.groupBy({
     by: ["leadId"],
-    where: { leadId: { in: ids }, canal: CANAL_WHATSAPP },
+    where: { leadId: { in: ids }, ...ONDE_ELE_ESCREVEU },
     _max: { criadoEm: true },
   });
   const porLeadEscreveu = new Map(
@@ -113,6 +114,7 @@ export async function estadosDeConversa(
       ultimoFollowupEm: lead.ultimoFollowupEm,
       conversaEncerradaEm: lead.conversaEncerradaEm,
       sdrPausadoEm: lead.sdrPausadoEm,
+      primeiraRespostaHumanaEm: lead.primeiraRespostaHumanaEm ?? null,
       optOut: lead.optOut,
       status: lead.status,
     });

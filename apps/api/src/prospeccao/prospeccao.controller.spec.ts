@@ -57,6 +57,8 @@ describe("ProspeccaoController — as rotas que a tela chama", () => {
     // própria (`prospeccao.excluir`) em vez de andar no `editar`.
     "DELETE leads/:id",
     "POST leads/:id/interacoes",
+    // A ficha devolve a conversa ao robô depois de uma pessoa assumir.
+    "POST leads/:id/devolver-ao-robo",
     "POST importar-rntrc",
     "POST enriquecer",
     "POST recalcular-scores",

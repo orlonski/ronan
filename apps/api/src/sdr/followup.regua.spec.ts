@@ -198,6 +198,19 @@ describe("como a tela chama cada estado", () => {
     expect(estadoVisivel(conversa({ conversaEncerradaEm: hAtras(1) }), PRAZOS, AGORA)).toBe(
       "encerrada",
     );
-    expect(estadoVisivel(conversa({ sdrPausadoEm: hAtras(1) }), PRAZOS, AGORA)).toBe("com-humano");
+    expect(
+      estadoVisivel(
+        conversa({ sdrPausadoEm: hAtras(1), primeiraRespostaHumanaEm: hAtras(0.5) }),
+        PRAZOS,
+        AGORA,
+      ),
+    ).toBe("com-humano");
+  });
+
+  it("robô saiu e ninguém escreveu ainda: esperando atendente, não 'com atendente'", () => {
+    // Era o que escondia os dez leads prometidos a uma pessoa desde 09/09.
+    expect(estadoVisivel(conversa({ sdrPausadoEm: hAtras(30) }), PRAZOS, AGORA)).toBe(
+      "esperando-atendente",
+    );
   });
 });

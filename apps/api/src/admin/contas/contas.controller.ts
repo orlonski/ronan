@@ -30,6 +30,7 @@ import type { AuthAdminUser } from "../../auth/types";
 import { IgnoraEscopo } from "../../common/escopo/escopo.decorator";
 import { ContasService } from "./contas.service";
 import { FollowupService } from "../../sdr/followup.service";
+import { ChatwootClientService } from "../../chatwoot/chatwoot-client.service";
 
 const CriarContaBody = z.object({
   nome: z.string().trim().min(2, "Diga o nome da empresa."),
@@ -92,6 +93,39 @@ const ConfiguracaoPlataformaBody = z
       .startsWith("https://", "O link do teste precisa ser https.")
       .max(300)
       .optional(),
+    // O que o robô mostra na primeira mensagem (vídeo, ou o site). https pelo
+    // mesmo motivo do link do teste.
+    sdrLinkApresentacao: z
+      .string()
+      .trim()
+      .url("Informe uma URL completa.")
+      .startsWith("https://", "O link precisa ser https.")
+      .max(300)
+      .optional(),
+
+    // Quem atende quando o robô passa a conversa, e como a equipe é avisada.
+    // Vazio no nome = "alguém da Movatruck".
+    sdrAtendenteNome: z.string().trim().max(40).optional(),
+    sdrNomesEquipe: z.array(z.string().trim().min(3).max(40)).max(20).optional(),
+    sdrHorariosDemo: z
+      .array(z.string().trim().regex(/^\d{1,2}:\d{2}$/, "Use HH:MM, ex.: 09:00."))
+      .max(20)
+      .optional(),
+    chatwootTimeComercialId: z.number().int().positive().nullable().optional(),
+    chatwootTimeOperacaoId: z.number().int().positive().nullable().optional(),
+    // Telefones com DDI, só dígitos. 12 ou 13: Brasil com ou sem o nono.
+    alertaComercialTelefones: z
+      .array(z.string().trim().regex(/^55\d{10,11}$/, "Telefone com 55 e DDD, só números."))
+      .max(10)
+      .optional(),
+    alertaEscalonarTelefones: z
+      .array(z.string().trim().regex(/^55\d{10,11}$/, "Telefone com 55 e DDD, só números."))
+      .max(10)
+      .optional(),
+    alertaEscalonarMinutos: z.number().int().min(5).max(240).optional(),
+    atendimentoHoraInicio: z.number().int().min(0).max(23).optional(),
+    atendimentoHoraFim: z.number().int().min(1).max(24).optional(),
+    atendimentoDias: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   })
   // Corpo vazio passaria batido como "salvei" sem alterar nada.
   .refine((v) => Object.values(v).some((x) => x !== undefined), "Diga o que você quer mudar.");
@@ -126,7 +160,14 @@ export class ContasController {
   constructor(
     private readonly service: ContasService,
     private readonly followup: FollowupService,
+    private readonly chatwoot: ChatwootClientService,
   ) {}
+
+  /** Os times do Chatwoot, pra escolher quem recebe a conversa quando o robô sai. */
+  @Get("chatwoot/times")
+  timesDoChatwoot() {
+    return this.chatwoot.listarTimes();
+  }
 
   @Get()
   listar() {

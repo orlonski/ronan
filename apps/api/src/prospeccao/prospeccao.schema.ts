@@ -25,7 +25,7 @@ export const listLeadsSchema = paginationQuerySchema.extend({
    * ela não serve pra nada.
    */
   conversa: z
-    .enum(["ativa", "aguardando-nos", "parada", "encerrada", "com-humano"])
+    .enum(["ativa", "aguardando-nos", "esperando-atendente", "parada", "encerrada", "com-humano"])
     .optional(),
 });
 export type ListLeadsParams = z.infer<typeof listLeadsSchema>;

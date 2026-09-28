@@ -320,6 +320,23 @@ export class ChatwootClientService {
   }
 
   /**
+   * Os times da conta, pra tela escolher pelo NOME. Id de time é andaime
+   * técnico — ninguém deveria precisar abrir o Chatwoot pra descobrir que o
+   * time de pré-vendas é o 3.
+   */
+  async listarTimes(): Promise<{ id: number; nome: string }[]> {
+    const conta = await this.contaPadrao();
+    if (!conta) return [];
+    const r = await this.requisitar(`/api/v1/accounts/${conta}/teams`, { metodo: "GET" });
+    const lista = Array.isArray(r.corpo)
+      ? r.corpo
+      : ((r.corpo as { payload?: unknown[] } | null)?.payload ?? []);
+    return (lista as { id?: number; name?: string }[])
+      .filter((t) => typeof t.id === "number")
+      .map((t) => ({ id: t.id as number, nome: t.name ?? `Time ${t.id}` }));
+  }
+
+  /**
    * Entrega a conversa a um time. É o que faz o próprio Chatwoot notificar
    * quem está no time — push no celular de quem tem o app.
    */

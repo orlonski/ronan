@@ -49,6 +49,18 @@ export type ConfiguracaoPlataformaInput = {
   sdrModeloGemini?: string;
   sdrModeloMinimax?: string;
   sdrLinkCadastro?: string;
+  sdrLinkApresentacao?: string;
+  sdrAtendenteNome?: string;
+  sdrNomesEquipe?: string[];
+  sdrHorariosDemo?: string[];
+  chatwootTimeComercialId?: number | null;
+  chatwootTimeOperacaoId?: number | null;
+  alertaComercialTelefones?: string[];
+  alertaEscalonarTelefones?: string[];
+  alertaEscalonarMinutos?: number;
+  atendimentoHoraInicio?: number;
+  atendimentoHoraFim?: number;
+  atendimentoDias?: number[];
   /** Chave digitada na tela. String vazia apaga e devolve a vez pra env. */
   sdrChaveAnthropic?: string;
   sdrChaveGemini?: string;
@@ -854,6 +866,19 @@ export class ContasService implements OnModuleInit {
       sdrModeloGemini: cfg?.sdrModeloGemini ?? "gemini-2.5-flash",
       sdrModeloMinimax: cfg?.sdrModeloMinimax ?? "MiniMax-M3",
       sdrLinkCadastro: cfg?.sdrLinkCadastro ?? "https://app.movatruck.com.br/cadastro",
+      sdrLinkApresentacao: cfg?.sdrLinkApresentacao ?? "https://www.movatruck.com.br",
+      // Quem atende e como a equipe fica sabendo.
+      sdrAtendenteNome: cfg?.sdrAtendenteNome ?? "",
+      sdrNomesEquipe: cfg?.sdrNomesEquipe ?? [],
+      sdrHorariosDemo: cfg?.sdrHorariosDemo ?? [],
+      chatwootTimeComercialId: cfg?.chatwootTimeComercialId ?? null,
+      chatwootTimeOperacaoId: cfg?.chatwootTimeOperacaoId ?? null,
+      alertaComercialTelefones: cfg?.alertaComercialTelefones ?? [],
+      alertaEscalonarTelefones: cfg?.alertaEscalonarTelefones ?? [],
+      alertaEscalonarMinutos: cfg?.alertaEscalonarMinutos ?? 15,
+      atendimentoHoraInicio: cfg?.atendimentoHoraInicio ?? 8,
+      atendimentoHoraFim: cfg?.atendimentoHoraFim ?? 18,
+      atendimentoDias: cfg?.atendimentoDias ?? [1, 2, 3, 4, 5, 6],
       // A IA escolhida tem chave no ambiente?
       //
       // Sem isso, ligar o SDR com o provider errado dá uma falha MUDA: ele não
@@ -921,7 +946,7 @@ export class ContasService implements OnModuleInit {
     // alguém já tinha configurado.
     // `null` entra no tipo porque apagar uma chave é gravar null — o
     // `Object.fromEntries` sozinho inferiria só os tipos que vieram do corpo.
-    const mudancas: Record<string, string | number | boolean | null> = Object.fromEntries(
+    const mudancas: Record<string, string | number | boolean | null | string[] | number[]> = Object.fromEntries(
       Object.entries(input).filter(([, v]) => v !== undefined),
     );
 
@@ -931,6 +956,11 @@ export class ContasService implements OnModuleInit {
     // a variável de ambiente. Qualquer outro valor é cifrado aqui, no único
     // ponto por onde ele entra.
     const segredo = segredoDeCripto(this.config);
+    // Nome vazio = sem nome ("alguém da Movatruck"), não uma string em branco
+    // que o robô leria como o nome de alguém.
+    if ("sdrAtendenteNome" in mudancas) {
+      mudancas.sdrAtendenteNome = String(mudancas.sdrAtendenteNome ?? "").trim() || null;
+    }
     for (const campo of ["sdrChaveAnthropic", "sdrChaveGemini", "sdrChaveMinimax"] as const) {
       if (!(campo in mudancas)) continue;
       const valor = String(mudancas[campo] ?? "").trim();

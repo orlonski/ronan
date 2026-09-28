@@ -47,7 +47,7 @@ export type Lead = {
 
 /** Como a conversa está agora — a mesma classificação que o robô usa. */
 export type ConversaDoLead = {
-  estado: "ativa" | "aguardando-nos" | "parada" | "encerrada" | "com-humano";
+  estado: "ativa" | "aguardando-nos" | "esperando-atendente" | "parada" | "encerrada" | "com-humano";
   ultimaDirecao: "ENTRADA" | "SAIDA" | null;
   ultimaMensagemEm: string | null;
   horasParada: number | null;
@@ -62,6 +62,8 @@ export type Resumo = {
   porStatus: { status: string; total: number }[];
   porUf: { uf: string; total: number }[];
   suprimidos: number;
+  /** O robô prometeu uma pessoa e ninguém escreveu ainda. */
+  esperandoAtendente?: number;
 };
 
 /**
@@ -73,6 +75,11 @@ export type Resumo = {
 const CONVERSA_LABEL: Record<ConversaDoLead["estado"], { texto: string; classe: string }> = {
   "aguardando-nos": {
     texto: "esperando resposta",
+    classe: "text-rose-700 dark:text-rose-400 font-medium",
+  },
+  // O robô já disse "fulano vai falar com você" — e ninguém falou.
+  "esperando-atendente": {
+    texto: "esperando uma pessoa",
     classe: "text-rose-700 dark:text-rose-400 font-medium",
   },
   parada: { texto: "parada", classe: "text-amber-700 dark:text-amber-500" },
@@ -146,6 +153,29 @@ export default function ProspeccaoPage() {
         </p>
       </header>
 
+      {/* Antes dos números da base: é o único número desta tela que custa
+          venda agora. O robô prometeu uma pessoa, e ninguém escreveu. */}
+      {(resumo.data?.esperandoAtendente ?? 0) > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            setConversa("esperando-atendente");
+            setContato(undefined);
+          }}
+          className="flex w-full items-center gap-3 rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-left text-sm text-rose-800 hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300"
+        >
+          <PhoneOff className="h-4 w-4 shrink-0" />
+          <span className="flex-1">
+            <span className="font-semibold">
+              {resumo.data?.esperandoAtendente}{" "}
+              {resumo.data?.esperandoAtendente === 1 ? "pessoa esperando" : "pessoas esperando"}
+            </span>{" "}
+            atendimento no WhatsApp — o robô já passou a conversa pra gente.
+          </span>
+          <span className="shrink-0 font-medium underline">Ver quem</span>
+        </button>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metrica titulo="Na base" valor={total.toLocaleString("pt-BR")} icone={<Building2 className="h-4 w-4" />} />
         <Metrica
@@ -195,6 +225,7 @@ export default function ProspeccaoPage() {
                 placeholder="Conversa"
                 showSearch={false}
                 options={[
+                  { value: "esperando-atendente", label: "Esperando uma pessoa" },
                   { value: "aguardando-nos", label: "Esperando resposta" },
                   { value: "parada", label: "Parada" },
                   { value: "ativa", label: "Conversando" },

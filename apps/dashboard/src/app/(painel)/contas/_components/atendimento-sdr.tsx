@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { AtendimentoHumanoConfig, type ConfigAtendimentoHumano } from "./atendimento-humano-config";
 
 type Provider = "anthropic" | "gemini" | "minimax";
 
@@ -22,7 +23,7 @@ type SituacaoChave = {
   variavel: string;
 };
 
-type Config = {
+type Config = ConfigAtendimentoHumano & {
   sdrAtivo: boolean;
   sdrProvider: Provider;
   sdrModeloAnthropic: string;
@@ -88,8 +89,8 @@ type Previsao = {
  * Pela mesma razão o provider e o modelo se escolhem aqui — o SDR não herda a
  * escolha de nenhuma empresa.
  *
- * Ele só fala com quem já está na base de leads. Número solto continua indo
- * direto pra fila humana, ligado ou desligado.
+ * Ele atende quem escreve no WhatsApp COMERCIAL. No número de operação quem
+ * responde é gente (ou o agente do motorista), nunca ele.
  */
 export function AtendimentoSdr() {
   const token = useAuthToken();
@@ -166,8 +167,8 @@ export function AtendimentoSdr() {
           </p>
           <p className="text-sm text-muted-foreground">
             {ligado
-              ? "Quem está na lista de captação e manda mensagem é atendido na hora: preço, dúvida e link do teste."
-              : "Toda mensagem de quem não é motorista vai direto pra fila humana."}
+              ? "Quem escreve no WhatsApp comercial é atendido na hora: ele mostra o sistema e oferece uma ligação curta ou o teste grátis."
+              : "Toda mensagem no WhatsApp comercial vai direto pra uma pessoa."}
           </p>
           {/* O aviso que faltava: sem chave ele não responde e a tela seguia
               dizendo "ligado", o que manda a pessoa caçar bug no WhatsApp. */}
@@ -335,6 +336,8 @@ export function AtendimentoSdr() {
           {ligado ? "Desligar atendimento" : "Ligar atendimento"}
         </Button>
       </div>
+      <AtendimentoHumanoConfig data={data} onSalvo={() => void refetch()} />
+
       {/* A conversa que o prospect abandonou.
           O varredor já roda e NÃO manda nada — mostra o que faria. É a leitura
           que transforma "ligo ou não ligo o follow-up" numa decisão com número

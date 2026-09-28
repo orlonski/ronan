@@ -14,6 +14,23 @@
  * existe: o que veio do Instagram, do site ou de indicação.
  */
 
+/**
+ * O começo do resumo da interação que o webhook grava quando ELE escreve.
+ *
+ * É a única linha de `InteracaoLead` que significa "o lead falou". As outras
+ * de canal WHATSAPP são nossas — recado deixado pelo vendedor, qualificação do
+ * robô, repasse — e contar essas como fala dele pôs a LAGUNA, nota 100, em
+ * "esperando resposta há 11 dias" por causa de um áudio que NÓS mandamos.
+ */
+export const RESUMO_MENSAGEM_RECEBIDA = "Mandou mensagem no WhatsApp";
+
+/** O filtro Prisma de "ele escreveu". Um lugar só, pros três que perguntam. */
+export const ONDE_ELE_ESCREVEU = {
+  canal: "WHATSAPP",
+  autor: null,
+  resumo: { startsWith: RESUMO_MENSAGEM_RECEBIDA },
+};
+
 /** Quem entrou por aqui. Separa do `PROSPECCAO_ATIVA` e do `SITE_FORMULARIO`. */
 export const ORIGEM_INBOUND = "WHATSAPP_INBOUND";
 

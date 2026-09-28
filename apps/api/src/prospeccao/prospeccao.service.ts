@@ -5,7 +5,7 @@ import { SEM_ESCOPO } from "../common/escopo/escopo";
 import type { ListLeadsParams } from "./prospeccao.schema";
 import { comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
-import { sufixoTelefone } from "../sdr/lead-inbound";
+import { ONDE_ELE_ESCREVEU, sufixoTelefone } from "../sdr/lead-inbound";
 import { LeadChatwootService } from "./lead-chatwoot.service";
 import { conversasDosLeads, type LeadParaConversa } from "./conversa-lead";
 import type { PrazosFollowup } from "../sdr/followup.regua";
@@ -30,7 +30,7 @@ export class ProspeccaoService {
 
   async resumo() {
     return comoSistema(async () => {
-      const [total, porStatus, porUf, comTelefone, comEmail, suprimidos] = await Promise.all([
+      const [total, porStatus, porUf, comTelefone, comEmail, suprimidos, esperandoAtendente] = await Promise.all([
         this.prisma.lead.count(),
         this.prisma.lead.groupBy({ by: ["status"], _count: true }),
         this.prisma.lead.groupBy({
@@ -42,6 +42,16 @@ export class ProspeccaoService {
         this.prisma.lead.count({ where: { telefone: { not: null } } }),
         this.prisma.lead.count({ where: { email: { not: null } } }),
         this.prisma.supressaoContato.count(),
+        // Prometido a uma pessoa e ninguém escreveu ainda. É o número que
+        // custa venda — por isso vai pro topo da tela.
+        this.prisma.lead.count({
+          where: {
+            sdrPausadoEm: { not: null },
+            primeiraRespostaHumanaEm: null,
+            conversaEncerradaEm: null,
+            optOut: false,
+          },
+        }),
       ]);
 
       return {
@@ -53,6 +63,7 @@ export class ProspeccaoService {
         porStatus: porStatus.map((s) => ({ status: s.status, total: s._count })),
         porUf: porUf.map((u) => ({ uf: u.uf ?? "—", total: u._count })),
         suprimidos,
+        esperandoAtendente,
       };
     });
   }
@@ -146,7 +157,12 @@ export class ProspeccaoService {
   private async idsPorEstadoDeConversa(estado: string): Promise<string[]> {
     const candidatos = await this.prisma.lead.findMany({
       where: {
-        OR: [{ mensagens: { some: {} } }, { interacoes: { some: { canal: "WHATSAPP" } } }],
+        OR: [
+          { mensagens: { some: {} } },
+          { interacoes: { some: ONDE_ELE_ESCREVEU } },
+          // Esperando gente não depende de ele ter escrito por último.
+          { sdrPausadoEm: { not: null } },
+        ],
       },
       select: {
         id: true,
@@ -156,6 +172,7 @@ export class ProspeccaoService {
         ultimoFollowupEm: true,
         conversaEncerradaEm: true,
         sdrPausadoEm: true,
+        primeiraRespostaHumanaEm: true,
       },
       take: MAX_CANDIDATOS,
     });
@@ -285,11 +302,48 @@ export class ProspeccaoService {
     const lead = await comoSistema(async () =>
       this.prisma.lead.findUnique({
         where: { id },
-        include: { interacoes: { orderBy: { criadoEm: "desc" }, take: 50 } },
+        include: {
+          interacoes: { orderBy: { criadoEm: "desc" }, take: 50 },
+          // A conversa inteira, nos dois sentidos. A ficha só mostrava o que
+          // ELE disse ("Mandou mensagem: ..."), e quem ia retomar não sabia o
+          // que o robô tinha respondido — nem se tinha respondido.
+          mensagens: {
+            orderBy: { criadoEm: "desc" },
+            take: 100,
+            select: { id: true, direcao: true, conteudo: true, criadoEm: true },
+          },
+        },
       }),
     );
     if (!lead) return null;
-    return { ...lead, chatwootUrl: this.chatwoot.linkDaConversa(lead) };
+    return {
+      ...lead,
+      mensagens: lead.mensagens.reverse(),
+      chatwootUrl: this.chatwoot.linkDaConversa(lead),
+    };
+  }
+
+  /**
+   * Devolve a conversa ao robô.
+   *
+   * O único jeito de o robô voltar a falar depois de uma pessoa assumir — e é
+   * de propósito que seja um clique de gente: o dono pediu, com essas
+   * palavras, que gesto de pessoa no Chatwoot tire o robô "sem mais
+   * interação". Zera também os alertas, pra um próximo repasse avisar de novo.
+   */
+  async devolverAoRobo(id: string) {
+    return comoSistema(() =>
+      this.prisma.lead.update({
+        where: { id },
+        data: {
+          sdrPausadoEm: null,
+          primeiraRespostaHumanaEm: null,
+          alertaHumanoEm: null,
+          alertaEscalonadoEm: null,
+        },
+        select: { id: true, sdrPausadoEm: true },
+      }),
+    );
   }
 
   /**
