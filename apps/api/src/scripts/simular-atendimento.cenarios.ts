@@ -27,6 +27,19 @@ export const CENARIOS: Cenario[] = [
     espera: { repasses: 0, contem: "Conta criada!", roboAtivo: true },
   },
   {
+    // 28/09, 11:31: conversa antiga (o teste de antes), sem "Devolver ao robô",
+    // e a frase do anúncio de novo. Saiu "Opa." e mais nada.
+    nome: "Roteiro: frase do anúncio no meio de conversa antiga",
+    canal: "comercial",
+    origem: "teste-do-dono",
+    passos: [
+      { cliente: "Oi" },
+      { cliente: "quanto custa pra 3 caminhões?" },
+      { cliente: "Tenho uma transportadora e quero conhecer a Movatruck" },
+    ],
+    espera: { repasses: 0, ultimaContem: "controlam as viagens como" },
+  },
+  {
     nome: "Roteiro: conta como controla, escolhe pelo número",
     canal: "comercial",
     origem: "adversarial",

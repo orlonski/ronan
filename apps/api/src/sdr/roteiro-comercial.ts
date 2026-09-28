@@ -80,6 +80,17 @@ export function abertura(nome: string | null): string {
   );
 }
 
+/**
+ * "Quero conhecer a Movatruck", "me fala mais": pedido de apresentação. Vale
+ * a abertura em qualquer ponto da conversa, não só no primeiro contato: no
+ * teste do dono (28/09), a frase do anúncio numa conversa antiga foi pro
+ * modelo e saiu "Opa." e mais nada.
+ */
+export function querConhecer(texto: string): boolean {
+  const t = normalizar(texto);
+  return /\b(?:quero|queria|gostaria\s+de|vim)\s+(?:conhecer|saber\s+mais|entender)\b|\bme\s+(?:fala|conta|explica)\s+(?:mais|sobre|o\s+que)\b|\bo\s+que\s+(?:e|faz)\s+(?:a\s+)?movatruck\b/.test(t);
+}
+
 /** A abertura acabou de sair (é a pergunta dela que está esperando resposta)? */
 export function ehAbertura(fala: string | null): boolean {
   return /controlam\s+as\s+viagens\s+como\b/i.test(fala ?? "");

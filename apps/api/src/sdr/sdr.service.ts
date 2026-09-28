@@ -14,7 +14,7 @@ import { trechoForaDoPortugues } from "../common/idioma-resposta";
 import { sanearResposta } from "../common/saneamento-resposta";
 import { segredoDeCripto } from "../common/segredo-cripto";
 import { aberturaPadrao, promptSdr, type ContextoLead } from "./sdr.prompt";
-import { primeiroNome } from "./roteiro-comercial";
+import { ehAbertura, ehCaminhos, ehTestePasso1, ehTestePasso2, primeiroNome } from "./roteiro-comercial";
 import { AtendimentoHumanoService } from "./atendimento-humano.service";
 import { empresaConhecida } from "./lead-inbound";
 import { TOOLS_SDR } from "./sdr.tools";
@@ -613,18 +613,23 @@ export class SdrService {
             .join("")
             .trim() || t
         : t;
-    const final = saneada?.ok
-      ? aparar(
-          semFrasesProibidas(
-            semPerguntaRepetida(semPrecoInventado(saneada.texto, [...valoresDaTabela, ...valoresDitos])),
-            oferta.diasTeste,
-          ),
-          ofertasAnteriores,
-          recusouLigacao,
-          mostrouInteresse,
-          /\?/.test(mensagem),
+    const limpa = saneada?.ok
+      ? semFrasesProibidas(
+          semPerguntaRepetida(semPrecoInventado(saneada.texto, [...valoresDaTabela, ...valoresDitos])),
+          oferta.diasTeste,
         )
       : "";
+    // A abertura e o guia do teste são texto do roteiro, não do modelo: não
+    // passam pela tesoura.
+    const doRoteiro = ehAbertura(limpa) || ehCaminhos(limpa) || ehTestePasso1(limpa) || ehTestePasso2(limpa);
+    const aparada = limpa && !doRoteiro
+      ? aparar(limpa, ofertasAnteriores, recusouLigacao, mostrouInteresse, /\?/.test(mensagem))
+      : limpa;
+    // A tesoura nunca pode entregar um toco: a abertura saiu como "Opa." no
+    // teste do dono (28/09), de tanto cortar frase do meio. Sobrou quase nada
+    // de um texto que era grande? Vai o texto inteiro.
+    const semLink = (t: string) => t.replace(/https?:\/\/\S+/g, "").trim().length;
+    const final = semLink(aparada) < 25 && semLink(limpa) > 60 ? limpa : aparada;
 
     // Prometeu contato de gente sem chamar a ferramenta? Vale a promessa.
     // A bateria pegou o MiniMax-M3 escrevendo "Combinado: Fernando te liga

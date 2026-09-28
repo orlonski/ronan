@@ -384,6 +384,7 @@ async function main() {
       .map((e) => e.slice(6));
     for (const f of falas) {
       if (/[—–]/.test(f)) erros.push(`travessão: "${f.slice(0, 60)}"`);
+      if (f.replace(/https?:\/\/\S+/g, "").trim().length < 12) erros.push(`resposta-toco: "${f}"`);
       if (/\bfernando\b/i.test(f)) erros.push(`nome de pessoa: "${f.slice(0, 60)}"`);
       if ((f.match(/\?/g) ?? []).length > 1) erros.push(`duas perguntas: "${f.slice(0, 80)}"`);
       // O guia do teste é lista de propósito (é o que a pessoa segue com o

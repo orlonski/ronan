@@ -12,6 +12,7 @@ import {
   ehTestePasso2,
   escolhaDeCaminho,
   primeiroNome,
+  querConhecer,
   testePasso1,
   testePasso2,
   travouNoCadastro,
@@ -147,6 +148,18 @@ describe("dúvida de cadastro no meio do teste", () => {
   it("não pega conversa que não é dúvida de cadastro", () => {
     expect(duvidaDeCadastro("quanto custa?")).toBeNull();
     expect(duvidaDeCadastro("tenho 3 caminhões")).toBeNull();
+  });
+});
+
+describe("querConhecer", () => {
+  it.each([
+    ["Tenho uma transportadora e quero conhecer a Movatruck", true],
+    ["me fala mais", true],
+    ["o que é a Movatruck?", true],
+    ["quero testar", false],
+    ["quanto custa?", false],
+  ])("%s → %s", (texto, esperado) => {
+    expect(querConhecer(texto)).toBe(esperado);
   });
 });
 

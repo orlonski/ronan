@@ -44,6 +44,7 @@ import {
   ehCaminhos,
   escolhaDeCaminho,
   primeiroNome,
+  querConhecer,
   retomadaDoTeste,
   testePasso1,
   travouNoCadastro,
@@ -755,6 +756,13 @@ export class ChatwootAgenteService {
   ): Promise<boolean> {
     const oferta = await this.atendimento.oferta();
     const pergunta = /\?/.test(texto);
+
+    // Pediu pra conhecer (a frase do anúncio), e a apresentação não acabou de
+    // sair: a abertura, sempre igual, venha em que ponto vier.
+    if (querConhecer(texto) && !ehAbertura(ultimaFalaNossa) && !ehCaminhos(ultimaFalaNossa)) {
+      await fixa(aberturaPadrao(oferta, primeiroNome(nomeContato)));
+      return true;
+    }
 
     // Os dois caminhos (ou a abertura) estão esperando resposta. Quem já
     // escolhe na resposta da abertura ("prefiro testar") não precisa ver a
