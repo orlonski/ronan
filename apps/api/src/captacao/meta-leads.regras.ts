@@ -44,6 +44,16 @@ function normalizar(texto: string): string {
     .trim();
 }
 
+/**
+ * Resposta de múltipla escolha volta como a CHAVE da opção ("dono_ou_sócio",
+ * "6_a_15"), não o texto que a pessoa viu. Pra quem lê o alerta, vira o texto:
+ * sublinhado vira espaço e a primeira letra sobe.
+ */
+function legivel(v: string): string {
+  const t = v.replace(/_/g, " ").replace(/\s+/g, " ").trim();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 function valor(campos: CampoMeta[], teste: (nome: string) => boolean): string | null {
   const campo = campos.find((c) => teste(normalizar(c.name)));
   const v = campo?.values?.[0]?.trim();
@@ -70,8 +80,10 @@ export function lerEnvio(envio: EnvioMeta): LeadDoFormulario {
   const campos = envio.field_data ?? [];
   const nome = valor(campos, (n) => n === "full name" || n === "nome completo" || n === "first name");
   const telefone = valor(campos, (n) => n === "phone number" || n === "telefone" || n.includes("whatsapp"));
-  const funcao = valor(campos, (n) => n.includes("dono") || n.includes("gestor") || n.includes("motorista"));
-  const frota = valor(campos, (n) => n.includes("caminh"));
+  const funcaoCrua = valor(campos, (n) => n.includes("dono") || n.includes("gestor") || n.includes("motorista"));
+  const frotaCrua = valor(campos, (n) => n.includes("caminh"));
+  const funcao = funcaoCrua ? legivel(funcaoCrua) : null;
+  const frota = frotaCrua ? legivel(frotaCrua) : null;
   const motorista = funcao ? /motorista/.test(normalizar(funcao)) : false;
   const frotaMinima = frotaMinimaDaFaixa(frota);
   return {

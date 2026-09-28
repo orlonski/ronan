@@ -61,6 +61,19 @@ describe("lerEnvio", () => {
   });
 });
 
+it("resposta como chave da opção (como a Meta devolve de verdade) vira texto legível", () => {
+  const l = lerEnvio({
+    id: "2",
+    field_data: [
+      { name: "você_é_dono_ou_gestor_da_transportadora,_ou_motorista?", values: ["dono_ou_sócio"] },
+      { name: "quantos_caminhões_rodam_hoje?", values: ["6_a_15"] },
+      { name: "nome_completo", values: ["Diego Teste"] },
+      { name: "telefone", values: ["+5542998424945"] },
+    ],
+  });
+  expect(l).toMatchObject({ funcao: "Dono ou sócio", frota: "6 a 15", nome: "Diego Teste", telefone: "+5542998424945", qualificado: true });
+});
+
 describe("frotaMinimaDaFaixa", () => {
   it.each([
     ["1 a 2", 1],
