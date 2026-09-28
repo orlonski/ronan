@@ -87,6 +87,8 @@ const ACAO_TITULO_POR_RECURSO: Record<string, string> = {
   "ao-vivo.editar": "Fechar ou apagar viagem presa",
   "torre.resolver": "Resolver alerta e registrar ocorrência",
   "config-torre.editar": "Mudar quando avisar",
+  "conferencia-diaria.decidir": "Decidir o que fazer com a conferência diária",
+  "config-conferencia-diaria.editar": "Mudar a regra da conferência diária",
   "config-cte.editar": "Configurar emissor, certificado e emitir teste",
 };
 
@@ -168,6 +170,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // `modulo` das três continua "Operação" (o Operador tinha as três).
   { recurso: "torre", label: "Torre de controle", modulo: "Operação", acoes: ["ver", "resolver"] },
   { recurso: "config-torre", label: "Torre de controle — quando avisar", modulo: "Operação", acoes: ["ver", "editar"] },
+  { recurso: "conferencia-diaria", label: "Conferência diária de viagens", modulo: "Operação", acoes: ["ver", "decidir"] },
   { recurso: "programacao", label: "Programação do dia", modulo: "Operação", acoes: ["ver", "editar", "publicar"] },
   // Relatório de produção por período. Agrupar por cliente/empresa (ou filtrar
   // por eles) exige TAMBÉM "viagens.ver-comercial" no endpoint: o agrupamento
@@ -267,6 +270,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "config-campos-layout", label: "Fechamento com o cliente — como ler a planilha do cliente", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-forca-atualizacao", label: "Força-atualização do app", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-km-atipico", label: "Alerta de km fora do padrão", modulo: "Sistema", acoes: ["ver", "editar"] },
+  { recurso: "config-conferencia-diaria", label: "Conferência diária — a regra", modulo: "Sistema", acoes: ["ver", "editar"] },
 ];
 
 /** Mapa recurso → rótulo amigável (usado na matriz de papéis). */

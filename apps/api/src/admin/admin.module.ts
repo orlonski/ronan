@@ -14,6 +14,7 @@ import { FrotaManutencaoModule } from "./frota-manutencao/frota-manutencao.modul
 import { CteModule } from "./cte/cte.module";
 import { ImportacaoModule } from "./importacao/importacao.module";
 import { TorreModule } from "./torre/torre.module";
+import { ConferenciaDiariaModule } from "./conferencia-diaria/conferencia-diaria.module";
 import { ViagemLifecycleAdminModule } from "./viagem-lifecycle/viagem-lifecycle.module";
 import { VeiculosModule } from "./veiculos/veiculos.module";
 import { EmpresasModule } from "./empresas/empresas.module";
@@ -64,6 +65,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     CteModule,
     ImportacaoModule,
     TorreModule,
+    ConferenciaDiariaModule,
     ViagemLifecycleAdminModule,
     VeiculosModule,
     EmpresasModule,

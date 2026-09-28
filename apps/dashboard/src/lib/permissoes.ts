@@ -99,6 +99,8 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/configuracoes/campos-layout", perm: "config-campos-layout.ver" },
   { prefixo: "/configuracoes/forca-atualizacao", perm: "config-forca-atualizacao.ver" },
   { prefixo: "/configuracoes/km-atipico", perm: "config-km-atipico.ver" },
+  { prefixo: "/configuracoes/conferencia-diaria", perm: "config-conferencia-diaria.ver" },
+  { prefixo: "/conferencia-diaria", perm: "conferencia-diaria.ver" },
   // A régua da torre ficava sob `programacao`. Desde 23/09/2026 toda tela do
   // menu (item ou aba) tem chave própria — o escritório libera uma sem a outra.
   { prefixo: "/configuracoes/torre", perm: "config-torre.ver" },

@@ -866,6 +866,41 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
+  "/conferencia-diaria": {
+    oQue:
+      "Os parceiros que provavelmente esqueceram de lançar viagem — o sistema " +
+      "olha o histórico de cada um e separa quem ficou sem lançar nos dias em " +
+      "que era esperado.",
+    faz: [
+      "Ver quem seria perguntado hoje e o motivo de cada um (última viagem lançada, dias esperados sem viagem)",
+      "Conferir quem foi poupado e por quê: já lançou, já foi perguntado há pouco, viagem em andamento",
+    ],
+    naoEAqui: {
+      procurando: "mudar quando e a quem o sistema pergunta",
+      vaEm: "Quando perguntar",
+      href: "/configuracoes/conferencia-diaria",
+    },
+  },
+
+  "/configuracoes/conferencia-diaria": {
+    oQue:
+      "A regra que decide quem provavelmente esqueceu de lançar viagem: em que " +
+      "dias o sistema confere, o que conta como falta e quantas vezes no máximo " +
+      "ele pergunta pra cada parceiro.",
+    faz: [
+      "Ligar ou desligar a conferência — ela nasce desligada e, nesta etapa, só registra quem seria perguntado: nada é enviado",
+      "Escolher a hora, os dias em que roda e quais dias da semana contam como dia de viagem (só dias úteis, todos ou os que você marcar)",
+      "Escolher a regra: sem viagem no dia esperado anterior, ou vários dias esperados seguidos sem viagem",
+      "Definir a frequência (no máximo 1 pergunta a cada N dias por parceiro), se feriado nacional conta e se quem nunca lançou também entra",
+      "Simular na hora e ver quem seria perguntado, com o texto exato da regra em vigor",
+    ],
+    naoEAqui: {
+      procurando: "ver quem seria perguntado hoje",
+      vaEm: "Esqueceu de lançar?",
+      href: "/conferencia-diaria",
+    },
+  },
+
   "/configuracoes/torre": {
     oQue:
       "Quando uma viagem em curso vira alerta, e quando o alerta merece te " +

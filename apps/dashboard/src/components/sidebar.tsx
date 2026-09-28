@@ -189,14 +189,17 @@ const GRUPOS: Grupo[] = [
         label: "Viagens",
         icon: ClipboardCheck,
         perm: "viagens.ver",
-        // Abas: Conferir tickets, Não chegaram e as engrenagens ⚙ Campos no
-        // app, ⚙ Paradas e imprevistos e ⚙ Km fora do padrão.
+        // Abas: Conferir tickets, Esqueceu de lançar?, Não chegaram e as
+        // engrenagens ⚙ Campos no app, ⚙ Paradas e imprevistos, ⚙ Km fora do
+        // padrão e ⚙ Quando perguntar.
         ou: [
           { href: "/conferencias", perm: "conferencia-ticket.ver" },
+          { href: "/conferencia-diaria", perm: "conferencia-diaria.ver" },
           { href: "/lancamentos-travados", perm: "lancamentos-resgatados.ver" },
           { href: "/tipos-servico", perm: "tipos-servico.ver" },
           { href: "/tipos-evento-viagem", perm: "tipos-evento-viagem.ver" },
           { href: "/configuracoes/km-atipico", perm: "config-km-atipico.ver" },
+          { href: "/configuracoes/conferencia-diaria", perm: "config-conferencia-diaria.ver" },
         ],
       },
       { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel, perm: "abastecimentos.ver" },

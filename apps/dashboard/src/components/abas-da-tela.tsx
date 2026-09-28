@@ -88,6 +88,7 @@ export const ABAS = {
   viagens: [
     { href: "/viagens", label: "Viagens", perm: "viagens.ver" },
     { href: "/conferencias", label: "Conferir tickets", perm: "conferencia-ticket.ver" },
+    { href: "/conferencia-diaria", label: "Esqueceu de lançar?", perm: "conferencia-diaria.ver" },
     {
       href: "/lancamentos-travados",
       label: "Não chegaram",
@@ -102,6 +103,7 @@ export const ABAS = {
     { href: "/tipos-servico", label: "Campos no app", perm: "tipos-servico.ver", config: true },
     { href: "/tipos-evento-viagem", label: "Paradas e imprevistos", perm: "tipos-evento-viagem.ver", config: true },
     { href: "/configuracoes/km-atipico", label: "Km fora do padrão", perm: "config-km-atipico.ver", config: true },
+    { href: "/configuracoes/conferencia-diaria", label: "Quando perguntar", perm: "config-conferencia-diaria.ver", config: true },
   ],
 } satisfies Record<string, Aba[]>;
 

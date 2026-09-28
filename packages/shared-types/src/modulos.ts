@@ -118,7 +118,15 @@ export const MODULOS: ModuloDef[] = [
     nome: "Conferência",
     pitch: "Descarga suspeita, km atípico e a leitura do ticket por IA.",
     medido: true,
-    recursos: ["conferencia-ticket", "config-km-atipico", "config-ia"],
+    recursos: [
+      "conferencia-ticket",
+      "config-km-atipico",
+      "config-ia",
+      // Conferência diária de viagens (pergunta ao motorista que provavelmente
+      // esqueceu de lançar). Fase 1: só sombra, nada é enviado.
+      "conferencia-diaria",
+      "config-conferencia-diaria",
+    ],
   },
   {
     chave: "fechamento",
