@@ -8,10 +8,14 @@ import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { empresaConhecida } from "./lead-inbound";
 import {
+  dentroDoHorario,
   deveEscalonar,
   mensagemDeRepasse,
+  proximaAbertura,
+  proximosHorarios,
   type HorarioAtendimento,
 } from "./atendimento-humano.regua";
+import type { OfertaSdr } from "./sdr.prompt";
 
 /** Quanto tempo um alerta sem resposta ainda merece escalonar. Depois disso é histórico. */
 const JANELA_ESCALONAR_DIAS = 3;
@@ -71,6 +75,28 @@ export class AtendimentoHumanoService {
     const cfg = await this.configuracao();
     if (!cfg) return mensagemDeRepasse(null, { inicio: 8, fim: 18, dias: [1, 2, 3, 4, 5, 6] });
     return mensagemDeRepasse(canal === "comercial" ? cfg.sdrAtendenteNome : null, this.horario(cfg));
+  }
+
+  /** O que o robô pode oferecer agora: quem liga, o que mostrar, quando. */
+  async oferta(): Promise<OfertaSdr> {
+    const cfg = await this.configuracao();
+    if (!cfg) {
+      return { atendente: null, linkApresentacao: "https://www.movatruck.com.br", diasTeste: null, prazoHumano: "em instantes" };
+    }
+    const h = this.horario(cfg);
+    return {
+      atendente: cfg.sdrAtendenteNome?.trim() || null,
+      linkApresentacao: cfg.sdrLinkApresentacao,
+      diasTeste: cfg.autoCadastroAberto ? cfg.diasTesteGratis : null,
+      prazoHumano: dentroDoHorario(h) ? "em instantes" : proximaAbertura(h),
+    };
+  }
+
+  /** Os dois próximos horários de ligação livres na grade. */
+  async horariosLivres(): Promise<string[]> {
+    const cfg = await this.configuracao();
+    if (!cfg) return [];
+    return proximosHorarios(cfg.sdrHorariosDemo ?? [], this.horario(cfg));
   }
 
   /** Os nomes que, citados, pedem gente. Inclui quem atende. */

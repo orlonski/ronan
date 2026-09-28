@@ -7,6 +7,12 @@
  *   pnpm testar:sdr --dificil     # desconto, prazo, concorrente, opt-out
  *   pnpm testar:sdr --inbound --bateria   # quem chegou sozinho, sem empresa
  *   pnpm testar:sdr --inbound --prompt    # só imprime o prompt, sem chamar IA
+ *   pnpm testar:sdr --inbound --limpar --anuncio   # a primeira resposta ao anúncio
+ *   pnpm testar:sdr --inbound --limpar --demo      # botão "agendar demonstração" do site
+ *   pnpm testar:sdr --inbound --limpar --ruido     # emoji e aviso de ausência: silêncio
+ *
+ * As baterias novas conferem sozinhas e imprimem PASSOU/FALHOU — cada
+ * checagem é um defeito que chegou em cliente de verdade em setembro/2026.
  *
  * O histórico é REAL e persiste entre execuções, igual ao harness do agente do
  * motorista — vários defeitos de conversa só aparecem no segundo turno, quando
@@ -27,6 +33,74 @@ import { promptSdr } from "../sdr/sdr.prompt";
 import { SdrModule } from "../sdr/sdr.module";
 import { SdrService } from "../sdr/sdr.service";
 import { EMPRESA_A_DESCOBRIR, ORIGEM_INBOUND } from "../sdr/lead-inbound";
+import type { RespostaSdr } from "../sdr/sdr.service";
+
+/** Uma mensagem da bateria e, quando houver, o que a resposta tem que cumprir. */
+type Caso = { msg: string; checar?: (r: RespostaSdr | null) => string[] };
+
+const linhas = (t: string) => t.split("\n").filter((l) => l.trim()).length;
+const perguntouFrota = (t: string) => /quantos\s+(caminh|ve[ií]culos)/i.test(t);
+
+/** A primeira resposta a quem veio do anúncio: curta, com algo pra ver e a escolha. */
+const ANUNCIO: Caso[] = [
+  {
+    msg: "Tenho transportadora a granel e quero conhecer a Movatruck.",
+    checar: (r) => {
+      const t = r?.texto ?? "";
+      const erros: string[] = [];
+      if (!t) erros.push("não respondeu");
+      if (linhas(t) > 4) erros.push(`longa demais (${linhas(t)} linhas)`);
+      if (!/https?:\/\//.test(t)) erros.push("sem link pra ver");
+      if (perguntouFrota(t)) erros.push('perguntou "quantos caminhões" na primeira resposta');
+      if (!/lig|mostr|test/i.test(t)) erros.push("não ofereceu ligação nem teste");
+      return erros;
+    },
+  },
+];
+
+/** O botão do site: direto pros horários, sem qualificar antes. */
+const DEMO: Caso[] = [
+  {
+    msg: "Oi! Vi o site do Movatruck e quero agendar uma demonstração.",
+    checar: (r) => {
+      const erros: string[] = [];
+      if (!r?.ferramentas.includes("oferecer_horarios")) erros.push("não ofereceu horários");
+      if (perguntouFrota(r?.texto ?? "")) erros.push("qualificou antes de agendar");
+      return erros;
+    },
+  },
+  {
+    msg: "pode ser o primeiro",
+    checar: (r) => {
+      const erros: string[] = [];
+      if (!r?.ferramentas.includes("agendar_demonstracao")) erros.push("não agendou");
+      if (!r?.passarParaHumano) erros.push("não avisou quem liga");
+      return erros;
+    },
+  },
+];
+
+/** O que não pede resposta. */
+const RUIDO: Caso[] = [
+  {
+    msg: "oi",
+    checar: (r) => {
+      const t = r?.texto ?? "";
+      const erros: string[] = [];
+      if (linhas(t) > 4) erros.push(`longa demais pra um "oi" (${linhas(t)} linhas)`);
+      if (/^\s*[•\-]/m.test(t)) erros.push("lista com marcador");
+      return erros;
+    },
+  },
+  {
+    msg: "👍",
+    checar: (r) => (r && !r.silencio && r.texto ? [`respondeu emoji: "${r.texto}"`] : []),
+  },
+  {
+    msg: "Agradecemos sua mensagem. Não estamos disponíveis no momento, mas responderemos assim que possível.",
+    checar: (r) => (r && !r.silencio && r.texto ? [`respondeu aviso de ausência: "${r.texto}"`] : []),
+  },
+];
 
 @Module({
   imports: [
@@ -68,6 +142,7 @@ const BATERIA_DIFICIL = [
   "em quanto tempo vocês implantam?",
   "isso integra com meu ERP? uso o Sankhya",
   "e comparado com o Frota Control, qual a diferença?",
+  "Eu nem sei do que é a empresa",
   "vc é robô?",
   "não quero mais receber mensagem de vocês",
 ];
@@ -81,13 +156,20 @@ async function main() {
   // nem o nome. É o caso em que ele mais erra — ou pergunta tudo de uma vez, ou
   // finge conhecer quem nunca viu.
   const inbound = args.includes("--inbound");
-  const perguntas = dificil
-    ? BATERIA_DIFICIL
-    : bateria
-      ? BATERIA
-      : [args.filter((a) => !a.startsWith("--")).join(" ")];
+  const casos: Caso[] = args.includes("--anuncio")
+    ? ANUNCIO
+    : args.includes("--demo")
+      ? DEMO
+      : args.includes("--ruido")
+        ? RUIDO
+        : (dificil
+            ? BATERIA_DIFICIL
+            : bateria
+              ? BATERIA
+              : [args.filter((a) => !a.startsWith("--")).join(" ")]
+          ).map((msg) => ({ msg }));
 
-  if (!bateria && !dificil && !args.includes("--prompt") && !perguntas[0]) {
+  if (!args.includes("--prompt") && !casos[0]?.msg) {
     console.error(
       'Uso: pnpm testar:sdr "sua pergunta"  |  --bateria  |  --dificil  |  --inbound  |  --limpar',
     );
@@ -154,7 +236,18 @@ async function main() {
     // desfazer isso a rodada seguinte fica muda — parecendo bug do SDR.
     await comoSistema(async () => {
       await prisma.mensagemLead.deleteMany({ where: { leadId: lead.id } });
-      await prisma.lead.update({ where: { id: lead.id }, data: { optOut: false } });
+      await prisma.lead.update({
+        where: { id: lead.id },
+        // A pausa e os alertas também: um repasse numa rodada calaria todas
+        // as seguintes, e pareceria o robô quebrado.
+        data: {
+          optOut: false,
+          sdrPausadoEm: null,
+          primeiraRespostaHumanaEm: null,
+          alertaHumanoEm: null,
+          alertaEscalonadoEm: null,
+        },
+      });
       await prisma.supressaoContato.deleteMany({ where: { contato: telefone } });
       // O `--inbound` descobre a empresa conversando: sem devolver o carimbo,
       // a segunda rodada já começa sabendo o que devia perguntar.
@@ -197,12 +290,29 @@ async function main() {
   const quem = inbound ? "lead inbound, empresa a descobrir" : `lead ${EMPRESA_TESTE}`;
   console.log(`\x1b[90m(${antes.sdrProvider} · ${modelo} · ${quem})\x1b[0m\n`);
 
+  const falhas: string[] = [];
+  let conferidos = 0;
   try {
-    for (const pergunta of perguntas) {
+    for (const caso of casos) {
+      const pergunta = caso.msg;
       console.log(`\x1b[36m> ${pergunta}\x1b[0m`);
       const inicio = Date.now();
       const r = await sdr.atender(lead.id, pergunta);
       const seg = ((Date.now() - inicio) / 1000).toFixed(1);
+
+      if (caso.checar) {
+        conferidos++;
+        const erros = caso.checar(r);
+        if (erros.length === 0) console.log("\x1b[32m[PASSOU]\x1b[0m");
+        else {
+          console.log(`\x1b[31m[FALHOU] ${erros.join(" · ")}\x1b[0m`);
+          falhas.push(`"${pergunta}": ${erros.join(" · ")}`);
+        }
+      }
+      if (r?.silencio) {
+        console.log(`\x1b[90m(ficou calado de propósito · ${r.ferramentas.join(", ")})\x1b[0m\n`);
+        continue;
+      }
 
       if (!r) {
         // `atender` devolve só null. Aqui vale descobrir o porquê: as três
@@ -222,6 +332,14 @@ async function main() {
         console.log(`\x1b[35m[pediu humano: ${r.motivoHumano}]\x1b[0m`);
       }
       console.log();
+    }
+    if (conferidos > 0) {
+      console.log(
+        falhas.length === 0
+          ? `\x1b[32m${conferidos}/${conferidos} conferências passaram.\x1b[0m`
+          : `\x1b[31m${falhas.length} de ${conferidos} falharam:\n  ${falhas.join("\n  ")}\x1b[0m`,
+      );
+      process.exitCode = falhas.length > 0 ? 1 : 0;
     }
   } finally {
     // Devolve o interruptor como estava, sempre — inclusive se a conversa

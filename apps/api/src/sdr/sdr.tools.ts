@@ -65,6 +65,29 @@ export const TOOLS_SDR: AgentToolDefinition[] = [
     input_schema: { type: "object", properties: {} },
   },
   {
+    name: "oferecer_horarios",
+    description:
+      "Os dois próximos horários livres pra ligação de demonstração. Use quando ele aceitar " +
+      "a ligação ou pedir pra agendar demonstração. Ofereça exatamente os horários que vierem.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "agendar_demonstracao",
+    description:
+      "Marca a ligação no horário que ELE escolheu entre os oferecidos e avisa quem vai ligar. " +
+      "Depois de chamar, confirme em uma linha e não pergunte mais nada.",
+    input_schema: {
+      type: "object",
+      properties: {
+        horario: {
+          type: "string",
+          description: 'O horário escolhido, como foi oferecido (ex.: "amanhã às 09:00").',
+        },
+      },
+      required: ["horario"],
+    },
+  },
+  {
     name: "passar_para_humano",
     description:
       "Chama uma pessoa da Movatruck pra assumir a conversa. Use quando ele pedir, " +

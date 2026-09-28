@@ -37,9 +37,9 @@ describe("o que o SDR sabe de quem está do outro lado", () => {
     expect(p).toContain("Você só tem o número dele");
   });
 
-  it("manda descobrir a empresa só quando não sabe qual é", () => {
-    expect(promptSdr(LEAD_INBOUND)).toContain("De que empresa ele é");
-    expect(promptSdr(LEAD_CONHECIDO)).not.toContain("De que empresa ele é");
+  it("lembra que não sabe a empresa só quando não sabe qual é", () => {
+    expect(promptSdr(LEAD_INBOUND)).toContain("Você não sabe de que empresa ele é");
+    expect(promptSdr(LEAD_CONHECIDO)).not.toContain("Você não sabe de que empresa ele é");
   });
 
   it("avisa que foi ele quem procurou a gente", () => {
@@ -71,5 +71,49 @@ describe("o lead que nasce de uma mensagem", () => {
     expect(nomeDePessoa("Sérgio", "42999988888")).toBe("Sérgio");
     expect(nomeDePessoa("+55 42 99998-8888", "42999988888")).toBeNull();
     expect(nomeDePessoa("  ", "42999988888")).toBeNull();
+  });
+});
+
+/**
+ * O roteiro que substituiu o "quantos caminhões?" na primeira resposta.
+ * Nove de nove leads do anúncio receberam essa pergunta de cara em
+ * setembro/2026 — e nenhum respondeu.
+ */
+describe("o próximo passo", () => {
+  const OFERTA = {
+    atendente: "Fernando",
+    linkApresentacao: "https://www.movatruck.com.br",
+    diasTeste: 30,
+    prazoHumano: "em instantes",
+  };
+
+  it("oferece a ligação com o nome de quem liga e o teste com os dias", () => {
+    const p = promptSdr(LEAD_INBOUND, OFERTA);
+    expect(p).toContain("ligação de 10 minutos com Fernando");
+    expect(p).toContain("30 dias grátis");
+    expect(p).toContain("https://www.movatruck.com.br");
+  });
+
+  it("proíbe a pergunta de frota na primeira resposta", () => {
+    expect(promptSdr(LEAD_INBOUND, OFERTA)).toContain(
+      "Não pergunte quantos caminhões na primeira resposta",
+    );
+  });
+
+  it("com o cadastro fechado, não promete teste", () => {
+    const p = promptSdr(LEAD_INBOUND, { ...OFERTA, diasTeste: null });
+    expect(p).not.toContain("dias grátis");
+  });
+
+  it("sem atendente configurado, não inventa nome", () => {
+    const p = promptSdr(LEAD_INBOUND, { ...OFERTA, atendente: null });
+    expect(p).toContain("alguém da Movatruck");
+    expect(p).not.toContain("Fernando");
+  });
+
+  it("manda calar com a ferramenta, e não escrever sobre a tarefa", () => {
+    const p = promptSdr(LEAD_INBOUND, OFERTA);
+    expect(p).toContain("nao_responder");
+    expect(p).toContain("Nunca fale de \"ferramenta\"");
   });
 });

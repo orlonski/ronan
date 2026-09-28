@@ -42,6 +42,13 @@ export type AgentProcessarArgs = {
   mensagemAtual: string;
   modelo: string;
   executarTool: AgentToolExecutor;
+  /**
+   * Ferramentas que ENCERRAM a vez: executada uma delas, o provider devolve ""
+   * sem chamar o modelo de novo. Existe por causa do `nao_responder` do SDR —
+   * o MiniMax-M3 recebia "não escreva nada" e chamava a ferramenta de novo, seis
+   * vezes, até estourar o limite de voltas.
+   */
+  encerrarApos?: readonly string[];
 };
 
 export interface AgentProvider {

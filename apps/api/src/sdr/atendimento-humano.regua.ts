@@ -56,7 +56,8 @@ export function mensagemDeRepasse(
   h: HorarioAtendimento,
   agora: Date = new Date(),
 ): string {
-  const quem = atendente?.trim() ? `O ${atendente.trim()}` : "Alguém da Movatruck";
+  // Sem artigo: o nome vem da configuração, e "o"/"a" seria chutar.
+  const quem = atendente?.trim() ? atendente.trim() : "Alguém da Movatruck";
   return dentroDoHorario(h, agora)
     ? `Certo! ${quem} vai falar com você por aqui em instantes.`
     : `Certo! ${quem} te responde por aqui ${proximaAbertura(h, agora)}.`;
@@ -83,4 +84,44 @@ export function deveEscalonar(
   const abertura = new Date(agora.getTime() - minutosDesdeAbertura * 60_000);
   const desde = alertadoEm > abertura ? alertadoEm : abertura;
   return agora.getTime() - desde.getTime() >= minutos * 60_000;
+}
+
+/**
+ * Os próximos horários de ligação que dá pra oferecer, dito como gente diz:
+ * "hoje às 14:00", "amanhã às 09:00", "segunda às 10:30".
+ *
+ * Só dentro do horário de atendimento, e com pelo menos `folgaMin` de
+ * antecedência — oferecer "hoje às 14:00" às 13:58 é prometer o que ninguém
+ * consegue cumprir.
+ */
+export function proximosHorarios(
+  grade: readonly string[],
+  h: HorarioAtendimento,
+  agora: Date = new Date(),
+  quantos = 2,
+  folgaMin = 60,
+): string[] {
+  const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+  const slots = grade
+    .map((g) => /^(\d{1,2}):(\d{2})$/.exec(g.trim()))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => ({ h: Number(m[1]), m: Number(m[2]), rotulo: `${m[1].padStart(2, "0")}:${m[2]}` }))
+    .filter((x) => x.h >= h.inicio && x.h < h.fim)
+    .sort((a, b) => a.h * 60 + a.m - (b.h * 60 + b.m));
+  if (slots.length === 0) return [];
+
+  const hoje = diaDaSemanaEmSaoPaulo(agora);
+  const minutosAgora = horaEmSaoPaulo(agora) * 60 + agora.getUTCMinutes();
+  const saida: string[] = [];
+  for (let i = 0; i <= 7 && saida.length < quantos; i++) {
+    const dia = (hoje + i) % 7;
+    if (!h.dias.includes(dia)) continue;
+    const nomeDia = i === 0 ? "hoje" : i === 1 ? "amanhã" : DIAS[dia];
+    for (const x of slots) {
+      if (i === 0 && x.h * 60 + x.m < minutosAgora + folgaMin) continue;
+      saida.push(`${nomeDia} às ${x.rotulo}`);
+      if (saida.length >= quantos) break;
+    }
+  }
+  return saida;
 }

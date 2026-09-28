@@ -57,6 +57,7 @@ export class AnthropicProvider implements AgentProvider {
     mensagemAtual,
     modelo,
     executarTool,
+    encerrarApos = [],
   }: AgentProcessarArgs): Promise<string> {
     if (!this.client) {
       throw new Error(`${this.nome} sem API key configurada`);
@@ -102,15 +103,18 @@ export class AnthropicProvider implements AgentProvider {
         tools: anthropicTools,
         messages,
       });
+      // O MiniMax já devolveu `content: null` — e o `.filter` derrubava a
+      // conversa inteira. Resposta sem conteúdo é resposta vazia.
+      const conteudo = resp.content ?? [];
       this.log.log(
         `[loop ${i}] stop_reason=${resp.stop_reason} ` +
-          `tool_uses=${resp.content.filter((b) => b.type === "tool_use").length} ` +
+          `tool_uses=${conteudo.filter((b) => b.type === "tool_use").length} ` +
           `cache_create=${resp.usage?.cache_creation_input_tokens ?? 0} ` +
           `cache_read=${resp.usage?.cache_read_input_tokens ?? 0}`,
       );
 
       if (resp.stop_reason !== "tool_use") {
-        const textoFinal = resp.content
+        const textoFinal = conteudo
           .filter((b): b is Anthropic.TextBlock => b.type === "text")
           .map((b) => b.text)
           .join("\n")
@@ -122,7 +126,7 @@ export class AnthropicProvider implements AgentProvider {
         return textoFinal;
       }
 
-      const toolUses = resp.content.filter(
+      const toolUses = conteudo.filter(
         (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
       );
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
@@ -148,7 +152,9 @@ export class AnthropicProvider implements AgentProvider {
         }
       }
 
-      messages.push({ role: "assistant", content: resp.content });
+      if (toolUses.some((tu) => encerrarApos.includes(tu.name))) return "";
+
+      messages.push({ role: "assistant", content: conteudo });
       messages.push({ role: "user", content: toolResults });
     }
 

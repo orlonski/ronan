@@ -154,7 +154,7 @@ function montar(
     {
       mensagemDeRepasse: vi.fn(async (canal: string) =>
         canal === "comercial"
-          ? "Certo! O Fernando vai falar com você por aqui em instantes."
+          ? "Certo! Fernando vai falar com você por aqui em instantes."
           : "Certo! Alguém da Movatruck vai falar com você por aqui em instantes.",
       ),
       nomesDaEquipe: vi.fn(async () => ["Fernando", "Diego"]),
@@ -462,7 +462,7 @@ describe("o SDR atendendo prospect no comercial", () => {
       respostaSdr: null,
     });
     await s.processar(evento({ ...COMERCIAL, content: "quanto custa?" }));
-    expect(responder.mock.calls[0]?.[2]).toContain("O Fernando vai falar com você");
+    expect(responder.mock.calls[0]?.[2]).toContain("Fernando vai falar com você");
     expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 11, []);
     expect(avisar).toHaveBeenCalledOnce();
   });

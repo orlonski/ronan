@@ -14,6 +14,7 @@ import { trechoForaDoPortugues } from "../common/idioma-resposta";
 import { sanearResposta } from "../common/saneamento-resposta";
 import { segredoDeCripto } from "../common/segredo-cripto";
 import { promptSdr, type ContextoLead } from "./sdr.prompt";
+import { AtendimentoHumanoService } from "./atendimento-humano.service";
 import { empresaConhecida } from "./lead-inbound";
 import { TOOLS_SDR } from "./sdr.tools";
 
@@ -42,6 +43,27 @@ export function providerValido(nome: string | null | undefined): ProviderSdr {
   return (PROVIDERS_SDR as readonly string[]).includes(limpo)
     ? (limpo as ProviderSdr)
     : "anthropic";
+}
+
+/**
+ * A frase promete que uma PESSOA vai entrar em contato?
+ *
+ * "te liga", "vai te chamar", "fala com você por aqui": dito isso, alguém tem
+ * que ser avisado, com ou sem o modelo ter lembrado da ferramenta.
+ */
+export function prometeContatoDeGente(texto: string): boolean {
+  const t = texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return [
+    /\b(?:te|lhe)\s+liga\b/,
+    /\bvai\s+(?:te\s+)?ligar\b/,
+    /\bliga\s+(?:pra|para)\s+(?:voce|vc)\b/,
+    /\bvai\s+te\s+(?:chamar|responder|procurar)\b/,
+    /\b(?:fala|vai\s+falar)\s+com\s+(?:voce|vc)\s+por\s+aqui\b/,
+    /\bte\s+(?:chama|responde)\s+por\s+aqui\b/,
+  ].some((p) => p.test(t));
 }
 
 /** Quanto da conversa entra no contexto. Mesma régua do agente do motorista. */
@@ -89,6 +111,7 @@ export class SdrService {
     private readonly precos: PrecosService,
     private readonly prospeccao: ProspeccaoService,
     private readonly config: ConfigService,
+    private readonly atendimento: AtendimentoHumanoService,
   ) {}
 
   /**
@@ -250,16 +273,22 @@ export class SdrService {
     const { mensagens, atual } = await this.historico(leadId, mensagem);
 
     const texto = await provider.processar({
-      systemText: promptSdr(contexto),
+      systemText: promptSdr(contexto, await this.atendimento.oferta()),
       tools: TOOLS_SDR,
       historico: mensagens,
       mensagemAtual: atual,
       modelo,
+      encerrarApos: ["nao_responder"],
       executarTool: async (nome, input) => {
         ferramentas.push(nome);
         const saida = await this.executarTool(nome, input, lead);
         if (nome === "passar_para_humano") {
           pediuHumano = String((input as { motivo?: unknown }).motivo ?? "sem motivo");
+        }
+        // Ligação marcada é passagem pra gente: quem liga tem que ser avisado
+        // e o robô sai da conversa depois de confirmar.
+        if (nome === "agendar_demonstracao") {
+          pediuHumano = `Ligação de demonstração marcada: ${String((input as { horario?: unknown }).horario ?? "?")}`;
         }
         if (nome === "nao_responder") calar = true;
         return saida;
@@ -304,6 +333,15 @@ export class SdrService {
       return null;
     }
     const final = saneada?.ok ? saneada.texto : "";
+
+    // Prometeu contato de gente sem chamar a ferramenta? Vale a promessa.
+    // A bateria pegou o MiniMax-M3 escrevendo "Combinado: Fernando te liga
+    // amanhã às 09:00" sem `agendar_demonstracao` — ninguém seria avisado, e
+    // é exatamente a promessa quebrada que queimou os leads de setembro.
+    if (!pediuHumano && prometeContatoDeGente(final)) {
+      pediuHumano = `Prometeu contato de uma pessoa: "${final.slice(0, 120)}"`;
+      this.log.warn(`SDR prometeu contato sem chamar a ferramenta — repasse forçado`);
+    }
 
     if (final) await this.gravar(leadId, "SAIDA", final);
 
@@ -405,6 +443,32 @@ export class SdrService {
           }),
         );
         return { ok: true };
+      }
+
+      case "oferecer_horarios": {
+        const horarios = await this.atendimento.horariosLivres();
+        return horarios.length > 0
+          ? { horarios }
+          : {
+              horarios: [],
+              instrucao: "Sem grade de horários: pergunte qual período fica bom (manhã ou tarde) e passe pra uma pessoa.",
+            };
+      }
+
+      case "agendar_demonstracao": {
+        const horario = String(input.horario ?? "").trim() || "horário a combinar";
+        await comoSistema(() =>
+          this.prisma.interacaoLead.create({
+            data: {
+              leadId,
+              canal: "WHATSAPP",
+              desfecho: "RESPONDEU",
+              resumo: `Ligação de demonstração marcada pelo atendimento: ${horario}`,
+              autor: null,
+            },
+          }),
+        );
+        return { ok: true, horario };
       }
 
       case "nao_responder":

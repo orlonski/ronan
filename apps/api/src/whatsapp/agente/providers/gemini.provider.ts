@@ -46,6 +46,7 @@ export class GeminiProvider implements AgentProvider {
     mensagemAtual,
     modelo,
     executarTool,
+    encerrarApos = [],
   }: AgentProcessarArgs): Promise<string> {
     if (!this.client) {
       throw new Error("GeminiProvider sem API key configurada");
@@ -145,6 +146,8 @@ export class GeminiProvider implements AgentProvider {
           });
         }
       }
+      // Ferramenta que encerra a vez (ver `encerrarApos`): não volta ao modelo.
+      if (calls.some((c) => encerrarApos.includes(c.name ?? ""))) return "";
       contents.push({ role: "user", parts: responseParts });
     }
 

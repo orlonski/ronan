@@ -3,6 +3,7 @@ import {
   deveEscalonar,
   dentroDoHorario,
   mensagemDeRepasse,
+  proximosHorarios,
   proximaAbertura,
   type HorarioAtendimento,
 } from "./atendimento-humano.regua";
@@ -29,10 +30,10 @@ describe("horário de atendimento", () => {
 describe("mensagemDeRepasse", () => {
   it("tem nome e prazo", () => {
     expect(mensagemDeRepasse("Fernando", H, sp("2026-09-28T10:00:00"))).toBe(
-      "Certo! O Fernando vai falar com você por aqui em instantes.",
+      "Certo! Fernando vai falar com você por aqui em instantes.",
     );
     expect(mensagemDeRepasse("Fernando", H, sp("2026-09-28T22:00:00"))).toBe(
-      "Certo! O Fernando te responde por aqui amanhã a partir das 8h.",
+      "Certo! Fernando te responde por aqui amanhã a partir das 8h.",
     );
     expect(mensagemDeRepasse(null, H, sp("2026-09-28T10:00:00"))).toContain("Alguém da Movatruck");
   });
@@ -53,5 +54,28 @@ describe("deveEscalonar", () => {
 
   it("fora do horário nunca escalona", () => {
     expect(deveEscalonar(sp("2026-09-28T10:00:00"), 15, H, sp("2026-09-28T20:00:00"))).toBe(false);
+  });
+});
+
+describe("proximosHorarios", () => {
+  const grade = ["09:00", "10:30", "14:00", "16:00"];
+  it("hoje, com folga de 1h", () => {
+    expect(proximosHorarios(grade, H, sp("2026-09-28T09:40:00"))).toEqual([
+      "hoje às 14:00",
+      "hoje às 16:00",
+    ]);
+  });
+  it("fim do dia pula pra amanhã; sábado à tarde pula o domingo", () => {
+    expect(proximosHorarios(grade, H, sp("2026-09-28T15:30:00"))).toEqual([
+      "amanhã às 09:00",
+      "amanhã às 10:30",
+    ]);
+    expect(proximosHorarios(grade, H, sp("2026-09-26T17:00:00"))).toEqual([
+      "segunda às 09:00",
+      "segunda às 10:30",
+    ]);
+  });
+  it("grade vazia não inventa horário", () => {
+    expect(proximosHorarios([], H, sp("2026-09-28T09:00:00"))).toEqual([]);
   });
 });
