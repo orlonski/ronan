@@ -113,13 +113,20 @@ export class ProspeccaoService {
         where.id = { in: ids };
       }
 
+      // Telefone digitado com máscara ("(42) 99842-4945") vira só dígitos, que
+      // é como está gravado.
+      const q = params.q?.trim();
+      const buscaPorNumero = q && /^[\d\s()+.-]+$/.test(q) && q.replace(/\D/g, "").length >= 6;
       const pagina = await paginate<Record<string, unknown>, ListLeadsParams>(this.prisma.lead, {
-        params,
+        params: buscaPorNumero ? { ...params, q: q.replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "") } : params,
         where: where as Record<string, unknown>,
         // Lead é da plataforma e não tem coluna de frota: não há recorte por
         // transportadora a fazer. Quem não pode ver a tela não tem a chave.
         escopo: SEM_ESCOPO,
-        searchFields: ["empresa", "nomeFantasia", "municipio", "cnpj", "socio"],
+        // `nome` e `telefone` também: quem chega pelo WhatsApp tem a empresa
+        // "Contato pelo WhatsApp", e só se acha pelo nome do contato ou pelo
+        // número (o dono não achou o próprio lead de teste, 28/09).
+        searchFields: ["empresa", "nomeFantasia", "municipio", "cnpj", "socio", "nome", "telefone", "email"],
         sortable: {
           score: "score",
           empresa: "empresa",

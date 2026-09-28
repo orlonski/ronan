@@ -203,7 +203,7 @@ export default function ProspeccaoPage() {
       <div className="space-y-3">
         <DataTableToolbar
           state={tableState}
-          searchPlaceholder="Buscar empresa, cidade, CNPJ ou sócio…"
+          searchPlaceholder="Buscar empresa, nome, telefone, cidade ou CNPJ…"
           filters={
             <>
               <Combobox
