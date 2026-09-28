@@ -37,6 +37,7 @@ import { AtendimentoHumanoService } from "../sdr/atendimento-humano.service";
 import { ProspeccaoModule } from "../prospeccao/prospeccao.module";
 import { ProspeccaoService } from "../prospeccao/prospeccao.service";
 import { LeadChatwootService } from "../prospeccao/lead-chatwoot.service";
+import { frotaInformada } from "../sdr/sdr.service";
 
 @Module({
   imports: [
@@ -273,6 +274,9 @@ async function main() {
     const alertasAntes = alertas.length;
 
     let ultimoPassoCliente = false;
+    // A conversa em ordem, cliente e robô — pras conferências que dependem do
+    // que JÁ tinha sido dito (frota informada, recusa, pergunta repetida).
+    const ordem: { quem: "C" | "R"; texto: string }[] = [];
     let ultimaFicouSemResposta = false;
     for (const p of c.passos) {
       const antes = chatwoot.eventos.get(conversa)?.length ?? 0;
@@ -284,6 +288,7 @@ async function main() {
       if ("cliente" in p || "audio" in p) {
         const texto = "cliente" in p ? p.cliente : "";
         linhas.push(`**CLIENTE:** ${texto || "(áudio)"}`);
+        if (texto) ordem.push({ quem: "C", texto });
         await agente.processar({
           ...base,
           event: "message_created",
@@ -320,6 +325,7 @@ async function main() {
       if (novos.length === 0) linhas.push(`> _(robô não respondeu)_`);
       ultimaFicouSemResposta = !novos.some((e) => e.startsWith("ROBÔ:"));
       for (const e of novos) linhas.push(`> ${e}`);
+      for (const e of novos) if (e.startsWith("ROBÔ:")) ordem.push({ quem: "R", texto: e.slice(6) });
       linhas.push("");
     }
 
@@ -348,6 +354,48 @@ async function main() {
       if (/\bfernando\b/i.test(f)) erros.push(`nome de pessoa: "${f.slice(0, 60)}"`);
       if ((f.match(/\?/g) ?? []).length > 1) erros.push(`duas perguntas: "${f.slice(0, 80)}"`);
       if (f.replace(/https?:\/\/\S+/g, "").length > 330) erros.push(`longa (${f.length}): "${f.slice(0, 60)}…"`);
+    }
+    // As que a QA final cobrou (28/09): passaram em 42/42 e não deviam.
+    const ditoAntes: string[] = [];
+    for (const m of ordem) {
+      if (m.quem === "C") {
+        ditoAntes.push(m.texto);
+        continue;
+      }
+      const f = m.texto;
+      if (/^\s*["“]|["”]\s*$/.test(f)) erros.push(`aspas nas pontas: "${f.slice(0, 50)}"`);
+      // As da terceira revisão (28/09).
+      if (/\b[a-z]+_[a-z]+\b/.test(f.replace(/https?:\/\/\S+/g, ""))) erros.push(`nome interno vazou: "${f.slice(0, 50)}"`);
+      if (/^\s*anotado\.?\s*$/i.test(f)) erros.push(`"Anotado." sozinho`);
+      // As da quarta revisão (28/09).
+      if (/\b(?:muitos|v[aá]rios|a\s+maioria)\s+(?:dos?\s+|de\s+)?(?:transportador|cliente|empresa)|\bclientes?\s+(?:rodando|usando)/i.test(f))
+        erros.push(`prova social inventada: "${f.slice(0, 60)}"`);
+      if (/\bcl[aá]ssico\b/i.test(f)) erros.push(`comentário sobre o jeito dele: "${f.slice(0, 40)}"`);
+      if (/\b(?:a\s+maioria|o\s+pessoal|muita\s+gente|outros\s+transportador|app\s+novo)\b|\ba\s+gente\s+(?:mais\s+)?v[eê]/i.test(f))
+        erros.push(`generalização inventada: "${f.slice(0, 60)}"`);
+      if (/\bh[aá]\s+(?:\d+\s+|muitos\s+)?anos\b|\bdesde\s+20\d\d\b|\btransportadoras?\s+(?:de\s+\S+\s+)?usando\b/i.test(f))
+        erros.push(`fato inventado sobre a empresa: "${f.slice(0, 60)}"`);
+      if (/\bserve\s+(?:pra|para)\s+mim\b/i.test(ditoAntes[ditoAntes.length - 1] ?? "") && !/^\s*serve\b/i.test(f))
+        erros.push(`"serve pra mim?" sem resposta: "${f.slice(0, 50)}"`);
+      const anterior = ditoAntes[ditoAntes.length - 1] ?? "";
+      // Sétima revisão: frase sobre o próprio histórico, e "como funciona" sem explicação.
+      if (/\bprimeira\s+mensagem\s+que\s+recebi\b|\bdesculpa\s+a\s+demora\b|\bn[aã]o\s+recebi\b/i.test(f))
+        erros.push(`frase falsa sobre a conversa: "${f.slice(0, 60)}"`);
+      if (/\bcomo\s+funciona\b/i.test(anterior) && !/\bcelular\b/i.test(f))
+        erros.push(`"como funciona?" sem explicação: "${f.slice(0, 60)}"`);
+      if (/\bconcreto\b/i.test(f)) erros.push(`"concreto" (não é granel): "${f.slice(0, 40)}"`);
+      if (/\?/.test(anterior) && /cart[aã]o/i.test(anterior) && /^\s*certeza\b/i.test(f))
+        erros.push(`"Certeza." pra pergunta de cartão`);
+      const preco = /\bpra\s+(\d+)\s+caminh/i.exec(f);
+      if (preco && !frotaInformada(Number(preco[1]), ditoAntes, null))
+        erros.push(`frota inventada (${preco[1]}): "${f.slice(0, 60)}"`);
+      const disseFrota = ditoAntes.some((d) =>
+        /\b(?:\d+|um|uma|dois|duas|tr[eê]s|quatro|cinco)\s+caminh|\bcaminh[aã]o\s+s[oó]\b|^\s*\d+\s*$/i.test(d),
+      );
+      if (disseFrota && /quantos\s+caminh/i.test(f)) erros.push(`perguntou a frota já dita: "${f.slice(0, 60)}"`);
+      const recusou = ditoAntes.some((d) => /n[aã]o\s+(?:precisa|quero)\b|\bpode\s+continuar\b|n[aã]o\s+me\s+liga/i.test(d));
+      if (recusou && /\bte\s+ligue\b|\bliga[cç][aã]o\s+de\s+10\b/i.test(f))
+        erros.push(`ofereceu ligação depois de recusa: "${f.slice(0, 60)}"`);
     }
     const e = c.espera ?? {};
     if (e.repasses !== undefined && repasses !== e.repasses) erros.push(`repasses ${repasses}, esperado ${e.repasses}`);

@@ -48,6 +48,15 @@ export class AtendimentoHumanoService {
     private readonly inbox: AdminInboxService,
   ) {}
 
+  /**
+   * "Agora" — com a porta pro simulador testar a madrugada sem esperar ela
+   * chegar (a QA notou que só o horário comercial estava coberto).
+   */
+  private agora(): Date {
+    const simulado = process.env.AGORA_SIMULADO;
+    return simulado ? new Date(simulado) : new Date();
+  }
+
   private configuracao() {
     return comoSistema(() =>
       this.prisma.configuracaoPlataforma.findUnique({ where: { id: "singleton" } }),
@@ -82,14 +91,17 @@ export class AtendimentoHumanoService {
     return mensagemDeRepasse(
       canal === "comercial" ? (cfg?.sdrAtendenteNome ?? null) : null,
       h,
-      new Date(),
+      this.agora(),
       canal === "operacao" ? "operacao" : motivo,
     );
   }
 
   async mensagemDeLembrete(): Promise<string> {
     const cfg = await this.configuracao();
-    return mensagemDeLembrete(cfg ? this.horario(cfg) : { inicio: 8, fim: 18, dias: [1, 2, 3, 4, 5, 6] });
+    return mensagemDeLembrete(
+      cfg ? this.horario(cfg) : { inicio: 8, fim: 18, dias: [1, 2, 3, 4, 5, 6] },
+      this.agora(),
+    );
   }
 
   /** O que o robô pode oferecer agora: quem liga, o que mostrar, quando. */
@@ -104,7 +116,7 @@ export class AtendimentoHumanoService {
       linkApresentacao: cfg.sdrLinkApresentacao,
       diasTeste: cfg.autoCadastroAberto ? cfg.diasTesteGratis : null,
       linkTeste: cfg.autoCadastroAberto ? cfg.sdrLinkCadastro : null,
-      prazoHumano: dentroDoHorario(h) ? "em instantes" : proximaAbertura(h),
+      prazoHumano: dentroDoHorario(h, this.agora()) ? "em instantes" : proximaAbertura(h, this.agora()),
     };
   }
 
@@ -112,7 +124,7 @@ export class AtendimentoHumanoService {
   async horariosLivres(pref: { dia?: string; periodo?: "manha" | "tarde" } = {}): Promise<string[]> {
     const cfg = await this.configuracao();
     if (!cfg) return [];
-    return proximosHorarios(cfg.sdrHorariosDemo ?? [], this.horario(cfg), new Date(), 2, 60, pref);
+    return proximosHorarios(cfg.sdrHorariosDemo ?? [], this.horario(cfg), this.agora(), 2, 60, pref);
   }
 
   /** Os nomes que, citados, pedem gente. Inclui quem atende. */

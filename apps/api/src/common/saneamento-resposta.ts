@@ -34,6 +34,9 @@ const METALINGUAGEM: RegExp[] = [
   /\b(?:chamar|chamei|chamo|usar|usei)\s+a\s+ferramenta\b/i,
   /\b(?:o|do|ao|pro|pelo)\s+lead\b/i,
   /\bprompt\b/i,
+  // Nome de ferramenta escrito como texto ("nao_responder") — chegou num
+  // cliente na simulação da madrugada (QA 28/09).
+  /\b[a-z]+_[a-z]+(?:_[a-z]+)*\b/,
   // "O valor sai pela ferramenta" — bastidor vazado que a QA pegou (28/09).
   /\bpela\s+ferramenta\b/i,
   /\btool(?:_use|s)?\b/i,
@@ -70,8 +73,17 @@ export function semTravessao(texto: string): string {
     .replace(/ {2,}/g, " ");
 }
 
+/** Aspas nas pontas: o modelo às vezes devolve a mensagem "entre aspas" (QA 28/09). */
+function semAspasNasPontas(texto: string): string {
+  return texto
+    .split("\n")
+    .map((l) => l.replace(/^\s*["“”«»]+/, "").replace(/["“”«»]+\s*$/, ""))
+    .join("\n")
+    .trim();
+}
+
 export function sanearResposta(bruto: string): ResultadoSaneamento {
-  const texto = semTravessao((bruto ?? "").replace(BLOCO_PENSAMENTO, "").trim());
+  const texto = semAspasNasPontas(semTravessao((bruto ?? "").replace(BLOCO_PENSAMENTO, "").trim()));
   for (const padrao of METALINGUAGEM) {
     const m = padrao.exec(texto);
     if (m) {

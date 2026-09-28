@@ -145,7 +145,14 @@ function montar(
     { processar } as unknown as AgenteService,
     { contaDoCodigo, consumir } as unknown as ConviteService,
     { responder, anotar, passarParaHumano, temEtiqueta, foiORobo } as unknown as ChatwootClientService,
-    { atender, registrarEntrada, registrarSaida } as unknown as SdrService,
+    {
+      atender,
+      registrarEntrada,
+      registrarSaida,
+      respostaDePreco: vi.fn(async () => null),
+      frotaConhecida: vi.fn(async () => null),
+      registrarAgendamento: vi.fn(async () => ({})),
+    } as unknown as SdrService,
     { vincular } as unknown as LeadChatwootService,
     { registrarOptOut } as unknown as ProspeccaoService,
     {
@@ -164,6 +171,14 @@ function montar(
       ),
       mensagemDeLembrete: vi.fn(async () => "Já avisei a equipe. Um consultor da Movatruck te responde aqui em instantes."),
       nomesDaEquipe: vi.fn(async () => ["Fernando", "Diego"]),
+      oferta: vi.fn(async () => ({
+        atendente: null,
+        linkApresentacao: "https://www.movatruck.com.br",
+        diasTeste: 30,
+        linkTeste: "https://app.movatruck.com.br/cadastro",
+        prazoHumano: "em instantes",
+      })),
+      horariosLivres: vi.fn(async () => ["hoje às 14:00", "hoje às 16:00"]),
       timeDoCanal: vi.fn(async (canal: string) => (canal === "comercial" ? 11 : 22)),
       avisar,
     } as unknown as AtendimentoHumanoService,
@@ -459,8 +474,8 @@ describe("o SDR atendendo prospect no comercial", () => {
       createErro: "P2002",
       respostaSdr: RESPOSTA,
     });
-    await s.processar(evento({ ...COMERCIAL, content: "boa tarde" }));
-    expect(atender).toHaveBeenCalledWith("lead-corrida", "boa tarde");
+    await s.processar(evento({ ...COMERCIAL, content: "vocês atendem em Ponta Grossa?" }));
+    expect(atender).toHaveBeenCalledWith("lead-corrida", "vocês atendem em Ponta Grossa?");
   });
 
   it("SDR desligado devolve a conversa pra gente, com nome e prazo", async () => {
@@ -487,10 +502,10 @@ describe("o SDR atendendo prospect no comercial", () => {
         ferramentas: ["passar_para_humano"],
       },
     });
-    await s.processar(evento({ ...COMERCIAL, content: "vocês integram com o Sankhya?" }));
+    await s.processar(evento({ ...COMERCIAL, content: "vocês fazem implantação presencial?" }));
     expect(responder).toHaveBeenCalledOnce();
     expect(passarParaHumano).toHaveBeenCalledWith(1, 7, 11, []);
-    expect(avisar).toHaveBeenCalledWith("lead-1", "quer negociar preço", "vocês integram com o Sankhya?", 7);
+    expect(avisar).toHaveBeenCalledWith("lead-1", "quer negociar preço", "vocês fazem implantação presencial?", 7);
   });
 
   it("SDR que explode cai na fila humana, sem derrubar o webhook", async () => {
@@ -509,6 +524,7 @@ describe("o SDR atendendo prospect no comercial", () => {
       identidade: DESCONHECIDO,
       ehLead: true,
       respostaSdr: { ...RESPOSTA, texto: "", silencio: true },
+      ultimaFalaNossa: "Pra 3 caminhões sai R$ 890,00 por mês.",
     });
     await s.processar(evento({ ...COMERCIAL, content: "hmm" }));
     expect(responder).not.toHaveBeenCalled();
@@ -701,25 +717,27 @@ describe("ruído não se responde", () => {
     expect(responder).not.toHaveBeenCalled();
   });
 
-  it("'oi' como primeira mensagem ainda é respondido", async () => {
-    const { s, atender } = montar({ identidade: DESCONHECIDO, ehLead: true, respostaSdr: RESPOSTA });
+  it("'oi' como primeira mensagem recebe a abertura fixa", async () => {
+    const { s, atender, responder } = montar({ identidade: DESCONHECIDO, ehLead: true, respostaSdr: RESPOSTA });
     await s.processar(evento({ ...COMERCIAL, content: "Oi" }));
-    expect(atender).toHaveBeenCalled();
+    expect(atender).not.toHaveBeenCalled();
+    expect(responder.mock.calls[0]?.[2]).toMatch(/^Opa! A Movatruck/);
   });
 });
 
 describe("rajada de mensagens", () => {
-  it("três balões seguidos viram UMA resposta", async () => {
-    const { s, atender, registrarEntrada } = montar({ identidade: DESCONHECIDO, ehLead: true, respostaSdr: RESPOSTA });
+  it("três balões seguidos viram UMA resposta — inclusive a abertura fixa", async () => {
+    const { s, atender, registrarEntrada, responder } = montar({ identidade: DESCONHECIDO, ehLead: true, respostaSdr: RESPOSTA });
     s.esperaRajadaMs = 30;
     await Promise.all([
       s.processar(evento({ ...COMERCIAL, content: "oi" })),
       s.processar(evento({ ...COMERCIAL, content: "tudo bem?" })),
       s.processar(evento({ ...COMERCIAL, content: "quero saber o preço" })),
     ]);
-    expect(atender).toHaveBeenCalledOnce();
-    expect(atender).toHaveBeenCalledWith("lead-1", "quero saber o preço");
-    expect(registrarEntrada).toHaveBeenCalledTimes(2);
+    // Primeiro contato: sai UMA abertura, não três.
+    expect(responder).toHaveBeenCalledOnce();
+    expect(atender).not.toHaveBeenCalled();
+    expect(registrarEntrada.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -773,6 +791,7 @@ describe("quando a pessoa pede pra parar", () => {
       identidade: DESCONHECIDO,
       ehLead: true,
       respostaSdr: RESPOSTA,
+      ultimaFalaNossa: "Pra 3 caminhões sai R$ 890,00 por mês.",
     });
     await s.processar(evento({ ...COMERCIAL, content: "não quero pagar caro nisso" }));
     expect(registrarOptOut).not.toHaveBeenCalled();
@@ -781,15 +800,29 @@ describe("quando a pessoa pede pra parar", () => {
 });
 
 describe("achados da QA (28/09)", () => {
-  it("'ok' logo depois de horários oferecidos NÃO é despedida: vai pro robô", async () => {
-    const { s, atender } = montar({
+  it("'ta bom' pra dois horários pergunta qual, sugerindo o primeiro — QA 28/09", async () => {
+    const { s, responder, avisar } = montar({
       identidade: DESCONHECIDO,
       ehLead: true,
       respostaSdr: RESPOSTA,
-      ultimaFalaNossa: "Tenho hoje às 14:00 ou amanhã às 09:00. Qual fica melhor?",
+      ultimaFalaNossa: "Tenho hoje às 14:00 ou amanhã às 09:00, qual fica melhor?",
     });
     await s.processar(evento({ ...COMERCIAL, content: "Ta bom" }));
-    expect(atender).toHaveBeenCalled();
+    expect(responder.mock.calls[0]?.[2]).toBe("Fica hoje às 14:00, então?");
+    expect(avisar).not.toHaveBeenCalled();
+  });
+
+  it("'sim' pro horário sugerido confirma e avisa quem liga", async () => {
+    const { s, atender, responder, avisar } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      respostaSdr: RESPOSTA,
+      ultimaFalaNossa: "Fica hoje às 14:00, então?",
+    });
+    await s.processar(evento({ ...COMERCIAL, content: "sim" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(responder.mock.calls[0]?.[2]).toBe("Combinado: um consultor da Movatruck te liga hoje às 14:00 neste número.");
+    expect(avisar).toHaveBeenCalledOnce();
   });
 
   it("'me liga agora' ouve 'te liga', não 'te responde por aqui'", async () => {

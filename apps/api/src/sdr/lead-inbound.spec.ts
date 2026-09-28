@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  perguntaIntegracao,
+  ehPedidoDeTeste,
+  perguntaQualMelhor,
+  perguntaSeERobo,
   ehNegociacaoDePreco,
   recusouContato,
   aceitouOfertaDeHumano,
@@ -190,5 +194,33 @@ describe("regras fixas do simulador (28/09)", () => {
     expect(recusouContato("Não quero falar com Fernando Nem sei quem é ele")).toBe(true);
     expect(recusouContato("não me liga")).toBe(true);
     expect(recusouContato("não quero que ninguém me ligue, só quero saber o preço")).toBe(false);
+  });
+});
+
+describe("perguntas com resposta fixa (simulador, madrugada 28/09)", () => {
+  it("pedido de teste", () => {
+    for (const t of ["qro testar", "Posso testar primeiro Depois eu posso pedir pra me ligar ?", "manda o link", "Manda logo essa porra"]) {
+      expect(ehPedidoDeTeste(t)).toBe(true);
+    }
+    expect(ehPedidoDeTeste("o teste precisa de cartão?")).toBe(false);
+  });
+  it("é robô?", () => {
+    for (const t of ["vc é robô?", "Vc é um robo", "é bot?", "to falando com maquina?"]) {
+      expect(perguntaSeERobo(t)).toBe(true);
+    }
+    expect(perguntaSeERobo("sou humano sim")).toBe(false);
+  });
+  it("qual é melhor", () => {
+    expect(perguntaQualMelhor("Qual é melhor ?")).toBe(true);
+    expect(perguntaQualMelhor("qual a diferença?")).toBe(true);
+    expect(perguntaQualMelhor("qual o preço?")).toBe(false);
+  });
+});
+
+describe("integração", () => {
+  it("vai pro consultor", () => {
+    expect(perguntaIntegracao("vcs integram com o Sankhya?")).toBe(true);
+    expect(perguntaIntegracao("tem API?")).toBe(true);
+    expect(perguntaIntegracao("quanto custa?")).toBe(false);
   });
 });

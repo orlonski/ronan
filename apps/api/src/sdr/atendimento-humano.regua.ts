@@ -52,7 +52,7 @@ export function proximaAbertura(h: HorarioAtendimento, agora: Date = new Date())
  * garantir que ela seja quebrada.
  */
 /** Por que passou pra gente — muda a frase: quem pede LIGAÇÃO ouve "te liga". */
-export type MotivoRepasse = "padrao" | "ligacao" | "quem" | "operacao" | "preco";
+export type MotivoRepasse = "padrao" | "ligacao" | "quem" | "operacao" | "preco" | "confirma" | "horario";
 
 export function mensagemDeRepasse(
   atendente: string | null,
@@ -71,6 +71,10 @@ export function mensagemDeRepasse(
   const quem = atendente?.trim() ? atendente.trim() : "Um consultor da Movatruck";
   if (motivo === "ligacao") return `Certo! ${quem} te liga neste número ${prazo}.`;
   if (motivo === "quem") return `${quem}, aqui mesmo por esta conversa, ${prazo}.`;
+  if (motivo === "horario") return `Certo! ${quem} combina o horário da ligação com você por aqui ${prazo}.`;
+  if (motivo === "confirma") {
+    return `Isso quem confirma é ${quem.charAt(0).toLowerCase()}${quem.slice(1)}. Te responde aqui ${prazo}.`;
+  }
   if (motivo === "preco") {
     return `Condição de preço quem vê é ${quem.charAt(0).toLowerCase()}${quem.slice(1)}. Te responde aqui ${prazo}.`;
   }
@@ -165,4 +169,73 @@ export function proximosHorarios(
     }
   }
   return saida;
+}
+
+/**
+ * A agenda, sem modelo. A QA pegou o modelo confirmando "Comboado: … 14:00"
+ * (com erro), a trava lendo isso como promessa, e o agendamento se perdendo.
+ * Oferecer, entender a escolha e confirmar é aritmética — fica aqui.
+ */
+const RE_HORARIO = /\b(hoje|amanh[ãa]|domingo|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado)\s+às\s+(\d{2}:\d{2})/gi;
+
+/** Os horários que a nossa última fala ofereceu, na ordem ("hoje às 14:00"). */
+export function horariosOfertados(fala: string | null): string[] {
+  if (!fala) return [];
+  const saida = [...fala.matchAll(RE_HORARIO)].map((m) => `${m[1]} às ${m[2]}`);
+  // "hoje às 14:00 ou às 16:00": o segundo herda o dia do primeiro. Sem isso,
+  // um "ok" parecia escolher entre UM horário e confirmava sem perguntar.
+  const herdado = /\bou\s+às\s+(\d{2}:\d{2})/i.exec(fala);
+  if (saida.length === 1 && herdado) saida.push(`${saida[0].split(" às ")[0]} às ${herdado[1]}`);
+  return saida;
+}
+
+function sem(texto: string): string {
+  return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+/**
+ * Qual dos horários oferecidos ele escolheu. `null` = não escolheu (pediu
+ * outro período, fez pergunta, mudou de assunto).
+ */
+export function escolhaDeHorario(texto: string, ofertados: string[]): string | null {
+  if (ofertados.length === 0) return null;
+  const t = sem(texto).replace(/[.!?,]+/g, " ").replace(/\s+/g, " ").trim();
+  // Hora citada: "14:00", "14h", "as 14", "o das 10:30".
+  const hora = /\b(\d{1,2})(?:[:h](\d{2}))?\s*(?:h|hs|horas)?\b/.exec(t);
+  if (hora) {
+    const hh = hora[1].padStart(2, "0");
+    const mm = hora[2] ?? null;
+    const achado = ofertados.find((o) => o.endsWith(`${hh}:${mm ?? o.slice(-2)}`) && (!mm || o.endsWith(`${hh}:${mm}`)));
+    if (achado) return achado;
+  }
+  if (/\b(?:segundo|segunda\s+opcao|o\s+outro|ultimo|o\s+de\s+baixo)\b/.test(t)) return ofertados[1] ?? null;
+  if (
+    /\b(?:primeiro|primeira|o\s+de\s+cima|esse|este|pode\s+ser|pode|ok|okay|sim|fechado|beleza|blz|ta\s+bom|tabom|serve|combinado|bora|fechou)\b/.test(
+      t,
+    ) &&
+    !/\b(?:tarde|manha|amanha|outro\s+dia|outra\s+hora|nao)\b/.test(t)
+  ) {
+    return ofertados[0];
+  }
+  return null;
+}
+
+/** Ele pediu outro dia ou período? ("de tarde", "amanhã de manhã", "quinta"). */
+export function preferenciaDeHorario(texto: string): { dia?: string; periodo?: "manha" | "tarde" } | null {
+  const t = sem(texto);
+  const periodo = /\btarde\b/.test(t) ? "tarde" : /\bmanha\b/.test(t) ? "manha" : undefined;
+  const dia = /\bhoje\b/.test(t)
+    ? "hoje"
+    : /\bamanha\b/.test(t)
+      ? "amanhã"
+      : (/\b(segunda|terca|quarta|quinta|sexta|sabado)\b/.exec(t)?.[1] ?? undefined);
+  return periodo || dia ? { dia, periodo } : null;
+}
+
+/** "hoje às 14:00 ou hoje às 16:00" → "Tenho hoje às 14:00 ou às 16:00, qual fica melhor?" */
+export function textoDeHorarios(horarios: string[]): string {
+  if (horarios.length === 1) return `Tenho ${horarios[0]}. Fica bom?`;
+  const [a, b] = horarios;
+  const mesmoDia = a.split(" às ")[0] === b.split(" às ")[0];
+  return `Tenho ${a} ou ${mesmoDia ? `às ${b.split(" às ")[1]}` : b}, qual fica melhor?`;
 }

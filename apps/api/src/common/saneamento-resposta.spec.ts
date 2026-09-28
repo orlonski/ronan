@@ -58,3 +58,12 @@ describe("semTravessao", () => {
     expect(r.ok && r.texto.includes("—")).toBe(false);
   });
 });
+
+describe("aspas nas pontas — QA final 28/09", () => {
+  it("saem", () => {
+    expect(sanearResposta('"Depende do tamanho da frota. Quantos caminhões você tem rodando?"')).toEqual({
+      ok: true,
+      texto: "Depende do tamanho da frota. Quantos caminhões você tem rodando?",
+    });
+  });
+});

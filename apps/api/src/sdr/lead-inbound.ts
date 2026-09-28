@@ -339,6 +339,14 @@ export function recusouContato(texto: string): boolean {
  */
 export function ehNegociacaoDePreco(texto: string): boolean {
   const limpo = normalizar(texto);
+  // "O atendente de ontem disse que era 500": valor combinado com gente é com
+  // gente. O robô desmentiu o atendente com um preço pra frota inventada.
+  if (
+    /\b(?:atendente|vendedor|consultor|voces|vcs|o\s+cara|a\s+moca|ele|ela)\b.*\b(?:disse|falou|falaram|passou|passaram|prometeu|ofereceu)\b/.test(limpo) &&
+    /\b(?:\d+|valor|preco|desconto|mes)\b/.test(limpo)
+  ) {
+    return true;
+  }
   return /\b(?:desconto|abatimento|mais\s+barato|abaixa|abaixar|baixar\s+o\s+preco|melhorar\s+o\s+preco|consegue\s+(?:fazer|deixar)\s+(?:por|a)|faz\s+por|fazer\s+por|sai\s+por\s+\d|negociar|chorinho)\b/.test(
     limpo,
   );
@@ -353,6 +361,34 @@ export function ehPedidoDeDemonstracao(texto: string): boolean {
   return /\b(?:agendar|marcar|ver|quero)\s+(?:uma\s+)?(?:demo|demonstracao|apresentacao)\b/.test(
     normalizar(texto),
   );
+}
+
+/** "Quero testar", "posso testar primeiro?", "manda o link", "manda logo". */
+export function ehPedidoDeTeste(texto: string): boolean {
+  const t = normalizar(texto);
+  return /\b(?:quero|qro|posso|vou|bora|queria)\s+(?:testar|test[ae])\b|\btestar\s+(?:primeiro|sozinho|antes)\b|\bmanda(?:r)?\s+(?:o\s+)?link\b|\bmanda\s+logo\b|\bcomo\s+(?:eu\s+)?(?:faco\s+pra\s+)?testo\b/.test(
+    t,
+  );
+}
+
+/** "Vc é robô?", "é um bot?", "tô falando com máquina?" */
+export function perguntaSeERobo(texto: string): boolean {
+  return /\b(?:e|eh|vc\s+e|voce\s+e|tu\s+e|isso\s+e|to\s+falando\s+com)\s+(?:um\s+|uma\s+)?(?:robo|bot|maquina|ia|inteligencia\s+artificial)\b/.test(
+    normalizar(texto),
+  );
+}
+
+/** "Qual é melhor?", "qual a diferença?" — pergunta sobre as opções. */
+export function perguntaQualMelhor(texto: string): boolean {
+  return /\bqual\s+(?:e\s+|eh\s+)?(?:o\s+|a\s+)?(?:melhor|diferenca|voce\s+indica|recomenda)\b/.test(normalizar(texto));
+}
+
+/**
+ * Integração com outro sistema ("integra com o Sankhya?", "tem API?") não é
+ * com o robô: numa rodada do simulador o modelo respondeu sozinho.
+ */
+export function perguntaIntegracao(texto: string): boolean {
+  return /\b(?:integr\w*|api|erp|sankhya|totvs|protheus|senior|omie|bling|sap|conta\s*azul)\b/.test(normalizar(texto));
 }
 
 /** O pedido é de LIGAÇÃO (e não de conversa por aqui)? Muda a frase do repasse. */

@@ -83,8 +83,104 @@ function prometeNaFrase(t: string): boolean {
   ].some((p) => p.test(t));
 }
 
-/** A oferta de ligação/teste — pra contar quantas vezes ela já saiu. */
-const OFERTA = /\bte\s+ligue\b|\bliga[cç][aã]o\s+de\s+10\b|\btestar\s+sozinho\b|\bdias\s+gr[aá]tis\b/i;
+const NUMEROS_POR_EXTENSO: Record<string, number> = {
+  um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10,
+};
+
+/**
+ * Ele disse ESSE número de caminhões em algum momento? A QA pegou o modelo
+ * chutando "1 caminhão" pra quem nunca disse a frota, e dando preço pra isso.
+ */
+export function frotaInformada(veiculos: number, falasDele: string[], frotaConhecida: number | null): boolean {
+  if (frotaConhecida && frotaConhecida === veiculos) return true;
+  return falasDele.some((f) => {
+    const t = f
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+    if (new RegExp(`\\b${veiculos}\\b`).test(t)) return true;
+    return Object.entries(NUMEROS_POR_EXTENSO).some(
+      ([palavra, n]) => n === veiculos && new RegExp(`\\b${palavra}\\s+(?:caminh|carret|cavalo|truck|bitrem)`).test(t),
+    );
+  });
+}
+
+/**
+ * Valor em reais que não veio da tabela nesta conversa não sai. O preço já só
+ * existe pela ferramenta — isto garante que ele não dependa de o modelo
+ * obedecer (pergunta do dono, 28/09: "não está inventando nada, né?").
+ */
+export function semPrecoInventado(texto: string, valoresDaTabela: readonly string[]): string {
+  const valores = texto.match(/R\$\s*[\d.]+(?:,\d{2})?/g) ?? [];
+  const soDigitos = (v: string) => v.replace(/\D/g, "").replace(/0+$/, "");
+  const validos = new Set(valoresDaTabela.map(soDigitos));
+  const invalidos = valores.filter((v) => !validos.has(soDigitos(v)));
+  if (invalidos.length === 0) return texto;
+  const frases = texto.match(/(?:https?:\/\/\S+|[.,](?=\d)|[^.!?\n])+[.!?]*\s*|\n+/g) ?? [texto];
+  const limpo = frases
+    .filter((f) => !invalidos.some((v) => f.includes(v)))
+    .join("")
+    .trim();
+  return limpo || "Depende do tamanho da frota. Quantos caminhões você tem rodando?";
+}
+
+/**
+ * A frota que ele disse, se disse: "12 caminhões", "um caminhão só", ou um
+ * número solto respondendo a pergunta da frota ("3"). `null` = não disse.
+ */
+export function frotaDita(falasDele: string[]): number | null {
+  for (const f of [...falasDele].reverse()) {
+    const t = f
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+    const num = /\b(\d{1,4})\s*(?:caminh|carret|cavalo|truck|bitrem|veiculo)/.exec(t) ?? /^(\d{1,4})$/.exec(t);
+    if (num) return Number(num[1]);
+    for (const [palavra, n] of Object.entries(NUMEROS_POR_EXTENSO)) {
+      if (new RegExp(`\\b${palavra}\\s+(?:caminh|carret|cavalo|truck|bitrem)`).test(t)) return n;
+    }
+  }
+  return null;
+}
+
+/**
+ * A oferta de ligação/teste — pra contar quantas vezes ela já saiu. Larga de
+ * propósito: o modelo escreve "te ligar 10 min", "testa 30 dias", "posso
+ * chamar um consultor" — e cada variação escapava da conta.
+ */
+const OFERTA =
+  /\bte\s+lig(?:ue|ar|a)\b|\bliga[cç][aã]o\s+de\s+10\b|\b10\s+min\b|\btesta(?:r)?\s+(?:sozinho|\d+\s+dias)|\bdias\s+gr[aá]tis\b|\bchamar\s+um\s+consultor\b/i;
+
+/**
+ * Frases que não saem, nem que o modelo insista:
+ * - "te ligo": o robô não liga pra ninguém;
+ * - "ninguém (te) cobra": vago, soa "grátis pra sempre" — vira o fato.
+ */
+export function semFrasesProibidas(texto: string, diasTeste: number | null): string {
+  const frases = texto.match(/(?:https?:\/\/\S+|[.,](?=\d)|[^.!?\n])+[.!?]*\s*|\n+/g) ?? [texto];
+  const fato = diasTeste ? `O teste é ${diasTeste} dias grátis, sem cartão e sem fidelidade. ` : "";
+  const saida = frases
+    .filter((f) => !/\bte\s+ligo\b|\beu\s+(?:te\s+)?ligo\b/i.test(f))
+    // Prova social inventada ("muitos transportadores migram pra cá") e
+    // comentário sobre o jeito dele trabalhar ("planilha, clássico") — QA 28/09.
+    .filter(
+      (f) =>
+        !/\b(?:muitos|muitas|v[aá]rios|v[aá]rias|centenas|milhares|a\s+maioria|todo\s+mundo)\s+(?:dos?\s+|das?\s+|de\s+)?(?:transportador|cliente|empresa|motorista|dono|frota)/i.test(f) &&
+        // O PADRÃO, não a frase (QA 28/09): "o que a maioria usa", "o que a
+        // gente mais vê", "o pessoal", "outros transportadores", "app novo".
+        // (Sem \b depois de "vê": em JS o limite de palavra não conhece acento.)
+        !/\b(?:a\s+maioria|o\s+pessoal|muita\s+gente|todo\s+mundo|outros\s+transportador\w*|mais\s+comum|app\s+novo|sistema\s+novo)\b|\ba\s+gente\s+(?:mais\s+)?v[eê]/i.test(f) &&
+        !/\bclientes?\s+(?:rodando|usando|satisfeit)/i.test(f) &&
+        // Tempo de empresa e quem usa: "tá no site há anos, com transportadoras
+        // usando todo dia" (QA, sexta revisão). Nada disso é fato confirmado.
+        !/\bh[aá]\s+(?:\d+\s+|muitos\s+|v[aá]rios\s+)?anos\b|\bdesde\s+(?:19|20)\d\d\b|\b(?:transportadoras?|empresas?)\s+(?:de\s+\S+\s+)?(?:usando|que\s+usam|j[aá]\s+usam)\b/i.test(f) &&
+        !/\bcl[aá]ssico\b/i.test(f),
+    )
+    .map((f) => (/ningu[eé]m\s+(?:te\s+|vai\s+(?:te\s+)?)?cobr/i.test(f) ? fato : f));
+  const final = [...new Set(saida)].join("").trim();
+  return final || texto;
+}
 
 /**
  * Travas de forma que o modelo ignora mesmo com regra no prompt — a QA de
@@ -96,14 +192,23 @@ const OFERTA = /\bte\s+ligue\b|\bliga[cç][aã]o\s+de\s+10\b|\btestar\s+sozinho\
  *
  * Exportada pra teste. Nunca devolve vazio: se cortar tudo, devolve o original.
  */
-export function aparar(texto: string, ofertasAnteriores: number, recusouLigacao: boolean): string {
+export function aparar(
+  texto: string,
+  ofertasAnteriores: number,
+  recusouLigacao: boolean,
+  mostrouInteresse = true,
+  perguntou = false,
+): string {
   // Link e número inteiros: cortar no ponto de "movatruck.com.br" entregou um
   // link quebrado no simulador (28/09), e "R$ 1.890,00" não termina frase.
   const frases: string[] =
     texto.match(/(?:https?:\/\/\S+|[.,](?=\d)|[^.!?\n])+[.!?]*\s*|\n+/g) ?? [texto];
   let saida = frases;
-  if (ofertasAnteriores >= 2 || recusouLigacao) {
-    saida = saida.filter((f) => !(OFERTA.test(f) && (ofertasAnteriores >= 2 || /\blig/i.test(f))));
+  // A oferta sai na abertura; de novo só se ele mostrou interesse (QA: oferta
+  // ignorada repetida é empurrar), e nunca uma terceira vez.
+  const cortaOferta = ofertasAnteriores >= 2 || (ofertasAnteriores >= 1 && !mostrouInteresse);
+  if (cortaOferta || recusouLigacao) {
+    saida = saida.filter((f) => !(OFERTA.test(f) && (cortaOferta || /\blig/i.test(f))));
   }
   const perguntas = saida.filter((f) => /\?\s*$/.test(f.trim()));
   if (perguntas.length > 1) {
@@ -128,7 +233,10 @@ export function aparar(texto: string, ofertasAnteriores: number, recusouLigacao:
   const final = saida.join("").replace(/\n{3,}/g, "\n\n").trim();
   if (final) return final;
   // A resposta inteira era a oferta repetida: não repete, só acusa o recebimento.
-  return ofertasAnteriores >= 2 || recusouLigacao ? "Anotado." : texto;
+  // Cortou tudo: melhor a resposta inteira (com a oferta de novo) do que um
+  // "Anotado." que não responde nada — a QA reprovou isso duas vezes.
+  void perguntou;
+  return texto;
 }
 
 /** Quanto da conversa entra no contexto. Mesma régua do agente do motorista. */
@@ -244,6 +352,56 @@ export class SdrService {
     );
   }
 
+  /**
+   * Pergunta de preço com a frota conhecida: a resposta sai da TABELA, sem
+   * modelo. O simulador pegou o modelo perguntando a frota que o cliente tinha
+   * acabado de dizer ("quanto custa pra 4 caminhões?"). `null` = não é o caso.
+   */
+  async respostaDePreco(leadId: string, texto: string): Promise<string | null> {
+    const t = texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    // Número solto ("3") é a frota — a QA reprovou "Anotado." pra isso.
+    const numeroSolto = /^\d{1,4}$/.test(t);
+    if (!numeroSolto && !/\b(?:quanto|preco|valor|custa|mensalidade)\b/.test(t)) return null;
+    // Robô desligado não responde nada — nem preço.
+    if (!(await this.configuracao())?.sdrAtivo) return null;
+    const lead = await comoSistema(() =>
+      this.prisma.lead.findUnique({ where: { id: leadId }, select: { frotaQtd: true } }),
+    );
+    const { mensagens } = await this.historico(leadId, texto);
+    const frota =
+      frotaDita([...mensagens.filter((m) => m.role === "user").map((m) => m.content), texto]) ??
+      lead?.frotaQtd ??
+      null;
+    if (!frota) return null;
+    const preco = await this.precos.precoPara(frota);
+    if (!preco) return null;
+    const valor = (preco.valorCentavos / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+    const cfg = await this.configuracao();
+    const teste =
+      cfg?.autoCadastroAberto && cfg.diasTesteGratis
+        ? ` Dá pra testar ${cfg.diasTesteGratis} dias grátis antes, sem cartão e sem fidelidade: ${cfg.sdrLinkCadastro}`
+        : "";
+    const nome = frota === 1 ? "caminhão" : "caminhões";
+    const resposta = numeroSolto
+      ? `Anotado, ${frota} ${nome}. Pra essa frota sai R$ ${valor} por mês.${teste}`
+      : `Pra ${frota} ${nome} sai R$ ${valor} por mês.${teste}`;
+    await this.gravar(leadId, "ENTRADA", texto);
+    await this.gravar(leadId, "SAIDA", resposta);
+    await comoSistema(() =>
+      this.prisma.lead.update({ where: { id: leadId }, data: { frotaQtd: frota, ultimoContato: new Date() } }),
+    );
+    return resposta;
+  }
+
+  /** A frota, se ele já disse (nesta mensagem, no histórico ou no cadastro). */
+  async frotaConhecida(leadId: string, texto: string): Promise<number | null> {
+    const lead = await comoSistema(() =>
+      this.prisma.lead.findUnique({ where: { id: leadId }, select: { frotaQtd: true } }),
+    );
+    const { mensagens } = await this.historico(leadId, texto);
+    return frotaDita([...mensagens.filter((m) => m.role === "user").map((m) => m.content), texto]) ?? lead?.frotaQtd ?? null;
+  }
+
   /** O SDR está ligado? Interruptor próprio, separado do agente de motorista. */
   async ativo(): Promise<boolean> {
     return (await this.configuracao())?.sdrAtivo ?? false;
@@ -329,6 +487,8 @@ export class SdrService {
 
     let pediuHumano: string | null = null;
     let calar = false;
+    // Os valores que a TABELA devolveu — os únicos que podem sair em R$.
+    const valoresDaTabela: string[] = [];
     const ferramentas: string[] = [];
 
     // A ENTRADA já foi gravada acima, então ela é a última linha do histórico.
@@ -349,7 +509,11 @@ export class SdrService {
       encerrarApos: ["nao_responder"],
       executarTool: async (nome, input) => {
         ferramentas.push(nome);
-        const saida = await this.executarTool(nome, input, lead);
+        const saida = await this.executarTool(nome, input, lead, {
+          falasDele: mensagens.filter((m) => m.role === "user").map((m) => m.content).concat(mensagem),
+        });
+        const valor = (saida as { valorMensal?: string } | null)?.valorMensal;
+        if (nome === "consultar_preco" && valor) valoresDaTabela.push(valor);
         if (nome === "passar_para_humano") {
           pediuHumano = String((input as { motivo?: unknown }).motivo ?? "sem motivo");
         }
@@ -399,6 +563,16 @@ export class SdrService {
     // Raciocínio vazado ("a ferramenta me passou", "Returning to idle") não
     // sai. Mesma lógica do idioma: grava pra auditoria e devolve null, que
     // manda pra uma pessoa.
+    // O modelo escreveu só o nome da ferramenta de calar: é silêncio, não fala.
+    if (/^\s*nao_responder\s*\.?\s*$/i.test(texto ?? "")) {
+      await this.gravar(leadId, "SAIDA", `[descartada — ferramenta como texto] ${texto}`);
+      if (jaFalamos) {
+        return { texto: "", silencio: true, passarParaHumano: false, motivoHumano: null, ferramentas };
+      }
+      const abertura = aberturaPadrao(oferta);
+      await this.gravar(leadId, "SAIDA", abertura);
+      return { texto: abertura, silencio: false, passarParaHumano: false, motivoHumano: null, ferramentas };
+    }
     const saneada = texto ? sanearResposta(texto) : null;
     if (saneada && !saneada.ok) {
       this.log.warn(
@@ -408,12 +582,37 @@ export class SdrService {
       return null;
     }
     const ofertasAnteriores = mensagens.filter((m) => m.role === "assistant" && OFERTA.test(m.content)).length;
-    const recusouLigacao = mensagens.some(
-      (m) =>
-        m.role === "user" &&
-        /n[aã]o\s+(?:quero|precisa|preciso)\b.*\b(?:lig|pessoa|ningu|consultor)/i.test(m.content),
+    const falasDele = mensagens.filter((m) => m.role === "user").map((m) => m.content).concat(mensagem);
+    const recusouLigacao = falasDele.some((f) =>
+      /n[aã]o\s+(?:quero|precisa|preciso)\b.*\b(?:lig|pessoa|ningu|consultor)|\bn[aã]o\s+precisa\b|\bpode\s+continuar\b/i.test(f),
     );
-    const final = saneada?.ok ? aparar(saneada.texto, ofertasAnteriores, recusouLigacao) : "";
+    const mostrouInteresse = falasDele.some((f) =>
+      /\b(?:quanto|pre[cç]o|valor|gostei|interess|quero\s+ver|como\s+funciona|me\s+explica|quero\s+saber)/i.test(f),
+    );
+    // Valor já dito antes (pela tabela, numa resposta anterior) também vale.
+    const valoresDitos = mensagens
+      .filter((m) => m.role === "assistant")
+      .flatMap((m) => m.content.match(/R\$\s*[\d.]+(?:,\d{2})?/g) ?? []);
+    // Frota já dita: "quantos caminhões?" não sai de novo.
+    const semPerguntaRepetida = (t: string) =>
+      frotaDita(falasDele) ?? lead.frotaQtd
+        ? (t.match(/(?:https?:\/\/\S+|[.,](?=\d)|[^.!?\n])+[.!?]*\s*|\n+/g) ?? [t])
+            .filter((f) => !/quantos\s+caminh/i.test(f))
+            .join("")
+            .trim() || t
+        : t;
+    const final = saneada?.ok
+      ? aparar(
+          semFrasesProibidas(
+            semPerguntaRepetida(semPrecoInventado(saneada.texto, [...valoresDaTabela, ...valoresDitos])),
+            oferta.diasTeste,
+          ),
+          ofertasAnteriores,
+          recusouLigacao,
+          mostrouInteresse,
+          /\?/.test(mensagem),
+        )
+      : "";
 
     // Prometeu contato de gente sem chamar a ferramenta? Vale a promessa.
     // A bateria pegou o MiniMax-M3 escrevendo "Combinado: Fernando te liga
@@ -442,12 +641,21 @@ export class SdrService {
   private async executarTool(
     nome: string,
     input: Record<string, unknown>,
-    lead: { id: string; empresa: string },
+    lead: { id: string; empresa: string; frotaQtd?: number | null },
+    contexto: { falasDele: string[] } = { falasDele: [] },
   ): Promise<unknown> {
     const leadId = lead.id;
     switch (nome) {
       case "consultar_preco": {
         const veiculos = Number(input.veiculos) || 0;
+        if (!frotaInformada(veiculos, contexto.falasDele, lead.frotaQtd ?? null)) {
+          return {
+            encontrado: false,
+            instrucao:
+              "Ele ainda não disse quantos caminhões tem. Pergunte: " +
+              "'Depende do tamanho da frota. Quantos caminhões você tem rodando?' Nunca chute.",
+          };
+        }
         const preco = await this.precos.precoPara(veiculos);
         if (!preco) {
           // Tabela vazia ou faixa descoberta. O prompt manda dizer que vai
@@ -589,6 +797,21 @@ export class SdrService {
   /** Uma fala nossa, dita fora do modelo (repasse, confirmação fixa). */
   registrarSaida(leadId: string, texto: string) {
     return this.gravar(leadId, "SAIDA", texto);
+  }
+
+  /** A ligação marcada pela agenda fixa — o mesmo registro da ferramenta. */
+  registrarAgendamento(leadId: string, horario: string) {
+    return comoSistema(() =>
+      this.prisma.interacaoLead.create({
+        data: {
+          leadId,
+          canal: "WHATSAPP",
+          desfecho: "RESPONDEU",
+          resumo: `Ligação de demonstração marcada pelo atendimento: ${horario}`,
+          autor: null,
+        },
+      }),
+    );
   }
 
   private gravar(leadId: string, direcao: "ENTRADA" | "SAIDA", conteudo: string) {

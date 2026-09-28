@@ -4,6 +4,10 @@ import {
   dentroDoHorario,
   mensagemDeRepasse,
   proximosHorarios,
+  escolhaDeHorario,
+  horariosOfertados,
+  preferenciaDeHorario,
+  textoDeHorarios,
   proximaAbertura,
   type HorarioAtendimento,
 } from "./atendimento-humano.regua";
@@ -98,4 +102,44 @@ describe("proximosHorarios com preferência — QA 28/09", () => {
       "quinta às 09:00",
     ]);
   });
+});
+
+describe("agenda por regra fixa — QA 28/09", () => {
+  const fala = "Opa! Um consultor da Movatruck te liga 10 min pra mostrar funcionando. Tenho hoje às 14:00 ou às 16:00, qual fica melhor?";
+  it("lê os horários oferecidos, inclusive o 'às 16:00' sem dia repetido", () => {
+    expect(horariosOfertados("Tenho hoje às 14:00 ou hoje às 16:00, qual fica melhor?")).toEqual([
+      "hoje às 14:00",
+      "hoje às 16:00",
+    ]);
+  });
+  it("'ou às 16:00' herda o dia", () => {
+    expect(horariosOfertados("Tenho hoje às 14:00 ou às 16:00, qual fica melhor?")).toEqual([
+      "hoje às 14:00",
+      "hoje às 16:00",
+    ]);
+  });
+
+  it("entende a escolha", () => {
+    const of = ["hoje às 14:00", "hoje às 16:00"];
+    expect(escolhaDeHorario("o primeiro", of)).toBe("hoje às 14:00");
+    expect(escolhaDeHorario("16h", of)).toBe("hoje às 16:00");
+    expect(escolhaDeHorario("pode ser às 16:00", of)).toBe("hoje às 16:00");
+    expect(escolhaDeHorario("ok", of)).toBe("hoje às 14:00");
+    expect(escolhaDeHorario("o segundo", of)).toBe("hoje às 16:00");
+    expect(escolhaDeHorario("de tarde", of)).toBeNull();
+    expect(escolhaDeHorario("não posso hoje", of)).toBeNull();
+    expect(escolhaDeHorario("ok", [])).toBeNull();
+  });
+  it("entende a preferência", () => {
+    expect(preferenciaDeHorario("de tarde")).toEqual({ dia: undefined, periodo: "tarde" });
+    expect(preferenciaDeHorario("amanhã de manhã")).toEqual({ dia: "amanhã", periodo: "manha" });
+    expect(preferenciaDeHorario("pode ser")).toBeNull();
+  });
+  it("texto dos horários", () => {
+    expect(textoDeHorarios(["hoje às 14:00", "hoje às 16:00"])).toBe("Tenho hoje às 14:00 ou às 16:00, qual fica melhor?");
+    expect(textoDeHorarios(["hoje às 16:00", "amanhã às 09:00"])).toBe(
+      "Tenho hoje às 16:00 ou amanhã às 09:00, qual fica melhor?",
+    );
+  });
+  void fala;
 });

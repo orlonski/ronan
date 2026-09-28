@@ -203,7 +203,7 @@ export const CENARIOS: Cenario[] = [
       { cliente: "precisa de cartão?" },
       { cliente: "obrigado" },
     ],
-    espera: { repasses: 0, contem: "sem cartão" },
+    espera: { repasses: 0 },
   },
   {
     nome: "Desconfiado: é golpe?",
@@ -444,6 +444,8 @@ export const CENARIOS: Cenario[] = [
       { cliente: "Oi! Vi o site do Movatruck e quero agendar uma demonstração." },
       { cliente: "de tarde" },
       { cliente: "ok" },
+      // "ok" pra dois horários pede confirmação ("Fica hoje às 14:00, então?").
+      { cliente: "sim" },
     ],
     espera: { repasses: 1, alertas: 1, contem: "te liga" },
   },

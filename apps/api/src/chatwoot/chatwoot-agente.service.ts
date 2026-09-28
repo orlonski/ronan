@@ -14,6 +14,10 @@ import {
   aceitouOfertaDeHumano,
   ehNegociacaoDePreco,
   ehPedidoDeDemonstracao,
+  ehPedidoDeTeste,
+  perguntaIntegracao,
+  perguntaQualMelhor,
+  perguntaSeERobo,
   ehPedidoDeHumano,
   esperavaResposta,
   recusouContato,
@@ -28,6 +32,13 @@ import {
 } from "../sdr/lead-inbound";
 import { ProspeccaoService } from "../prospeccao/prospeccao.service";
 import { AtendimentoHumanoService } from "../sdr/atendimento-humano.service";
+import { aberturaPadrao } from "../sdr/sdr.prompt";
+import {
+  escolhaDeHorario,
+  horariosOfertados,
+  preferenciaDeHorario,
+  textoDeHorarios,
+} from "../sdr/atendimento-humano.regua";
 
 /**
  * O agente que atende dentro do Chatwoot.
@@ -421,6 +432,19 @@ export class ChatwootAgenteService {
       return;
     }
 
+    // Mensagem em rajada ("oi", "tudo bem?", "quero conhecer" no mesmo
+    // segundo): só a ÚLTIMA responde, e ANTES de qualquer resposta fixa — sem
+    // isso, cada balão via "ainda não falamos com ele" e a abertura saía três
+    // vezes. Durante a espera alguém pode ter assumido: aí, calado.
+    if (!(await this.souAUltima(leadId))) {
+      await this.sdr.registrarEntrada(leadId, fala);
+      return;
+    }
+    if (await this.comGente(leadId)) {
+      await this.sdr.registrarEntrada(leadId, fala);
+      return;
+    }
+
     const ultimaFalaNossa = await this.ultimaFalaNossa(leadId);
 
     // 4. Áudio: o modelo não ouve. Pede pra escrever — sem mentir que não
@@ -451,20 +475,146 @@ export class ChatwootAgenteService {
       return;
     }
 
-    // 5a. Pediu demonstração: os horários na hora, sem pergunta antes. O resto
-    //     (escolher, pedir outro período) é com o robô, que tem o histórico.
-    if (ehPedidoDeDemonstracao(texto)) {
-      const horarios = await this.atendimento.horariosLivres();
-      if (horarios.length >= 2) {
-        await this.sdr.registrarEntrada(leadId, texto);
-        const resposta =
-          `Opa! Um consultor da Movatruck te liga 10 min pra mostrar funcionando. ` +
-          `Tenho ${horarios[0]} ou ${horarios[1]}, qual fica melhor?`;
-        if (await this.chatwoot.responder(contaChatwoot, conversaId, resposta)) {
-          await this.sdr.registrarSaida(leadId, resposta);
-        }
-        return;
+    // 5a. A agenda, inteira por regra fixa: pedir demonstração ou aceitar a
+    //     ligação → horários da grade; escolher → confirma e avisa; pedir outro
+    //     período → horários desse período, ou o consultor combina.
+    if (await this.agenda(leadId, texto, ultimaFalaNossa, onde)) return;
+
+    const oferta = await this.atendimento.oferta();
+    const fixa = async (resposta: string) => {
+      await this.sdr.registrarEntrada(leadId, texto);
+      if (await this.chatwoot.responder(contaChatwoot, conversaId, resposta)) {
+        await this.sdr.registrarSaida(leadId, resposta);
       }
+    };
+
+    // 5a''. As três perguntas em que o modelo mais fugia do roteiro, com a
+    //       resposta fixa (simulador, 28/09).
+    // "Serve pra mim?": a resposta primeiro, depois a escolha — o modelo
+    // pulava direto pra oferta (QA 28/09, variava entre rodadas).
+    if (/\b(?:serve|funciona|da\s+certo|vale\s+a\s+pena)\s+(?:pra|para)\s+(?:mim|min|nos|n[oó]s|o\s+meu|a\s+minha|quem)\b/i.test(texto)) {
+      const dirige = /\b(?:eu\s+mesmo\s+dirijo|eu\s+dirijo|sou\s+o\s+motorista|um\s+caminh[aã]o\s+s[oó])\b/i.test(texto);
+      await fixa(
+        `Serve sim. ${dirige ? "Você mesmo lança" : "O motorista lança"} a viagem pelo celular na hora da carga, ` +
+          "com ticket, peso e pedágio, e funciona sem sinal. " +
+          (oferta.diasTeste
+            ? `Prefere testar ${oferta.diasTeste} dias grátis ou que um consultor te ligue 10 min pra mostrar?`
+            : "Quer que um consultor te ligue 10 min pra mostrar?"),
+      );
+      return;
+    }
+    // "Alguém aí?": quem responde é o robô, e ele diz que é — "Tô aqui."
+    // sozinho dava a entender que era gente.
+    // (Sem \b no fim: em JS o limite de palavra não conhece o "í" de "aí" — e a
+    // regra nunca disparava; o modelo respondeu "é a primeira mensagem que
+    // recebi", que era mentira. QA, sétima revisão.)
+    if (/^\s*(?:algu[eé]m\s+a[ií]|tem\s+algu[eé]m\s+a[ií]|oi\s+algu[eé]m|t[aá]\s+a[ií])(?![a-z])/i.test(texto)) {
+      await fixa(
+        "Tô aqui, sou o atendimento automático da Movatruck. Quer que um consultor fale com você, ou te ajudo por aqui?",
+      );
+      return;
+    }
+    // "Como funciona?": a explicação SEMPRE vem, e a oferta só se não acabou de
+    // sair. O modelo, numa rodada, respondeu só a oferta (QA, sétima revisão).
+    if (/\bcomo\s+funciona\b|\bme\s+explica\b|\bexplica\s+(?:melhor|mais)\b|\bquero\s+saber\s+mais\b/i.test(texto)) {
+      const ofertouAgora = /\bte\s+ligue\b|\b10\s+min\b|\bdias\s+gr[aá]tis\b/i.test(ultimaFalaNossa ?? "");
+      await fixa(
+        "O motorista lança a viagem pelo celular na hora da carga, com ticket, peso, pedágio e abastecimento, " +
+          "e funciona sem sinal. Você vê tudo no painel e fecha o mês sem planilha." +
+          (ofertouAgora
+            ? ""
+            : oferta.diasTeste
+              ? ` Prefere ver numa ligação de 10 min com um consultor, ou testar ${oferta.diasTeste} dias grátis, sem cartão?`
+              : " Quer ver numa ligação de 10 min com um consultor?"),
+      );
+      return;
+    }
+    if (/\b(?:mandei|enviei|te\s+mandei)\s+(?:um\s+|o\s+)?[aá]udio/i.test(texto)) {
+      await fixa("Por aqui eu não consigo ouvir áudio. Pode me escrever o que precisa?");
+      return;
+    }
+    if (perguntaSeERobo(texto)) {
+      await fixa("Sou o atendimento automático da Movatruck. Quer que um consultor fale com você?");
+      return;
+    }
+    if (oferta.diasTeste && oferta.linkTeste && ehPedidoDeTeste(texto)) {
+      const depois = /\b(?:depois|mais\s+tarde)\b.*\blig/i.test(texto)
+        ? " Se quiser a ligação depois, é só me chamar aqui."
+        : "";
+      await fixa(
+        `Pode sim: ${oferta.linkTeste}\n${oferta.diasTeste} dias grátis, sem cartão e sem fidelidade. ` +
+          `Comece cadastrando um motorista e lançando uma viagem.${depois}`,
+      );
+      return;
+    }
+    if (perguntaQualMelhor(texto)) {
+      await fixa(
+        "Se prefere ver alguém mostrando, a ligação de 10 min com um consultor." +
+          (oferta.diasTeste ? ` Se quer mexer com calma, o teste de ${oferta.diasTeste} dias grátis, sem cartão.` : ""),
+      );
+      return;
+    }
+
+    // 5a'. "Vai me cobrar?", "precisa de cartão?": o fato, sem modelo. Cliente
+    //      desconfiado ouviu "Quer começar?" em vez de resposta (QA 28/09).
+    if (
+      oferta.diasTeste &&
+      /\b(?:cobr\w*|cart[aã]o|fidelidade|contrato|multa)\b/i.test(texto) &&
+      !/\b(?:quanto|pre[cç]o|valor|mensalidade)\b/i.test(texto)
+    ) {
+      await this.sdr.registrarEntrada(leadId, texto);
+      // Pergunta de sim/não começa com o "não": "Certeza." pra "precisa de
+      // cartão?" soava como "precisa sim" (QA 28/09).
+      const resposta = /cart[aã]o/i.test(texto)
+        ? `Não precisa de cartão. O teste é ${oferta.diasTeste} dias grátis, sem fidelidade: ${oferta.linkTeste}`
+        : `Não tem cobrança no teste: são ${oferta.diasTeste} dias grátis, sem cartão e sem fidelidade. Se não servir, é só parar de usar.`;
+      await fixa(resposta);
+      return;
+    }
+
+    // 5a-medo. Medo de golpe ou de perder dado: resposta fixa, só com fato
+    //         verdadeiro. O modelo, aqui, inventou "há anos, com transportadoras
+    //         usando todo dia" numa das rodadas (QA, sexta revisão).
+    if (/\b(?:hacker|racker|roubar|robar|vazar|se\s+perder|perder\s+(?:os\s+)?dados?)\b/i.test(texto)) {
+      await fixa("Fica nos servidores da Movatruck, com backup, e só entra quem tem login e senha.");
+      return;
+    }
+    if (/\b(?:golpe|medo|passar\s+a\s+perna|me\s+enganar|enganar|n[aã]o\s+confio|(?:posso|d[aá]\s+pra)\s+confiar|[eé]\s+confi[aá]vel|desconfi\w*|picaretagem|pilantr\w*)\b/i.test(texto)) {
+      await fixa(
+        "Entendo o cuidado. A gente nunca pede senha nem dado de banco por mensagem" +
+          (oferta.diasTeste
+            ? `, e o teste é ${oferta.diasTeste} dias grátis, sem cartão e sem fidelidade. Se não servir, é só parar de usar.`
+            : `. Pode conferir com calma no site: ${oferta.linkApresentacao}`),
+      );
+      return;
+    }
+
+    // 5a-ctl. Ele contou como controla hoje ("planilha", "caderno"): um
+    //         reconhecimento curto e a pergunta da frota. O modelo, aqui,
+    //         inventava "é o que a maioria usa" (QA, 28/09, em duas rodadas).
+    const controle = /\b(planilha|pranila|excel|caderno|caderninho|papel|whats(?:app)?|zap|de\s+cabe[cç]a)\b/i.exec(texto);
+    if (controle && !/\?/.test(texto) && texto.trim().split(/\s+/).length <= 8) {
+      const ja = await this.sdr.frotaConhecida(leadId, texto);
+      const nome = /pranila|excel/i.test(controle[1]) ? "planilha" : /zap|whats/i.test(controle[1]) ? "WhatsApp" : controle[1].toLowerCase();
+      await fixa(
+        ja
+          ? `Entendi, ${nome}. Com a Movatruck o motorista lança pelo celular na hora da carga e você vê tudo no painel, sem montar ${nome === "WhatsApp" ? "mensagem por mensagem" : nome} no fim do mês.`
+          : `Entendi, ${nome}. E quantos caminhões rodam hoje?`,
+      );
+      return;
+    }
+
+    // 5a-int. Integração com outro sistema: é com o consultor, sempre.
+    if (perguntaIntegracao(texto)) {
+      await this.sdr.registrarEntrada(leadId, texto);
+      await this.avisarFilaHumana(onde, `comercial: integração — conversa ${conversaId}`, {
+        canal: "comercial",
+        leadId,
+        ultimaFala: texto,
+        situacao: "Perguntou de integração com outro sistema.",
+        motivo: "confirma",
+      });
+      return;
     }
 
     // 5b. Negociação de preço: é com o consultor, sempre — regra fixa.
@@ -483,16 +633,53 @@ export class ChatwootAgenteService {
     // 5c. Recusou ligação/pessoa: resposta fixa, e o robô segue disponível.
     if (recusouContato(texto)) {
       await this.sdr.registrarEntrada(leadId, texto);
-      const oferta = await this.atendimento.oferta();
+      // O link não vai de novo se já foi (terceira vez é empurrar — QA 28/09).
+      const linkJaFoi = Boolean(oferta.linkTeste && ultimaFalaNossa?.includes(oferta.linkTeste));
       const resposta =
         "Sem problema, ninguém vai te ligar sem você pedir." +
-        (oferta.diasTeste && oferta.linkTeste
+        (oferta.diasTeste && oferta.linkTeste && !linkJaFoi
           ? ` Se quiser conhecer por conta, dá pra testar ${oferta.diasTeste} dias grátis: ${oferta.linkTeste}`
-          : "");
+          : " Se quiser, é só chamar aqui.");
       if (await this.chatwoot.responder(contaChatwoot, conversaId, resposta)) {
         await this.sdr.registrarSaida(leadId, resposta);
       }
       return;
+    }
+
+    // 5d. Preço com a frota conhecida: direto da tabela, sem modelo.
+    const preco = await this.sdr.respostaDePreco(leadId, texto);
+    if (preco) {
+      if (await this.chatwoot.responder(contaChatwoot, conversaId, preco)) return;
+    }
+
+    // 5f. Primeiro contato curto ("Ou", "oi", "👍", "?"): a abertura fixa,
+    //     sempre igual. O modelo respondia "Ou" com o link do teste.
+    if (!ultimaFalaNossa && texto && !/\?/.test(texto.replace(/^\s*\?\s*$/, "")) && texto.trim().split(/\s+/).length <= 25 && !ehPedidoDeParar(texto)) {
+      const oferta = await this.atendimento.oferta();
+      const abertura = aberturaPadrao(oferta);
+      await this.sdr.registrarEntrada(leadId, texto);
+      if (await this.chatwoot.responder(contaChatwoot, conversaId, abertura)) {
+        await this.sdr.registrarSaida(leadId, abertura);
+      }
+      return;
+    }
+
+    // 5e. "ok" pra "ligação ou teste?" não escolheu nada: pergunta o mais
+    //     leve, o teste (o robô ficava calado, ou escolhia pelo cliente).
+    if (
+      ultimaFalaNossa &&
+      /\bte\s+ligue\b.*\bou\b.*\btest/i.test(ultimaFalaNossa) &&
+      ehSoEncerramento(texto)
+    ) {
+      const oferta = await this.atendimento.oferta();
+      if (oferta.diasTeste) {
+        await this.sdr.registrarEntrada(leadId, texto);
+        const resposta = `Quer o link do teste de ${oferta.diasTeste} dias grátis, sem cartão?`;
+        if (await this.chatwoot.responder(contaChatwoot, conversaId, resposta)) {
+          await this.sdr.registrarSaida(leadId, resposta);
+        }
+        return;
+      }
     }
 
     // 6. "ok", 👍, "valeu" depois de uma fala nossa que NÃO esperava resposta.
@@ -502,16 +689,7 @@ export class ChatwootAgenteService {
       return;
     }
 
-    // 7. Mensagem em rajada: só a última responde, lendo as outras no histórico.
-    if (!(await this.souAUltima(leadId))) {
-      await this.sdr.registrarEntrada(leadId, texto);
-      return;
-    }
-    // Durante a espera alguém pode ter assumido.
-    if (await this.comGente(leadId)) {
-      await this.sdr.registrarEntrada(leadId, texto);
-      return;
-    }
+    // 7. O modelo (a rajada já foi esperada lá em cima).
     if (await this.atenderComoSdr(leadId, texto, onde)) return;
 
     await this.avisarFilaHumana(onde, `comercial: conversa ${conversaId}`, {
@@ -520,6 +698,77 @@ export class ChatwootAgenteService {
       ultimaFala: texto,
       situacao: "O robô não respondeu. Precisa de uma pessoa.",
     });
+  }
+
+  /**
+   * A agenda da ligação, sem modelo. Devolve `true` quando cuidou da mensagem.
+   *
+   * A QA pegou o modelo confirmando "Comboado: … 14:00" (com erro), a trava
+   * de promessa lendo isso como repasse genérico, e o agendamento se perdendo.
+   * Oferecer, entender a escolha e confirmar não precisa de modelo.
+   */
+  private async agenda(
+    leadId: string,
+    texto: string,
+    ultimaFalaNossa: string | null,
+    onde: OndeConversa,
+  ): Promise<boolean> {
+    const ofertados = horariosOfertados(ultimaFalaNossa);
+    const responder = async (resposta: string) => {
+      await this.sdr.registrarEntrada(leadId, texto);
+      if (await this.chatwoot.responder(onde.contaId, onde.conversaId, resposta)) {
+        await this.sdr.registrarSaida(leadId, resposta);
+      }
+    };
+
+    // Escolheu um dos horários: confirma, registra e avisa quem liga. Um "ok"
+    // pra DOIS horários é ambíguo: pergunta qual, com o primeiro sugerido.
+    const escolhido = escolhaDeHorario(texto, ofertados);
+    if (escolhido && ofertados.length > 1 && !/\d|primeir|segund|outro|ultim|cima|baixo/i.test(texto)) {
+      await responder(`Fica ${escolhido}, então?`);
+      return true;
+    }
+    if (escolhido) {
+      await responder(`Combinado: um consultor da Movatruck te liga ${escolhido} neste número.`);
+      await this.sdr.registrarAgendamento(leadId, escolhido);
+      await this.avisarFilaHumana(onde, `agenda: ligação marcada ${escolhido}`, {
+        canal: "comercial",
+        leadId,
+        ultimaFala: texto,
+        situacao: `Ligação de demonstração marcada: ${escolhido}.`,
+        semAviso: true,
+      });
+      return true;
+    }
+
+    // Pediu demonstração, aceitou a ligação da abertura, ou pediu outro período
+    // depois de ver horários: os horários da grade, na preferência dele.
+    const aceitouLigacao =
+      /\bte\s+ligue\b|\b10\s+min\b/i.test(ultimaFalaNossa ?? "") &&
+      /\b(?:liga[cç][aã]o|pode\s+ser|a\s+primeira|primeira|quero\s+ver|pode\s+ligar)\b/i.test(texto) &&
+      !/\btest/i.test(texto);
+    const pref = preferenciaDeHorario(texto);
+    if (!ehPedidoDeDemonstracao(texto) && !aceitouLigacao && !(ofertados.length > 0 && pref)) return false;
+
+    const horarios = await this.atendimento.horariosLivres(pref ?? {});
+    if (horarios.length > 0) {
+      const inicio = ehPedidoDeDemonstracao(texto)
+        ? "Opa! Um consultor da Movatruck te liga 10 min pra mostrar funcionando. "
+        : "";
+      await responder(`${inicio}${textoDeHorarios(horarios)}`);
+      return true;
+    }
+    // Nada na grade pra essa preferência: o consultor combina.
+    await this.sdr.registrarEntrada(leadId, texto);
+    const periodo = pref?.periodo ? ` de ${pref.periodo === "manha" ? "manhã" : "tarde"}` : "";
+    await this.avisarFilaHumana(onde, "agenda: sem horário na preferência", {
+      canal: "comercial",
+      leadId,
+      ultimaFala: texto,
+      situacao: `Quer uma ligação${periodo}${pref?.dia ? ` (${pref.dia})` : ""}; não havia horário na grade.`,
+      motivo: "horario",
+    });
+    return true;
   }
 
   /**
@@ -565,13 +814,17 @@ export class ChatwootAgenteService {
       }),
     );
     if (marcado.count === 0) return;
-    const texto = await this.atendimento.mensagemDeLembrete();
+    const prometeuLigacao = /\bte\s+liga\b/i.test((await this.ultimaFalaNossa(leadId)) ?? "");
+    const texto = (await this.atendimento.mensagemDeLembrete()).replace(
+      prometeuLigacao ? "te responde aqui" : "\u0000",
+      "te liga neste número",
+    );
     if (await this.chatwoot.responder(onde.contaId, onde.conversaId, texto)) {
       await this.sdr.registrarSaida(leadId, texto);
     }
     await this.atendimento.avisar(
       leadId,
-      "Cobrou de novo, e ninguém respondeu ainda.",
+      "Escreveu de novo, e ninguém respondeu ainda.",
       fala,
       onde.conversaId,
       { reforco: true },
@@ -1034,6 +1287,22 @@ export class ChatwootAgenteService {
       if (resposta?.silencio) return true;
       if (!resposta?.texto.trim()) return false;
 
+      // O modelo decidiu passar pra gente: a frase do repasse é a NOSSA, com
+      // quem e quando — a dele saiu como "Já chamei, fica tranquilo" (QA
+      // 28/09), e às vezes com prazo errado. Exceção: a ligação marcada, que
+      // confirma o horário escolhido.
+      if (resposta.passarParaHumano && !resposta.motivoHumano?.startsWith("Ligação de demonstração marcada")) {
+        this.log.log(`SDR pediu humano na conversa ${conversaId}: ${resposta.motivoHumano}`);
+        await this.avisarFilaHumana(onde, `SDR: ${resposta.motivoHumano}`, {
+          canal: "comercial",
+          leadId,
+          ultimaFala: texto,
+          situacao: resposta.motivoHumano ?? "O robô passou pra uma pessoa.",
+          motivo: ehNegociacaoDePreco(texto) ? "preco" : pedeLigacao(texto) ? "ligacao" : "confirma",
+        });
+        return true;
+      }
+
       const enviado = await this.chatwoot.responder(contaChatwoot, conversaId, resposta.texto);
       if (!enviado) return false;
 
@@ -1087,7 +1356,7 @@ export class ChatwootAgenteService {
       /** Etiqueta a mais, pra quem atende saber de cara do que se trata. */
       etiqueta?: string;
       /** Muda a frase: pedido de ligação ouve "te liga", pergunta "quem" ouve quem. */
-      motivo?: "padrao" | "ligacao" | "quem" | "preco";
+      motivo?: "padrao" | "ligacao" | "quem" | "preco" | "confirma" | "horario";
     },
   ): Promise<void> {
     const { contaId: contaChatwoot, conversaId } = onde;
