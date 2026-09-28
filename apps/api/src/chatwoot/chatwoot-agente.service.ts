@@ -1133,9 +1133,8 @@ export class ChatwootAgenteService {
             alertaEscalonadoEm: null,
             lembreteEsperaEm: null,
             cicloIniciadoEm: new Date(),
-            testeOferecidoEm: null,
-            testeGuiaEm: null,
-            testeLembreteEm: null,
+            // O teste em andamento NÃO zera: o link saiu, a promessa de mandar
+            // o próximo passo quando a conta nascer continua valendo.
           },
         }),
       );

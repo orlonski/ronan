@@ -55,6 +55,23 @@ export const CENARIOS: Cenario[] = [
     espera: { repasses: 0, contem: "Entendi, no caderno", ultimaSemResposta: true },
   },
   {
+    // 28/09, 13:05: pegou o link, pediu atendente, o consultor respondeu.
+    // Resolvida a conversa, a conta criada depois ainda recebe o passo a passo.
+    nome: "Roteiro: link, atendente, resolvida, e a conta nasce depois",
+    canal: "comercial",
+    origem: "teste-do-dono",
+    passos: [
+      { cliente: "quero testar" },
+      { cliente: "Posso falar com um atendente ?" },
+      { equipe: "Oque você quer saber ?" },
+      { cliente: "Quero saber se preciso ter uma frota mínima pra usar o sistema" },
+      { equipe: "Não precisa não. Se tiver 1 caminhão já pode usar" },
+      { resolver: true },
+      { contaCriada: true },
+    ],
+    espera: { repasses: 1, contem: "Conta criada!" },
+  },
+  {
     nome: "Roteiro: conta como controla, escolhe pelo número",
     canal: "comercial",
     origem: "adversarial",

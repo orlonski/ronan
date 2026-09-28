@@ -339,6 +339,14 @@ export class ProspeccaoService {
    * interação". Zera também os alertas, pra um próximo repasse avisar de novo.
    */
   async devolverAoRobo(id: string) {
+    // Dois botões, um endpoint. "Devolver ao robô" (tinha gente na conversa)
+    // mantém o teste em andamento: o link já saiu e a promessa de mandar o
+    // próximo passo quando a conta nascer continua valendo. "Recomeçar
+    // conversa" (robô atendendo) zera tudo, é o começo do zero.
+    const atual = await comoSistema(() =>
+      this.prisma.lead.findUnique({ where: { id }, select: { sdrPausadoEm: true } }),
+    );
+    const recomecar = !atual?.sdrPausadoEm;
     return comoSistema(() =>
       this.prisma.lead.update({
         where: { id },
@@ -350,9 +358,7 @@ export class ProspeccaoService {
           lembreteEsperaEm: null,
           // Conversa nova: o robô não lê o que veio antes (teste do dono, 28/09).
           cicloIniciadoEm: new Date(),
-          testeOferecidoEm: null,
-          testeGuiaEm: null,
-          testeLembreteEm: null,
+          ...(recomecar ? { testeOferecidoEm: null, testeGuiaEm: null, testeLembreteEm: null } : {}),
         },
         select: { id: true, sdrPausadoEm: true },
       }),
