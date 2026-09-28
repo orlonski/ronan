@@ -269,8 +269,11 @@ const PADROES_HUMANO: RegExp[] = [
   // "quero falar com o Diego": nome de quem ele já conhece é pedido de gente,
   // mesmo sem o nome estar configurado em lugar nenhum.
   /\b(?:quero|queria|preciso|posso|gostaria\s+de)\s+falar\s+com\s+(?:o|a)\s+\w{3,}/,
-  /\bme\s+(?:liga|ligue|ligar|chama|chame)\b/,
-  /\b(?:pode|podem|quero\s+que)\s+(?:me\s+)?ligar\b/,
+  // Imperativo — pedido de AGORA. "Depois eu posso pedir pra me ligar?" é
+  // pergunta sobre o futuro de quem escolheu testar primeiro, e virou repasse
+  // no teste do dono (28/09).
+  /\bme\s+(?:liga|ligue|chama|chame)\b/,
+  /\b(?:pode|podem|quero\s+que)\s+me\s+ligar\b/,
   /\bvc\s+e\s+(?:um\s+)?robo\b.*\b(?:quero|prefiro)\s+(?:falar|gente|pessoa)/,
 ];
 
@@ -281,9 +284,12 @@ const PADROES_HUMANO: RegExp[] = [
  */
 const NEGACAO = /\b(?:nao|nem|nunca)\s+(?:\w+\s+){0,2}(?:quero|queria|preciso|falar|conversar|sei)\b/;
 
+/** Quem fala em testar está escolhendo o teste — isso é com o robô, que manda o link. */
+const FALA_DE_TESTE = /\btest(?:ar|e|o)\b/;
+
 export function ehPedidoDeHumano(texto: string, nomesEquipe: readonly string[] = []): boolean {
   const limpo = normalizar(texto);
-  if (NEGACAO.test(limpo)) return false;
+  if (NEGACAO.test(limpo) || FALA_DE_TESTE.test(limpo)) return false;
   if (PADROES_HUMANO.some((p) => p.test(limpo))) return true;
   // Nome só conta como PEDIDO ("falar com o Diego", "chama o Diego"), nunca
   // solto na frase.

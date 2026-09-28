@@ -513,13 +513,38 @@ describe("o SDR atendendo prospect no comercial", () => {
     expect(processar).not.toHaveBeenCalled();
   });
 
-  it("não repete o aviso de fila humana na segunda mensagem seguida", async () => {
+  it("não repete o aviso: lead já com gente fica em silêncio", async () => {
     const { s, responder, passarParaHumano } = montar({
       identidade: DESCONHECIDO,
-      jaEtiquetada: true,
+      ehLead: true,
+      pausado: true,
       respostaSdr: null,
     });
     await s.processar(evento(COMERCIAL));
+    expect(responder).not.toHaveBeenCalled();
+    expect(passarParaHumano).not.toHaveBeenCalled();
+  });
+
+  it("etiqueta velha no Chatwoot não cala o aviso de um lead novo — o teste do dono em 28/09", async () => {
+    // Lead excluído (ou devolvido ao robô), conversa ainda com precisa-humano:
+    // o repasse saía sem uma palavra, e a pessoa ficava olhando pro nada.
+    const { s, responder, passarParaHumano } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      jaEtiquetada: true,
+      respostaSdr: null,
+    });
+    await s.processar(evento({ ...COMERCIAL, content: "quanto custa?" }));
+    expect(responder).toHaveBeenCalledOnce();
+    expect(repassou(passarParaHumano)).toBe(true);
+  });
+
+  it("sem lead (operação), a etiqueta ainda evita repetir o aviso", async () => {
+    const { s, responder, passarParaHumano } = montar({
+      identidade: DESCONHECIDO,
+      jaEtiquetada: true,
+    });
+    await s.processar(evento({ ...OPERACAO, content: "oi" }));
     expect(responder).not.toHaveBeenCalled();
     expect(repassou(passarParaHumano)).toBe(true);
   });

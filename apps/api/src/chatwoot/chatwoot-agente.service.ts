@@ -868,15 +868,18 @@ export class ChatwootAgenteService {
   ): Promise<void> {
     const { contaId: contaChatwoot, conversaId } = onde;
     const { leadId } = opcoes;
+    // "Já avisei esta pessoa?" — com lead, a resposta é o próprio lead: já
+    // estava com gente ANTES desta mensagem. A etiqueta do Chatwoot sobrevive
+    // a lead excluído e a "Devolver ao robô", e usar ela deixou o dono sem
+    // resposta nenhuma no teste de 28/09: o repasse saiu calado. Sem lead
+    // (motorista, número desconhecido na operação), a etiqueta é o que há.
+    const jaAvisado = leadId
+      ? await this.comGente(leadId)
+      : await this.chatwoot.temEtiqueta(contaChatwoot, conversaId, LABEL_PRECISA_HUMANO);
     // Daqui pra frente quem cuida é gente. O robô sai de cena: sem isto, o
     // varredor de follow-up escreveria por cima de um vendedor no meio da
     // conversa, que é o jeito mais rápido de estragar uma venda com um robô.
     if (leadId) await this.marcarHumanoAssumiu(leadId);
-    const jaAvisado = await this.chatwoot.temEtiqueta(
-      contaChatwoot,
-      conversaId,
-      LABEL_PRECISA_HUMANO,
-    );
     if (jaAvisado || opcoes.semAviso) {
       this.log.log(`${motivo} — já estava na fila humana, sem repetir o aviso`);
     } else {

@@ -72,6 +72,16 @@ describe("ehPedidoDeHumano", () => {
     }
   });
 
+  it("quem escolhe testar não está pedindo gente — o teste do dono em 28/09", () => {
+    for (const t of [
+      "Posso testar primeiro Depois eu posso pedir pra me ligar ?",
+      "quero testar antes, depois vcs me ligam",
+      "depois eu posso pedir pra me ligar?",
+    ]) {
+      expect(ehPedidoDeHumano(t, equipe)).toBe(false);
+    }
+  });
+
   it("sem nome configurado, pedir alguém pelo nome ainda conta", () => {
     expect(ehPedidoDeHumano("quero falar com o Diego", [])).toBe(true);
   });
