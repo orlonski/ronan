@@ -40,6 +40,21 @@ export const CENARIOS: Cenario[] = [
     espera: { repasses: 0, ultimaContem: "controlam as viagens como" },
   },
   {
+    // 28/09, 12:12: a conversa do dono depois do "Recomeçar conversa".
+    nome: "Roteiro: papel e caderno, quer testar sozinho, vai almoçar",
+    canal: "comercial",
+    origem: "teste-do-dono",
+    passos: [
+      { cliente: "Boa tarde" },
+      { cliente: "digamos que nem temos muito controle \nMas em resumo é feito em papel e caderno" },
+      { cliente: "prefiro criar minha conta e se surgir dúvidas eu peço ajuda" },
+      { cliente: "Então devo me cadastrar aí e depois voce me ajuda nos primeiros passos ?\nOu o consultor vai me ligar ?\nNão entendi" },
+      { cliente: "Que top hein\nEu vou almoçar e depois volto nesse link e me cadastro\nPode ser ?" },
+      { cliente: "Beleza\nObrigado" },
+    ],
+    espera: { repasses: 0, contem: "Entendi, no caderno", ultimaSemResposta: true },
+  },
+  {
     nome: "Roteiro: conta como controla, escolhe pelo número",
     canal: "comercial",
     origem: "adversarial",

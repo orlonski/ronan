@@ -224,3 +224,12 @@ describe("integração", () => {
     expect(perguntaIntegracao("quanto custa?")).toBe(false);
   });
 });
+
+describe("encerramento em mais de uma palavra", () => {
+  it.each([["Beleza\nObrigado", true], ["ok valeu", true], ["show, obrigado!", true], ["beleza, e o preço?", false], ["muito bom o sistema", false]])(
+    "%s → %s",
+    (texto, esperado) => {
+      expect(ehSoEncerramento(texto)).toBe(esperado);
+    },
+  );
+});

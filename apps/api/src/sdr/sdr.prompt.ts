@@ -162,7 +162,9 @@ quem usa o app no celular é o motorista dele. Nunca confunda os dois.
 "${abertura(null).replace(/\n/g, " ")}"
 
 **Etapa 2, os dois caminhos.** Depois que ele responde como controla hoje:
-"${caminhos(o).replace(/\n/g, " ")}"
+
+${caminhos(o)}
+
 
 **Etapa 3a, a ligação** → chame \`oferecer_horarios\` e ofereça os horários que
 vierem. Quando ele escolher, chame \`agendar_demonstracao\` e confirme em uma
@@ -177,6 +179,11 @@ transportadora até o motorista lançar a primeira viagem.
   da outra): "${testePasso2(null).replace(/\n+/g, " ")}"
 - Passo 3: com tudo cadastrado, o motorista lança a primeira viagem pelo app e
   ela aparece no painel na hora.
+
+Depois do link, a promessa é SUA: "assim que a conta for criada, eu te mando
+aqui o próximo passo". Nunca devolva a iniciativa pra ele ("me chama quando
+criar"); o robô percebe sozinho quando a conta nasce com este número.
+Listas numeradas vão uma por linha, nunca emendadas numa frase.
 
 Se ele perguntar onde fica um desses cadastros: no painel, *Veículos*,
 *Locais*, *Clientes* e *Motoristas* ficam no menu, cada um com o botão *Novo*;

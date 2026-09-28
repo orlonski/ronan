@@ -23,7 +23,7 @@ const PREFIXO_IMPORTACAO = "import:";
  */
 const JANELA_META_MS = 22 * 3_600_000;
 
-/** Quanto esperar, depois do link, antes do único lembrete. */
+/** Quanto silêncio (depois da última mensagem) antes do único lembrete. */
 const ESPERA_LEMBRETE_MS = 3 * 3_600_000;
 
 /**
@@ -197,14 +197,18 @@ export class TesteGuiadoService {
     );
     for (const lead of leads) {
       if (!(await this.dentroDaJanela(lead.id, agora))) continue;
-      // Ele escreveu depois do link: a conversa está viva, e quem responde é o
-      // atendimento normal, não um lembrete.
-      const falouDepois = await comoSistema(() =>
-        this.prisma.mensagemLead.count({
-          where: { leadId: lead.id, direcao: "ENTRADA", criadoEm: { gt: lead.testeOferecidoEm! } },
+      // Conta o silêncio a partir da ÚLTIMA mensagem, de qualquer lado — não
+      // do link. "Vou almoçar e depois me cadastro" (teste do dono, 28/09) é
+      // justamente quem mais precisa do lembrete; a regra antiga, "escreveu
+      // depois do link, não lembra", deixava ele de fora.
+      const ultima = await comoSistema(() =>
+        this.prisma.mensagemLead.findFirst({
+          where: { leadId: lead.id },
+          orderBy: { criadoEm: "desc" },
+          select: { criadoEm: true },
         }),
       );
-      if (falouDepois > 0) continue;
+      if (ultima && agora.getTime() - ultima.criadoEm.getTime() < ESPERA_LEMBRETE_MS) continue;
       const marcado = await comoSistema(() =>
         this.prisma.lead.updateMany({
           where: { id: lead.id, testeLembreteEm: null },

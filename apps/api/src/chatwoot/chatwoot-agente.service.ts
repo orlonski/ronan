@@ -35,6 +35,7 @@ import { AtendimentoHumanoService } from "../sdr/atendimento-humano.service";
 import { aberturaPadrao } from "../sdr/sdr.prompt";
 import {
   RESPOSTA_CODIGO,
+  RESPOSTA_COMO_E_O_TESTE,
   caminhos,
   codigoNaoChegou,
   controleAtual,
@@ -44,10 +45,13 @@ import {
   ehCaminhos,
   escolhaDeCaminho,
   primeiroNome,
+  naoEntendeuOTeste,
   querConhecer,
+  respostaDepois,
   retomadaDoTeste,
   testePasso1,
   travouNoCadastro,
+  vaiFazerDepois,
 } from "../sdr/roteiro-comercial";
 import { TesteGuiadoService } from "./teste-guiado.service";
 import {
@@ -812,11 +816,15 @@ export class ChatwootAgenteService {
       /^(?:legal|interessante|entendi|show|massa|bacana|sim|certo|ok|beleza|blz|hum+|ah|a+h|top|bom|otimo|joia|que\s+bom|muito\s+bom)[\s!.]*$/i.test(
         texto.trim(),
       );
+    // "Digamos que nem temos muito controle, é em papel e caderno" (teste do
+    // dono, 28/09): resposta de verdade, só que em duas linhas. Até 30
+    // palavras sem pergunta, citando como controla, ainda é a resposta.
+    const respondeuComo = controleAtual(texto) && texto.trim().split(/\s+/).length <= 30;
     if (
       ehAbertura(ultimaFalaNossa) &&
       !pergunta &&
       !ehPedidoDeTeste(texto) &&
-      ((curta && controleAtual(texto)) || reconhecimento)
+      ((curta && controleAtual(texto)) || respondeuComo || reconhecimento)
     ) {
       await fixa(caminhos(oferta, controleAtual(texto)));
       return true;
@@ -827,6 +835,14 @@ export class ChatwootAgenteService {
     if (!etapa.oferecido) return false;
     if (codigoNaoChegou(texto)) {
       await fixa(RESPOSTA_CODIGO);
+      return true;
+    }
+    if (!etapa.comConta && naoEntendeuOTeste(texto)) {
+      await fixa(RESPOSTA_COMO_E_O_TESTE);
+      return true;
+    }
+    if (!etapa.comConta && !etapa.guiado && vaiFazerDepois(texto)) {
+      await fixa(respostaDepois(texto));
       return true;
     }
     const duvida = duvidaDeCadastro(texto);

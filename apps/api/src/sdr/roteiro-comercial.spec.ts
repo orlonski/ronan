@@ -12,7 +12,10 @@ import {
   ehTestePasso2,
   escolhaDeCaminho,
   primeiroNome,
+  naoEntendeuOTeste,
   querConhecer,
+  respostaDepois,
+  vaiFazerDepois,
   testePasso1,
   testePasso2,
   travouNoCadastro,
@@ -160,6 +163,28 @@ describe("querConhecer", () => {
     ["quanto custa?", false],
   ])("%s → %s", (texto, esperado) => {
     expect(querConhecer(texto)).toBe(esperado);
+  });
+});
+
+describe("depois do link", () => {
+  it("'vou almoçar e depois volto' fica pra depois, e a resposta mantém a promessa", () => {
+    const t = "Que top hein\nEu vou almoçar e depois volto nesse link e me cadastro\nPode ser ?";
+    expect(vaiFazerDepois(t)).toBe(true);
+    expect(respostaDepois(t)).toBe(
+      "Combinado! Quando criar a conta com este número, eu te mando aqui o próximo passo na hora. Bom almoço!",
+    );
+    expect(respostaDepois("faço mais tarde")).not.toMatch(/almo/);
+  });
+
+  it("'não entendi, o consultor vai me ligar?' é dúvida sobre como vai ser", () => {
+    expect(
+      naoEntendeuOTeste("Então devo me cadastrar aí e depois voce me ajuda nos primeiros passos ?\nOu o consultor vai me ligar ?\nNão entendi"),
+    ).toBe(true);
+    expect(naoEntendeuOTeste("criei a conta")).toBe(false);
+  });
+
+  it("controle em frase longa ainda é reconhecido", () => {
+    expect(controleAtual("digamos que nem temos muito controle \nMas em resumo é feito em papel e caderno")).toBe("caderno");
   });
 });
 

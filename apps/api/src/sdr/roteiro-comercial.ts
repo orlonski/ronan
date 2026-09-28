@@ -286,6 +286,28 @@ export function disseQueCriouConta(texto: string): boolean {
   return /\b(?:criei|cadastrei|fiz\s+(?:o\s+)?cadastro|ja\s+entrei|entrei|consegui|pronto|feito|foi|deu\s+certo|ta\s+criad\w*|conta\s+criad\w*)\b/.test(t);
 }
 
+/** "Vou almoçar e depois faço", "mais tarde eu vejo": ficou pra depois. */
+export function vaiFazerDepois(texto: string): boolean {
+  const t = normalizar(texto);
+  return /\b(?:depois|mais\s+tarde|amanha|a\s+noite|de\s+noite|outra\s+hora|mais\s+pra\s+frente|volto|voltar)\b/.test(t) &&
+    !/\b(?:lig\w*|consultor)\b/.test(t);
+}
+
+export function respostaDepois(texto: string): string {
+  const almoco = /\balmo[cç]\w*/i.test(texto);
+  return `Combinado! Quando criar a conta com este número, eu te mando aqui o próximo passo na hora.${almoco ? " Bom almoço!" : ""}`;
+}
+
+/** Depois do link, "não entendi", "o consultor vai me ligar?": como vai ser. */
+export function naoEntendeuOTeste(texto: string): boolean {
+  const t = normalizar(texto);
+  return /\bnao\s+entendi\b|\b(?:consultor|alguem)\s+vai\s+(?:me\s+)?ligar\b|\bvoce\s+me\s+ajuda\b|\bcomo\s+(?:vai\s+ser|funciona\s+isso|e\s+que\s+funciona)\b|\bdepois\s+(?:voce|vc)\s+me\b/.test(t);
+}
+
+export const RESPOSTA_COMO_E_O_TESTE =
+  "Isso: você cria a conta pelo link e, assim que ela estiver criada, eu te mando aqui o que cadastrar, um passo de cada vez. " +
+  "Ninguém te liga sem você pedir. Se em algum momento preferir fazer junto com um consultor, é só falar aqui.";
+
 /** "Não chegou o código", "cadê o código". */
 export function codigoNaoChegou(texto: string): boolean {
   const t = normalizar(texto);

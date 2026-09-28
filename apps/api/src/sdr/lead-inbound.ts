@@ -257,12 +257,22 @@ const ENCERRAMENTOS = new Set([
   "nada kakakak",
 ]);
 
+const PALAVRAS_DE_FECHAR = new Set([
+  "ok", "okay", "blz", "beleza", "valeu", "vlw", "obrigado", "obrigada", "obg", "brigado", "brigada",
+  "show", "top", "tmj", "certo", "combinado", "perfeito", "otimo", "joia", "massa", "fechou", "falou", "flw",
+  "muito", "mto", "grato", "grata", "entao", "ta", "bom", "demais",
+]);
+
 export function ehSoEncerramento(texto: string): boolean {
   const semEmoji = texto
     .replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}‍️]/gu, "")
     .trim();
   if (!semEmoji) return texto.trim().length > 0; // só emoji
   const limpo = normalizar(semEmoji).replace(/[.!,;:?]+/g, "").trim();
+  // "Beleza\nObrigado", "ok valeu", "show, obrigado": só palavras de fechar,
+  // em qualquer combinação (teste do dono, 28/09: o robô respondeu "Por nada!").
+  const palavras = limpo.split(/\s+/);
+  if (palavras.length > 1 && palavras.length <= 4 && palavras.every((p) => PALAVRAS_DE_FECHAR.has(p))) return true;
   return (
     ENCERRAMENTOS.has(limpo) ||
     /^k{3,}$/.test(limpo) ||
