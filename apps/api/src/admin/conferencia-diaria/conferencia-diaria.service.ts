@@ -666,7 +666,14 @@ export class ConferenciaDiariaService {
   }
 
   private descricao(c: Config): string {
-    return descreverRegraConferencia({ ...this.configDaRegra(c), horaEnvio: c.horaEnvio, diasDoJob: c.diasDoJob });
+    return descreverRegraConferencia({
+      ...this.configDaRegra(c),
+      horaEnvio: c.horaEnvio,
+      diasDoJob: c.diasDoJob,
+      lembreteNoApp: c.lembreteNoApp,
+      lembreteParaQuem: c.lembreteParaQuem,
+      diasParaLembreteNoApp: c.diasParaLembreteNoApp,
+    });
   }
 
   /** Avalia todos os motoristas elegíveis da conta da vez. Não grava nada. */

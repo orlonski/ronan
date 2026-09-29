@@ -13,6 +13,7 @@ import { EvolutionModule } from "../whatsapp/evolution.module";
 import { UploadsModule } from "../uploads/uploads.module";
 import { MotoristaController } from "./motorista.controller";
 import { MotoristaService } from "./motorista.service";
+import { LembreteLancamentoService } from "./lembrete-lancamento.service";
 import { ViagensMotoristaController } from "./viagens.controller";
 import { ViagemLifecycleController } from "./viagem-lifecycle.controller";
 import { ViagensMotoristaService } from "./viagens.service";
@@ -90,6 +91,7 @@ import { ProgramacaoMotoristaController } from "./programacao.controller";
   ],
   providers: [
     MotoristaService,
+    LembreteLancamentoService,
     ViagensMotoristaService,
     PedagiosMotoristaService,
     AbastecimentosMotoristaService,

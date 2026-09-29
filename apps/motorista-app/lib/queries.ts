@@ -14,6 +14,7 @@ import {
 import type {
   ExtrairTicketResult,
   FonteGps,
+  LembreteLancamentoApp,
   ReferenciaKmPayload,
   StatusMotorista,
   StoryEmoji,
@@ -186,6 +187,12 @@ export type Me = {
     exigeFotoOdometro?: boolean;
     exigeFotoBomba?: boolean;
   } | null;
+  /**
+   * "Você está há N dias sem lançar viagem" — só vem quando a empresa ligou o
+   * lembrete e ele está atrasado. Opcional: servidor antigo/cache antigo não
+   * tem, e ausência = nada a mostrar (nunca inventa cobrança).
+   */
+  lembreteLancamento?: LembreteLancamentoApp | null;
   // Preferências de recebimento (controladas na tela de perfil).
   aceitaPush: boolean;
   aceitaWhatsapp: boolean;
@@ -371,6 +378,15 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   if (typeof anyM.aceitaPush !== "boolean") anyM.aceitaPush = true;
   if (typeof anyM.aceitaWhatsapp !== "boolean") anyM.aceitaWhatsapp = true;
   if (typeof anyM.receberResumoDiario !== "boolean") anyM.receberResumoDiario = true;
+  // Lembrete de lançamento: só vale com o formato certo. Qualquer outra coisa
+  // (chave ausente, null, lixo de versão futura) vira "sem lembrete".
+  const l = anyM.lembreteLancamento as Record<string, unknown> | null | undefined;
+  if (
+    l != null &&
+    !(typeof l === "object" && typeof l.dias === "number" && typeof l.desde === "string")
+  ) {
+    delete anyM.lembreteLancamento;
+  }
   return m;
 }
 
@@ -531,8 +547,12 @@ export function useSalvarPreferenciasNotificacao() {
       if (ctx?.anterior) qc.setQueryData(["me"], ctx.anterior);
     },
     onSuccess: (fresh) => {
-      qc.setQueryData(["me"], normalizarMe(fresh));
-      void cachePut("q:me", normalizarMe(fresh)).catch(() => {});
+      // A resposta do PATCH não traz o lembrete (é do GET): preserva o que já
+      // se sabia em vez de apagar o card até o próximo refetch.
+      const lembrete = qc.getQueryData<Me>(["me"])?.lembreteLancamento;
+      const novo = normalizarMe(lembrete ? { ...fresh, lembreteLancamento: lembrete } : fresh);
+      qc.setQueryData(["me"], novo);
+      void cachePut("q:me", novo).catch(() => {});
     },
   });
 }

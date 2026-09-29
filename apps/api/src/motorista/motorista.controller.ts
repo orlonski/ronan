@@ -8,6 +8,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { MotoristaService } from "./motorista.service";
+import { LembreteLancamentoService } from "./lembrete-lancamento.service";
 import { CapacidadeLivre } from "../common/acesso-app/capacidade.decorator";
 
 const PreferenciasNotificacaoInput = z
@@ -32,11 +33,18 @@ type PreferenciasNotificacaoInput = z.infer<typeof PreferenciasNotificacaoInput>
 @Controller("m")
 @CapacidadeLivre("Infra do app: sem isto nada abre.")
 export class MotoristaController {
-  constructor(private readonly service: MotoristaService) {}
+  constructor(
+    private readonly service: MotoristaService,
+    private readonly lembrete: LembreteLancamentoService,
+  ) {}
 
   @Get("me")
-  me(@CurrentUser() user: AuthMotorista) {
-    return this.service.me(user.id);
+  async me(@CurrentUser() user: AuthMotorista) {
+    const perfil = await this.service.me(user.id);
+    // Campo OPCIONAL e retrocompatível: só existe quando a empresa ligou o lembrete
+    // e o motorista está atrasado. App antigo ignora; ausente = nada a mostrar.
+    const lembreteLancamento = await this.lembrete.paraMotorista(user.id);
+    return lembreteLancamento ? { ...perfil, lembreteLancamento } : perfil;
   }
 
   @Get("catalogos")

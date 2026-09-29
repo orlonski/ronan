@@ -4824,6 +4824,12 @@ enum QuemEntraConferenciaDiaria {
   SO_MODALIDADES
 }
 
+/// Quem vê o lembrete dentro do app do motorista.
+enum LembreteAppParaQuem {
+  SO_QUEM_SAIU
+  TODOS_QUE_ATRASARAM
+}
+
 enum EstadoConferenciaDiaria {
   /// Registrado em sombra: o motorista SERIA perguntado, nada foi enviado.
   SOMBRA
@@ -4913,6 +4919,12 @@ model ConfiguracaoConferenciaDiaria {
   mensagensParaSuspeitar Int                       @default(3)
   /// …dentro desta janela em dias.
   diasParaSuspeitar     Int                        @default(7)
+  /// Lembrete DENTRO do app: "você está há N dias sem lançar viagem". Nasce desligado.
+  lembreteNoApp         Boolean                    @default(false)
+  /// SO_QUEM_SAIU = só quem tocou "Parar perguntas" no WhatsApp; TODOS_QUE_ATRASARAM = qualquer motorista.
+  lembreteParaQuem      LembreteAppParaQuem        @default(SO_QUEM_SAIU)
+  /// Dias esperados sem lançar (mesmos dias considerados e feriados da regra) pra o card aparecer.
+  diasParaLembreteNoApp Int                        @default(3)
   alteradoEm            DateTime                   @updatedAt
   alteradoPor           User?                      @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId         String?

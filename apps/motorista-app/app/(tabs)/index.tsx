@@ -25,6 +25,7 @@ import {
 import { HomePessoal } from "@/components/home-pessoal";
 import { HomeRegistrado } from "@/components/home-registrado";
 import { BlocoDocumentos } from "@/components/bloco-documentos";
+import { LembreteLancamento } from "@/components/lembrete-lancamento";
 import { useVisao } from "@/lib/visao";
 import {
   ActivityIndicator,
@@ -374,6 +375,10 @@ function HomeDaEmpresa() {
             {/* O que falta na ficha dele. Some sozinho quando não falta nada:
                 é uma coisa que ACABA. */}
             <BlocoDocumentos />
+
+            {/* Aviso discreto (a empresa liga): dias sem lançar viagem.
+                Some ao lançar (fila do aparelho conta) e com "Agora não". */}
+            <LembreteLancamento />
 
             {/* Banner viagem em andamento (ou capturada aguardando lançamento) */}
             {tracking.data && (

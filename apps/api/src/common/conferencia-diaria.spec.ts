@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { descreverRegraConferencia } from "@ronan/shared-types";
+import {
+  descreverRegraConferencia,
+  lembreteLancamentoVisivel,
+  textoLembreteLancamento,
+} from "@ronan/shared-types";
 import {
   avaliarConferenciaDiaria,
+  avaliarLembreteNoApp,
+  type ConfigLembreteApp,
   diasEsperadosAntesDeHoje,
   hojeYmd,
   somarDias,
@@ -221,5 +227,176 @@ describe("descreverRegraConferencia", () => {
     expect(t).toContain("2 dias esperados seguidos");
     expect(t).toContain("não entra");
     expect(t).not.toContain("feriado");
+  });
+});
+
+
+describe("avaliarLembreteNoApp (lembrete dentro do app)", () => {
+  const app = (over: Partial<ConfigLembreteApp> = {}): ConfigLembreteApp => ({
+    ativo: true,
+    lembreteNoApp: true,
+    lembreteParaQuem: "SO_QUEM_SAIU",
+    diasParaLembreteNoApp: 3,
+    ...over,
+  });
+  // Segunda 28/09: os dias esperados antes são sex 25, qui 24, qua 23, ter 22...
+  const parou = (over: Partial<MotoristaParaConferencia> = {}) => ({
+    ...mot({ diasComViagem: ["2026-09-18"], ...over }),
+    receberConferenciaDiaria: false,
+  });
+  const rodar = (
+    a: ConfigLembreteApp,
+    m: ReturnType<typeof parou>,
+    over: Partial<ConfigRegraConferencia> = {},
+    feriados = SEM_FERIADO,
+    agora = SEG_MANHA,
+  ) => avaliarLembreteNoApp(cfg(over), a, m, feriados, agora);
+
+  it("empresa desligada: nada", () => {
+    expect(rodar(app({ lembreteNoApp: false }), parou())).toBeNull();
+  });
+
+  it("conferência inativa: nada, mesmo com o lembrete ligado", () => {
+    expect(rodar(app({ ativo: false }), parou())).toBeNull();
+  });
+
+  it("SO_QUEM_SAIU: quem ainda recebe as perguntas NÃO vê; quem parou vê", () => {
+    expect(rodar(app(), { ...parou(), receberConferenciaDiaria: true })).toBeNull();
+    const r = rodar(app(), parou());
+    expect(r).not.toBeNull();
+    expect(r!.dias).toBeGreaterThanOrEqual(3);
+  });
+
+  it("TODOS_QUE_ATRASARAM: quem ainda recebe também vê", () => {
+    const r = rodar(app({ lembreteParaQuem: "TODOS_QUE_ATRASARAM" }), { ...parou(), receberConferenciaDiaria: true });
+    expect(r).not.toBeNull();
+  });
+
+  it("só aparece com N dias esperados sem viagem: 2 dias não bastam pra N=3, 3 bastam", () => {
+    // Lançou na quarta 23: sem viagem em qui 24 e sex 25 = 2 dias esperados.
+    expect(rodar(app(), parou({ diasComViagem: ["2026-09-23"] }))).toBeNull();
+    // Lançou na terça 22: qua, qui, sex = 3.
+    const r = rodar(app(), parou({ diasComViagem: ["2026-09-22"] }));
+    expect(r).toEqual({ dias: 3, desde: "2026-09-23", calculadoEm: "2026-09-28" });
+  });
+
+  it("N configurável e a regra da conferência (dia anterior) não interfere", () => {
+    const r = rodar(app({ diasParaLembreteNoApp: 1 }), parou({ diasComViagem: ["2026-09-24"] }), {
+      regra: "SEM_VIAGEM_NO_DIA_ANTERIOR",
+    });
+    expect(r).toEqual({ dias: 1, desde: "2026-09-25", calculadoEm: "2026-09-28" });
+  });
+
+  it("frequência do WhatsApp (intervalo/máximo por semana) não segura o card", () => {
+    const r = rodar(app(), parou(), { intervaloMinimoDias: 30, maxPerguntasPorSemana: 1 });
+    expect(r).not.toBeNull();
+  });
+
+  it("feriado nacional não conta como dia esperado (mesma config da regra)", () => {
+    // Sem o feriado de sex 25, a sequência desde ter 22 teria 3 dias; com ele, só 2.
+    const feriados = new Set(["2026-09-25"]);
+    expect(rodar(app(), parou({ diasComViagem: ["2026-09-22"] }), {}, feriados)).toBeNull();
+    // Se a empresa não ignora feriado, ele conta.
+    expect(rodar(app(), parou({ diasComViagem: ["2026-09-22"] }), { ignorarFeriados: false }, feriados)).not.toBeNull();
+  });
+
+  it("fim de semana não conta (só os dias considerados)", () => {
+    // Lançou na sexta 25; segunda 28 olha sex... zero dias sem viagem.
+    expect(rodar(app(), parou({ diasComViagem: ["2026-09-25"] }))).toBeNull();
+  });
+
+  it("virada de dia às 21h30 de Brasília: ainda é segunda (UTC já é terça)", () => {
+    const noite = new Date("2026-09-29T00:30:00Z"); // segunda 21:30 em SP
+    const r = rodar(app(), parou({ diasComViagem: ["2026-09-22"] }), {}, SEM_FERIADO, noite);
+    expect(r?.calculadoEm).toBe("2026-09-28");
+    // À 00:30 de terça em SP (03:30Z) o "hoje" muda e segunda passa a contar como dia esperado.
+    const madruga = new Date("2026-09-29T03:30:00Z");
+    const r2 = rodar(app(), parou({ diasComViagem: ["2026-09-22"] }), {}, SEM_FERIADO, madruga);
+    expect(r2).toEqual({ dias: 4, desde: "2026-09-23", calculadoEm: "2026-09-29" });
+  });
+
+  it("lançou hoje: o lembrete some na hora", () => {
+    expect(rodar(app(), parou({ diasComViagem: ["2026-09-18", "2026-09-28"] }))).toBeNull();
+  });
+
+  it("viagem em andamento e cadastro recente não geram lembrete", () => {
+    expect(rodar(app(), parou({ temViagemEmAndamento: true }))).toBeNull();
+    expect(rodar(app(), parou({ cadastradoEm: "2026-09-26" }))).toBeNull();
+  });
+
+  it("quem nunca lançou: segue a config da conferência (incluirQueNuncaLancou)", () => {
+    expect(rodar(app(), parou({ diasComViagem: [] }))).not.toBeNull();
+    expect(rodar(app(), parou({ diasComViagem: [] }), { incluirQueNuncaLancou: false })).toBeNull();
+  });
+
+  it("a contagem mostrada é a sequência real, com teto de 30", () => {
+    const r = rodar(app(), parou({ diasComViagem: ["2026-06-01"], cadastradoEm: "2026-01-01" }));
+    expect(r!.dias).toBe(30);
+  });
+});
+
+describe("lembreteLancamentoVisivel (decisão do card no aparelho)", () => {
+  const lembrete = { dias: 3, desde: "2026-09-23", calculadoEm: "2026-09-28" };
+  const base = { lembrete, hoje: "2026-09-28", dispensadoEm: null as string | null, datasDeViagens: [] as string[] };
+
+  it("sem lembrete (servidor antigo, cache antigo, empresa desligada): não mostra", () => {
+    expect(lembreteLancamentoVisivel({ ...base, lembrete: undefined })).toBe(false);
+    expect(lembreteLancamentoVisivel({ ...base, lembrete: null })).toBe(false);
+    expect(lembreteLancamentoVisivel({ ...base, lembrete: {} as never })).toBe(false);
+  });
+
+  it("com lembrete: mostra", () => {
+    expect(lembreteLancamentoVisivel(base)).toBe(true);
+  });
+
+  it("'Agora não' vale só pro dia: amanhã volta", () => {
+    expect(lembreteLancamentoVisivel({ ...base, dispensadoEm: "2026-09-28" })).toBe(false);
+    expect(lembreteLancamentoVisivel({ ...base, dispensadoEm: "2026-09-27" })).toBe(true);
+    expect(lembreteLancamentoVisivel({ ...base, dispensadoEm: "2026-09-28", hoje: "2026-09-29" })).toBe(true);
+  });
+
+  it("viagem na fila ou na lista com dia dentro da sequência desfaz o lembrete", () => {
+    expect(lembreteLancamentoVisivel({ ...base, datasDeViagens: ["2026-09-28"] })).toBe(false);
+    expect(lembreteLancamentoVisivel({ ...base, datasDeViagens: ["2026-09-23"] })).toBe(false);
+  });
+
+  it("viagem antiga (antes da sequência) não desfaz", () => {
+    expect(lembreteLancamentoVisivel({ ...base, datasDeViagens: ["2026-09-22", "2026-09-01"] })).toBe(true);
+  });
+
+  it("texto: singular, plural e sem 'empresa/frota/controle'", () => {
+    expect(textoLembreteLancamento(1)).toBe(
+      "Você está há 1 dia sem lançar viagem. Viagem que não é lançada não entra no seu acerto.",
+    );
+    const t = textoLembreteLancamento(4);
+    expect(t).toContain("há 4 dias");
+    expect(t).not.toMatch(/empresa|frota|controle|schaba/i);
+  });
+});
+
+describe("descreverRegraConferencia com lembrete no app", () => {
+  const base = {
+    horaEnvio: 8,
+    diasDoJob: [1, 2, 3, 4, 5],
+    regra: "SEM_VIAGEM_NO_DIA_ANTERIOR" as const,
+    diasSemViagem: 2,
+    diasConsiderados: [1, 2, 3, 4, 5],
+    ignorarFeriados: true,
+    incluirQueNuncaLancou: true,
+    intervaloMinimoDias: 3,
+    maxPerguntasPorSemana: 3,
+  };
+  it("desligado (ou campo ausente): o texto é o de sempre", () => {
+    expect(descreverRegraConferencia(base)).not.toMatch(/app mostra/);
+    expect(descreverRegraConferencia({ ...base, lembreteNoApp: false })).not.toMatch(/app mostra/);
+  });
+  it("ligado: cita o lembrete, pra quem e quantos dias", () => {
+    const t = descreverRegraConferencia({ ...base, lembreteNoApp: true, lembreteParaQuem: "SO_QUEM_SAIU", diasParaLembreteNoApp: 3 });
+    expect(t).toMatch(/o app mostra um lembrete/);
+    expect(t).toMatch(/pediu pra parar/);
+    expect(t).toMatch(/3 dias esperados/);
+    expect(
+      descreverRegraConferencia({ ...base, lembreteNoApp: true, lembreteParaQuem: "TODOS_QUE_ATRASARAM", diasParaLembreteNoApp: 1 }),
+    ).toMatch(/qualquer motorista.*1 dia esperado/);
   });
 });

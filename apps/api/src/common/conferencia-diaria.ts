@@ -216,3 +216,73 @@ export function avaliarConferenciaDiaria(
     evidencias,
   };
 }
+
+/** Config do lembrete dentro do app (colunas de `ConfiguracaoConferenciaDiaria`). */
+export type ConfigLembreteApp = {
+  /** A conferência em si está ativa? Sem ela, nada de lembrete. */
+  ativo: boolean;
+  lembreteNoApp: boolean;
+  lembreteParaQuem: "SO_QUEM_SAIU" | "TODOS_QUE_ATRASARAM";
+  diasParaLembreteNoApp: number;
+};
+
+export type LembreteLancamento = { dias: number; desde: Ymd; calculadoEm: Ymd };
+
+/** Teto da contagem mostrada: passado disso "há 30 dias" já diz tudo. */
+const TETO_DIAS_LEMBRETE = 30;
+
+/**
+ * Lembrete DENTRO do app: "você está há N dias sem lançar viagem".
+ *
+ * Reaproveita `avaliarConferenciaDiaria` com a regra SEM_VIAGEM_HA_N_DIAS (N = dias
+ * do lembrete) e a MESMA config de dias considerados, feriados, "nunca lançou" e
+ * cadastro recente. Frequência da pergunta do WhatsApp não vale aqui (o card não é
+ * mensagem), então `perguntasAnteriores` vai vazio.
+ *
+ * Devolve `null` quando não deve aparecer. Devolve o tamanho REAL da sequência
+ * (até o teto), não só N, e o dia mais antigo dela (`desde`).
+ */
+export function avaliarLembreteNoApp(
+  cfgRegra: ConfigRegraConferencia,
+  cfgApp: ConfigLembreteApp,
+  m: MotoristaParaConferencia & { receberConferenciaDiaria: boolean },
+  feriadosNacionais: ReadonlySet<Ymd>,
+  agora: Date,
+): LembreteLancamento | null {
+  if (!cfgApp.ativo || !cfgApp.lembreteNoApp) return null;
+  if (cfgApp.lembreteParaQuem === "SO_QUEM_SAIU" && m.receberConferenciaDiaria) return null;
+
+  const hoje = hojeYmd(agora);
+  // Lançou hoje (o dia de hoje não conta na regra, mas o lembrete some na hora).
+  if (m.diasComViagem.includes(hoje)) return null;
+
+  const n = Math.max(1, Math.floor(cfgApp.diasParaLembreteNoApp));
+  const r = avaliarConferenciaDiaria(
+    {
+      ...cfgRegra,
+      regra: "SEM_VIAGEM_HA_N_DIAS",
+      diasSemViagem: n,
+      intervaloMinimoDias: 1,
+      maxPerguntasPorSemana: 7,
+    },
+    { ...m, perguntasAnteriores: [] },
+    feriadosNacionais,
+    agora,
+  );
+  if (!r.deveriaPerguntar) return null;
+
+  const comViagem = new Set(m.diasComViagem);
+  const esperados = diasEsperadosAntesDeHoje(
+    hoje,
+    TETO_DIAS_LEMBRETE,
+    cfgRegra.diasConsiderados,
+    cfgRegra.ignorarFeriados ? feriadosNacionais : null,
+  ).filter((d) => !m.cadastradoEm || d >= m.cadastradoEm);
+  const sequencia: Ymd[] = [];
+  for (const d of esperados) {
+    if (comViagem.has(d)) break;
+    sequencia.push(d);
+  }
+  if (sequencia.length < n) return null;
+  return { dias: sequencia.length, desde: sequencia[sequencia.length - 1]!, calculadoEm: hoje };
+}

@@ -10,6 +10,8 @@ import {
   type ConfigConferenciaDiaria,
   type RegraConferenciaDiaria,
   type QuemEntraConferenciaDiaria,
+  type LembreteAppParaQuem,
+  textoLembreteLancamento,
 } from "@ronan/shared-types";
 import { RequerTela } from "@/components/requer-tela";
 import { AbasDaTela } from "@/components/abas-da-tela";
@@ -331,6 +333,51 @@ function Conteudo() {
               className="max-w-sm"
             />
           </Field>
+        </Card>
+
+        <Card className="space-y-4 p-5">
+          <h2 className="text-base font-semibold">Lembrete dentro do app</h2>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            Quem pediu pra parar as perguntas no WhatsApp continua sabendo, pelo app, que viagem não lançada não
+            entra no acerto. Quando o parceiro fica alguns dias esperados sem lançar, aparece um aviso discreto na
+            tela inicial do app dele, com o botão &ldquo;Lançar viagem&rdquo; e a opção &ldquo;Agora não&rdquo;
+            (que some só por aquele dia). O aviso desaparece assim que ele lança uma viagem. Só funciona com a
+            conferência ativa (ligada lá em cima).
+          </p>
+          <Field label="Mostrar o lembrete no app" help="Desligado por padrão: nada muda no app dos parceiros até você ligar.">
+            <Toggle value={form.lembreteNoApp} onChange={(v) => set("lembreteNoApp", v)} disabled={!podeEditar} />
+          </Field>
+          {form.lembreteNoApp && (
+            <>
+              <Field label="Pra quem">
+                <Select
+                  value={form.lembreteParaQuem}
+                  onChange={(e) => set("lembreteParaQuem", e.target.value as LembreteAppParaQuem)}
+                  disabled={!podeEditar}
+                  className="max-w-xs"
+                >
+                  <option value="SO_QUEM_SAIU">Só quem pediu pra parar as perguntas</option>
+                  <option value="TODOS_QUE_ATRASARAM">Todos que ficaram sem lançar</option>
+                </Select>
+              </Field>
+              <Field
+                label="Depois de quantos dias esperados sem lançar"
+                help="Conta os mesmos dias esperados e feriados da regra acima."
+              >
+                <NumInput
+                  value={form.diasParaLembreteNoApp}
+                  onChange={(v) => set("diasParaLembreteNoApp", v)}
+                  min={1}
+                  max={30}
+                  disabled={!podeEditar}
+                />
+              </Field>
+              <div className="max-w-prose rounded-xl border bg-muted/40 p-4">
+                <p className="text-xs font-medium uppercase text-muted-foreground">O parceiro vai ver</p>
+                <p className="mt-1 text-sm">{textoLembreteLancamento(form.diasParaLembreteNoApp)}</p>
+              </div>
+            </>
+          )}
         </Card>
 
         <Card className="space-y-4 p-5">

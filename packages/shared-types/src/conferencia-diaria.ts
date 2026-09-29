@@ -14,6 +14,13 @@ export type ModoConferenciaDiaria = z.infer<typeof ModoConferenciaDiaria>;
 export const QuemEntraConferenciaDiaria = z.enum(["TODOS_APROVADOS", "SO_MODALIDADES"]);
 export type QuemEntraConferenciaDiaria = z.infer<typeof QuemEntraConferenciaDiaria>;
 
+/**
+ * Quem vê o lembrete dentro do app. SO_QUEM_SAIU = quem tocou "Parar perguntas" no
+ * WhatsApp (o app é o canal que sobra pra ele); TODOS_QUE_ATRASARAM = qualquer motorista.
+ */
+export const LembreteAppParaQuem = z.enum(["SO_QUEM_SAIU", "TODOS_QUE_ATRASARAM"]);
+export type LembreteAppParaQuem = z.infer<typeof LembreteAppParaQuem>;
+
 export const EstadoConferenciaDiaria = z.enum([
   "SOMBRA",
   "SUPRIMIDA",
@@ -140,6 +147,9 @@ export const AtualizarConfigConferenciaDiariaSchema = z
     suprimirResumoQuemRecebeuPergunta: z.boolean(),
     mensagensParaSuspeitar: z.number().int().min(2).max(10),
     diasParaSuspeitar: z.number().int().min(2).max(30),
+    lembreteNoApp: z.boolean(),
+    lembreteParaQuem: LembreteAppParaQuem,
+    diasParaLembreteNoApp: z.number().int().min(1).max(30),
   })
   .partial()
   .superRefine((v, ctx) => {
@@ -176,6 +186,9 @@ export const ConfigConferenciaDiaria = z.object({
   suprimirResumoQuemRecebeuPergunta: z.boolean(),
   mensagensParaSuspeitar: z.number(),
   diasParaSuspeitar: z.number(),
+  lembreteNoApp: z.boolean(),
+  lembreteParaQuem: LembreteAppParaQuem,
+  diasParaLembreteNoApp: z.number(),
 });
 export type ConfigConferenciaDiaria = z.infer<typeof ConfigConferenciaDiaria>;
 
@@ -196,6 +209,10 @@ export function descreverRegraConferencia(cfg: {
   incluirQueNuncaLancou: boolean;
   intervaloMinimoDias: number;
   maxPerguntasPorSemana: number;
+  /** Ausentes = lembrete no app desligado (config antiga / chamador que não conhece o campo). */
+  lembreteNoApp?: boolean;
+  lembreteParaQuem?: LembreteAppParaQuem;
+  diasParaLembreteNoApp?: number;
 }): string {
   const hora = `${String(cfg.horaEnvio).padStart(2, "0")}:00`;
   const quando = `${prefixoDias(cfg.diasDoJob)}, às ${hora}`;
@@ -209,7 +226,53 @@ export function descreverRegraConferencia(cfg: {
     ? "Quem nunca lançou nenhuma viagem também entra."
     : "Quem nunca lançou nenhuma viagem não entra.";
   const freq = `No máximo 1 mensagem a cada ${cfg.intervaloMinimoDias} ${cfg.intervaloMinimoDias === 1 ? "dia" : "dias"} e ${cfg.maxPerguntasPorSemana} por semana, por motorista.`;
-  return `${quando}, o sistema pergunta ao motorista que ${alvo}. O dia de hoje nunca conta. ${nunca} ${freq}`;
+  const base = `${quando}, o sistema pergunta ao motorista que ${alvo}. O dia de hoje nunca conta. ${nunca} ${freq}`;
+  if (!cfg.lembreteNoApp) return base;
+  const n = Math.max(1, cfg.diasParaLembreteNoApp ?? 3);
+  const quem =
+    cfg.lembreteParaQuem === "TODOS_QUE_ATRASARAM"
+      ? "qualquer motorista"
+      : "o motorista que pediu pra parar as perguntas no WhatsApp";
+  return `${base} Além disso, o app mostra um lembrete na tela inicial para ${quem} que ficou ${n} ${n === 1 ? "dia esperado" : "dias esperados"} sem lançar viagem.`;
+}
+
+/**
+ * O que a API entrega no `/m/me` (`lembreteLancamento`) quando o card deve aparecer.
+ * `desde` é o dia esperado mais antigo da sequência sem viagem: viagem lançada com
+ * data a partir dele desfaz o lembrete (inclusive as ainda na fila do aparelho).
+ */
+export const LembreteLancamentoApp = z.object({
+  dias: z.number().int().min(1),
+  desde: z.string(),
+  calculadoEm: z.string(),
+});
+export type LembreteLancamentoApp = z.infer<typeof LembreteLancamentoApp>;
+
+export function textoLembreteLancamento(dias: number): string {
+  const n = Math.max(1, Math.floor(dias));
+  return `Você está há ${n} ${n === 1 ? "dia" : "dias"} sem lançar viagem. Viagem que não é lançada não entra no seu acerto.`;
+}
+
+/**
+ * O card aparece? Lógica pura, compartilhada com o app (que a alimenta com o
+ * último `lembreteLancamento` do cache — offline segue valendo).
+ *
+ *  - `hoje`: Ymd de Brasília (nunca UTC do aparelho).
+ *  - `dispensadoEm`: dia (Ymd) em que ele tocou "Agora não" neste cadastro.
+ *  - `datasDeViagens`: dias (Ymd) das viagens que o aparelho conhece — as da lista em
+ *    cache e as ainda na fila de envio. Qualquer uma com dia >= `desde` conta como lançada.
+ * "Não sei" nunca inventa cobrança: sem lembrete, sem card.
+ */
+export function lembreteLancamentoVisivel(entrada: {
+  lembrete: LembreteLancamentoApp | null | undefined;
+  hoje: string;
+  dispensadoEm: string | null | undefined;
+  datasDeViagens: readonly string[];
+}): boolean {
+  const l = entrada.lembrete;
+  if (!l || typeof l.dias !== "number" || typeof l.desde !== "string") return false;
+  if (entrada.dispensadoEm === entrada.hoje) return false;
+  return !entrada.datasDeViagens.some((d) => d >= l.desde);
 }
 
 function listaNomes(dias: number[]): string {
