@@ -446,6 +446,13 @@ export class ContasService implements OnModuleInit {
           })),
           skipDuplicates: true,
         });
+
+        // Os papéis foram semeados LÁ EM CIMA, quando a conta ainda não tinha
+        // módulo nenhum — e o teto é cruzado com os módulos, então o
+        // Administrador nascia só com as chaves do núcleo e ficava assim até o
+        // próximo boot da API (medido: 81 chaves com 7 módulos ligados). Semeia
+        // de novo agora que o contrato existe; é idempotente.
+        await this.permissoes.seedPapeisSistema();
       });
     } catch (erro) {
       await this.desfazer(conta.id);

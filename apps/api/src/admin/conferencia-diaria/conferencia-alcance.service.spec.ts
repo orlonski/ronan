@@ -26,6 +26,7 @@ function montar(
   );
   const findManyMsg = vi.fn(async (_a: { where: { criadoEm: { gte: Date } } }) => opts.mensagens ?? []);
   const prisma = {
+    conta: { findUnique: async () => ({ ehPlataforma: false, permissoesPermitidas: [], permissoesExtras: [] }) },
     moduloContratado: { findMany: vi.fn(async () => [{ chave: "conferencia", vigenteDe: null, vigenteAte: null }]) },
     configuracaoConferenciaDiaria: {
       findFirst: vi.fn(async () =>

@@ -216,3 +216,44 @@ describe("módulos contratados", () => {
     expect(teto.size).toBe(TODAS_AS_CHAVES.length);
   });
 });
+
+describe("modulosDaConta — a casa tem todos, o cliente só o que contratou", () => {
+  const todos = MODULOS.map((m) => m.chave).sort();
+  const nucleo = MODULOS.filter((m) => m.nucleo).map((m) => m.chave);
+  const ligado = (chave: string) => ({ chave, vigenteDe: null, vigenteAte: null });
+
+  it("conta plataforma SEM nenhuma linha recebe o catálogo inteiro", async () => {
+    const p = prismaCom({ ehPlataforma: true, permissoesPermitidas: [] }, null, []);
+    expect([...(await modulosDaConta(p, "casa"))].sort()).toEqual(todos);
+  });
+
+  it("conta plataforma ignora linha desligada ou vencida", async () => {
+    const ontem = new Date(Date.now() - 3 * 86_400_000);
+    const p = prismaCom({ ehPlataforma: true, permissoesPermitidas: [] }, null, [
+      { chave: "ponto", vigenteDe: null, vigenteAte: ontem },
+    ]);
+    expect((await modulosDaConta(p, "casa")).has("ponto")).toBe(true);
+  });
+
+  it("cliente só com núcleo continua só com o núcleo", async () => {
+    const p = prismaCom({ ehPlataforma: false, permissoesPermitidas: [] }, null, []);
+    expect([...(await modulosDaConta(p, "c"))].sort()).toEqual([...nucleo].sort());
+  });
+
+  it("cliente com ponto ligado tem núcleo + ponto, nada além", async () => {
+    const p = prismaCom({ ehPlataforma: false, permissoesPermitidas: [] }, null, [ligado("ponto")]);
+    expect([...(await modulosDaConta(p, "c"))].sort()).toEqual([...nucleo, "ponto"].sort());
+  });
+
+  it("conta inexistente não vira plataforma", async () => {
+    const p = prismaCom(null, null, []);
+    expect([...(await modulosDaConta(p, "x"))].sort()).toEqual([...nucleo].sort());
+  });
+
+  it("o teto do cliente só-núcleo segue sem chave de módulo à parte", async () => {
+    const p = prismaCom({ ehPlataforma: false, permissoesPermitidas: [] }, null, []);
+    const teto = await tetoDaConta(p, "c");
+    expect(teto.has("ponto.ver")).toBe(false);
+    expect(teto.has("cte.ver")).toBe(false);
+  });
+});

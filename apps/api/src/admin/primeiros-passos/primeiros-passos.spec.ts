@@ -48,6 +48,7 @@ function prismaFake(contagens: Record<string, number>, modulos: string[]) {
       }),
     },
     tabelaPreco: { count: count("tabelaPreco") },
+    conta: { findUnique: async () => ({ ehPlataforma: false, permissoesPermitidas: [], permissoesExtras: [] }) },
     moduloContratado: {
       findMany: vi.fn().mockResolvedValue(
         modulos.map((chave) => ({ chave, vigenteDe: null, vigenteAte: null })),

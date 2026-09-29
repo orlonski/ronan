@@ -11,6 +11,7 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { EventoMotoristaBatch } from "@ronan/shared-types";
+import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -63,6 +64,9 @@ export class EventosController {
 
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  // Tela "Diagnóstico do app": recurso da plataforma. `@Controller()` sem
+  // prefixo escondia isto do boot-check, e o guard de permissão é fail-open.
+  @RequerPermissao("diagnosticos.ver")
   @Get("admin/eventos")
   listar(
     @Query(new ZodValidationPipe(ListarQuery))
@@ -87,6 +91,8 @@ export class EventosController {
    */
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  // A aba "Diagnóstico" da viagem: quem vê a viagem continua vendo.
+  @RequerPermissao("diagnosticos.ver", "viagens.ver")
   @Get("admin/eventos/viagem/:viagemId")
   porViagem(@Param("viagemId") viagemId: string) {
     return this.service.listarPorViagem(viagemId);

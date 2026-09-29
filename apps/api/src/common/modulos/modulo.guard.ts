@@ -65,11 +65,14 @@ export class ModuloGuard implements CanActivate {
 
     const contratados = await this.cache.obter(
       (contaId) => modulosDaConta(this.prisma, contaId),
-      // Padrão sem conta no contexto: não bloqueia. Quem não tem conta no
-      // contexto é rota de plataforma ou worker, e esses não são o alvo daqui.
+      // Padrão quando não dá pra saber (sem conta no contexto, ou a leitura dos
+      // módulos falhou): NADA contratado. Era `size === 0 → libera`, e como o
+      // padrão era esse mesmo conjunto vazio, um soluço do banco abria todos os
+      // módulos vendidos à parte pra qualquer administrador. "Não sei" nunca
+      // vira "pode": o núcleo entra sempre em `modulosDaConta`, então um
+      // conjunto vazio só aparece aqui por falha, e falha nega.
       new Set<ModuloChave>(),
     );
-    if (contratados.size === 0) return true;
 
     for (const m of modulosExigidos) {
       if (contratados.has(m)) return true;

@@ -49,6 +49,31 @@ export const ENDPOINTS_SEM_PERMISSAO: ReadonlySet<string> = new Set([
   "OnboardingController.tour",
   "OnboardingController.tourVisto",
   "OnboardingController.tourRever",
+
+  // Fora de `admin/*` (o boot-check agora olha o `@Roles("ADMIN_USER")`, não só
+  // o prefixo). São do próprio usuário sobre si mesmo, como a caixa pessoal:
+  // o painel de qualquer empresa reporta o erro que viu, e quem entra precisa
+  // aceitar os Termos ANTES de ter papel configurado.
+  "ErrorsController.reportarDashboard",
+  "TermosController.status",
+  "TermosController.recibos",
+  "TermosController.aceitar",
+
+  // DÍVIDA aberta (achada ao estender o boot-check ao `@Roles("ADMIN_USER")`
+  // fora de `admin/*`). Não recebem chave nova aqui porque hoje qualquer
+  // administrador as usa nos botões de Motoristas/Usuários, e escolher a chave
+  // errada tiraria o convite de quem o usa. Decidir com o dono; esta lista só
+  // encolhe. O convite gasta mensagem de WhatsApp (recurso medido).
+  "WhatsappController.conviteMotorista",
+  "WhatsappController.conviteUser",
+
+  // Busca de endereço/CEP/rota: compartilhada com o app do motorista (mesmo
+  // controller, `@Roles` de três tipos) e sem dado de empresa. Custa cota do
+  // Google Maps, não módulo.
+  "GeocodingController.cep",
+  "GeocodingController.buscar",
+  "GeocodingController.place",
+  "GeocodingController.reverso",
 ]);
 
 /** Nome estável de um handler pro registro acima. */

@@ -56,6 +56,20 @@ export async function modulosDaConta(
   contaId: string,
   hoje: Date = new Date(),
 ): Promise<Set<ModuloChave>> {
+  // A casa (`ehPlataforma`) tem TODOS os módulos, coerente com `tetoDaConta`, que
+  // já lhe dá o catálogo inteiro de chaves. Sem isto o `ModuloGuard` barrava a
+  // própria Movatruck em qualquer módulo sem linha em `modulos_contratados`
+  // (ponto, fiscal…), embora o RBAC dela liberasse tudo. Conta cliente não muda:
+  // continua valendo só o contrato. A tela de Módulos segue mostrando o
+  // `contratado` real (linhas), só o `vigente` (o que vale) vira verdadeiro.
+  //
+  // É uma leitura por chave primária; o `ModuloGuard` já cacheia o resultado.
+  const conta = await prisma.conta.findUnique({
+    where: { id: contaId },
+    select: { ehPlataforma: true, permissoesPermitidas: true, permissoesExtras: true },
+  });
+  if (conta?.ehPlataforma) return new Set<ModuloChave>(MODULOS.map((m) => m.chave));
+
   const linhas = await prisma.moduloContratado.findMany({
     where: { contaId, ativo: true },
     select: { chave: true, vigenteDe: true, vigenteAte: true },

@@ -168,16 +168,24 @@ export class WhatsappController {
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  @RequerPermissao("whatsapp.gerenciar")
   @Get("admin/whatsapp/qrcode-cache")
   qrcodeCache() {
     return ultimoQrCode ?? { base64: null, capturadoEm: null };
   }
 
   // ================== Endpoints admin ==================
+  //
+  // ⚠️ Esta classe é `@Controller()` (o caminho mora em cada handler), então o
+  // boot-check dos módulos, que olhava o prefixo do controller, nunca viu estes
+  // GETs — e o `PermissaoGuard` é fail-open. Sem permissão, qualquer
+  // administrador de qualquer empresa (até com papel VAZIO) lia o QR code, os
+  // grupos e as sessões da instância ÚNICA da plataforma.
 
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  @RequerPermissao("whatsapp.ver")
   @Get("admin/whatsapp/status")
   async status() {
     if (!this.evolution.configurado) {
@@ -194,6 +202,7 @@ export class WhatsappController {
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  @RequerPermissao("whatsapp.gerenciar")
   @Get("admin/whatsapp/qrcode")
   async qrcode() {
     return this.evolution.pegarQrCode();
@@ -202,6 +211,7 @@ export class WhatsappController {
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  @RequerPermissao("whatsapp.ver")
   @Get("admin/whatsapp/sessoes")
   async listarSessoes() {
     return this.sessao.listar();
@@ -220,6 +230,7 @@ export class WhatsappController {
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  @RequerPermissao("whatsapp.ver")
   @Get("admin/whatsapp/mensagens")
   async mensagens(
     @Query("sessaoId") sessaoId: string,
@@ -235,6 +246,7 @@ export class WhatsappController {
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  @RequerPermissao("whatsapp.ver")
   @Get("admin/whatsapp/grupos")
   async grupos() {
     return this.avisoGrupo.listarGrupos();
@@ -243,6 +255,7 @@ export class WhatsappController {
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  @RequerPermissao("whatsapp.ver")
   @Get("admin/whatsapp/aviso-grupo")
   async avisoGrupoConfig(
     @CurrentUser() user: AuthUser,
@@ -288,6 +301,7 @@ export class WhatsappController {
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  @RequerPermissao("whatsapp.gerenciar")
   @Get("admin/whatsapp/aviso-grupo/diagnostico")
   async diagnosticarAvisoGrupo(
     @Query("motorista") motorista: string,

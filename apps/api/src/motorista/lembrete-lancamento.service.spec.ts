@@ -51,6 +51,7 @@ function montar(
       }),
     },
     configuracaoConferenciaDiaria: { findFirst },
+    conta: { findUnique: async () => ({ ehPlataforma: false, permissoesPermitidas: [], permissoesExtras: [] }) },
     moduloContratado: {
       findMany: vi.fn(async () => opts.modulos ?? [{ chave: "conferencia", vigenteDe: null, vigenteAte: null }]),
     },

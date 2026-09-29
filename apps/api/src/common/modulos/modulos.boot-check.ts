@@ -4,6 +4,7 @@ import { GUARDS_METADATA, PATH_METADATA } from "@nestjs/common/constants";
 import { moduloDaChave } from "@ronan/shared-types";
 import { PERMISSAO_KEY } from "../../auth/decorators/requer-permissao.decorator";
 import { IS_PUBLIC_KEY } from "../../auth/decorators/public.decorator";
+import { ROLES_KEY } from "../../auth/decorators/roles.decorator";
 import { PlataformaGuard } from "../../auth/guards/plataforma.guard";
 import { chaveDoHandler, ENDPOINTS_SEM_PERMISSAO } from "./endpoints-sem-permissao";
 
@@ -43,9 +44,13 @@ export class ModulosBootCheck implements OnModuleInit {
       if (!instance || !metatype) continue;
 
       const rota = this.reflector.get<string>(PATH_METADATA, metatype) ?? "";
-      // Só `admin/*`: as rotas do motorista têm outro modelo (flags por
-      // motorista) e as públicas se defendem por segredo próprio.
-      if (!rota.startsWith("admin/")) continue;
+      const ehAdmin = rota.startsWith("admin/");
+      // As rotas do motorista têm outro modelo (flags por motorista) e as
+      // públicas se defendem por segredo próprio. Mas `admin/*` não é o único
+      // prefixo por onde entra um ADMIN_USER: `errors/*` servia o log de erros
+      // (recurso da plataforma) sem permissão nenhuma, e o boot-check nunca viu
+      // porque só olhava o prefixo. Fora de `admin/`, o que vale é o `@Roles`.
+      if (!ehAdmin && !declaraAdminUser(this.reflector, metatype as unknown as Function)) continue;
 
       // Controller inteiro atrás do PlataformaGuard já está fechado, e fechado
       // MAIS do que a matriz fecharia: só a casa entra. Cobrar permissão além
@@ -61,6 +66,10 @@ export class ModulosBootCheck implements OnModuleInit {
         // Só o que é endpoint HTTP de verdade.
         const temRota = Reflect.hasMetadata(PATH_METADATA, handler);
         if (!temRota) continue;
+        // Fora de `admin/`, só o handler que admite ADMIN_USER entra na conta.
+        if (!ehAdmin && !admiteAdminUser(this.reflector, handler as Function, metatype as unknown as Function)) {
+          continue;
+        }
         verificados++;
 
         const publico = this.reflector.getAllAndOverride<boolean | undefined>(IS_PUBLIC_KEY, [
@@ -121,4 +130,27 @@ export class ModulosBootCheck implements OnModuleInit {
 function temPlataformaGuard(reflector: Reflector, alvo: Function): boolean {
   const guards = reflector.get<unknown[] | undefined>(GUARDS_METADATA, alvo);
   return Array.isArray(guards) && guards.includes(PlataformaGuard);
+}
+
+/** Algum handler do controller (ou ele próprio) admite `ADMIN_USER` no `@Roles`? */
+// eslint-disable-next-line @typescript-eslint/ban-types
+function declaraAdminUser(reflector: Reflector, classe: Function): boolean {
+  if (rolesDe(reflector, classe).includes("ADMIN_USER")) return true;
+  const proto = classe.prototype as Record<string, unknown>;
+  return Object.getOwnPropertyNames(proto).some((nome) => {
+    const h = proto[nome];
+    return typeof h === "function" && rolesDe(reflector, h as Function).includes("ADMIN_USER");
+  });
+}
+
+/** O `@Roles` do handler vence o da classe, como no `RolesGuard`. */
+// eslint-disable-next-line @typescript-eslint/ban-types
+function admiteAdminUser(reflector: Reflector, handler: Function, classe: Function): boolean {
+  const doHandler = rolesDe(reflector, handler);
+  return (doHandler.length > 0 ? doHandler : rolesDe(reflector, classe)).includes("ADMIN_USER");
+}
+
+// eslint-disable-next-line @typescript-eslint/ban-types
+function rolesDe(reflector: Reflector, alvo: Function): string[] {
+  return reflector.get<string[] | undefined>(ROLES_KEY, alvo) ?? [];
 }

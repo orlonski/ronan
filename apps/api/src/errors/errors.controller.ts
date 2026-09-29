@@ -87,9 +87,15 @@ export class ErrorsController {
   }
 
   // ===== Admin: ler erros =====
+  //
+  // `erros.ver` é recurso da PLATAFORMA (módulo `plataforma`). Estes três GETs
+  // não declaravam permissão, e como o `PermissaoGuard` é fail-open e o
+  // boot-check só varre controllers `admin/*`, qualquer administrador de qualquer
+  // empresa lia o log de erros da própria conta por curl.
 
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  @RequerPermissao("erros.ver")
   @Get("agrupados")
   agrupados(
     @Query(new ZodValidationPipe(ListarQuery))
@@ -100,6 +106,7 @@ export class ErrorsController {
 
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  @RequerPermissao("erros.ver")
   @Get()
   listar(
     @Query(new ZodValidationPipe(ListarQuery))
@@ -110,6 +117,7 @@ export class ErrorsController {
 
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
+  @RequerPermissao("erros.ver")
   @Get(":id")
   detalhe(@Param("id") id: string) {
     return this.service.detalhe(id);

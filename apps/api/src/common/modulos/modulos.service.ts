@@ -14,6 +14,15 @@ export class ModulosService {
 
   /** O catálogo + o que esta conta tem. É o que a tela de Empresas mostra. */
   async daConta(contaId: string) {
+    // ⚠️ `ModuloContratado` é escopado pela trava: sem o contexto da conta ALVO,
+    // a consulta sai filtrada pela conta de QUEM chama (a casa, quando o super
+    // administrador não está "assumindo" o cliente) e devolve zero linhas — a
+    // tela mostrava todos os módulos da empresa como desligados. Aqui o alvo
+    // vem da URL, não da sessão, então o contexto se abre à mão.
+    return comConta(contaId, () => this.daContaNoContexto(contaId));
+  }
+
+  private async daContaNoContexto(contaId: string) {
     const linhas = await this.prisma.moduloContratado.findMany({
       where: { contaId },
       include: { ligadoPor: { select: { id: true, nome: true } } },
@@ -58,24 +67,29 @@ export class ModulosService {
       );
     }
 
-    const linha = await this.prisma.moduloContratado.upsert({
-      where: { contaId_chave: { contaId: args.contaId, chave: args.chave } },
-      create: {
-        contaId: args.contaId,
-        chave: args.chave,
-        ativo: args.ativo,
-        vigenteDe: new Date(),
-        vigenteAte: args.vigenteAte ? new Date(`${args.vigenteAte}T00:00:00Z`) : null,
-        observacao: args.observacao ?? null,
-        ligadoPorId: args.usuarioId,
-      },
-      update: {
-        ativo: args.ativo,
-        vigenteAte: args.vigenteAte ? new Date(`${args.vigenteAte}T00:00:00Z`) : null,
-        observacao: args.observacao ?? null,
-        ligadoPorId: args.usuarioId,
-      },
-    });
+    // Mesmo motivo do `daConta`: sem o contexto da conta alvo o upsert gravava o
+    // módulo na conta de quem clicou (a casa) e devolvia 200, e a empresa
+    // continuava exatamente como estava.
+    const linha = await comConta(args.contaId, () =>
+      this.prisma.moduloContratado.upsert({
+        where: { contaId_chave: { contaId: args.contaId, chave: args.chave } },
+        create: {
+          contaId: args.contaId,
+          chave: args.chave,
+          ativo: args.ativo,
+          vigenteDe: new Date(),
+          vigenteAte: args.vigenteAte ? new Date(`${args.vigenteAte}T00:00:00Z`) : null,
+          observacao: args.observacao ?? null,
+          ligadoPorId: args.usuarioId,
+        },
+        update: {
+          ativo: args.ativo,
+          vigenteAte: args.vigenteAte ? new Date(`${args.vigenteAte}T00:00:00Z`) : null,
+          observacao: args.observacao ?? null,
+          ligadoPorId: args.usuarioId,
+        },
+      }),
+    );
 
     // Aplica na hora, como o teto faz (`contas.service.definirTeto`). Sem isto
     // o Administrador da empresa só ganhava as telas do módulo no próximo boot

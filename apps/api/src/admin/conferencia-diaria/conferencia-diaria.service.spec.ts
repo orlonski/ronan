@@ -74,6 +74,7 @@ function montar(
     return [];
   });
   const prisma = {
+    conta: { findUnique: async () => ({ ehPlataforma: false, permissoesPermitidas: [], permissoesExtras: [] }) },
     moduloContratado: { findMany: vi.fn(async () => [{ chave: "conferencia", vigenteDe: null, vigenteAte: null }]) },
     configuracaoConferenciaDiaria: { findFirst: vi.fn(async () => cfg) },
     conferenciaDiaria: { count: vi.fn(async () => opts.jaRodou ?? 0), createMany, update, updateMany, findMany },
