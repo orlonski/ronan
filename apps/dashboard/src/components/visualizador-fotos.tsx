@@ -235,7 +235,8 @@ export function VisualizadorFotos({
                     }}
                   >
                     <TransformComponent
-                      wrapperStyle={{ width: "100%", height: "100%" }}
+                      wrapperClass="pinch-zoom"
+                      wrapperStyle={{ width: "100%", height: "100%", touchAction: "none" }}
                       contentStyle={{ width: caixa.w || "auto", height: caixa.h || "auto" }}
                     >
                       <div data-foto className="relative" style={{ width: caixa.w, height: caixa.h }}>

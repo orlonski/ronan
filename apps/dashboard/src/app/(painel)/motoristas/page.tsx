@@ -532,7 +532,7 @@ export default function MotoristasPage() {
             Cadastro de motoristas e suas placas. Cada motorista pode ter várias placas.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-md:flex-wrap">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <Permitido chave="motoristas.criar">
             <ConvidarMotoristaDialog />

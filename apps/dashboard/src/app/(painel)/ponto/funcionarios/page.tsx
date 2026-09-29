@@ -230,7 +230,7 @@ function Conteudo() {
       )}
       {vendoAcesso && (
         <Dialog open onOpenChange={(o) => !o && setVendoAcesso(null)}>
-          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+          <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-3xl">
             <DialogHeader>
               <DialogTitle>{vendoAcesso.nome}</DialogTitle>
             </DialogHeader>
@@ -327,7 +327,7 @@ function Importar() {
 
       {previa && (
         <Dialog open onOpenChange={() => setPrevia(null)}>
-          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Confira antes de cadastrar</DialogTitle>
             </DialogHeader>

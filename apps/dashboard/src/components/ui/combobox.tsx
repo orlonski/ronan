@@ -82,7 +82,7 @@ export function Combobox({
           // último vence). Antes substituía a classe inteira, então passar só
           // "w-full" apagava borda/altura/padding e o trigger virava um ícone solto.
           className={cn(
-            "flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-sm hover:bg-accent/30 sm:w-auto sm:min-w-[180px]",
+            "flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-sm hover:bg-accent/30 sm:w-auto sm:min-w-[180px] max-md:h-11 max-md:text-base",
             triggerClassName,
           )}
         >
@@ -127,7 +127,7 @@ export function Combobox({
                   onSearchChange?.(e.target.value);
                 }}
                 placeholder={searchPlaceholder}
-                className="h-9 pl-8"
+                className="h-9 pl-8 max-md:h-11"
               />
             </div>
           </div>

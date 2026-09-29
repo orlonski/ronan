@@ -24,7 +24,7 @@ export type CodigoIndisponivel = keyof typeof TEXTOS;
 export function LinkIndisponivel({ code }: { code: CodigoIndisponivel }) {
   const t = TEXTOS[code] ?? TEXTOS.LINK_INVALIDO;
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+    <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center px-6 text-center">
       <div className="mb-6 rounded-full bg-slate-100 p-4">
         <LinkIcon className="h-8 w-8 text-slate-400" />
       </div>

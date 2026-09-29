@@ -18,6 +18,32 @@ body {
   overflow-x: clip;
 }
 
+/* Fundação de "app" no celular (Leva 1 / fatia 1).
+ *
+ * - overscroll-behavior-y: o pull-to-refresh nativo do Android recarrega a página
+ *   e perde o formulário que a pessoa estava preenchendo.
+ * - touch-action: manipulation: sem o atraso de toque e sem zoom por duplo toque.
+ *   Vai em html/body (e não em `*`) de propósito: o navegador cruza o touch-action
+ *   do elemento com o dos ancestrais, então quem declara `none`/`pan-x pan-y`
+ *   (Leaflet, visualizador de foto) continua mandando no próprio gesto de pinça.
+ * - text-size-adjust: o iOS em paisagem não incha o texto por conta própria.
+ * Nada disto muda o desenho em tela de mesa. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+html,
+body {
+  overscroll-behavior-y: none;
+  touch-action: manipulation;
+}
+/* Quem precisa de pinça própria: mapas e visualizador de foto. */
+.leaflet-container,
+.pinch-zoom {
+  touch-action: none;
+}
+
 /* Safe-area (notch / home-bar do iPhone) — usadas no header sticky e na
  * bottom-nav. env() cai pra 0px em navegadores/telas sem inset. */
 @layer utilities {

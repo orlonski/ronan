@@ -166,7 +166,7 @@ export function CompartilharViagemModal({ viagemId }: { viagemId: string }) {
           o <select> de validade. No iOS, focar um select já abre o picker de
           roda: o modal nascia com o seletor "aberto" na cara do usuário. */}
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+        className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>

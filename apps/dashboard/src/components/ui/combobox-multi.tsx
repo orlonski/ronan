@@ -77,7 +77,7 @@ export function ComboboxMulti({
           // Acrescenta, não substitui (mesma armadilha do Combobox single:
           // passar só "w-full" apagava borda/padding e soltava o trigger).
           className={cn(
-            "flex min-h-10 w-full items-center justify-between gap-2 rounded-md border bg-background px-2 py-1.5 text-left text-sm shadow-sm hover:bg-accent/30",
+            "flex min-h-10 w-full items-center justify-between gap-2 rounded-md border bg-background px-2 py-1.5 text-left text-sm shadow-sm hover:bg-accent/30 max-md:min-h-11 max-md:text-base",
             triggerClassName,
           )}
         >
@@ -114,7 +114,7 @@ export function ComboboxMulti({
                 onSearchChange?.(e.target.value);
               }}
               placeholder={searchPlaceholder}
-              className="h-9 pl-8"
+              className="h-9 pl-8 max-md:h-11"
             />
           </div>
         </div>

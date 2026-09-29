@@ -12,7 +12,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 952,
         "larguraUtilRazao": 0.744,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -25,20 +25,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1112,
         "larguraUtilRazao": 0.772,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 0,
         "conteudoCortadoPx": 0,
-        "alvosMenor44": 54,
+        "alvosMenor44": 15,
         "textosMenor14": 18,
         "menorFontePx": 10,
-        "inputsMenor16": 2,
+        "inputsMenor16": 0,
         "larguraUtilPx": 358,
         "larguraUtilRazao": 0.918,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -66,7 +66,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 960,
         "larguraUtilRazao": 0.75,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -79,20 +79,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1113.7,
         "larguraUtilRazao": 0.773,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 0,
         "conteudoCortadoPx": 0,
-        "alvosMenor44": 40,
+        "alvosMenor44": 24,
         "textosMenor14": 21,
         "menorFontePx": 10,
-        "inputsMenor16": 15,
+        "inputsMenor16": 0,
         "larguraUtilPx": 358,
         "larguraUtilRazao": 0.918,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -120,7 +120,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 960,
         "larguraUtilRazao": 0.75,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -133,20 +133,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1120,
         "larguraUtilRazao": 0.778,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 0,
         "conteudoCortadoPx": 0,
-        "alvosMenor44": 29,
+        "alvosMenor44": 27,
         "textosMenor14": 94,
         "menorFontePx": 10,
         "inputsMenor16": 0,
         "larguraUtilPx": 345,
         "larguraUtilRazao": 0.885,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -174,7 +174,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 934,
         "larguraUtilRazao": 0.73,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -187,20 +187,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1094,
         "larguraUtilRazao": 0.76,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 0,
         "conteudoCortadoPx": 0,
-        "alvosMenor44": 55,
+        "alvosMenor44": 12,
         "textosMenor14": 29,
         "menorFontePx": 10,
-        "inputsMenor16": 17,
-        "larguraUtilPx": 348,
-        "larguraUtilRazao": 0.892,
-        "viewportBloqueiaZoom": false,
+        "inputsMenor16": 0,
+        "larguraUtilPx": 346,
+        "larguraUtilRazao": 0.887,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -228,7 +228,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 936,
         "larguraUtilRazao": 0.731,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -241,20 +241,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1096,
         "larguraUtilRazao": 0.761,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 0,
         "conteudoCortadoPx": 0,
-        "alvosMenor44": 48,
+        "alvosMenor44": 35,
         "textosMenor14": 95,
         "menorFontePx": 10,
         "inputsMenor16": 0,
         "larguraUtilPx": 334,
         "larguraUtilRazao": 0.856,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -282,7 +282,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 934,
         "larguraUtilRazao": 0.73,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -295,20 +295,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1094,
         "larguraUtilRazao": 0.76,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 0,
         "conteudoCortadoPx": 0,
-        "alvosMenor44": 22,
+        "alvosMenor44": 2,
         "textosMenor14": 36,
         "menorFontePx": 10,
-        "inputsMenor16": 9,
-        "larguraUtilPx": 332,
-        "larguraUtilRazao": 0.851,
-        "viewportBloqueiaZoom": false,
+        "inputsMenor16": 0,
+        "larguraUtilPx": 330,
+        "larguraUtilRazao": 0.846,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -336,7 +336,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 952,
         "larguraUtilRazao": 0.744,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -349,20 +349,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1112,
         "larguraUtilRazao": 0.772,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
-        "elementosQueEstouram": 1,
-        "conteudoCortadoPx": 138,
-        "alvosMenor44": 125,
+        "elementosQueEstouram": 0,
+        "conteudoCortadoPx": 0,
+        "alvosMenor44": 39,
         "textosMenor14": 115,
         "menorFontePx": 10,
-        "inputsMenor16": 2,
+        "inputsMenor16": 0,
         "larguraUtilPx": 358,
         "larguraUtilRazao": 0.918,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -390,7 +390,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 922,
         "larguraUtilRazao": 0.72,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -403,20 +403,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1082,
         "larguraUtilRazao": 0.751,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 1,
         "conteudoCortadoPx": 5,
-        "alvosMenor44": 6,
+        "alvosMenor44": 4,
         "textosMenor14": 6,
         "menorFontePx": 10,
-        "inputsMenor16": 1,
+        "inputsMenor16": 0,
         "larguraUtilPx": 337,
         "larguraUtilRazao": 0.864,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -444,7 +444,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 947,
         "larguraUtilRazao": 0.74,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -457,20 +457,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1107,
         "larguraUtilRazao": 0.769,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 66,
-        "conteudoCortadoPx": 119,
-        "alvosMenor44": 42,
+        "conteudoCortadoPx": 123,
+        "alvosMenor44": 4,
         "textosMenor14": 119,
         "menorFontePx": 10,
-        "inputsMenor16": 1,
+        "inputsMenor16": 0,
         "larguraUtilPx": 358,
         "larguraUtilRazao": 0.918,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "ultra": {
@@ -498,7 +498,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 960,
         "larguraUtilRazao": 0.75,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -511,20 +511,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1107,
         "larguraUtilRazao": 0.769,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 1,
         "conteudoCortadoPx": 118,
-        "alvosMenor44": 35,
+        "alvosMenor44": 13,
         "textosMenor14": 36,
         "menorFontePx": 10,
-        "inputsMenor16": 2,
+        "inputsMenor16": 0,
         "larguraUtilPx": 358,
         "larguraUtilRazao": 0.918,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -552,7 +552,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 943,
         "larguraUtilRazao": 0.737,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -565,20 +565,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1103,
         "larguraUtilRazao": 0.766,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 0,
         "conteudoCortadoPx": 0,
-        "alvosMenor44": 7,
+        "alvosMenor44": 6,
         "textosMenor14": 7,
         "menorFontePx": 10,
         "inputsMenor16": 0,
         "larguraUtilPx": 355.8,
         "larguraUtilRazao": 0.912,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -606,7 +606,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 952,
         "larguraUtilRazao": 0.744,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -619,20 +619,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1112,
         "larguraUtilRazao": 0.772,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 0,
         "conteudoCortadoPx": 0,
-        "alvosMenor44": 57,
+        "alvosMenor44": 17,
         "textosMenor14": 8,
         "menorFontePx": 10,
-        "inputsMenor16": 2,
+        "inputsMenor16": 0,
         "larguraUtilPx": 358,
         "larguraUtilRazao": 0.918,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -660,7 +660,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 960,
         "larguraUtilRazao": 0.75,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -673,20 +673,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1113.7,
         "larguraUtilRazao": 0.773,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 0,
         "conteudoCortadoPx": 0,
-        "alvosMenor44": 30,
+        "alvosMenor44": 18,
         "textosMenor14": 61,
         "menorFontePx": 10,
-        "inputsMenor16": 5,
+        "inputsMenor16": 0,
         "larguraUtilPx": 358,
         "larguraUtilRazao": 0.918,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {
@@ -714,7 +714,7 @@
         "inputsMenor16": null,
         "larguraUtilPx": 943,
         "larguraUtilRazao": 0.737,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mac1440": {
@@ -727,20 +727,20 @@
         "inputsMenor16": null,
         "larguraUtilPx": 1103,
         "larguraUtilRazao": 0.766,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": true
       },
       "mobile": {
         "overflowHorizontalPx": 0,
         "elementosQueEstouram": 0,
         "conteudoCortadoPx": 0,
-        "alvosMenor44": 27,
+        "alvosMenor44": 4,
         "textosMenor14": 88,
         "menorFontePx": 11,
-        "inputsMenor16": 21,
+        "inputsMenor16": 0,
         "larguraUtilPx": 350.5,
         "larguraUtilRazao": 0.899,
-        "viewportBloqueiaZoom": false,
+        "viewportBloqueiaZoom": true,
         "menuLateralVisivel": false
       },
       "ultra": {

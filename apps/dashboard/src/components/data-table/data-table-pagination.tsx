@@ -40,7 +40,7 @@ export function DataTablePagination({
           <select
             value={pageSize}
             onChange={(e) => state.setPageSize(Number(e.target.value))}
-            className="h-8 rounded-md border border-border bg-background pl-2 pr-7 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-8 rounded-md border border-border bg-background pl-2 pr-7 text-sm max-md:text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {PAGE_SIZE_OPTIONS.map((n) => (
               <option key={n} value={n}>

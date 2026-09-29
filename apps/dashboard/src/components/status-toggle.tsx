@@ -42,6 +42,8 @@ export function StatusToggle({
         onClick={() => onChange(!active)}
         className={cn(
           "relative inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
+          // Celular: área de toque de 44px sem mudar o tamanho desenhado (pseudo-elemento invisível).
+          "max-md:before:absolute max-md:before:left-1/2 max-md:before:top-1/2 max-md:before:h-11 max-md:before:min-w-full max-md:before:-translate-x-1/2 max-md:before:-translate-y-1/2 max-md:before:content-['']",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           dims.track,
           active ? "bg-green-600" : "bg-gray-300",

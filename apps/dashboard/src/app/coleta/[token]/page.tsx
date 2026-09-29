@@ -133,7 +133,7 @@ function Moldura({
   alinhar?: "center" | "start";
 }) {
   return (
-    <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-4 py-10">
+    <main className="mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center px-4 py-10">
       <div className={`flex w-full flex-col ${alinhar === "center" ? "items-center text-center" : "items-start"}`}>
         {children}
       </div>

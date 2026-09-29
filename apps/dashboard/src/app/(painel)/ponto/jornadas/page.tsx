@@ -228,7 +228,7 @@ function DialogJornada({ modelo, onFechar }: { modelo: Modelo | null; onFechar: 
 
   return (
     <Dialog open onOpenChange={onFechar}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{modelo ? "Editar jornada" : "Nova jornada"}</DialogTitle>
         </DialogHeader>

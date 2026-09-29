@@ -82,7 +82,7 @@ export function TagInput({
       ))}
       <input
         type="text"
-        className="flex-1 min-w-[8rem] bg-transparent outline-none placeholder:text-muted-foreground"
+        className="flex-1 min-w-[8rem] bg-transparent outline-none placeholder:text-muted-foreground max-md:text-base"
         placeholder={value.length === 0 ? placeholder : ""}
         value={draft}
         maxLength={60}

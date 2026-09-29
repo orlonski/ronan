@@ -76,7 +76,7 @@ export function PreviewDocumentoModal({ open, onClose, motoristaId, tipo, doc }:
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-3 p-4 sm:p-6">
+      <DialogContent className="flex h-[90dvh] max-h-[90dvh] w-[95vw] max-w-5xl flex-col gap-3 p-4 sm:p-6">
         <DialogHeader className="pr-8">
           <DialogTitle className="truncate">
             {ROTULO_DOCUMENTO_MOTORISTA[tipo]}

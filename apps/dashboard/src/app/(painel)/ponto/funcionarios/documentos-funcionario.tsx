@@ -124,7 +124,7 @@ export function DocumentosDoFuncionario({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onFechar()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Documentos de {nome}</DialogTitle>
         </DialogHeader>

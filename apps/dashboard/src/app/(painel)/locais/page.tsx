@@ -908,7 +908,7 @@ function MesclarDupDialog({
   });
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-2">
             <span>Revisar duplicata &quot;{dup.nome}&quot;</span>

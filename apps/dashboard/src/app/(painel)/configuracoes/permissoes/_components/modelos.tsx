@@ -87,7 +87,7 @@ export function UsarModelo({ onCopiado }: { onCopiado: (papelId: string) => void
       </Button>
 
       <Dialog open={aberto} onOpenChange={setAberto}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Modelos de papel</DialogTitle>
             <DialogDescription>

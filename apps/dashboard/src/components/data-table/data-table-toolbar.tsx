@@ -80,14 +80,14 @@ export function ToolbarFilterDateRange({
         type="date"
         value={from}
         onChange={(e) => state.setFilter(fromKey, e.target.value || undefined)}
-        className="h-7 w-full min-w-0 flex-1 border-0 bg-transparent text-sm focus-visible:outline-none sm:w-auto sm:flex-none"
+        className="h-7 w-full min-w-0 flex-1 border-0 bg-transparent text-sm max-md:text-base focus-visible:outline-none sm:w-auto sm:flex-none"
       />
       <span className="shrink-0 text-muted-foreground">→</span>
       <input
         type="date"
         value={to}
         onChange={(e) => state.setFilter(toKey, e.target.value || undefined)}
-        className="h-7 w-full min-w-0 flex-1 border-0 bg-transparent text-sm focus-visible:outline-none sm:w-auto sm:flex-none"
+        className="h-7 w-full min-w-0 flex-1 border-0 bg-transparent text-sm max-md:text-base focus-visible:outline-none sm:w-auto sm:flex-none"
       />
     </div>
   );
@@ -119,7 +119,7 @@ export function DataTableSortSelect({
       <select
         value={current}
         onChange={(e) => state.setSort(e.target.value, state.order)}
-        className="h-7 min-w-0 flex-1 border-0 bg-transparent text-sm focus-visible:outline-none sm:flex-none"
+        className="h-7 min-w-0 flex-1 border-0 bg-transparent text-sm max-md:text-base focus-visible:outline-none sm:flex-none"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

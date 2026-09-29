@@ -154,7 +154,7 @@ const FEATURES = [
 
 export default function LoginPage() {
   return (
-    <main className="theme-modern-minimal relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black px-4 py-8">
+    <main className="theme-modern-minimal relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black px-4 py-8">
       {/* Vídeo de fundo */}
       <video
         autoPlay

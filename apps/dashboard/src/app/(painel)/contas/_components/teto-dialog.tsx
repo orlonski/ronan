@@ -138,7 +138,7 @@ export function TetoDialog({
 
   return (
     <Dialog open={aberto} onOpenChange={(v) => !v && onFechar(false)}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             {padrao ? "Permissões padrão das empresas" : `Permissões liberadas — ${conta?.nome}`}

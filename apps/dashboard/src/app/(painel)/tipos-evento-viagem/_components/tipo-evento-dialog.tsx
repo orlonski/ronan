@@ -185,7 +185,7 @@ export function TipoEventoDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editando ? "Editar evento" : "Novo evento"}</DialogTitle>
           <DialogDescription>

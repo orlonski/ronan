@@ -100,9 +100,15 @@ export function comparar(m: Medidas, orc: Entrada, vp: NomeViewport): Veredito {
   menorMelhor("textosMenor14", m.textosMenor14, orc.textosMenor14, 0, v);
   menorMelhor("inputsMenor16", m.inputsMenor16, orc.inputsMenor16, 0, v);
   maiorMelhor("menorFontePx", m.menorFontePx, orc.menorFontePx, TOL_FONTE, v);
-  if (m.viewportBloqueiaZoom && !orc.viewportBloqueiaZoom) v.piorou.push("viewportBloqueiaZoom: o meta viewport passou a travar o zoom");
-  if (!m.viewportBloqueiaZoom && orc.viewportBloqueiaZoom) v.melhorou.push("viewportBloqueiaZoom: o zoom foi liberado");
-
+  // Decisão do dono: no celular o painel é app, então o zoom por pinça TRAVADO é o estado desejado
+  // (antes da Leva 1 era o contrário). Destravar no mobile é regressão; nos desktops o meta viewport
+  // não tem efeito, então só informa.
+  if (vp === "mobile") {
+    if (m.viewportBloqueiaZoom && !orc.viewportBloqueiaZoom) v.melhorou.push("viewportBloqueiaZoom: zoom por pinça travado (decisão do dono)");
+    if (!m.viewportBloqueiaZoom && orc.viewportBloqueiaZoom) v.piorou.push("viewportBloqueiaZoom: o zoom voltou a ser liberado no celular");
+  } else if (m.viewportBloqueiaZoom !== orc.viewportBloqueiaZoom) {
+    v.informativo.push(`viewportBloqueiaZoom: ${m.viewportBloqueiaZoom} (orçamento ${orc.viewportBloqueiaZoom}; sem efeito no desktop)`);
+  }
   if (vp === "ultra") {
     // Ultrawide é o viewport que "não pode piorar": a largura útil não pode se mexer nem pra mais nem pra menos.
     const d = m.larguraUtilPx - orc.larguraUtilPx;

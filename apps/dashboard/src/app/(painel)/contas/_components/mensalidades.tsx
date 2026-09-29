@@ -418,7 +418,7 @@ function DialogNovaAssinatura({
 
   return (
     <Dialog open onOpenChange={(v) => !v && onFechar()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-h-[85dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nova assinatura</DialogTitle>
           <DialogDescription>
@@ -658,7 +658,7 @@ function DialogCobrancas({
 
   return (
     <Dialog open onOpenChange={(v) => !v && onFechar()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-h-[85dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{assinatura.conta.nome}</DialogTitle>
           <DialogDescription>

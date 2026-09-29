@@ -27,7 +27,7 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
   useInboxStream();
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-dvh">
       {/* Bloqueia o painel quando há termo pendente. Renderiza null quando
           não há — ver o componente. */}
       <AceiteTermos />
