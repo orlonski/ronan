@@ -537,9 +537,13 @@ export function compararDeclaradoComLido(
  *      dinheiro — e as armadilhas de bruto/tara e de unidade são conhecidas;
  *   2. leitura fraca invalida qualquer conclusão, inclusive a de que está tudo
  *      certo;
- *   3. só peso e documento podem chegar ao motorista. Nome de cliente e de
- *      material, mesmo com "nao" da IA, param na revisão humana — errar aí é
- *      barato pra nós e caro pra ele.
+ *   3. só "nao" vira divergência. Qualquer campo que a IA afirma, com
+ *      certeza, não corresponder ao documento vai pro motorista corrigir
+ *      (decisão do dono em 29/09/2026: o conferente existe pra poupar trabalho
+ *      manual, e tudo que parava na fila humana voltava pra mesa de alguém).
+ *      "incerto" segue na revisão do painel — o prompt manda a IA responder
+ *      "incerto" na menor dúvida, na placa da carreta e em nome que ela não
+ *      reconhece, e "sim" pra um dia de diferença na data.
  */
 export function conferirComJulgamento(
   declarado: Declarado,
@@ -590,15 +594,15 @@ export function conferirComJulgamento(
   }
 
   // ── os demais campos: parecer da IA ──
-  const mapa: { campo: CampoConferido; chave: keyof JulgamentoIa; dec?: string | null; lid?: string | null; grave: boolean }[] = [
-    { campo: "ticket", chave: "numeroDocumento", dec: declarado.ticket, lid: lido.ticket, grave: true },
-    { campo: "placa", chave: "placa", dec: declarado.placa, lid: lido.placa, grave: false },
-    { campo: "data", chave: "data", dec: declarado.data ? soDia(declarado.data) : null, lid: lido.data, grave: false },
-    { campo: "cliente", chave: "cliente", dec: declarado.clienteNome, lid: lido.clienteNome, grave: false },
-    { campo: "material", chave: "material", dec: declarado.materialNome, lid: lido.materialNome, grave: false },
+  const mapa: { campo: CampoConferido; chave: keyof JulgamentoIa; dec?: string | null; lid?: string | null; rotulo: string }[] = [
+    { campo: "ticket", chave: "numeroDocumento", dec: declarado.ticket, lid: lido.ticket, rotulo: "o número do ticket" },
+    { campo: "placa", chave: "placa", dec: declarado.placa, lid: lido.placa, rotulo: "a placa" },
+    { campo: "data", chave: "data", dec: declarado.data ? soDia(declarado.data) : null, lid: lido.data, rotulo: "a data" },
+    { campo: "cliente", chave: "cliente", dec: declarado.clienteNome, lid: lido.clienteNome, rotulo: "a obra/cliente" },
+    { campo: "material", chave: "material", dec: declarado.materialNome, lid: lido.materialNome, rotulo: "o material" },
   ];
 
-  for (const { campo, chave, dec, lid, grave } of mapa) {
+  for (const { campo, chave, dec, lid, rotulo } of mapa) {
     const parecer = julgamento[chave];
     if (!parecer || !dec) continue;
     conferidos.push(campo);
@@ -611,16 +615,22 @@ export function conferirComJulgamento(
     // consegue provar que é o mesmo caminhão, a prova vale mais que o parecer.
     if (campo === "placa" && lid && equivalenciaPlaca(dec, lid)) continue;
 
+    // Mesma trava pra data: um dia de diferença é pesagem à noite lançada no
+    // dia seguinte. O prompt já pede "sim" nesse caso; aqui o código garante.
+    if (campo === "data" && lid && /^\d{4}-\d{2}-\d{2}/.test(lid) && diasEntre(dec, soDia(lid)) <= 1) continue;
+
     const registro = { campo, declarado: dec, lido: lid ?? "—" };
-    if (parecer.confere === "nao" && grave) {
+    if (parecer.confere === "nao") {
       divergencias.push({
         ...registro,
         gravidade: "ALTA",
-        detalhe: parecer.porque || `O documento não corresponde ao que foi lançado em ${campo}.`,
+        // Frase montada pelo código quando há o valor lido: é o motorista que
+        // lê, e ele precisa ver os dois lados pra saber o que corrigir.
+        detalhe: lid
+          ? `No ticket, ${rotulo} é ${lid}, e a viagem foi lançada com ${dec}.`
+          : parecer.porque || `O ticket não corresponde ao que foi lançado em ${rotulo}.`,
       });
     } else {
-      // "nao" em campo não-grave também para aqui: nome de cliente ou material
-      // é onde a leitura mais erra, e onde acusar sai mais caro que conferir.
       incertezas.push({ ...registro, motivo: parecer.porque || "não deu pra confirmar" });
     }
   }
@@ -686,9 +696,10 @@ export function decidirVeredito(
 /**
  * Vale pagar uma segunda leitura, num modelo melhor, antes de concluir?
  *
- * Só quando o dinheiro está em jogo (peso) ou quando a leitura foi fraca. É o
- * que impede acusar motorista por causa de uma leitura ruim — e o que segura o
- * custo, porque a segunda opinião custa 5x a primeira.
+ * Quando o dinheiro está em jogo (peso), quando a leitura foi fraca, ou antes
+ * de qualquer aviso ao motorista. É o que impede acusar motorista por causa de
+ * uma leitura ruim; o custo fica contido porque só paga quem diverge, e o teto
+ * por hora (`maxSegundaOpiniaoPorHora`) segura o resto.
  */
 export function precisaSegundaOpiniao(
   r: ResultadoConferencia,
@@ -699,7 +710,9 @@ export function precisaSegundaOpiniao(
   const pesoEmJogo =
     r.divergencias.some((d) => d.campo === "toneladas") ||
     r.incertezas.some((i) => i.campo === "toneladas");
-  return pesoEmJogo || confianca < limiares.confiancaParaAvisar;
+  // Qualquer campo pode chegar ao motorista agora — então qualquer aviso passa
+  // por uma segunda leitura antes. Se as duas discordarem, humano decide.
+  return pesoEmJogo || r.veredito === "DIVERGE" || confianca < limiares.confiancaParaAvisar;
 }
 
 /** Frase única pro chat da viagem e pro painel. */

@@ -366,8 +366,15 @@ describe("segunda opinião", () => {
     expect(precisaSegundaOpiniao(r, 0.92)).toBe(false);
   });
 
-  it("divergência que não é de peso, com leitura boa, não escala", () => {
+  it("qualquer aviso ao motorista passa por segunda leitura, mesmo sem peso", () => {
     const r = conferir({ ticket: "3174" }, { ticket: "9821" });
+    expect(r.veredito).toBe("DIVERGE");
+    expect(precisaSegundaOpiniao(r, 0.92)).toBe(true);
+  });
+
+  it("revisão humana sem peso em jogo, com leitura boa, não escala", () => {
+    const r = conferir({}, { placa: "AGF7758" });
+    expect(r.veredito).toBe("INCERTO");
     expect(precisaSegundaOpiniao(r, 0.92)).toBe(false);
   });
 });
@@ -567,14 +574,55 @@ describe("conferência guiada pelo parecer da IA", () => {
     expect(r.veredito).toBe("BATE");
   });
 
-  it("placa de outra placa mesmo continua caindo em revisão", () => {
+  it("placa que a IA afirma ser outra vira divergência", () => {
     const r = conferirComJulgamento(
       { ...declarado, placa: "ATN3B14" },
       { ...lido, placa: "XYZ1234" },
       { numeroDocumento: ok, toneladas: ok, placa: { confere: "nao", porque: "outra placa" } },
     );
+    expect(r.divergencias[0]).toMatchObject({ campo: "placa", gravidade: "ALTA" });
+    expect(r.divergencias[0].detalhe).toBe("No ticket, a placa é XYZ1234, e a viagem foi lançada com ATN3B14.");
+    expect(r.veredito).toBe("DIVERGE");
+  });
+
+  it("placa com 'incerto' (a carreta, pelo prompt) segue na revisão", () => {
+    const r = conferirComJulgamento(
+      { ...declarado, placa: "ATN3B14" },
+      { ...lido, placa: "XYZ1234" },
+      { numeroDocumento: ok, toneladas: ok, placa: { confere: "incerto", porque: "parece a carreta" } },
+    );
     expect(r.incertezas[0]).toMatchObject({ campo: "placa" });
     expect(r.veredito).toBe("INCERTO");
+  });
+
+  it("data com um dia de diferença não diverge nem com 'nao' da IA", () => {
+    const r = conferirComJulgamento(
+      { ...declarado, data: "2026-09-10" },
+      { ...lido, data: "2026-09-11" },
+      { numeroDocumento: ok, toneladas: ok, data: { confere: "nao", porque: "dia seguinte" } },
+    );
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("data com dias de diferença e 'nao' da IA diverge", () => {
+    const r = conferirComJulgamento(
+      { ...declarado, data: "2026-09-10" },
+      { ...lido, data: "2026-09-14" },
+      { numeroDocumento: ok, toneladas: ok, data: { confere: "nao", porque: "outra data" } },
+    );
+    expect(r.divergencias[0]).toMatchObject({ campo: "data" });
+    expect(r.veredito).toBe("DIVERGE");
+  });
+
+  it("'nao' em material vira divergência", () => {
+    const r = conferirComJulgamento(declarado, lido, {
+      numeroDocumento: ok,
+      toneladas: ok,
+      material: { confere: "nao", porque: "é brita, não areia" },
+    });
+    expect(r.divergencias[0]).toMatchObject({ campo: "material" });
+    expect(r.veredito).toBe("DIVERGE");
   });
 
   it("a IA sabendo qual número é o do documento resolve o formato certo", () => {
@@ -598,12 +646,21 @@ describe("conferência guiada pelo parecer da IA", () => {
     expect(r.veredito).toBe("DIVERGE");
   });
 
-  it("'nao' em cliente NÃO chega ao motorista — para na revisão", () => {
-    // Nome é onde a leitura mais erra, e onde acusar sai mais caro que conferir.
+  it("'nao' em obra/cliente chega ao motorista", () => {
     const r = conferirComJulgamento(declarado, lido, {
       numeroDocumento: ok,
       toneladas: ok,
       cliente: { confere: "nao", porque: "empresas diferentes" },
+    });
+    expect(r.divergencias[0]).toMatchObject({ campo: "cliente", gravidade: "ALTA" });
+    expect(r.veredito).toBe("DIVERGE");
+  });
+
+  it("'incerto' em obra/cliente segue na revisão", () => {
+    const r = conferirComJulgamento(declarado, lido, {
+      numeroDocumento: ok,
+      toneladas: ok,
+      cliente: { confere: "incerto", porque: "não reconheço o nome" },
     });
     expect(r.divergencias).toHaveLength(0);
     expect(r.incertezas[0].campo).toBe("cliente");
