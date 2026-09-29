@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { Menu } from "lucide-react";
 import { AceiteTermos } from "@/components/aceite-termos";
 import { AvisoConta } from "@/components/aviso-conta";
 import { AvisoVisita } from "@/components/aviso-visita";
 import { Sidebar } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { GlobalLoadingBar } from "@/components/loading";
-import { LogoConta } from "@/components/logo-conta";
+import { CabecalhoMobile } from "@/components/cabecalho-mobile";
+import { CabecalhoProvider } from "@/lib/cabecalho";
+import { ehPaginaRaiz } from "@/lib/menu";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { Topbar } from "@/components/topbar";
 import { TelaGuard } from "@/components/requer-tela";
 import { SobreATela } from "@/components/sobre-a-tela";
@@ -16,17 +18,21 @@ import { TourHost } from "@/components/tour-host";
 import { useInboxStream } from "@/lib/inbox";
 
 /**
- * Shell do painel: cuida da gaveta lateral no mobile + header com
- * hamburger. No desktop, sidebar fica fixa visível como antes.
+ * Shell do painel. No desktop (>= 768px): sidebar fixa + cabeçalho fininho com
+ * o sino. No celular: cabeçalho compacto (logo ou Voltar + título, sino) e
+ * barra inferior com a folha "Mais" — ver cabecalho-mobile.tsx e bottom-nav.tsx.
  *
  * useInboxStream e' chamado aqui (UMA VEZ) pra abrir o stream SSE que
  * atualiza o sininho em tempo real. Cleanup acontece no unmount.
  */
 export function PainelShell({ children }: { children: React.ReactNode }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
   useInboxStream();
+  // A barra inferior só existe em página raiz; nas filhas o rodapé do conteúdo
+  // não precisa da folga de 6rem que ela ocupava.
+  const raiz = ehPaginaRaiz(usePathname());
 
   return (
+    <CabecalhoProvider>
     <div className="flex min-h-dvh">
       {/* Bloqueia o painel quando há termo pendente. Renderiza null quando
           não há — ver o componente. */}
@@ -44,37 +50,21 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
         Pular para o conteúdo
       </a>
       <GlobalLoadingBar />
-      <Sidebar
-        mobileOpen={mobileOpen}
-        onMobileClose={() => setMobileOpen(false)}
-      />
+      <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Faixa e cabeçalho grudam juntos no topo: o aviso de que você está
             dentro de outra empresa não pode sumir ao rolar a página. O `sticky`
             e o `pt-safe` vivem aqui, no envelope, e não em cada header — dois
             elementos com `top-0` se sobreporiam. */}
-        <div className="sticky top-0 z-30 pt-safe">
+        {/* No celular o envelope tem fundo próprio: com a barra de status do
+            iPhone imersiva, a área do notch (pt-safe) fica DENTRO dele e o
+            conteúdo que rola por baixo não pode aparecer ali. */}
+        <div className="sticky top-0 z-30 pt-safe max-md:bg-background">
           <AvisoVisita />
           <AvisoConta />
 
-          {/* Header mobile com hamburger (cara de app) */}
-          <header className="flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
-            <button
-              type="button"
-              onClick={() => setMobileOpen(true)}
-              className="rounded-md p-2 text-foreground hover:bg-muted"
-              aria-label="Abrir menu"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-            <div className="flex items-center">
-              <LogoConta width={112} className="text-foreground" />
-            </div>
-            <div className="flex items-center gap-1">
-              <Topbar />
-            </div>
-          </header>
+          <CabecalhoMobile />
 
           {/* Header desktop só com ações à direita (sininho + tema) */}
           <header className="hidden items-center justify-end gap-1 border-b bg-background px-4 py-2 md:flex">
@@ -85,7 +75,10 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
         <main
           id="conteudo"
           tabIndex={-1}
-          className="flex-1 overflow-y-auto overflow-x-hidden bg-background p-4 pb-24 md:p-8 md:pb-8"
+          className={cn(
+            "flex-1 overflow-y-auto overflow-x-hidden bg-background p-4 md:p-8 md:pb-8",
+            raiz ? "pb-24" : "pb-[calc(2rem+env(safe-area-inset-bottom))]",
+          )}
         >
           {/* "Para que serve esta tela", escolhida pela rota.
               
@@ -102,7 +95,8 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Barra de navegação inferior (só mobile) */}
-      <BottomNav onOpenMenu={() => setMobileOpen(true)} />
+      <BottomNav />
     </div>
+    </CabecalhoProvider>
   );
 }

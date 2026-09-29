@@ -21,7 +21,7 @@ import { TODAS_AS_CHAVES } from "@ronan/shared-types";
 const DASH = resolve(__dirname, "../../../dashboard/src");
 const PAINEL = join(DASH, "app/(painel)");
 const permissoes = readFileSync(join(DASH, "lib/permissoes.ts"), "utf8");
-const sidebar = readFileSync(join(DASH, "components/sidebar.tsx"), "utf8");
+const sidebar = readFileSync(join(DASH, "lib/menu.ts"), "utf8");
 const abas = readFileSync(join(DASH, "components/abas-da-tela.tsx"), "utf8");
 
 const inicioAbertas = permissoes.indexOf("export const ROTAS_ABERTAS");

@@ -42,7 +42,7 @@ export default function DemandaDetalhePage({ params }: { params: Promise<{ id: s
       <div>
         <Link
           href={"/demandas" as never}
-          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground max-md:hidden"
         >
           <ArrowLeft className="h-4 w-4" /> Demandas
         </Link>

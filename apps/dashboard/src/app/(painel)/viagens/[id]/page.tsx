@@ -582,7 +582,7 @@ export default function ViagemDetalhePage({
     <div className="space-y-4 sm:space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
-          <Link href="/viagens" className="shrink-0">
+          <Link href="/viagens" className="shrink-0 max-md:hidden">
             <span className="-ml-2 inline-flex rounded p-2 hover:bg-muted sm:ml-0">
               <ArrowLeft className="h-5 w-5" />
             </span>

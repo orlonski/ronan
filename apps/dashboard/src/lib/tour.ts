@@ -134,7 +134,10 @@ export function medirAlvo(alvo: string): DOMRect | null {
   // para o header mobile, outra para o desktop) e só uma delas está na tela. O
   // primeiro do DOM costuma ser justamente o escondido, e o furo sairia num
   // canto vazio.
-  const todos = document.querySelectorAll<HTMLElement>(`[data-coach="${CSS.escape(alvo)}"]`);
+  // `~=`: o atributo pode listar várias âncoras separadas por espaço. É assim que,
+  // no celular, o botão "Mais" da barra inferior serve de alvo pros itens do
+  // menu, que ali moram dentro da folha fechada. Chave com um valor só casa igual.
+  const todos = document.querySelectorAll<HTMLElement>(`[data-coach~="${CSS.escape(alvo)}"]`);
   for (const el of todos) {
     const r = el.getBoundingClientRect();
     if (r.width >= 2 && r.height >= 2) return r;

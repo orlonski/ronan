@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RECURSOS_LABEL, agruparRecursosPorMenu } from "@ronan/shared-types";
-import { estruturaDoMenu } from "@/components/sidebar";
+import { estruturaDoMenu } from "@/lib/menu";
 import { ABAS } from "@/components/abas-da-tela";
 import { usePermissoes } from "@/lib/permissoes";
 import { fetchApi, useAuthToken } from "@/lib/client-api";

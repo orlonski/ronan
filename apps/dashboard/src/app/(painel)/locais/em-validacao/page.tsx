@@ -195,7 +195,7 @@ export default function LocaisEmValidacaoPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/locais"
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted"
+            className="rounded-md p-1 text-muted-foreground hover:bg-muted max-md:hidden"
             title="Voltar pra lista de locais"
           >
             <ArrowLeft className="h-5 w-5" />

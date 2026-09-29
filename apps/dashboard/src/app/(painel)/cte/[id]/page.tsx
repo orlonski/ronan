@@ -89,7 +89,7 @@ function Conteudo({ id }: { id: string }) {
   return (
     <div className="space-y-5">
       <div>
-        <Link href="/cte" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
+        <Link href="/cte" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline max-md:hidden">
           <ArrowLeft className="h-3.5 w-3.5" /> CT-e emitidos
         </Link>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">

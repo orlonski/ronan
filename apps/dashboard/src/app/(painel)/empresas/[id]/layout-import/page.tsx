@@ -389,7 +389,7 @@ export default function LayoutImportPage({
     return (
       <div className="space-y-4">
       <ConfirmDialog />
-        <Link href="/empresas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
+        <Link href="/empresas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline max-md:hidden">
           <ArrowLeft className="h-4 w-4" /> Clientes
         </Link>
         <Card className="p-6">
@@ -415,7 +415,7 @@ export default function LayoutImportPage({
             <ArrowLeft className="h-5 w-5" />
           </Button>
         ) : (
-          <Button variant="ghost" size="icon" asChild>
+          <Button variant="ghost" size="icon" asChild className="max-md:hidden">
               <Link href="/empresas" aria-label="Voltar para Clientes">
               <ArrowLeft className="h-5 w-5" />
               </Link>

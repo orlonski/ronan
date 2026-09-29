@@ -67,8 +67,12 @@ As próximas levas recolhem o menu lateral abaixo de 1536px. Os E2E que leem o `
 `fixarMenuAberto(page)` (`tests/e2e/helpers/menu.ts`), que grava `localStorage["ronan.menu"] = "fixo"`.
 **A Leva 1 deve ler essa chave** e manter o menu aberto quando ela valer `fixo`. Hoje o painel ignora a chave.
 
+## Navegação do celular (Leva 1, fatia 2)
+
+`navegacao-mobile.dashboard.spec.ts` roda só no projeto `mobile` e trava: barra inferior (4 destinos derivados do menu + "Mais"), folha "Mais" com busca, o cabeçalho com Voltar nas páginas filhas, a barra que some com o teclado e — a regra central — que a folha do celular mostra **exatamente** as telas da sidebar do desktop (admin e `operador@modelo.test`, papel restrito do seed). A regra de quem vê o quê (menu, semente da barra, raiz x filha) também tem teste sem navegador em `tests/e2e/menu-fonte-unica.dashboard.spec.ts`. A suíte não grava "visto" do passo a passo, então a home abre com o tour por cima: o spec o pula.
+
 ## Detalhes
 
-- Login: `admin@modelo.test` / `uxmedidas123` (`/whatsapp` abre com `super@movatruck.test`, tela só da plataforma).
+- Login: `admin@modelo.test` / `uxmedidas123` (`/whatsapp` abre com `super@movatruck.test`, tela só da plataforma; `operador@modelo.test` tem papel restrito).
 - `pnpm typecheck:tests` confere o TypeScript desta pasta.
 - Os projetos de UX só entram no `playwright.config.ts` com `UX=1` ou `--project=<viewport>`; `pnpm exec playwright test` segue rodando só o E2E.

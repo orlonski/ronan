@@ -107,7 +107,7 @@ export default function NovoEnvioPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
+        <Button variant="ghost" size="icon" asChild className="max-md:hidden">
             <Link href="/envios" aria-label="Voltar para Mandar a minha planilha">
             <ArrowLeft className="h-5 w-5" />
             </Link>

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
  * Regra decidida com o dono em 23/09/2026: configuração que só serve a uma
  * tela mora DENTRO dela, como aba — quem está em Locais pensando "por que o
  * app não achou a pedreira?" não tinha como adivinhar que a resposta estava em
- * Ajustes. O item do menu correspondente usa `ou` (sidebar.tsx) com as mesmas
+ * Ajustes. O item do menu correspondente usa `ou` (lib/menu.ts) com as mesmas
  * rotas, pra abrir na primeira aba que a pessoa pode ver.
  *
  * Cada aba mantém a permissão (e o módulo) que a tela já tinha. `perm: null`

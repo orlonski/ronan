@@ -23,7 +23,7 @@ import { RECURSOS_LABEL } from "@ronan/shared-types";
  * quando alguém move um arquivo não protege nada.
  */
 
-const SIDEBAR = resolve(__dirname, "../../../dashboard/src/components/sidebar.tsx");
+const SIDEBAR = resolve(__dirname, "../../../dashboard/src/lib/menu.ts");
 
 const ABAS = resolve(__dirname, "../../../dashboard/src/components/abas-da-tela.tsx");
 const PERMISSOES_DASH = resolve(__dirname, "../../../dashboard/src/lib/permissoes.ts");

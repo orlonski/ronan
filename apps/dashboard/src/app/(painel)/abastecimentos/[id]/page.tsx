@@ -127,7 +127,7 @@ export default function AbastecimentoDetalhePage({
           linha própria — em linha única o "Excluir" saía da tela. */}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
-          <Link href="/abastecimentos" className="shrink-0" aria-label="Voltar">
+          <Link href="/abastecimentos" className="shrink-0 max-md:hidden" aria-label="Voltar">
             <span className="-ml-2 inline-flex rounded p-2 hover:bg-muted sm:ml-0">
               <ArrowLeft className="h-5 w-5" />
             </span>

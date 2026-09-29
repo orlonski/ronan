@@ -51,7 +51,9 @@ async function main() {
     update: { permissoes: chaves }, create: { contaId: plat.id, nome: "Administrador", permissoes: chaves, sistema: true },
   });
   const superAdmin = await prisma.user.create({ data: { contaId: plat.id, nome: "Super Admin", email: "super@movatruck.test", senhaHash, papelId: papelPlat.id, plataforma: true } });
-  await prisma.papel.create({ data: { contaId: C, nome: "Operador", descricao: "Lança e confere", permissoes: chaves.filter((c) => /^(viagens|motoristas|veiculos|locais)/.test(c)), sistema: false } });
+  const papelOperador = await prisma.papel.create({ data: { contaId: C, nome: "Operador", descricao: "Lança e confere", permissoes: chaves.filter((c) => /^(viagens|motoristas|veiculos|locais)/.test(c)), sistema: false } });
+  // Usuário de papel RESTRITO (menos telas): a suíte de navegação do celular compara o que ele vê com o que a sidebar mostra.
+  const operador = await prisma.user.create({ data: { contaId: C, nome: "Operador Teste", email: "operador@modelo.test", senhaHash, papelId: papelOperador.id } });
   for (const chave of MODULOS) {
     if (chave !== "plataforma") await prisma.moduloContratado.create({ data: { contaId: C, chave, ativo: true } });
     await prisma.moduloContratado.createMany({ data: [{ contaId: plat.id, chave, ativo: true }], skipDuplicates: true });
@@ -59,7 +61,7 @@ async function main() {
   // termos
   for (const tipo of ["USO", "PRIVACIDADE"]) {
     const tv = await prisma.termoVersao.create({ data: { tipo, versao: "1.0", corpo: "Termo de teste.", sha256: crypto.createHash("sha256").update(tipo).digest("hex"), vigenteDesde: new Date("2026-01-01"), publicadoEm: new Date("2026-01-01") } });
-    for (const [cid, u] of [[C, admin], [plat.id, superAdmin]]) {
+    for (const [cid, u] of [[C, admin], [C, operador], [plat.id, superAdmin]]) {
       await prisma.aceiteTermo.create({ data: { contaId: cid, termoVersaoId: tv.id, userId: u.id, nomeQuemAceitou: u.nome, emailQuemAceitou: u.email, origem: "seed" } });
     }
   }
@@ -204,7 +206,7 @@ async function main() {
 
   fs.mkdirSync(path.join(__dirname, "..", ".stack"), { recursive: true });
   fs.writeFileSync(path.join(__dirname, "..", ".stack", "seed-ids.json"), JSON.stringify({
-    contaId: C, plataformaContaId: plat.id, adminEmail: admin.email, superEmail: superAdmin.email, senha: "uxmedidas123",
+    contaId: C, plataformaContaId: plat.id, adminEmail: admin.email, superEmail: superAdmin.email, operadorEmail: operador.email, senha: "uxmedidas123",
     viagem: viagens[0].id, viagemEmAndamento: viagens.find((v) => v.status === "EM_ANDAMENTO")?.id, viagemDivergente: viagens.find((v) => v.status === "DIVERGENTE").id,
     motorista: mot[0].id, veiculo: veic[0].id, cliente: clientes[0].id, empresa: empresas[0].id, local: locais[0].id, material: materiais[0].id, tipoServico: tipos[0].id,
     modalidade: modal[0].id, transportadora: transp[0].id, pedido: pedidos[0].id,

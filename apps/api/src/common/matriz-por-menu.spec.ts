@@ -18,13 +18,13 @@ import {
  * seria dois checkboxes da mesma chave, e o "Marcar todos" de uma seção mexeria
  * na outra.
  *
- * ⚠️ `estruturaDoMenu()` mora no sidebar.tsx, que importa Next e lucide — não
+ * ⚠️ `estruturaDoMenu()` mora em lib/menu.ts (antes no sidebar.tsx), que importa Next e lucide — não
  * dá pra importá-lo daqui (e o tsc do apps/api recusa arquivo fora do rootDir).
  * Por isso o menu é LIDO do arquivo como texto, igual ao menu-matriz.spec.ts, e
  * a função de agrupamento vem do shared-types, que é pura.
  */
 
-const SIDEBAR = resolve(__dirname, "../../../dashboard/src/components/sidebar.tsx");
+const SIDEBAR = resolve(__dirname, "../../../dashboard/src/lib/menu.ts");
 
 /** Reconstrói grupos → itens → abas a partir do texto de GRUPOS. */
 function menuDoSidebar(): MenuDescricao {

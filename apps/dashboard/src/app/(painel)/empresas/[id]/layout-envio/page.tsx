@@ -67,7 +67,7 @@ export default function LayoutEnvioPage({
     <div className="space-y-6">
     <ConfirmDialog />
       <header className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
+        <Button variant="ghost" size="icon" asChild className="max-md:hidden">
             <Link href={`/empresas`} aria-label="Voltar para Clientes">
             <ArrowLeft className="h-5 w-5" />
             </Link>

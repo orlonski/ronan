@@ -21,7 +21,7 @@ const { encode } = reqDash("next-auth/jwt") as {
   encode: (p: { token: Record<string, unknown>; secret: string }) => Promise<string>;
 };
 
-function idsDoSeed(): { adminEmail: string; superEmail: string; senha: string } {
+function idsDoSeed(): { adminEmail: string; superEmail: string; operadorEmail: string; senha: string } {
   const f = path.join(__dirname, ".stack", "seed-ids.json");
   if (!fs.existsSync(f)) {
     throw new Error("Sem tests/ux/.stack/seed-ids.json: suba o stack antes (tests/ux/subir-stack.sh subir).");
@@ -30,12 +30,12 @@ function idsDoSeed(): { adminEmail: string; superEmail: string; senha: string } 
 }
 
 type Cookie = { name: string; value: string; domain: string; path: string; httpOnly: boolean; sameSite: "Lax" };
-const cookies: Partial<Record<"admin" | "super", Promise<Cookie>>> = {};
-/** `admin` = administrador da empresa do seed; `super` = super admin da plataforma (telas só da Movatruck, ex. /whatsapp). */
-function cookieDe(quem: "admin" | "super"): Promise<Cookie> {
+const cookies: Partial<Record<"admin" | "super" | "operador", Promise<Cookie>>> = {};
+/** `admin` = administrador da empresa do seed; `operador` = papel restrito (viagens/motoristas/veículos/locais); `super` = super admin da plataforma (telas só da Movatruck, ex. /whatsapp). */
+function cookieDe(quem: "admin" | "super" | "operador"): Promise<Cookie> {
   return (cookies[quem] ??= (async () => {
     const ids = idsDoSeed();
-    const adminEmail = quem === "super" ? ids.superEmail : ids.adminEmail;
+    const adminEmail = quem === "super" ? ids.superEmail : quem === "operador" ? ids.operadorEmail : ids.adminEmail;
     const senha = ids.senha;
     const r = await fetch(`${API}/admin/auth/login`, {
       method: "POST",
@@ -51,6 +51,12 @@ function cookieDe(quem: "admin" | "super"): Promise<Cookie> {
     });
     return { name: "next-auth.session-token", value, domain: "localhost", path: "/", httpOnly: true, sameSite: "Lax" as const };
   })());
+}
+
+/** Loga o contexto como outro usuário do seed (o cookie do admin é trocado). */
+export async function entrarComo(page: Page, quem: "admin" | "super" | "operador"): Promise<void> {
+  await page.context().clearCookies();
+  await page.context().addCookies([await cookieDe(quem)]);
 }
 
 export const test = base.extend({

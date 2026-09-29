@@ -16,7 +16,7 @@ import { resolve } from "node:path";
 
 const DASH = resolve(__dirname, "../../../dashboard/src");
 const catalogo = readFileSync(`${DASH}/lib/sobre-as-telas.ts`, "utf8");
-const sidebar = readFileSync(`${DASH}/components/sidebar.tsx`, "utf8");
+const sidebar = readFileSync(`${DASH}/lib/menu.ts`, "utf8");
 
 /** As rotas do menu — é a lista do que a pessoa consegue alcançar clicando. */
 const rotasDoMenu = new Set(

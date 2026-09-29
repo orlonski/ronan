@@ -62,7 +62,7 @@ export function Topbar() {
         <button
           data-coach="sino"
           type="button"
-          className="relative rounded-md p-2 text-foreground hover:bg-muted"
+          className="relative rounded-md p-2 text-foreground hover:bg-muted max-md:flex max-md:h-11 max-md:w-11 max-md:items-center max-md:justify-center"
           aria-label="Notificações"
         >
           <Bell className="h-5 w-5" />
@@ -76,7 +76,7 @@ export function Topbar() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[380px] p-0">
+      <PopoverContent align="end" className="w-[min(380px,calc(100vw-1rem))] p-0">
         <div className="flex items-center justify-between border-b px-4 py-2">
           <p className="text-sm font-semibold">Notificações</p>
           {naoLidas > 0 && (
