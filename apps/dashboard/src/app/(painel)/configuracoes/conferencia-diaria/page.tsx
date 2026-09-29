@@ -6,6 +6,7 @@ import { AlertTriangle, Play, Save, Send } from "lucide-react";
 import { toast } from "sonner";
 import {
   MENSAGEM_AO_PARAR_PADRAO,
+  JANELA_ATIVIDADE_VALIDACAO_MAX_DIAS,
   descreverRegraConferencia,
   type ConfigConferenciaDiaria,
   type RegraConferenciaDiaria,
@@ -267,6 +268,18 @@ function Conteudo() {
 
         <Card className="space-y-4 p-5">
           <h2 className="text-base font-semibold">Sem incomodar demais</h2>
+          <Field
+            label="Só perguntar a quem lançou viagem nos últimos (dias). 0 = todos"
+            help="Quem está parado há mais tempo não recebe mensagem: aparece numa lista para o escritório decidir se ainda trabalha aqui. Protege o número de WhatsApp de mandar pergunta a quem já saiu."
+          >
+            <NumInput
+              value={form.janelaAtividadeDias ?? 0}
+              onChange={(v) => set("janelaAtividadeDias", v)}
+              min={0}
+              max={JANELA_ATIVIDADE_VALIDACAO_MAX_DIAS}
+              disabled={!podeEditar}
+            />
+          </Field>
           <Field label="No máximo 1 pergunta a cada (dias)">
             <NumInput value={form.intervaloMinimoDias} onChange={(v) => set("intervaloMinimoDias", v)} min={1} max={30} disabled={!podeEditar} />
           </Field>

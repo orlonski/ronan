@@ -39,6 +39,15 @@ export type ConfigRegraConferencia = {
   incluirQueNuncaLancou: boolean;
   intervaloMinimoDias: number;
   maxPerguntasPorSemana: number;
+  /**
+   * Regra de ATIVIDADE. Ausente ou 0 = desligada. Com N > 0, quem lançou a última
+   * viagem há MAIS de N dias (qualquer status, hoje inclusive) não é perguntado:
+   * vira `semMovimento`, pro escritório decidir se ainda trabalha aqui. Quem NUNCA
+   * lançou não é afetado (segue só `incluirQueNuncaLancou`): a queixa que originou a
+   * conferência inclui justamente o motorista que nunca lançou, e o cadastro recente
+   * sem viagem cai nesse mesmo caso.
+   */
+  janelaAtividadeDias?: number;
 };
 
 export type MotoristaParaConferencia = {
@@ -65,10 +74,14 @@ export type EvidenciasConferencia = {
   temViagemEmAndamento: boolean;
   ultimaPergunta: Ymd | null;
   perguntasNaSemana: number;
+  /** Só quando a regra de atividade barrou: há quantos dias foi a última viagem. */
+  diasSemMovimento?: number;
 };
 
 export type ResultadoConferencia = {
   deveriaPerguntar: boolean;
+  /** Barrado pela regra de atividade: não recebe mensagem e vai pra lista do escritório. */
+  semMovimento?: boolean;
   motivo: string;
   evidencias: EvidenciasConferencia;
 };
@@ -179,6 +192,21 @@ export function avaliarConferenciaDiaria(
   if (nuncaLancou && !cfg.incluirQueNuncaLancou) {
     return nao("Nunca lançou viagem e a regra não inclui quem nunca lançou.");
   }
+  const janela = cfg.janelaAtividadeDias ?? 0;
+  if (janela > 0 && !nuncaLancou) {
+    // Olha TODAS as viagens, hoje inclusive: quem lançou hoje está em atividade,
+    // mesmo que `ultimoDiaComViagem` (que ignora hoje) aponte pra bem antes.
+    const ultimaAtividade = [...m.diasComViagem].sort().at(-1)!;
+    const parado = diasEntre(ultimaAtividade, hoje);
+    if (parado > janela) {
+      return {
+        deveriaPerguntar: false,
+        semMovimento: true,
+        motivo: `Sem viagem há mais de ${janela} dias (última em ${dataBR(ultimaAtividade)}).`,
+        evidencias: { ...evidencias, diasSemMovimento: parado },
+      };
+    }
+  }
   if (esperados.length < n) {
     // Sem dias esperados suficientes (cadastro recente, ou config sem dia útil
     // no período): sem base pra dizer que faltou viagem.
@@ -264,6 +292,8 @@ export function avaliarLembreteNoApp(
       diasSemViagem: n,
       intervaloMinimoDias: 1,
       maxPerguntasPorSemana: 7,
+      // O card no app não é mensagem de WhatsApp: a regra de atividade protege o número, não vale aqui.
+      janelaAtividadeDias: 0,
     },
     { ...m, perguntasAnteriores: [] },
     feriadosNacionais,

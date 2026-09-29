@@ -394,3 +394,22 @@ describe("perguntas anteriores (linha zerada por teste)", () => {
     expect(c.dias.some((d) => d.pergunta)).toBe(false);
   });
 });
+
+describe("SEM_MOVIMENTO (regra de atividade) não é pergunta nem falha de canal", () => {
+  it("não aparece no calendário nem nos totais, nem como 'sem canal'", () => {
+    const l = linha({
+      estado: "SUPRIMIDA",
+      suprimidaPor: "SEM_MOVIMENTO",
+      enviadaEm: null,
+      snapshot: { deveriaPerguntar: false, evidencias: { diasEsperadosVerificados: ["2026-09-25"] } },
+    });
+    const c = monta({ linhas: [l] });
+    expect(dia(c, "2026-09-25").pergunta).toBeUndefined();
+    expect(c.totais).toEqual({ diasComViagem: 0, perguntados: 0, respondidos: 0, retroativos: 0, semResposta: 0, semCanal: 0 });
+  });
+
+  it("mesmo que o snapshot dissesse deveriaPerguntar, SEM_MOVIMENTO nunca vira 'sem canal'", () => {
+    const l = linha({ estado: "SUPRIMIDA", suprimidaPor: "SEM_MOVIMENTO", enviadaEm: null });
+    expect(monta({ linhas: [l] }).totais.semCanal).toBe(0);
+  });
+});

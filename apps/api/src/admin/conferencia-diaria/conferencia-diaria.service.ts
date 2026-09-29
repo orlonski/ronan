@@ -60,7 +60,17 @@ export type ItemConferencia = {
   evidencias: EvidenciasConferencia;
   /** Preenchido quando o motorista não pode receber a pergunta pelo WhatsApp. */
   semCanal: SemCanal | null;
+  /**
+   * Barrado pela regra de atividade (parado há mais de N dias): não recebe mensagem e
+   * vai pra lista do escritório. Nunca é "sem canal" — é outra fila, com outra decisão.
+   */
+  semMovimento: boolean;
+  /** Só nos `semMovimento`: pro escritório reconhecer o parceiro sem ver o número inteiro. */
+  telefoneMascarado?: string | null;
 };
+
+/** `suprimidaPor` da linha poupada pela regra de atividade. Não é canal: o calendário e a fila de "sem canal" a ignoram. */
+export const SUPRIMIDA_SEM_MOVIMENTO = "SEM_MOVIMENTO";
 
 /** Estados em que a pergunta CONTA como feita (entra no intervalo mínimo e no máximo semanal). */
 const ESTADOS_PERGUNTADOS = ["SOMBRA", "PENDENTE", "ENVIADA", "RESPONDIDA", "EXPIRADA"] as const;
@@ -199,20 +209,29 @@ export class ConferenciaDiariaService {
   /** O que o job já gravou hoje: quem seria (ou foi) perguntado e quem foi poupado, com o porquê. */
   async listaDoDia() {
     const dia = inicioDoDiaData(new Date());
+    // O N do título do grupo "sem movimento" é o da config de HOJE (só leitura; nada é criado).
+    const cfg = await this.prisma.configuracaoConferenciaDiaria.findFirst({ select: { janelaAtividadeDias: true } });
     const linhas = await this.prisma.conferenciaDiaria.findMany({
       where: { dia },
-      include: { motorista: { select: { nome: true } } },
+      include: { motorista: { select: { nome: true, telefone: true } } },
       orderBy: { motorista: { nome: "asc" } },
     });
     return {
       dia: dataParaYmd(dia),
       rodou: linhas.length > 0,
+      janelaAtividadeDias: cfg?.janelaAtividadeDias ?? 0,
       itens: linhas.map((l) => {
         const snap = l.snapshot as { evidencias?: EvidenciasConferencia; deveriaPerguntar?: boolean } | null;
-        const semCanal = (l.suprimidaPor as SemCanal | null) ?? null;
+        const semMovimento = l.suprimidaPor === SUPRIMIDA_SEM_MOVIMENTO;
+        // SEM_MOVIMENTO mora no mesmo campo, mas NÃO é canal: nunca vira a marca "sem canal".
+        const semCanal = semMovimento ? null : ((l.suprimidaPor as SemCanal | null) ?? null);
         return {
           motoristaId: l.motoristaId,
           nome: l.motorista.nome,
+          semMovimento,
+          ...(semMovimento
+            ? { telefoneMascarado: l.motorista.telefone ? mascararTelefone(l.motorista.telefone) : null }
+            : {}),
           // SUPRIMIDA sem canal ainda é "a regra mandou perguntar": a lista mostra
           // com a marca pra contatar por outro meio.
           deveriaPerguntar: l.estado === "SUPRIMIDA" ? snap?.deveriaPerguntar === true && semCanal != null : true,
@@ -285,6 +304,7 @@ export class ConferenciaDiariaService {
       dia: hojeYmd(agora),
       gravado: false,
       regraEmVigor: this.descricao(cfg),
+      janelaAtividadeDias: cfg.janelaAtividadeDias ?? 0,
       itens,
     };
   }
@@ -425,7 +445,7 @@ export class ConferenciaDiariaService {
           motoristaId: i.motoristaId,
           dia,
           estado,
-          suprimidaPor: semCanal,
+          suprimidaPor: i.semMovimento ? SUPRIMIDA_SEM_MOVIMENTO : semCanal,
           motivo: i.motivo,
           snapshot: {
             modoConfigurado: cfg.modo,
@@ -433,6 +453,7 @@ export class ConferenciaDiariaService {
             ...(pode.ok ? {} : { semEnvioPorque: pode.motivo }),
             deveriaPerguntar: i.deveriaPerguntar,
             semCanal: i.semCanal,
+            ...(i.semMovimento ? { semMovimento: true } : {}),
             regraEmVigor: regra,
             config: this.configDaRegra(cfg),
             evidencias: i.evidencias,
@@ -443,7 +464,9 @@ export class ConferenciaDiariaService {
     this.log.log(
       `Conferência diária (${pode.ok ? "enviando" : "sombra"}) conta ${contaId}: ${count} motoristas avaliados, ${
         itens.filter((i) => i.deveriaPerguntar && !i.semCanal).length
-      } a perguntar, ${itens.filter((i) => i.deveriaPerguntar && i.semCanal).length} sem canal.`,
+      } a perguntar, ${itens.filter((i) => i.deveriaPerguntar && i.semCanal).length} sem canal, ${
+        itens.filter((i) => i.semMovimento).length
+      } sem movimento.`,
     );
     return count;
   }
@@ -751,6 +774,7 @@ export class ConferenciaDiariaService {
         id: true,
         contaId: true,
         estado: true,
+        suprimidaPor: true,
         opcao: true,
         wamid: true,
         enviadaEm: true,
@@ -781,7 +805,9 @@ export class ConferenciaDiariaService {
       throw new ConflictException(
         linha.estado === "SOMBRA"
           ? "A conferência de hoje rodou em modo sombra: nada foi enviado a este motorista e nada será reenviado."
-          : "Hoje a regra não mandou perguntar a este motorista (ou ele está sem canal). Não dá pra reenviar.",
+          : linha.suprimidaPor === SUPRIMIDA_SEM_MOVIMENTO
+            ? "Este motorista está sem movimento há mais tempo que a janela de atividade da empresa, então a conferência não o perguntou. Se quiser mesmo assim, use a pergunta de teste na ficha dele."
+            : "Hoje a regra não mandou perguntar a este motorista (ou ele está sem canal). Não dá pra reenviar.",
       );
     }
     const cfg = await this.config();
@@ -1373,6 +1399,7 @@ export class ConferenciaDiariaService {
       incluirQueNuncaLancou: c.incluirQueNuncaLancou,
       intervaloMinimoDias: c.intervaloMinimoDias,
       maxPerguntasPorSemana: c.maxPerguntasPorSemana,
+      janelaAtividadeDias: c.janelaAtividadeDias ?? 0,
     };
   }
 
@@ -1509,7 +1536,16 @@ export class ConferenciaDiariaService {
         perguntasAnteriores: perguntasPor.get(m.id) ?? [],
       };
       const r = avaliarConferenciaDiaria(regra, entrada, feriados, agora);
-      return { motoristaId: m.id, nome: m.nome, ...r, semCanal: this.semCanalDe(m) };
+      const semMovimento = r.semMovimento === true;
+      return {
+        motoristaId: m.id,
+        nome: m.nome,
+        ...r,
+        semMovimento,
+        // Quem foi poupado pela atividade não é "sem canal": é outra lista, sem mensagem.
+        semCanal: semMovimento ? null : this.semCanalDe(m),
+        ...(semMovimento ? { telefoneMascarado: m.telefone ? mascararTelefone(m.telefone) : null } : {}),
+      };
     });
   }
 }

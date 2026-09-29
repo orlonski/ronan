@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 
 export type SemCanal = "SEM_TELEFONE" | "NAO_ACEITA_WHATSAPP" | "PAROU" | "DESLIGADA_PAINEL" | "INALCANCAVEL";
@@ -15,16 +16,22 @@ export type ItemConferencia = {
   erroEnvio?: string | null;
   /** A regra manda perguntar, mas não há como perguntar pelo WhatsApp. */
   semCanal?: SemCanal | null;
+  /** Barrado pela regra de atividade: não recebe mensagem, o escritório decide. */
+  semMovimento?: boolean;
+  telefoneMascarado?: string | null;
   evidencias: {
     ultimoDiaComViagem: string | null;
     nuncaLancou: boolean;
     diasEsperadosVerificados: string[];
+    diasSemMovimento?: number;
   } | null;
 };
 
 export type RespostaConferencia = {
   dia: string;
   rodou?: boolean;
+  /** O N da regra de atividade da empresa (0 = desligada). Vem da config, nunca de constante. */
+  janelaAtividadeDias?: number;
   itens: ItemConferencia[];
 };
 
@@ -75,9 +82,11 @@ function situacao(i: ItemConferencia): { texto: string; tom: "neutro" | "ok" | "
  * WhatsApp: a empresa precisa contatar por outro meio.
  */
 export function ListaConferencia({ dados }: { dados: RespostaConferencia }) {
-  const semCanal = dados.itens.filter((i) => i.deveriaPerguntar && i.semCanal);
-  const perguntados = dados.itens.filter((i) => i.deveriaPerguntar && !i.semCanal);
-  const poupados = dados.itens.filter((i) => !i.deveriaPerguntar);
+  const semMovimento = dados.itens.filter((i) => i.semMovimento);
+  const semCanal = dados.itens.filter((i) => !i.semMovimento && i.deveriaPerguntar && i.semCanal);
+  const perguntados = dados.itens.filter((i) => !i.semMovimento && i.deveriaPerguntar && !i.semCanal);
+  const poupados = dados.itens.filter((i) => !i.semMovimento && !i.deveriaPerguntar);
+  const janela = dados.janelaAtividadeDias ?? 0;
   const gravado = dados.itens.some((i) => i.estado);
   const jaSaiu = dados.itens.some((i) => ["ENVIADA", "RESPONDIDA", "EXPIRADA"].includes(i.estado ?? ""));
 
@@ -86,7 +95,8 @@ export function ListaConferencia({ dados }: { dados: RespostaConferencia }) {
       <p className="text-sm text-muted-foreground">
         Dia {dataBR(dados.dia)}: {dados.itens.length} parceiro(s) avaliado(s),{" "}
         {perguntados.length} {jaSaiu ? "perguntado(s)" : "seriam perguntados"}
-        {semCanal.length > 0 ? ` e ${semCanal.length} sem canal de WhatsApp` : ""}.
+        {semCanal.length > 0 ? ` e ${semCanal.length} sem canal de WhatsApp` : ""}
+        {semMovimento.length > 0 ? `${semCanal.length > 0 ? "," : " e"} ${semMovimento.length} sem movimento` : ""}.
       </p>
 
       {perguntados.length === 0 ? (
@@ -135,6 +145,38 @@ export function ListaConferencia({ dados }: { dados: RespostaConferencia }) {
                 <Badge className="shrink-0 self-start bg-amber-100 text-amber-900">
                   Sem canal: {i.semCanal ? MOTIVO_SEM_CANAL[i.semCanal] : ""}
                 </Badge>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {semMovimento.length > 0 && (
+        <div className="space-y-2" data-testid="conferencia-sem-movimento">
+          <h3 className="text-sm font-semibold">
+            {janela > 0 ? `Sem movimento há mais de ${janela} dias` : "Sem movimento há bastante tempo"} — o escritório decide (não
+            recebem mensagem)
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Se a pessoa não trabalha mais aqui, abra a ficha e inative o cadastro. Ninguém desta lista recebe mensagem.
+          </p>
+          <ul className="divide-y rounded-md border border-slate-300 bg-slate-50/60">
+            {semMovimento.map((i) => (
+              <li key={i.motoristaId} className="flex flex-col gap-1 p-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="font-medium">{i.nome}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Última viagem {dataBR(i.evidencias?.ultimoDiaComViagem)}
+                    {i.evidencias?.diasSemMovimento != null ? ` (há ${i.evidencias.diasSemMovimento} dias)` : ""}
+                    {i.telefoneMascarado ? ` · ${i.telefoneMascarado}` : " · sem telefone"}
+                  </p>
+                </div>
+                <Link
+                  href={`/motoristas/${i.motoristaId}`}
+                  className="shrink-0 self-start rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-100"
+                >
+                  Abrir a ficha
+                </Link>
               </li>
             ))}
           </ul>

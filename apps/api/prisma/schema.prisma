@@ -4949,6 +4949,8 @@ model ConfiguracaoConferenciaDiaria {
   lembreteParaQuem      LembreteAppParaQuem        @default(SO_QUEM_SAIU)
   /// Dias esperados sem lançar (mesmos dias considerados e feriados da regra) pra o card aparecer.
   diasParaLembreteNoApp Int                        @default(3)
+  /// Só pergunta a quem lançou viagem nos últimos N dias. 0 = regra desligada (todos). Quem fica de fora vai pra uma lista do escritório, sem mensagem.
+  janelaAtividadeDias   Int                        @default(0)
   alteradoEm            DateTime                   @updatedAt
   alteradoPor           User?                      @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId         String?

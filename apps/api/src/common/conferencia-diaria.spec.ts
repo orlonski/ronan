@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  AtualizarConfigConferenciaDiariaSchema,
+  JANELA_ATIVIDADE_VALIDACAO_MAX_DIAS,
+  JANELA_ATIVIDADE_VALIDACAO_MIN_DIAS,
   descreverRegraConferencia,
   lembreteLancamentoVisivel,
   textoLembreteLancamento,
@@ -398,5 +401,116 @@ describe("descreverRegraConferencia com lembrete no app", () => {
     expect(
       descreverRegraConferencia({ ...base, lembreteNoApp: true, lembreteParaQuem: "TODOS_QUE_ATRASARAM", diasParaLembreteNoApp: 1 }),
     ).toMatch(/qualquer motorista.*1 dia esperado/);
+  });
+});
+
+describe("regra de atividade (janelaAtividadeDias)", () => {
+  // Hoje = 28/09/2026 (segunda). 45 dias antes = 14/08/2026.
+  const c = (janela: number) => cfg({ janelaAtividadeDias: janela });
+  const av = (janela: number, over: Partial<MotoristaParaConferencia>, agora = SEG_MANHA) =>
+    avaliarConferenciaDiaria(c(janela), mot(over), SEM_FERIADO, agora);
+
+  it("última viagem MAIS antiga que N dias: semMovimento, não pergunta, motivo legível e evidência", () => {
+    const r = av(45, { diasComViagem: ["2026-08-13"] }); // 46 dias
+    expect(r.semMovimento).toBe(true);
+    expect(r.deveriaPerguntar).toBe(false);
+    expect(r.motivo).toBe("Sem viagem há mais de 45 dias (última em 13/08/2026).");
+    expect(r.evidencias.diasSemMovimento).toBe(46);
+  });
+
+  it("limite exato: exatamente N dias atrás ainda conta como ativo", () => {
+    const r = av(45, { diasComViagem: ["2026-08-14"] }); // 45 dias
+    expect(r.semMovimento).toBeUndefined();
+    expect(r.deveriaPerguntar).toBe(true);
+    expect(r.evidencias.diasSemMovimento).toBeUndefined();
+  });
+
+  it("N = 0 desliga a regra: comportamento de sempre", () => {
+    const r = av(0, { diasComViagem: ["2026-06-05"] });
+    expect(r.semMovimento).toBeUndefined();
+    expect(r.deveriaPerguntar).toBe(true);
+    const sem = avaliarConferenciaDiaria(cfg(), mot({ diasComViagem: ["2026-06-05"] }), SEM_FERIADO, SEG_MANHA);
+    expect(sem.deveriaPerguntar).toBe(true);
+  });
+
+  it("quem NUNCA lançou não é afetado: segue só incluirQueNuncaLancou", () => {
+    const entra = av(45, { diasComViagem: [] });
+    expect(entra.semMovimento).toBeUndefined();
+    expect(entra.deveriaPerguntar).toBe(true);
+    const fora = avaliarConferenciaDiaria(
+      { ...c(45), incluirQueNuncaLancou: false },
+      mot({ diasComViagem: [] }),
+      SEM_FERIADO,
+      SEG_MANHA,
+    );
+    expect(fora.semMovimento).toBeUndefined();
+    expect(fora.deveriaPerguntar).toBe(false);
+  });
+
+  it("viagem EM_ANDAMENTO é movimento, mesmo com a última data antiga", () => {
+    const r = av(45, { diasComViagem: ["2026-06-05"], temViagemEmAndamento: true });
+    expect(r.semMovimento).toBeUndefined();
+    expect(r.deveriaPerguntar).toBe(false);
+    expect(r.motivo).toBe("Tem viagem em andamento agora.");
+  });
+
+  it("viagem lançada HOJE é atividade (hoje não conta na regra do dia, mas conta aqui)", () => {
+    const r = av(7, { diasComViagem: ["2026-06-05", "2026-09-28"] });
+    expect(r.semMovimento).toBeUndefined();
+  });
+
+  it("fuso: às 21h30 de Brasília (UTC já virou) 'hoje' segue sendo o dia local", () => {
+    const noite = new Date("2026-09-29T00:30:00Z"); // 28/09 21:30 em SP
+    // 14/08 = 45 dias antes de 28/09 (não 46, como seria em UTC).
+    expect(av(45, { diasComViagem: ["2026-08-14"] }, noite).semMovimento).toBeUndefined();
+    expect(av(45, { diasComViagem: ["2026-08-13"] }, noite).semMovimento).toBe(true);
+  });
+
+  it("o lembrete no app ignora a janela (não é mensagem de WhatsApp)", () => {
+    const r = avaliarLembreteNoApp(
+      c(45),
+      { ativo: true, lembreteNoApp: true, lembreteParaQuem: "TODOS_QUE_ATRASARAM", diasParaLembreteNoApp: 3 },
+      { ...mot({ diasComViagem: ["2026-06-05"] }), receberConferenciaDiaria: true },
+      SEM_FERIADO,
+      SEG_MANHA,
+    );
+    expect(r).not.toBeNull();
+  });
+
+  it("a Regra em vigor só fala da janela quando N > 0", () => {
+    const base = {
+      horaEnvio: 8,
+      diasDoJob: [1, 2, 3, 4, 5],
+      regra: "SEM_VIAGEM_NO_DIA_ANTERIOR" as const,
+      diasSemViagem: 1,
+      diasConsiderados: [1, 2, 3, 4, 5],
+      ignorarFeriados: true,
+      incluirQueNuncaLancou: true,
+      intervaloMinimoDias: 3,
+      maxPerguntasPorSemana: 3,
+    };
+    expect(descreverRegraConferencia({ ...base, janelaAtividadeDias: 0 })).toBe(descreverRegraConferencia(base));
+    expect(descreverRegraConferencia({ ...base, janelaAtividadeDias: 45 })).toContain(
+      "Só recebe a pergunta quem lançou viagem nos últimos 45 dias",
+    );
+  });
+});
+
+describe("Zod da janela de atividade", () => {
+  const ok = (v: unknown) => AtualizarConfigConferenciaDiariaSchema.safeParse({ janelaAtividadeDias: v });
+  it("aceita 0 (desligada) e valores dentro da guarda técnica", () => {
+    expect(ok(0).success).toBe(true);
+    expect(ok(JANELA_ATIVIDADE_VALIDACAO_MIN_DIAS).success).toBe(true);
+    expect(ok(JANELA_ATIVIDADE_VALIDACAO_MAX_DIAS).success).toBe(true);
+  });
+  it("recusa fora da guarda, negativo, quebrado e texto, em PT-BR", () => {
+    for (const v of [1, JANELA_ATIVIDADE_VALIDACAO_MIN_DIAS - 1, JANELA_ATIVIDADE_VALIDACAO_MAX_DIAS + 1, -3, 10.5, "abc"]) {
+      const r = ok(v);
+      expect(r.success, String(v)).toBe(false);
+      if (!r.success) expect(r.error.issues[0]!.message).toMatch(/dias|número/);
+    }
+  });
+  it("config antiga sem o campo continua valendo", () => {
+    expect(AtualizarConfigConferenciaDiariaSchema.safeParse({}).success).toBe(true);
   });
 });

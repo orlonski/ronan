@@ -72,6 +72,8 @@ export function diaPerguntado(l: Pick<LinhaParaCalendario, "dia" | "snapshot">):
 function conta(l: LinhaParaCalendario): boolean {
   if (ESTADOS_ENVIADOS.has(l.estado) || l.estado === "PENDENTE" || l.estado === "FALHOU") return true;
   if (l.estado === "SUPRIMIDA") {
+    // SEM_MOVIMENTO não é pergunta nem falha de canal: a regra de atividade poupou o motorista.
+    if (l.suprimidaPor === "SEM_MOVIMENTO") return false;
     const snap = l.snapshot as { deveriaPerguntar?: boolean } | null;
     return snap?.deveriaPerguntar === true && l.suprimidaPor != null;
   }

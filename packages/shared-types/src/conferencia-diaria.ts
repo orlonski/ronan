@@ -147,6 +147,15 @@ const listaDeDias = (nome: string) =>
     .max(7)
     .refine(semRepeticao, { message: `${nome}: dia repetido.` });
 
+/**
+ * Guarda TÉCNICA de validação do campo `janelaAtividadeDias` (não é regra de negócio):
+ * 0 desliga a regra; o valor que vale é o que cada empresa escolhe na tela. O piso evita
+ * uma janela tão curta que barraria motorista em atividade normal (folga, feriado
+ * prolongado); o teto é o de um ano, além do qual "parado" deixa de ter sentido.
+ */
+export const JANELA_ATIVIDADE_VALIDACAO_MIN_DIAS = 7;
+export const JANELA_ATIVIDADE_VALIDACAO_MAX_DIAS = 365;
+
 /** A regra da conferência diária, como o painel edita. */
 export const AtualizarConfigConferenciaDiariaSchema = z
   .object({
@@ -175,6 +184,15 @@ export const AtualizarConfigConferenciaDiariaSchema = z
     lembreteNoApp: z.boolean(),
     lembreteParaQuem: LembreteAppParaQuem,
     diasParaLembreteNoApp: z.number().int().min(1).max(30),
+    janelaAtividadeDias: z
+      .number({ invalid_type_error: "Informe um número de dias." })
+      .int("Informe um número inteiro de dias.")
+      .refine(
+        (v) => v === 0 || (v >= JANELA_ATIVIDADE_VALIDACAO_MIN_DIAS && v <= JANELA_ATIVIDADE_VALIDACAO_MAX_DIAS),
+        {
+          message: `Use 0 (perguntar a todos) ou um valor entre ${JANELA_ATIVIDADE_VALIDACAO_MIN_DIAS} e ${JANELA_ATIVIDADE_VALIDACAO_MAX_DIAS} dias.`,
+        },
+      ),
   })
   .partial()
   .superRefine((v, ctx) => {
@@ -214,6 +232,7 @@ export const ConfigConferenciaDiaria = z.object({
   lembreteNoApp: z.boolean(),
   lembreteParaQuem: LembreteAppParaQuem,
   diasParaLembreteNoApp: z.number(),
+  janelaAtividadeDias: z.number(),
 });
 export type ConfigConferenciaDiaria = z.infer<typeof ConfigConferenciaDiaria>;
 
@@ -238,6 +257,8 @@ export function descreverRegraConferencia(cfg: {
   lembreteNoApp?: boolean;
   lembreteParaQuem?: LembreteAppParaQuem;
   diasParaLembreteNoApp?: number;
+  /** Ausente ou 0 = todos são perguntados, por mais parados que estejam. */
+  janelaAtividadeDias?: number;
 }): string {
   const hora = `${String(cfg.horaEnvio).padStart(2, "0")}:00`;
   const quando = `${prefixoDias(cfg.diasDoJob)}, às ${hora}`;
@@ -251,7 +272,12 @@ export function descreverRegraConferencia(cfg: {
     ? "Quem nunca lançou nenhuma viagem também entra."
     : "Quem nunca lançou nenhuma viagem não entra.";
   const freq = `No máximo 1 mensagem a cada ${cfg.intervaloMinimoDias} ${cfg.intervaloMinimoDias === 1 ? "dia" : "dias"} e ${cfg.maxPerguntasPorSemana} por semana, por motorista.`;
-  const base = `${quando}, o sistema pergunta ao motorista que ${alvo}. O dia de hoje nunca conta. ${nunca} ${freq}`;
+  const janela = cfg.janelaAtividadeDias ?? 0;
+  const atividade =
+    janela > 0
+      ? ` Só recebe a pergunta quem lançou viagem nos últimos ${janela} dias; quem está parado há mais tempo não recebe mensagem e aparece numa lista para o escritório decidir.`
+      : "";
+  const base = `${quando}, o sistema pergunta ao motorista que ${alvo}. O dia de hoje nunca conta. ${nunca}${atividade} ${freq}`;
   if (!cfg.lembreteNoApp) return base;
   const n = Math.max(1, cfg.diasParaLembreteNoApp ?? 3);
   const quem =
