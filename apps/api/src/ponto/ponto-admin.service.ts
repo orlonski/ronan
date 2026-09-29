@@ -12,6 +12,7 @@ import { AuditoriaService } from "../auditoria/auditoria.service";
 import { abrirRegime, encerrarRegime, soDigitos } from "../common/regime-vigente";
 import { contaIdAtual } from "../common/conta/conta-context";
 import { paraCadaConta } from "../common/conta/para-cada-conta";
+import { comLockDeCron } from "../common/cron-exclusivo";
 import { ymdSaoPaulo } from "../common/timezone";
 import {
   apurarPeriodo,
@@ -305,9 +306,103 @@ export class PontoAdminService {
       }
       return f;
     });
+    await this.garantirPontoNoApp(cpf, dados.usuarioId);
     // Ponto entra (ou sai) do app dele — nas regras, na hora.
     this.acessoApp.agendarRecalculo("FUNCIONARIO_CONTRATADO");
     return resultado;
+  }
+
+  /**
+   * Quem já é MOTORISTA e acaba de ser registrado tem que ver o Ponto no app.
+   *
+   * ⚠️ O resolvedor dá a quem tem cadastro de motorista SÓ o tipo do motorista
+   * (a modalidade dele, ou "sem modalidade"), e esses perfis não trazem o ponto.
+   * Resultado: o gestor da Schaba registrou a contratação, o motorista abriu o
+   * app e a aba não existia — e não havia nada na tela dizendo por quê.
+   *
+   * A saída é uma EXCEÇÃO individual com o motivo escrito, e não mexer no perfil
+   * da modalidade: o perfil vale pra todo mundo daquele tipo e a empresa decide
+   * o que ele tem; a exceção é visível em "Dar ou tirar algo só dele" e sai com
+   * um clique. Só concede o que falta e nunca derruba a contratação.
+   */
+  private async garantirPontoNoApp(cpf: string, usuarioId: string | null) {
+    const chaves = ["app.ponto.bater", "app.ponto.espelho"] as const;
+    try {
+      // Concedido uma vez, nunca de novo: se o gestor revogou de propósito, o
+      // ciclo abaixo não pode devolver a cada 5 minutos.
+      const jaConcedeu = await this.prisma.excecaoAcessoApp.count({
+        where: { cpf, capacidade: { in: [...chaves] }, origem: "CONTRATACAO" },
+      });
+      if (jaConcedeu >= chaves.length) return;
+      const r = await this.acessoApp.explicar(cpf);
+      if (!r?.vinculos.motorista || !r.vinculos.funcionario) return;
+      // Faltando por CORTE (módulo não contratado, cadastro inativo), exceção
+      // não resolve e só poluiria a ficha.
+      const faltam = chaves.filter(
+        (c) => !r.efetivo.includes(c) && (r.explicacao[c]?.cortes.length ?? 0) === 0,
+      );
+      for (const capacidade of faltam) {
+        if (r.explicacao[capacidade]?.negadaPor) continue; // alguém tirou de propósito
+        const jaTem = await this.prisma.excecaoAcessoApp.findFirst({
+          where: {
+            cpf,
+            capacidade,
+            OR: [{ revogadaEm: null }, { origem: "CONTRATACAO" }],
+          },
+          select: { id: true },
+        });
+        if (jaTem) continue;
+        await this.prisma.$transaction([
+          this.prisma.excecaoAcessoApp.create({
+            data: {
+              cpf,
+              capacidade,
+              efeito: "CONCEDER",
+              motivo: "Registrado para bater ponto: o tipo de motorista dele não inclui o ponto.",
+              origem: "CONTRATACAO",
+              criadoPorId: usuarioId,
+              chaveViva: `${cpf}:${capacidade}`,
+            },
+          }),
+          this.prisma.logAcessoApp.create({
+            data: {
+              tipo: "EXCECAO_CONCEDER",
+              autorId: usuarioId,
+              cpf,
+              motivo: "Registrado para bater ponto.",
+              ganhou: [capacidade],
+            },
+          }),
+        ]);
+      }
+      if (faltam.length) this.acessoApp.agendarRecalculo("PONTO_NO_APP");
+    } catch (e) {
+      // A contratação já foi gravada; o acesso se ajusta em "Dar ou tirar algo
+      // só dele". Não desfaz o registro por causa disso.
+      this.log.warn(`Ponto no app não concedido a ${cpf}: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Cura quem JÁ estava registrado: motorista contratado antes desta regra
+   * existir (ou por outro caminho, como a planilha) ficava sem a aba Ponto.
+   * O gestor marcou "registrado" — o resto não pode ser tarefa dele.
+   */
+  @Cron("0 */5 * * * *", { name: "ponto-no-app", timeZone: "America/Sao_Paulo" })
+  async cronPontoNoApp(): Promise<void> {
+    await comLockDeCron(this.prisma, "ponto-no-app", async () => {
+      await paraCadaConta(this.prisma, async () => {
+        const [funcionarios, motoristas] = await Promise.all([
+          this.prisma.funcionario.findMany({ where: { ativo: true }, select: { cpf: true } }),
+          this.prisma.motorista.findMany({ where: { ativo: true }, select: { cpf: true } }),
+        ]);
+        const dirigem = new Set(motoristas.map((m) => soDigitos(m.cpf)));
+        for (const f of funcionarios) {
+          const cpf = soDigitos(f.cpf);
+          if (dirigem.has(cpf)) await this.garantirPontoNoApp(cpf, null);
+        }
+      });
+    });
   }
 
   async editarFuncionario(id: string, dados: Record<string, unknown>) {
