@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "lib": ["ES2022", "DOM"],
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+    "types": ["node"],
+    "typeRoots": ["../../apps/dashboard/node_modules/@types"]
+  },
+  "include": ["./*.ts", "../e2e/helpers/*.ts", "../../playwright.config.ts"]
+}

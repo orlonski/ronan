@@ -16,7 +16,13 @@
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f",
     "db:migrate": "pnpm --filter @ronan/api prisma migrate dev",
-    "db:studio": "pnpm --filter @ronan/api prisma studio"
+    "db:studio": "pnpm --filter @ronan/api prisma studio",
+    "ux": "UX=1 playwright test --reporter=list --project=mobile --project=mac1440 --project=mac1280 --project=ultra",
+    "ux:orcamento:atualizar": "UX=1 UX_ATUALIZAR=1 playwright test --reporter=list --project=mobile --project=mac1440 --project=mac1280 --grep \"orçamento:\"",
+    "ux:ultra:atualizar": "UX=1 UX_ATUALIZAR=1 playwright test --reporter=list --project=ultra --update-snapshots --grep \"(orçamento|ultrawide):\" && python3 tests/ux/otimizar-baseline.py",
+    "ux:stack": "bash tests/ux/subir-stack.sh",
+    "ux:tudo": "bash tests/ux/subir-stack.sh tudo",
+    "typecheck:tests": "tsc --noEmit -p tests/ux/tsconfig.json"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

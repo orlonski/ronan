@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { fixarMenuAberto } from "./helpers/menu";
 
 /**
  * Módulo desligado SOME do painel — e sem saber o que a empresa contratou, some
@@ -73,6 +74,8 @@ async function textoDoMenu(page: Page): Promise<string[]> {
 
 test.describe("Painel: módulo desligado some do menu e da URL", () => {
   test.beforeEach(async ({ page }) => {
+    // Menu lateral sempre aberto: a Leva 1 recolhe o menu abaixo de 1536px e estes testes leem o `aside`.
+    await fixarMenuAberto(page);
     await page.goto("/login");
     await page.fill('input[type="email"]', ADMIN_EMAIL);
     await page.fill('input[type="password"]', ADMIN_PASS);
