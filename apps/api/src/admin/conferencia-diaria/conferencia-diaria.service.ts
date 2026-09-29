@@ -272,6 +272,48 @@ export class ConferenciaDiariaService {
     return d.ok ? { ok: true } : { ok: false, motivo: d.motivo };
   }
 
+  /**
+   * Linhas do dia gravadas em SOMBRA viram PENDENTE quando o envio foi ligado
+   * depois, ainda na hora do job. Recalcula antes: quem lançou viagem (ou perdeu o
+   * canal) entre a gravação e agora continua em SOMBRA e não é perguntado.
+   */
+  private async promoverSombraDoDia(cfg: Config, dia: Date, agora: Date): Promise<number> {
+    const pode = await this.podeEnviar(cfg);
+    if (!pode.ok) return 0;
+    const sombra = await this.prisma.conferenciaDiaria.findMany({
+      where: { dia, estado: "SOMBRA" },
+      select: { id: true, motoristaId: true, snapshot: true },
+    });
+    if (sombra.length === 0) return 0;
+
+    const itens = await this.calcular(cfg, agora);
+    const aindaPerguntar = new Set(
+      itens.filter((i) => i.deveriaPerguntar && !i.semCanal).map((i) => i.motoristaId),
+    );
+    let promovidas = 0;
+    for (const l of sombra) {
+      if (!aindaPerguntar.has(l.motoristaId)) continue;
+      const { semEnvioPorque: _descartado, ...resto } = (l.snapshot ?? {}) as Record<string, unknown>;
+      await this.prisma.conferenciaDiaria.update({
+        where: { id: l.id },
+        data: {
+          estado: "PENDENTE",
+          snapshot: {
+            ...resto,
+            modoConfigurado: cfg.modo,
+            nadaEnviado: false,
+            promovidaDeSombra: true,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      promovidas++;
+    }
+    if (promovidas > 0) {
+      this.log.log(`Conferência diária: ${promovidas} linha(s) de sombra do dia promovidas a PENDENTE (envio ligado depois).`);
+    }
+    return promovidas;
+  }
+
   private async gravarODia(cfg: Config, contaId: string, agora: Date): Promise<number> {
     // Janela: a HORA configurada inteira (o cron tem 6 batidas nela). Se a
     // primeira falhar (deploy no minuto), a seguinte cobre — a idempotência
@@ -281,7 +323,12 @@ export class ConferenciaDiariaService {
 
     const dia = inicioDoDiaData(agora);
     const jaRodou = await this.prisma.conferenciaDiaria.count({ where: { dia } });
-    if (jaRodou > 0) return 0;
+    if (jaRodou > 0) {
+      // O dia já foi gravado — mas talvez em SOMBRA, e a empresa ligou o envio
+      // depois (dentro da hora do job). Sem isto o envio só valeria amanhã.
+      await this.promoverSombraDoDia(cfg, dia, agora);
+      return 0;
+    }
 
     const itens = await this.calcular(cfg, agora);
     if (itens.length === 0) return 0;

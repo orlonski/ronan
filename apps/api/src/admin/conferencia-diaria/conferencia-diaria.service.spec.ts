@@ -54,6 +54,7 @@ function montar(
     jaRodou?: number;
     pendentes?: Record<string, unknown>[];
     candidatosLembrete?: Record<string, unknown>[];
+    sombra?: Record<string, unknown>[];
     envioResultado?: Record<string, unknown>;
     sugestao?: Record<string, unknown> | null;
     lancouDepois?: boolean;
@@ -66,6 +67,7 @@ function montar(
   const findMany = vi.fn(async (a: { where: { estado?: string } }) => {
     if (a.where.estado === "PENDENTE") return opts.pendentes ?? [];
     if (a.where.estado === "ENVIADA") return opts.candidatosLembrete ?? [];
+    if (a.where.estado === "SOMBRA") return opts.sombra ?? [];
     return [];
   });
   const prisma = {
@@ -170,6 +172,41 @@ describe("modo sombra x enviando", () => {
     const calcular = vi.spyOn(t.svc as never, "calcular");
     await t.svc.rodarDaVez("c1", AGORA);
     expect(calcular).not.toHaveBeenCalled();
+  });
+
+  it("envio ligado DEPOIS da sombra do dia: quem ainda deve ser perguntado vira PENDENTE; quem lançou nesse meio tempo continua em SOMBRA", async () => {
+    const t = montar({
+      jaRodou: 2,
+      sombra: [
+        { id: "l1", motoristaId: "a", snapshot: { nadaEnviado: true, semEnvioPorque: "modo sombra", evidencias: EVID } },
+        { id: "l2", motoristaId: "b", snapshot: { nadaEnviado: true, semEnvioPorque: "modo sombra", evidencias: EVID } },
+      ],
+    });
+    vi.spyOn(t.svc as never, "calcular").mockResolvedValue([
+      item("a"),
+      item("b", { deveriaPerguntar: false }),
+    ] as never);
+    await t.svc.rodarDaVez("c1", AGORA);
+    const chamadas = t.update.mock.calls.map(
+      (c) => c[0] as { where: { id: string }; data: { estado: string; snapshot: Record<string, unknown> } },
+    );
+    const promovidas = chamadas.filter((c) => c.data.estado === "PENDENTE");
+    expect(promovidas.map((c) => c.where.id)).toEqual(["l1"]);
+    expect(promovidas[0]!.data.snapshot).toMatchObject({ nadaEnviado: false, promovidaDeSombra: true });
+    expect(promovidas[0]!.data.snapshot).not.toHaveProperty("semEnvioPorque");
+    expect(t.createMany).not.toHaveBeenCalled();
+  });
+
+  it("sombra do dia NÃO é promovida se o modo continua SOMBRA", async () => {
+    const t = montar({
+      cfg: { modo: "SOMBRA" },
+      jaRodou: 1,
+      sombra: [{ id: "l1", motoristaId: "a", snapshot: {} }],
+    });
+    const calcular = vi.spyOn(t.svc as never, "calcular");
+    await t.svc.rodarDaVez("c1", AGORA);
+    expect(calcular).not.toHaveBeenCalled();
+    expect(t.update).not.toHaveBeenCalled();
   });
 
   it("quem NÃO tem canal (parou, inalcançável) é registrado como SUPRIMIDA com a marca, nunca perguntado", async () => {
