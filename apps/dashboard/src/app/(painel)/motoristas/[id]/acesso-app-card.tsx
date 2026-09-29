@@ -170,7 +170,7 @@ export function AcessoAppCard(alvo: AlvoAcesso) {
       ) : (
         <p className="mt-4 text-xs text-muted-foreground">
           {ehMotorista
-            ? "Nesta empresa os acessos ainda são ligados na ficha: são as chavinhas mais abaixo."
+            ? "Nesta empresa os acessos ainda são ligados ao editar o motorista: são as chavinhas de “Acessos do app”."
             : "Nesta empresa quem é registrado recebe o ponto."}
         </p>
       )}

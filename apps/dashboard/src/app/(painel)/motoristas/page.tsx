@@ -234,7 +234,13 @@ export default function MotoristasPage() {
         header: ({ column }) => <DataTableColumnHeader column={column} title="Nome" />,
         cell: ({ row }) => (
           <span className="flex items-center gap-2">
-            <span className="font-medium">{row.original.nome}</span>
+            <Link
+              href={`/motoristas/${row.original.id}`}
+              className="font-medium hover:underline"
+              title="Abrir a ficha"
+            >
+              {row.original.nome}
+            </Link>
           </span>
         ),
       },
@@ -447,7 +453,7 @@ export default function MotoristasPage() {
               </DocumentosDrawerButton>
             </Permitido>
             <Permitido chave="motoristas.editar">
-              <Link href={`/motoristas/${row.original.id}`}>
+              <Link href={`/motoristas/${row.original.id}/editar`}>
                 <Button variant="ghost" size="icon" title="Editar">
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -648,7 +654,13 @@ export default function MotoristasPage() {
               <div className="min-w-0 space-y-2">
                 <div className="flex items-center gap-2 text-sm">
                   <HardHat className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate font-medium">{m.nome}</span>
+                  <Link
+                    href={`/motoristas/${m.id}`}
+                    className="truncate font-medium hover:underline"
+                    title="Abrir a ficha"
+                  >
+                    {m.nome}
+                  </Link>
                   {m.aceite === "ACEITO" ? (
                     <StatusCadastroBadge status={m.status} />
                   ) : (
@@ -727,7 +739,7 @@ export default function MotoristasPage() {
                   </DocumentosDrawerButton>
                 </Permitido>
                 <Permitido chave="motoristas.editar">
-                  <Link href={`/motoristas/${m.id}`}>
+                  <Link href={`/motoristas/${m.id}/editar`}>
                     <Button variant="ghost" size="icon" title="Editar">
                       <Pencil className="h-4 w-4" />
                     </Button>
