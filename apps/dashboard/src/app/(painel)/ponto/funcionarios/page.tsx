@@ -22,6 +22,8 @@ import { EstadoVazio } from "@/components/estado-vazio";
 import { apiBaseUrl, fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { hojeSP } from "@/lib/datetime-br";
 import { usePermissoes } from "@/lib/permissoes";
+import { MotoristaCombobox } from "@/components/fk-comboboxes";
+import { maskCpf } from "../../motoristas/_components/motorista-form";
 import { AcessoAppCard } from "../../motoristas/[id]/acesso-app-card";
 import { DocumentosDoFuncionario } from "./documentos-funcionario";
 import { ComecarPonto, PATH, PrecisaFundamento, useConfigPonto } from "../_lib";
@@ -103,7 +105,7 @@ function Conteudo() {
   const [vendoAcesso, setVendoAcesso] = useState<Funcionario | null>(null);
   const [vendoDocs, setVendoDocs] = useState<Funcionario | null>(null);
   const config = useConfigPonto();
-  const [prefill, setPrefill] = useState<{ nome: string; cpf: string } | null>(null);
+  const [prefill, setPrefill] = useState<{ id: string; nome: string; cpf: string } | null>(null);
 
   // Vindo da ficha do motorista ("Registrar pra bater ponto"): abre a
   // contratação já com nome e CPF dele. Só o id viaja na URL — CPF em query
@@ -115,7 +117,7 @@ function Conteudo() {
     window.history.replaceState(null, "", "/ponto/funcionarios");
     fetchApi<{ nome: string; cpf: string }>(`/admin/motoristas/${id}`, { token })
       .then((m) => {
-        setPrefill({ nome: m.nome, cpf: m.cpf });
+        setPrefill({ id, nome: m.nome, cpf: m.cpf });
         setNovo(true);
       })
       .catch(() => toast.error("Não consegui abrir os dados do motorista."));
@@ -178,7 +180,7 @@ function Conteudo() {
                   {f.nome}
                 </Link>
                 <span className="block text-xs text-muted-foreground">
-                  {f.cargo ?? "sem cargo"} · CPF {f.cpf}
+                  {f.cargo ?? "sem cargo"} · CPF {maskCpf(f.cpf)}
                   {f.matricula ? ` · matrícula ${f.matricula}` : ""}
                 </span>
               </div>
@@ -337,7 +339,7 @@ function Importar() {
                 <div className="max-h-48 overflow-y-auto rounded border p-2">
                   {previa.criar.map((l) => (
                     <div key={l.linha} className="border-b py-1 last:border-0">
-                      {l.nome} · {l.cpf}
+                      {l.nome} · {maskCpf(l.cpf)}
                       {l.jornada ? ` · ${l.jornada}` : " · sem jornada"}
                     </div>
                   ))}
@@ -381,10 +383,14 @@ function DialogContratar({
   inicial,
 }: {
   onFechar: () => void;
-  inicial?: { nome: string; cpf: string } | null;
+  inicial?: { id?: string; nome: string; cpf: string } | null;
 }) {
   const token = useAuthToken();
   const qc = useQueryClient();
+  // Motorista já cadastrado: nome e CPF vêm do cadastro, ninguém digita de
+  // novo. Digitar só faz sentido pra quem NÃO dirige (mecânico, escritório) e
+  // não tem cadastro de motorista.
+  const [motoristaId, setMotoristaId] = useState<string | undefined>(inicial?.id);
   const [form, setForm] = useState({
     nome: inicial?.nome ?? "",
     cpf: inicial?.cpf ?? "",
@@ -432,27 +438,53 @@ function DialogContratar({
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <Label htmlFor="func-nome">Nome completo</Label>
-            <Input
-              id="func-nome"
-              value={form.nome}
-              onChange={(e) => setForm({ ...form, nome: e.target.value })}
+            <Label>Quem vai bater ponto?</Label>
+            <MotoristaCombobox
+              triggerClassName="w-full"
+              value={motoristaId}
+              initialOption={
+                inicial?.id ? { value: inicial.id, label: inicial.nome } : undefined
+              }
+              placeholder="Buscar motorista já cadastrado…"
+              onChange={(id) => {
+                setMotoristaId(id);
+                if (!id) return setForm((f) => ({ ...f, nome: "", cpf: "" }));
+                fetchApi<{ nome: string; cpf: string }>(`/admin/motoristas/${id}`, { token })
+                  .then((m) => setForm((f) => ({ ...f, nome: m.nome, cpf: m.cpf })))
+                  .catch(() => toast.error("Não consegui abrir os dados do motorista."));
+              }}
             />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Se ele já dirige, escolha aqui: nome e CPF vêm do cadastro. Se não dirige (mecânico,
+              escritório…), deixe em branco e preencha abaixo.
+            </p>
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
+          {!motoristaId && (
             <div>
-              <Label htmlFor="func-cpf">CPF</Label>
+              <Label htmlFor="func-nome">Nome completo</Label>
               <Input
-                id="func-cpf"
-                inputMode="numeric"
-                value={form.cpf}
-                onChange={(e) => setForm({ ...form, cpf: e.target.value })}
+                id="func-nome"
+                value={form.nome}
+                onChange={(e) => setForm({ ...form, nome: e.target.value })}
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                É por ele que o aplicativo reconhece a pessoa — e é o que impede a mesma pessoa
-                estar como parceiro autônomo ao mesmo tempo.
-              </p>
             </div>
+          )}
+          <div className="grid gap-3 md:grid-cols-2">
+            {!motoristaId && (
+              <div>
+                <Label htmlFor="func-cpf">CPF</Label>
+                <Input
+                  id="func-cpf"
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
+                  value={maskCpf(form.cpf)}
+                  onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  É por ele que o aplicativo reconhece a pessoa.
+                </p>
+              </div>
+            )}
             <div>
               <Label htmlFor="func-admissao">Admitido em</Label>
               <Input

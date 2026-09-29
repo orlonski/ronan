@@ -124,7 +124,7 @@ function parseValorBR(v: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function maskCpf(input: string): string {
+export function maskCpf(input: string): string {
   const d = cpfDigits(input).slice(0, 11);
   if (d.length <= 3) return d;
   if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
