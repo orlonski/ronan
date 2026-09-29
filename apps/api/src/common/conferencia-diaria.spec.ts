@@ -514,3 +514,59 @@ describe("Zod da janela de atividade", () => {
     expect(AtualizarConfigConferenciaDiariaSchema.safeParse({}).success).toBe(true);
   });
 });
+
+describe("limites de envio da conferência (tolerância, janela do lembrete, reenvios)", () => {
+  const base = {
+    horaEnvio: 8,
+    diasDoJob: [1, 2, 3, 4, 5],
+    regra: "SEM_VIAGEM_NO_DIA_ANTERIOR" as const,
+    diasSemViagem: 2,
+    diasConsiderados: [1, 2, 3, 4, 5],
+    ignorarFeriados: true,
+    incluirQueNuncaLancou: true,
+    intervaloMinimoDias: 3,
+    maxPerguntasPorSemana: 3,
+  };
+  const padroes = { horasToleranciaEnvio: 3, lembreteHoraMin: 7, lembreteHoraMax: 21, reenviar: true };
+
+  it("com os padrões o texto da regra em vigor é idêntico ao de antes (campos ausentes ou explícitos)", () => {
+    const antes = descreverRegraConferencia(base);
+    expect(descreverRegraConferencia({ ...base, ...padroes })).toBe(antes);
+    expect(descreverRegraConferencia({ ...base, ...padroes, reenviar: false })).toBe(antes);
+  });
+  it("tolerância diferente do padrão entra no texto (singular, plural e zero)", () => {
+    expect(descreverRegraConferencia({ ...base, horasToleranciaEnvio: 1 })).toContain(
+      "Se a pergunta não sair até 1 hora depois, é cancelada.",
+    );
+    expect(descreverRegraConferencia({ ...base, horasToleranciaEnvio: 5 })).toContain(
+      "Se a pergunta não sair até 5 horas depois, é cancelada.",
+    );
+    expect(descreverRegraConferencia({ ...base, horasToleranciaEnvio: 0 })).toContain("não sair na hora do horário");
+  });
+  it("janela do lembrete só aparece com o lembrete ligado e fora do padrão", () => {
+    const c = { ...base, lembreteHoraMin: 9, lembreteHoraMax: 18 };
+    expect(descreverRegraConferencia({ ...c, reenviar: true })).toContain("Lembrete só entre 9h e 18h.");
+    expect(descreverRegraConferencia({ ...c, reenviar: false })).not.toContain("Lembrete só entre");
+  });
+
+  const ok = (v: Record<string, unknown>) => AtualizarConfigConferenciaDiariaSchema.safeParse(v);
+  it("tolerância aceita 0 a 12 e recusa fora", () => {
+    for (const v of [0, 1, 12]) expect(ok({ horasToleranciaEnvio: v }).success, String(v)).toBe(true);
+    for (const v of [-1, 13, 2.5, "3"]) expect(ok({ horasToleranciaEnvio: v }).success, String(v)).toBe(false);
+  });
+  it("limite de reenvios aceita 1 a 50 e recusa fora", () => {
+    for (const v of [1, 5, 50]) expect(ok({ maxReenviosPorPergunta: v }).success, String(v)).toBe(true);
+    for (const v of [0, 51, 1.5]) expect(ok({ maxReenviosPorPergunta: v }).success, String(v)).toBe(false);
+  });
+  it("hora do lembrete: min 0-23, max 1-24 e min < max", () => {
+    expect(ok({ lembreteHoraMin: 0, lembreteHoraMax: 24 }).success).toBe(true);
+    expect(ok({ lembreteHoraMin: 24 }).success).toBe(false);
+    expect(ok({ lembreteHoraMax: 0 }).success).toBe(false);
+    expect(ok({ lembreteHoraMax: 25 }).success).toBe(false);
+    const igual = ok({ lembreteHoraMin: 9, lembreteHoraMax: 9 });
+    expect(igual.success).toBe(false);
+    expect(!igual.success && igual.error.issues[0]!.message).toMatch(/depois da hora inicial/);
+    expect(ok({ lembreteHoraMin: 18, lembreteHoraMax: 9 }).success).toBe(false);
+    expect(ok({ lembreteHoraMin: 9, lembreteHoraMax: 18 }).success).toBe(true);
+  });
+});

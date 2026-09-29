@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { comConta } from "../../common/conta/conta-context";
-import { ConferenciaDiariaService, MAX_REENVIOS_POR_LINHA } from "./conferencia-diaria.service";
+import { PADRAO_MAX_REENVIOS_POR_PERGUNTA } from "@ronan/shared-types";
+import { ConferenciaDiariaService } from "./conferencia-diaria.service";
 
 // 28/09/2026 é segunda-feira. 08:10 em Brasília = 11:10Z.
 const AGORA = new Date("2026-09-28T11:10:00Z");
@@ -33,6 +34,10 @@ const CFG = {
   suprimirResumoQuemRecebeuPergunta: true,
   mensagensParaSuspeitar: 3,
   diasParaSuspeitar: 7,
+  horasToleranciaEnvio: 3,
+  lembreteHoraMin: 7,
+  lembreteHoraMax: 21,
+  maxReenviosPorPergunta: 5,
 };
 
 const EVID = { hoje: "2026-09-28", diasEsperadosVerificados: ["2026-09-25"], ultimoDiaComViagem: "2026-09-20", nuncaLancou: false };
@@ -326,6 +331,39 @@ describe("envio da pergunta", () => {
     expect(t.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ estado: "FALHOU" }) }));
   });
 
+  describe("tolerância de envio configurável", () => {
+    // 12:00 em Brasília = 3h depois das 08h; 11:00 = 3h... horas locais: 15Z=12h, 12Z=09h, 11:00Z=08h
+    const em = (hLocal: number) => new Date(`2026-09-28T${String(hLocal + 3).padStart(2, "0")}:00:00Z`);
+    it("tolerância 1h: às 10h já vira FALHOU; às 09h ainda envia", async () => {
+      const t = montar({ cfg: { horasToleranciaEnvio: 1 }, pendentes: [pend("a")] });
+      await t.svc.enviarPendentes(t.cfg as never, em(10));
+      expect(t.tentarEnviar).not.toHaveBeenCalled();
+      expect(t.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ estado: "FALHOU" }) }));
+      const t2 = montar({ cfg: { horasToleranciaEnvio: 1 }, pendentes: [pend("a")] });
+      expect(await t2.svc.enviarPendentes(t2.cfg as never, em(9))).toBe(1);
+    });
+    it("tolerância 3h (padrão): às 11h ainda envia, às 12h vira FALHOU", async () => {
+      const t = montar({ pendentes: [pend("a")] });
+      expect(await t.svc.enviarPendentes(t.cfg as never, em(11))).toBe(1);
+      const t2 = montar({ pendentes: [pend("a")] });
+      await t2.svc.enviarPendentes(t2.cfg as never, em(12));
+      expect(t2.tentarEnviar).not.toHaveBeenCalled();
+    });
+    it("tolerância 0: só na hora cheia do job; um minuto depois da hora seguinte já falha", async () => {
+      const t = montar({ cfg: { horasToleranciaEnvio: 0 }, pendentes: [pend("a")] });
+      expect(await t.svc.enviarPendentes(t.cfg as never, em(8))).toBe(1);
+      const t2 = montar({ cfg: { horasToleranciaEnvio: 0 }, pendentes: [pend("a")] });
+      await t2.svc.enviarPendentes(t2.cfg as never, em(9));
+      expect(t2.tentarEnviar).not.toHaveBeenCalled();
+      expect(t2.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ estado: "FALHOU" }) }));
+    });
+    it("config sem o campo (linha antiga/mock) cai no padrão de 3h", async () => {
+      const { horasToleranciaEnvio: _h, ...semCampo } = CFG;
+      const t = montar({ pendentes: [pend("a")] });
+      expect(await t.svc.enviarPendentes(semCampo as never, em(11))).toBe(1);
+    });
+  });
+
   it("modo SOMBRA nunca envia, mesmo com linhas PENDENTE de um dia em que estava ENVIANDO", async () => {
     const t = montar({ cfg: { modo: "SOMBRA" }, pendentes: [pend("a")] });
     expect(await t.svc.enviarPendentes({ ...t.cfg, modo: "SOMBRA" } as never, AGORA)).toBe(0);
@@ -385,6 +423,30 @@ describe("lembrete e expiração", () => {
     const t = montar({ candidatosLembrete: [enviada("a", 5)], lancouDepois: true });
     const r = await t.svc.lembrarEExpirar(cfg as never, AGORA);
     expect(r.lembretes).toBe(0);
+  });
+
+  describe("janela do lembrete configurável", () => {
+    const local = (h: number) => new Date(`2026-09-28T${String(h + 3).padStart(2, "0")}:00:00Z`);
+    it("janela 9h-18h: às 8h não sai, às 10h sai, às 19h não sai", async () => {
+      const c = { ...cfg, lembreteHoraMin: 9, lembreteHoraMax: 18 };
+      for (const [h, esperado] of [[8, 0], [10, 1], [19, 0]] as const) {
+        const t = montar({ candidatosLembrete: [enviada("a", 5)] });
+        const r = await t.svc.lembrarEExpirar(c as never, local(h));
+        expect(r.lembretes, `hora ${h}`).toBe(esperado);
+      }
+    });
+    it("janela ampliada 5h-23h deixa sair às 6h (fora do padrão 7-21)", async () => {
+      const t = montar({ candidatosLembrete: [enviada("a", 5)] });
+      const r = await t.svc.lembrarEExpirar({ ...cfg, lembreteHoraMin: 5, lembreteHoraMax: 23 } as never, local(6));
+      expect(r.lembretes).toBe(1);
+    });
+    it("limites da janela são inclusivos (hora min e hora max)", async () => {
+      const c = { ...cfg, lembreteHoraMin: 9, lembreteHoraMax: 18 };
+      for (const h of [9, 18]) {
+        const t = montar({ candidatosLembrete: [enviada("a", 5)] });
+        expect((await t.svc.lembrarEExpirar(c as never, local(h))).lembretes, `hora ${h}`).toBe(1);
+      }
+    });
   });
 
   it("de madrugada não manda lembrete", async () => {
@@ -588,9 +650,19 @@ describe("reenviar a pergunta de hoje", () => {
   });
 
   it("passou do limite de reenvios do dia => 409", async () => {
-    const t = tc({}, linhaHoje({ reenvios: MAX_REENVIOS_POR_LINHA }));
+    const t = tc({}, linhaHoje({ reenvios: PADRAO_MAX_REENVIOS_POR_PERGUNTA }));
     await expect(comConta("c1", () => t.svc.reenviarPerguntaDeHoje("m1", "u1", HOJE))).rejects.toThrow(/reenviada/);
     expect(t.tentarEnviar).not.toHaveBeenCalled();
+  });
+
+  it("limite de reenvios da config: 2 barra no 2º e a mensagem cita 2; 5 deixa passar o mesmo caso", async () => {
+    const t = tc({ cfg: { maxReenviosPorPergunta: 2 } }, linhaHoje({ reenvios: 2 }));
+    await expect(comConta("c1", () => t.svc.reenviarPerguntaDeHoje("m1", "u1", HOJE))).rejects.toThrow(/reenviada 2 vezes/);
+    expect(t.tentarEnviar).not.toHaveBeenCalled();
+    const t1 = tc({ cfg: { maxReenviosPorPergunta: 2 } }, linhaHoje({ reenvios: 1 }));
+    expect(await comConta("c1", () => t1.svc.reenviarPerguntaDeHoje("m1", "u1", HOJE))).toMatchObject({ enviado: true, reenvios: 2 });
+    const t5 = tc({ cfg: { maxReenviosPorPergunta: 5 } }, linhaHoje({ reenvios: 2 }));
+    expect(await comConta("c1", () => t5.svc.reenviarPerguntaDeHoje("m1", "u1", HOJE))).toMatchObject({ enviado: true, reenvios: 3 });
   });
 
   it("respeita o teto por hora", async () => {
@@ -628,6 +700,22 @@ describe("enviar pergunta de teste (unidade)", () => {
   }
   const rodar = (t: ReturnType<typeof tt>) => comConta("c1", () => t.svc.enviarPerguntaDeTeste("m1", "u1", AGORA_T));
 
+  it("limite de reenvios da config vale no teste manual: 2 barra e cita 2; 5 deixa passar", async () => {
+    const linha = { id: "L1", contaId: "c1", estado: "ENVIADA", reenvios: 2, snapshot: {}, dia: DIA };
+    const t = tt({ cfg: { maxReenviosPorPergunta: 2 } }, mot(), linha);
+    await expect(rodar(t)).rejects.toThrow(/enviada 2 vezes/);
+    expect(t.updateMany).not.toHaveBeenCalled();
+    const t5 = tt({ cfg: { maxReenviosPorPergunta: 5 } }, mot(), linha);
+    await expect(rodar(t5)).resolves.toMatchObject({ enviado: true });
+  });
+
+  it("empresa sem linha de config: o teste usa o padrão de 5 como fallback", async () => {
+    const linha = { id: "L1", contaId: "c1", estado: "ENVIADA", reenvios: 5, snapshot: {}, dia: DIA };
+    const t = tt({}, mot(), linha);
+    (t.prisma.configuracaoConferenciaDiaria as unknown as Record<string, unknown>).findFirst = vi.fn(async () => null);
+    await expect(rodar(t)).rejects.toThrow(/enviada 5 vezes/);
+  });
+
   it("respeita o teto global por hora (sem gravar nada)", async () => {
     const t = tt({ teto: 5, usadasNaHora: 5 });
     await expect(rodar(t)).rejects.toThrow(/limite de envios/);
@@ -646,7 +734,7 @@ describe("enviar pergunta de teste (unidade)", () => {
   });
 
   it("linha de hoje no limite de reenvios: 409 e nada é zerado", async () => {
-    const linha = { id: "L1", contaId: "c1", estado: "ENVIADA", reenvios: MAX_REENVIOS_POR_LINHA, snapshot: {}, dia: DIA };
+    const linha = { id: "L1", contaId: "c1", estado: "ENVIADA", reenvios: PADRAO_MAX_REENVIOS_POR_PERGUNTA, snapshot: {}, dia: DIA };
     const t = tt({}, mot(), linha);
     await expect(rodar(t)).rejects.toBeInstanceOf(ConflictException);
     expect(t.updateMany).not.toHaveBeenCalled();

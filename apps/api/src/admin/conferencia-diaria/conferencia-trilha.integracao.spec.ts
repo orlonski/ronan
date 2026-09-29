@@ -7,7 +7,8 @@ import { comConta, comoSistema } from "../../common/conta/conta-context";
 import { inicioDoDiaData } from "../../common/timezone";
 import type { PrismaService } from "../../prisma/prisma.service";
 import { ConferenciaDiariaController } from "./conferencia-diaria.controller";
-import { ConferenciaDiariaService, MAX_REENVIOS_POR_LINHA } from "./conferencia-diaria.service";
+import { PADRAO_MAX_REENVIOS_POR_PERGUNTA } from "@ronan/shared-types";
+import { ConferenciaDiariaService } from "./conferencia-diaria.service";
 import { ConferenciaRespostaService } from "./conferencia-resposta.service";
 
 /**
@@ -226,7 +227,7 @@ describe.skipIf(!URL_TESTE)("conferência diária — Prisma real", () => {
 
   it("limite por linha, SUPRIMIDA/SOMBRA e sem linha de hoje", async () => {
     const { motoristaId } = await novaLinha({ estado: "ENVIADA", wamid: "w", enviadaEm: AGORA });
-    for (let i = 0; i < MAX_REENVIOS_POR_LINHA; i++) {
+    for (let i = 0; i < PADRAO_MAX_REENVIOS_POR_PERGUNTA; i++) {
       envio.tentarEnviar.mockResolvedValueOnce({ enviado: true, idExterno: `wamid.R${i}` });
       await comConta(contaA, () => servico.reenviarPerguntaDeHoje(motoristaId, admin, AGORA));
     }

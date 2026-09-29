@@ -11,6 +11,10 @@ import { Prisma } from "@prisma/client";
 import {
   BOTOES_CONFERENCIA_DIARIA,
   descreverRegraConferencia,
+  PADRAO_HORAS_TOLERANCIA_ENVIO,
+  PADRAO_LEMBRETE_HORA_MAX,
+  PADRAO_LEMBRETE_HORA_MIN,
+  PADRAO_MAX_REENVIOS_POR_PERGUNTA,
   payloadConferencia,
   type AtualizarConfigConferenciaDiaria,
 } from "@ronan/shared-types";
@@ -84,13 +88,12 @@ const POR_QUE_SEM_CANAL: Record<SemCanal, string> = {
   INALCANCAVEL: "está com o WhatsApp sem entregar (número suspeito)",
 };
 
-/** Depois de quantas horas do horário configurado uma pergunta que não saiu deixa de sair. */
-const HORAS_DE_TOLERANCIA_ENVIO = 3;
-/** Lembrete só em horário de gente acordada. */
-const LEMBRETE_HORA_MIN = 7;
-const LEMBRETE_HORA_MAX = 21;
-/** Quantas vezes o painel pode reenviar a pergunta da MESMA linha (= do mesmo dia). Freio anti-abuso. */
-export const MAX_REENVIOS_POR_LINHA = 5;
+/**
+ * NOTA (não é constante de regra): a tolerância de envio, a janela do lembrete e o teto de
+ * reenvios/testes por linha vêm da config da empresa (`horasToleranciaEnvio`, `lembreteHoraMin/Max`,
+ * `maxReenviosPorPergunta`). Onde não há config carregada, valem os `PADRAO_*` do shared-types,
+ * que são só o seed inicial (os mesmos DEFAULT das colunas).
+ */
 /** O teto de envios por hora quando a linha da plataforma ainda não existe. */
 const TETO_HORA_PADRAO = 60;
 
@@ -155,6 +158,9 @@ export class ConferenciaDiariaService {
       throw new BadRequestException(
         "O lembrete tem que sair antes de a pergunta expirar: aumente as horas pra expirar ou diminua as horas pro lembrete.",
       );
+    }
+    if (depois.lembreteHoraMin >= depois.lembreteHoraMax) {
+      throw new BadRequestException("A hora final do lembrete tem que ser depois da hora inicial.");
     }
     if (depois.diasDoJob.length === 0 || depois.diasConsiderados.length === 0) {
       throw new BadRequestException("Escolha pelo menos um dia em que roda e um dia esperado de viagem.");
@@ -612,7 +618,7 @@ export class ConferenciaDiariaService {
     const pendentes = pendentesDoDia.filter((p) => !ehPerguntaDeTeste(p.snapshot));
     if (pendentes.length === 0) return 0;
 
-    if (hora > cfg.horaEnvio + HORAS_DE_TOLERANCIA_ENVIO) {
+    if (hora > cfg.horaEnvio + (cfg.horasToleranciaEnvio ?? PADRAO_HORAS_TOLERANCIA_ENVIO)) {
       await this.prisma.conferenciaDiaria.updateMany({
         where: { id: { in: pendentes.map((p) => p.id) }, estado: "PENDENTE" },
         data: { estado: "FALHOU", erroEnvio: "Não saiu no horário (teto de envios por hora ou Meta indisponível)." },
@@ -671,8 +677,8 @@ export class ConferenciaDiariaService {
     const hora = horaEmSaoPaulo(agora);
     if (
       !cfg.reenviar ||
-      hora < LEMBRETE_HORA_MIN ||
-      hora > LEMBRETE_HORA_MAX ||
+      hora < (cfg.lembreteHoraMin ?? PADRAO_LEMBRETE_HORA_MIN) ||
+      hora > (cfg.lembreteHoraMax ?? PADRAO_LEMBRETE_HORA_MAX) ||
       !(await this.podeEnviar(cfg)).ok
     ) {
       return { expiradas, lembretes };
@@ -759,7 +765,7 @@ export class ConferenciaDiariaService {
    * Só a linha de hoje (São Paulo). Exige conferência ativa em modo ENVIANDO, Meta
    * disponível e motorista com canal. O histórico não some: o que a linha tinha
    * (estado, resposta, wamid) vai pra trilha antes de zerar. Freios: teto por hora
-   * global, no máximo `MAX_REENVIOS_POR_LINHA` por linha e nunca SUPRIMIDA/SOMBRA
+   * global, no máximo `maxReenviosPorPergunta` (config da empresa) por linha e nunca SUPRIMIDA/SOMBRA
    * (a regra mandou não perguntar). Auditoria com quem pediu.
    */
   async reenviarPerguntaDeHoje(
@@ -824,9 +830,10 @@ export class ConferenciaDiariaService {
     if (semCanal || !m.telefone) {
       throw new ConflictException(`${m.nome} ${POR_QUE_SEM_CANAL[semCanal ?? "SEM_TELEFONE"]}. Não dá pra mandar a pergunta.`);
     }
-    if (linha.reenvios >= MAX_REENVIOS_POR_LINHA) {
+    const maxReenvios = cfg.maxReenviosPorPergunta ?? PADRAO_MAX_REENVIOS_POR_PERGUNTA;
+    if (linha.reenvios >= maxReenvios) {
       throw new ConflictException(
-        `A pergunta de hoje já foi reenviada ${MAX_REENVIOS_POR_LINHA} vezes. Volte amanhã: o limite é por dia.`,
+        `A pergunta de hoje já foi reenviada ${maxReenvios} vezes. Volte amanhã: o limite é por dia.`,
       );
     }
     if ((await this.vagasNestaHora(agora)) <= 0) {
@@ -916,7 +923,7 @@ export class ConferenciaDiariaService {
    *    o módulo `conferencia` é exigido pelo guard da rota;
    *  - se não existe a linha de hoje, cria SÓ a deste motorista (PENDENTE → ENVIADA),
    *    marcada `origem: TESTE_PAINEL` no snapshot. Se existe, zera e reenvia como
-   *    o reenvio, e conta como reenvio (teto `MAX_REENVIOS_POR_LINHA` por linha/dia);
+   *    o reenvio, e conta como reenvio (teto `maxReenviosPorPergunta` da config, por linha/dia);
    *  - linha SUPRIMIDA/SOMBRA não bloqueia (é teste) — vira teste e não conta como
    *    "pergunta feita"; o que a linha tinha vai pra trilha;
    *  - a linha de teste não entra no intervalo mínimo nem no máximo semanal;
@@ -986,17 +993,18 @@ export class ConferenciaDiariaService {
         dia: true,
       },
     });
-    if (linha && linha.reenvios >= MAX_REENVIOS_POR_LINHA) {
+    // Sem configuração a empresa nunca ligou a conferência: vale "ontem". Nada é criado aqui.
+    const cfg = await this.prisma.configuracaoConferenciaDiaria.findFirst();
+    const maxReenvios = cfg?.maxReenviosPorPergunta ?? PADRAO_MAX_REENVIOS_POR_PERGUNTA;
+    if (linha && linha.reenvios >= maxReenvios) {
       throw new ConflictException(
-        `A pergunta de hoje deste motorista já foi enviada ${MAX_REENVIOS_POR_LINHA} vezes além da primeira. Volte amanhã: o limite é por dia.`,
+        `A pergunta de hoje deste motorista já foi enviada ${maxReenvios} vezes além da primeira. Volte amanhã: o limite é por dia.`,
       );
     }
     if ((await this.vagasNestaHora(agora)) <= 0) {
       throw new ConflictException("O limite de envios por hora foi atingido. Tente de novo daqui a pouco.");
     }
 
-    // Sem configuração a empresa nunca ligou a conferência: vale "ontem". Nada é criado aqui.
-    const cfg = await this.prisma.configuracaoConferenciaDiaria.findFirst();
     const feriados = cfg?.ignorarFeriados ? await this.feriadosNacionais(dia) : null;
     const snapAtual = (linha?.snapshot ?? null) as { evidencias?: { diasEsperadosVerificados?: string[] } } | null;
     // O dia sobre o qual a linha de hoje já falava (o que o calendário mostra hoje).
@@ -1411,6 +1419,10 @@ export class ConferenciaDiariaService {
       lembreteNoApp: c.lembreteNoApp,
       lembreteParaQuem: c.lembreteParaQuem,
       diasParaLembreteNoApp: c.diasParaLembreteNoApp,
+      reenviar: c.reenviar,
+      horasToleranciaEnvio: c.horasToleranciaEnvio,
+      lembreteHoraMin: c.lembreteHoraMin,
+      lembreteHoraMax: c.lembreteHoraMax,
     });
   }
 

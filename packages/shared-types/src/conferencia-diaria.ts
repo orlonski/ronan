@@ -156,6 +156,24 @@ const listaDeDias = (nome: string) =>
 export const JANELA_ATIVIDADE_VALIDACAO_MIN_DIAS = 7;
 export const JANELA_ATIVIDADE_VALIDACAO_MAX_DIAS = 365;
 
+/**
+ * PADRÕES INICIAIS (seed) dos três limites de envio. São os valores que valiam quando
+ * eram fixos no código: a coluna nasce com eles e o serviço os usa só como fallback
+ * quando a empresa ainda não tem linha de configuração. Quem manda é a config da empresa.
+ */
+export const PADRAO_HORAS_TOLERANCIA_ENVIO = 3;
+export const PADRAO_LEMBRETE_HORA_MIN = 7;
+export const PADRAO_LEMBRETE_HORA_MAX = 21;
+export const PADRAO_MAX_REENVIOS_POR_PERGUNTA = 5;
+
+/** Limites TÉCNICOS de validação (não são regra de negócio): o que a tela e a API aceitam gravar. */
+export const TOLERANCIA_ENVIO_VALIDACAO_MIN_HORAS = 0;
+export const TOLERANCIA_ENVIO_VALIDACAO_MAX_HORAS = 12;
+export const LEMBRETE_HORA_VALIDACAO_MIN = 0;
+export const LEMBRETE_HORA_VALIDACAO_MAX = 24;
+export const MAX_REENVIOS_VALIDACAO_MIN = 1;
+export const MAX_REENVIOS_VALIDACAO_MAX = 50;
+
 /** A regra da conferência diária, como o painel edita. */
 export const AtualizarConfigConferenciaDiariaSchema = z
   .object({
@@ -193,9 +211,36 @@ export const AtualizarConfigConferenciaDiariaSchema = z
           message: `Use 0 (perguntar a todos) ou um valor entre ${JANELA_ATIVIDADE_VALIDACAO_MIN_DIAS} e ${JANELA_ATIVIDADE_VALIDACAO_MAX_DIAS} dias.`,
         },
       ),
+    horasToleranciaEnvio: z
+      .number({ invalid_type_error: "Informe um número de horas." })
+      .int("Informe um número inteiro de horas.")
+      .min(TOLERANCIA_ENVIO_VALIDACAO_MIN_HORAS, `Use de ${TOLERANCIA_ENVIO_VALIDACAO_MIN_HORAS} a ${TOLERANCIA_ENVIO_VALIDACAO_MAX_HORAS} horas.`)
+      .max(TOLERANCIA_ENVIO_VALIDACAO_MAX_HORAS, `Use de ${TOLERANCIA_ENVIO_VALIDACAO_MIN_HORAS} a ${TOLERANCIA_ENVIO_VALIDACAO_MAX_HORAS} horas.`),
+    lembreteHoraMin: z
+      .number({ invalid_type_error: "Informe uma hora." })
+      .int("Informe uma hora inteira.")
+      .min(0, "A hora inicial do lembrete vai de 0 a 23.")
+      .max(23, "A hora inicial do lembrete vai de 0 a 23."),
+    lembreteHoraMax: z
+      .number({ invalid_type_error: "Informe uma hora." })
+      .int("Informe uma hora inteira.")
+      .min(1, "A hora final do lembrete vai de 1 a 24.")
+      .max(LEMBRETE_HORA_VALIDACAO_MAX, "A hora final do lembrete vai de 1 a 24."),
+    maxReenviosPorPergunta: z
+      .number({ invalid_type_error: "Informe um número de reenvios." })
+      .int("Informe um número inteiro de reenvios.")
+      .min(MAX_REENVIOS_VALIDACAO_MIN, `Use de ${MAX_REENVIOS_VALIDACAO_MIN} a ${MAX_REENVIOS_VALIDACAO_MAX} reenvios por dia.`)
+      .max(MAX_REENVIOS_VALIDACAO_MAX, `Use de ${MAX_REENVIOS_VALIDACAO_MIN} a ${MAX_REENVIOS_VALIDACAO_MAX} reenvios por dia.`),
   })
   .partial()
   .superRefine((v, ctx) => {
+    if (v.lembreteHoraMin !== undefined && v.lembreteHoraMax !== undefined && v.lembreteHoraMin >= v.lembreteHoraMax) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["lembreteHoraMax"],
+        message: "A hora final do lembrete tem que ser depois da hora inicial.",
+      });
+    }
     if (v.diasDoJob && v.diasDoJob.length === 0) {
       ctx.addIssue({ code: "custom", path: ["diasDoJob"], message: "Escolha pelo menos um dia em que a conferência roda." });
     }
@@ -233,6 +278,10 @@ export const ConfigConferenciaDiaria = z.object({
   lembreteParaQuem: LembreteAppParaQuem,
   diasParaLembreteNoApp: z.number(),
   janelaAtividadeDias: z.number(),
+  horasToleranciaEnvio: z.number(),
+  lembreteHoraMin: z.number(),
+  lembreteHoraMax: z.number(),
+  maxReenviosPorPergunta: z.number(),
 });
 export type ConfigConferenciaDiaria = z.infer<typeof ConfigConferenciaDiaria>;
 
@@ -259,6 +308,11 @@ export function descreverRegraConferencia(cfg: {
   diasParaLembreteNoApp?: number;
   /** Ausente ou 0 = todos são perguntados, por mais parados que estejam. */
   janelaAtividadeDias?: number;
+  /** Ausentes = padrão inicial (não entram no texto). Só o que difere do padrão é dito. */
+  reenviar?: boolean;
+  horasToleranciaEnvio?: number;
+  lembreteHoraMin?: number;
+  lembreteHoraMax?: number;
 }): string {
   const hora = `${String(cfg.horaEnvio).padStart(2, "0")}:00`;
   const quando = `${prefixoDias(cfg.diasDoJob)}, às ${hora}`;
@@ -277,7 +331,20 @@ export function descreverRegraConferencia(cfg: {
     janela > 0
       ? ` Só recebe a pergunta quem lançou viagem nos últimos ${janela} dias; quem está parado há mais tempo não recebe mensagem e aparece numa lista para o escritório decidir.`
       : "";
-  const base = `${quando}, o sistema pergunta ao motorista que ${alvo}. O dia de hoje nunca conta. ${nunca}${atividade} ${freq}`;
+  const tol = cfg.horasToleranciaEnvio ?? PADRAO_HORAS_TOLERANCIA_ENVIO;
+  const tolerancia =
+    tol !== PADRAO_HORAS_TOLERANCIA_ENVIO
+      ? tol === 0
+        ? " Se a pergunta não sair na hora do horário, é cancelada."
+        : ` Se a pergunta não sair até ${tol} ${tol === 1 ? "hora" : "horas"} depois, é cancelada.`
+      : "";
+  const hMin = cfg.lembreteHoraMin ?? PADRAO_LEMBRETE_HORA_MIN;
+  const hMax = cfg.lembreteHoraMax ?? PADRAO_LEMBRETE_HORA_MAX;
+  const janelaLembrete =
+    cfg.reenviar && (hMin !== PADRAO_LEMBRETE_HORA_MIN || hMax !== PADRAO_LEMBRETE_HORA_MAX)
+      ? ` Lembrete só entre ${hMin}h e ${hMax}h.`
+      : "";
+  const base = `${quando}, o sistema pergunta ao motorista que ${alvo}. O dia de hoje nunca conta. ${nunca}${atividade} ${freq}${tolerancia}${janelaLembrete}`;
   if (!cfg.lembreteNoApp) return base;
   const n = Math.max(1, cfg.diasParaLembreteNoApp ?? 3);
   const quem =

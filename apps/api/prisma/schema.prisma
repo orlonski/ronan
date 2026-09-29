@@ -4951,6 +4951,13 @@ model ConfiguracaoConferenciaDiaria {
   diasParaLembreteNoApp Int                        @default(3)
   /// Só pergunta a quem lançou viagem nos últimos N dias. 0 = regra desligada (todos). Quem fica de fora vai pra uma lista do escritório, sem mensagem.
   janelaAtividadeDias   Int                        @default(0)
+  /// Pergunta pendente que não saiu até N horas depois da hora do job vira FALHOU (0 = só na hora cheia do job).
+  horasToleranciaEnvio   Int                       @default(3)
+  /// Janela de horas do dia (Brasília) em que o lembrete pode sair: de lembreteHoraMin até lembreteHoraMax (inclusive).
+  lembreteHoraMin        Int                       @default(7)
+  lembreteHoraMax        Int                       @default(21)
+  /// Teto de reenvios/testes por pergunta por dia (vale pro reenvio e pra pergunta de teste do painel).
+  maxReenviosPorPergunta Int                       @default(5)
   alteradoEm            DateTime                   @updatedAt
   alteradoPor           User?                      @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId         String?

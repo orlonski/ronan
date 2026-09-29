@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import {
   MENSAGEM_AO_PARAR_PADRAO,
   JANELA_ATIVIDADE_VALIDACAO_MAX_DIAS,
+  TOLERANCIA_ENVIO_VALIDACAO_MAX_HORAS,
+  MAX_REENVIOS_VALIDACAO_MAX,
   descreverRegraConferencia,
   type ConfigConferenciaDiaria,
   type RegraConferenciaDiaria,
@@ -297,15 +299,52 @@ function Conteudo() {
             <Toggle value={form.reenviar} onChange={(v) => set("reenviar", v)} disabled={!podeEditar} />
           </Field>
           {form.reenviar && (
-            <Field label="Lembrar depois de quantas horas">
-              <NumInput value={form.horasParaLembrar} onChange={(v) => set("horasParaLembrar", v)} min={1} max={48} disabled={!podeEditar} />
-            </Field>
+            <>
+              <Field label="Lembrar depois de quantas horas">
+                <NumInput value={form.horasParaLembrar} onChange={(v) => set("horasParaLembrar", v)} min={1} max={48} disabled={!podeEditar} />
+              </Field>
+              <Field
+                label="Lembrete só entre (hora inicial e final)"
+                help="Fora desse intervalo o lembrete não sai. Horário de Brasília."
+              >
+                <div className="flex items-center gap-2">
+                  <NumInput value={form.lembreteHoraMin} onChange={(v) => set("lembreteHoraMin", v)} min={0} max={23} disabled={!podeEditar} />
+                  <span className="text-sm text-muted-foreground">h e</span>
+                  <NumInput value={form.lembreteHoraMax} onChange={(v) => set("lembreteHoraMax", v)} min={1} max={24} disabled={!podeEditar} />
+                  <span className="text-sm text-muted-foreground">h</span>
+                </div>
+              </Field>
+            </>
           )}
           <Field
             label="Dar a pergunta por encerrada depois de quantas horas"
             help="Se ele responder depois, a resposta ainda vale."
           >
             <NumInput value={form.horasParaExpirar} onChange={(v) => set("horasParaExpirar", v)} min={2} max={72} disabled={!podeEditar} />
+          </Field>
+          <Field
+            label="Cancelar a pergunta que não saiu depois de quantas horas"
+            help="Se a pergunta não saiu no horário (por exemplo, o WhatsApp ficou fora do ar), ela ainda pode sair até essa hora depois. Passou disso, é cancelada e não sai mais. 0 = só na hora marcada."
+          >
+            <NumInput
+              value={form.horasToleranciaEnvio}
+              onChange={(v) => set("horasToleranciaEnvio", v)}
+              min={0}
+              max={TOLERANCIA_ENVIO_VALIDACAO_MAX_HORAS}
+              disabled={!podeEditar}
+            />
+          </Field>
+          <Field
+            label="No máximo quantos reenvios ou testes por pergunta, por dia"
+            help="Vale para o botão de reenviar e para a pergunta de teste na ficha do parceiro. Amanhã o limite zera."
+          >
+            <NumInput
+              value={form.maxReenviosPorPergunta}
+              onChange={(v) => set("maxReenviosPorPergunta", v)}
+              min={1}
+              max={MAX_REENVIOS_VALIDACAO_MAX}
+              disabled={!podeEditar}
+            />
           </Field>
           <Field
             label="Resumo das 20h"

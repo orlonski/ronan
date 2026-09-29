@@ -11,7 +11,8 @@ import { comConta, comoSistema } from "../../common/conta/conta-context";
 import { inicioDoDiaData } from "../../common/timezone";
 import type { PrismaService } from "../../prisma/prisma.service";
 import { ConferenciaDiariaController } from "./conferencia-diaria.controller";
-import { ConferenciaDiariaService, MAX_REENVIOS_POR_LINHA } from "./conferencia-diaria.service";
+import { PADRAO_MAX_REENVIOS_POR_PERGUNTA } from "@ronan/shared-types";
+import { ConferenciaDiariaService } from "./conferencia-diaria.service";
 
 /**
  * Pergunta de TESTE da conferência diária, com Prisma REAL (banco descartável).
@@ -204,9 +205,9 @@ describe.skipIf(!URL_TESTE)("conferência diária: pergunta de teste (Prisma rea
     expect(l!.snapshot).toMatchObject({ origem: "TESTE_PAINEL", evidencias: { diasEsperadosVerificados: ["2026-09-25"] } });
     expect(l!.suprimidaPor).toBeNull();
 
-    for (let i = 1; i < MAX_REENVIOS_POR_LINHA; i++) await testar(contaComConfig, m.id);
+    for (let i = 1; i < PADRAO_MAX_REENVIOS_POR_PERGUNTA; i++) await testar(contaComConfig, m.id);
     await expect(testar(contaComConfig, m.id)).rejects.toThrow(/vezes/);
-    expect((await linhasDe(contaComConfig, m.id))[0]!.reenvios).toBe(MAX_REENVIOS_POR_LINHA);
+    expect((await linhasDe(contaComConfig, m.id))[0]!.reenvios).toBe(PADRAO_MAX_REENVIOS_POR_PERGUNTA);
   });
 
   it("(b3) a Meta recusa: a linha criada fica FALHOU com o motivo e a resposta diz que não saiu", async () => {
