@@ -11,7 +11,7 @@ import type { AcessoDaPessoa } from "../acesso-app-card";
 /**
  * EDITAR o motorista. A leitura (ficha, versão do app, calendário, acesso,
  * histórico) mora em `/motoristas/[id]`; aqui só se altera o cadastro.
- * Salvar ou cancelar volta pra ficha.
+ * Voltar, salvar e cancelar levam à listagem.
  */
 export default function EditarMotoristaPage({
   params,
@@ -35,7 +35,7 @@ function Conteudo({ id }: { id: string }) {
     <div className="space-y-6">
       <FormPageHeader
         title={item.data ? `Editar ${item.data.nome}` : "Editar motorista"}
-        backHref={`/motoristas/${id}` as Route}
+        backHref={"/motoristas" as Route}
       />
       {item.isLoading && (
         <p className="text-sm text-muted-foreground">Carregando…</p>
