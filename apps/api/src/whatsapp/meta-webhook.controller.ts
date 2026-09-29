@@ -24,6 +24,7 @@ import {
 } from "../admin/conferencia-diaria/conferencia-resposta.service";
 import { ErrorsService } from "../errors/errors.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { registrarStatusMetaNaConferencia } from "../common/conferencia-trilha";
 
 /**
  * Webhook da Cloud API da Meta. Controller SEPARADO do webhook do Evolution:
@@ -49,12 +50,17 @@ type TemplateStatus = {
   message_template_name?: string;
   message_template_language?: string;
   reason?: string;
+  /** `template_category_update`: a Meta reclassificou (ou vai reclassificar) o template. */
+  previous_category?: string;
+  new_category?: string;
+  correct_category?: string;
 };
 
 type ValueMeta = {
   statuses?: Array<{
     id?: string;
     status?: string;
+    timestamp?: string;
     errors?: Array<{ code?: number; title?: string; message?: string }>;
   }>;
   messages?: MensagemRecebida[];
@@ -178,6 +184,13 @@ export class MetaWebhookController {
           continue;
         }
 
+        // A Meta chama de `template_category_update` na doc e o campo também
+        // aparece como `message_template_category_update` em SDKs: aceita os dois.
+        if (change.field === "template_category_update" || change.field === "message_template_category_update") {
+          await this.registrarCategoriaTemplate(value);
+          continue;
+        }
+
         // Qualidade/limite do número e avisos da conta: é o que antecede uma
         // restrição de envio. Vai pro ErrorLog, que é a tela onde alguém olha.
         if (change.field === "phone_number_quality_update" || change.field === "account_update") {
@@ -255,6 +268,30 @@ export class MetaWebhookController {
   }
 
   /**
+   * A Meta reclassificou o template. UTILITY -> MARKETING é o que importa: passa
+   * a valer o limite de entregas de marketing por usuário (erro 131049) e a
+   * cobrança de marketing. Só esse caso (e o aviso prévio `correct_category`)
+   * vai pro ErrorLog; o resto é log.
+   */
+  private async registrarCategoriaTemplate(v: ValueMeta): Promise<void> {
+    const nome = v.message_template_name ?? "?";
+    const idioma = v.message_template_language ?? "?";
+    const antes = (v.previous_category ?? "").toUpperCase();
+    const depois = (v.new_category ?? v.correct_category ?? "").toUpperCase();
+    this.log.warn(`template "${nome}" (${idioma}): categoria ${antes || "?"} -> ${depois || "?"}`);
+    if (depois !== "MARKETING" || antes === "MARKETING") return;
+    try {
+      await this.errors.reportar({
+        origem: "api",
+        message: `Template do WhatsApp "${nome}" (${idioma}) virou MARKETING na Meta (era ${antes || "?"})`,
+        extra: { nome, idioma, antes, depois, aviso: v.new_category ? "reclassificado" : "reclassificação prevista", valor: v },
+      });
+    } catch (e) {
+      this.log.warn(`não deu pra registrar a mudança de categoria: ${(e as Error).message}`);
+    }
+  }
+
+  /**
    * `phone_number_quality_update` (qualidade/limite do número) e `account_update`
    * (restrição, banimento, revisão da conta). Moldado em `gravarStatusTemplate`:
    * vai pro `ErrorLog` e nunca derruba o webhook.
@@ -327,6 +364,19 @@ export class MetaWebhookController {
         this.log.warn(`não deu pra atualizar o alcance do número: ${(e as Error).message}`);
       }
     }
+
+    // Recibo da Meta na trilha da conferência (se o wamid for de uma pergunta ou
+    // lembrete). Nunca lança; o dedupe (wamid,status) mora no helper.
+    await comoSistema(() =>
+      registrarStatusMetaNaConferencia(this.prisma, {
+        wamid: s.id!,
+        status: s.status!,
+        codigo: erro?.code ?? null,
+        titulo: erro?.title ?? null,
+        mensagem: erro?.message ?? null,
+        timestamp: s.timestamp ?? null,
+      }),
+    );
 
     if (n.count === 0) {
       // Acontece de verdade: status de mensagem mandada antes desta versão, ou

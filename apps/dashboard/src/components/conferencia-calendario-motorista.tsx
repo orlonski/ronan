@@ -221,7 +221,28 @@ const EVENTO_ROTULO: Record<string, string> = {
   LEMBRETE: "Lembrete",
   EXPIRADA: "Expirou",
   REENVIO: "Reenvio pelo painel",
+  STATUS: "Recibo da Meta",
 };
+
+const STATUS_META_ROTULO: Record<string, string> = {
+  sent: "enviado",
+  delivered: "entregue",
+  read: "lido",
+  failed: "falhou",
+};
+
+/** "Meta: entregue" / "Meta: falhou (131049) — <título>". */
+export function rotuloEventoTrilha(e: { evento: string; detalhe: Record<string, unknown> }): string {
+  if (e.evento !== "STATUS") return EVENTO_ROTULO[e.evento] ?? e.evento;
+  const d = e.detalhe;
+  const status = String(d.status ?? "");
+  const nome = STATUS_META_ROTULO[status] ?? status;
+  const alvo = d.alvo === "LEMBRETE" ? " (lembrete)" : "";
+  if (status !== "failed") return `Meta: ${nome}${alvo}`;
+  const cod = d.codigo != null ? ` (${String(d.codigo)})` : "";
+  const titulo = typeof d.titulo === "string" && d.titulo ? ` — ${d.titulo}` : "";
+  return `Meta: ${nome}${cod}${titulo}${alvo}`;
+}
 
 /** Um valor da trilha em uma linha só, pra caber no print. */
 function valorCurto(v: unknown): string {
@@ -266,7 +287,7 @@ function DadosTecnicos({ t }: { t: DadosTecnicosConferencia }) {
             <li key={i} className="rounded border bg-muted/30 p-1.5">
               <p>
                 <span className="font-mono">{HORA_COMPLETA.format(new Date(e.em))}</span>{" "}
-                <span className="font-semibold">{EVENTO_ROTULO[e.evento] ?? e.evento}</span>
+                <span className="font-semibold">{rotuloEventoTrilha(e)}</span>
               </p>
               <p className="break-all font-mono text-[11px] text-muted-foreground">
                 {Object.entries(e.detalhe)

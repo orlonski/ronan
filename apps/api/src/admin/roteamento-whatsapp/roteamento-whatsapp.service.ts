@@ -23,6 +23,12 @@ import { MetaProvedor } from "../../whatsapp/envio/meta.provedor";
 const PADRAO: ProvedorWhatsapp = "meta";
 import { RoteamentoWhatsappService as Roteador } from "../../whatsapp/envio/roteamento.service";
 
+/** A categoria do catálogo na grafia da Meta. `servico` (janela de 24h) não tem template. */
+export function categoriaMetaEsperada(rota: string): string | null {
+  const c = ROTAS_WHATSAPP.find((r) => r.chave === rota)?.categoria;
+  return c === "utility" || c === "marketing" || c === "authentication" ? c.toUpperCase() : null;
+}
+
 @Injectable()
 export class AdminRoteamentoWhatsappService {
   constructor(
@@ -214,7 +220,7 @@ export class AdminRoteamentoWhatsappService {
   async templatesMeta(wabaId: string) {
     const r = (await this.meta.listarTemplates(wabaId)) as {
       ok?: boolean;
-      resposta?: { data?: { name: string; language: string; status: string }[] };
+      resposta?: { data?: { name: string; language: string; status: string; category?: string }[] };
     };
     const naMeta = r.resposta?.data ?? [];
     const esperados = Object.entries(TEMPLATES_WHATSAPP).map(([rota, def]) => {
@@ -233,6 +239,13 @@ export class AdminRoteamentoWhatsappService {
          * — e um segundo cadastro é recusado por nome duplicado.
          */
         status: achado?.status ?? null,
+        /**
+         * A categoria que a Meta deu ao template (UTILITY/MARKETING/AUTHENTICATION).
+         * Ela pode reclassificar sozinha; MARKETING traz limite de entregas por
+         * usuário (131049) e cobrança maior. `categoriaEsperada` é a do catálogo.
+         */
+        categoria: achado?.category ?? null,
+        categoriaEsperada: categoriaMetaEsperada(rota),
         bate: !!achado && achado.language === def!.idioma && achado.status === "APPROVED",
         /**
          * O prefixo a sugerir no campo de URL, pros templates que apontam pra

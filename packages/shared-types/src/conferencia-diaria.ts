@@ -314,8 +314,11 @@ export type CalendarioConferenciaQuery = z.infer<typeof CalendarioConferenciaQue
 export const EventoTrilhaConferencia = z.object({
   /** ISO 8601. */
   em: z.string(),
-  evento: z.enum(["ENVIO", "TOQUE", "IGNORADO", "RESPOSTA_GRAVADA", "LEMBRETE", "EXPIRADA", "REENVIO"]),
-  /** Id da linha, opção, origem, `context.id`, wamid, count, motivo… — o que couber ao evento. */
+  evento: z.enum(["ENVIO", "TOQUE", "IGNORADO", "RESPOSTA_GRAVADA", "LEMBRETE", "EXPIRADA", "REENVIO", "STATUS"]),
+  /**
+   * Id da linha, opção, origem, `context.id`, wamid, count, motivo… — o que couber ao evento.
+   * `STATUS` (recibo da Meta): `{ status, wamid, alvo: "PERGUNTA"|"LEMBRETE", codigo?, titulo?, mensagem?, metaEm? }`.
+   */
   detalhe: z.record(z.unknown()),
 });
 export type EventoTrilhaConferencia = z.infer<typeof EventoTrilhaConferencia>;

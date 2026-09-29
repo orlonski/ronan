@@ -1267,6 +1267,10 @@ type TemplateEsperado = {
   naMeta: string;
   /** Status cru da Meta: APPROVED, PENDING, REJECTED… `null` = não existe lá. */
   status: string | null;
+  /** Categoria que a Meta deu (UTILITY/MARKETING/AUTHENTICATION). A Meta pode reclassificar sozinha. */
+  categoria?: string | null;
+  /** A que o catálogo do código declara, na mesma grafia. */
+  categoriaEsperada?: string | null;
   bate: boolean;
   /**
    * O prefixo que o servidor sugere pro botão, quando o link volta pra nós.
@@ -1425,6 +1429,7 @@ function TemplatesMetaCard() {
               <TableHead>Mensagem</TableHead>
               <TableHead>O código espera</TableHead>
               <TableHead>Na Meta</TableHead>
+              <TableHead>Categoria</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -1438,6 +1443,22 @@ function TemplatesMetaCard() {
                     <span className="text-emerald-700 dark:text-emerald-400">{t.naMeta}</span>
                   ) : (
                     <span className="text-amber-700 dark:text-amber-400">{t.naMeta}</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-xs">
+                  {t.categoria ? (
+                    t.categoriaEsperada && t.categoria !== t.categoriaEsperada ? (
+                      <span
+                        className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200"
+                        title={`O código declara ${t.categoriaEsperada}. Categoria diferente muda limite de entregas e custo.`}
+                      >
+                        {t.categoria} (esperado {t.categoriaEsperada})
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">{t.categoria}</span>
+                    )
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
                 <TableCell className="text-right">

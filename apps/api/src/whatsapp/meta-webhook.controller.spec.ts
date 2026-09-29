@@ -28,15 +28,22 @@ function controller(
   const tratarMensagem = vi.fn(async (_m: unknown) => ({ tratada: false as const, motivo: "x" }));
   const aoEntregar = vi.fn(async (_t: string) => {});
   const aoFalhar = vi.fn(async (_t: string, _c: unknown) => true);
+  const confFindFirst = vi.fn(async (_a: unknown) => null as unknown);
+  const confUpdateMany = vi.fn(async (_a: unknown) => ({ count: 1 }));
+  const confRaw = vi.fn(async (..._a: unknown[]) => 1);
   const c = new MetaWebhookController(
     { get: (k: string) => env[k] } as unknown as ConfigService,
-    { whatsappMensagem: { updateMany, findFirst } } as unknown as PrismaService,
+    {
+      whatsappMensagem: { updateMany, findFirst },
+      conferenciaDiaria: { findFirst: confFindFirst, updateMany: confUpdateMany },
+      $executeRaw: confRaw,
+    } as unknown as PrismaService,
     { reportar } as unknown as ErrorsService,
     { repassar, configurado: () => true } as unknown as ChatwootRepasseService,
     { tratarMensagem } as unknown as ConferenciaRespostaService,
     { aoEntregar, aoFalhar } as unknown as ConferenciaAlcanceService,
   );
-  return { c, updateMany, reportar, repassar, tratarMensagem, aoEntregar, aoFalhar };
+  return { c, confFindFirst, confUpdateMany, confRaw, updateMany, reportar, repassar, tratarMensagem, aoEntregar, aoFalhar };
 }
 
 /** Monta o POST como a Meta monta: corpo cru + assinatura hex do HMAC dele. */
@@ -381,5 +388,44 @@ describe("avisos da conta (qualidade do número, restrição)", () => {
     await expect(
       k.c.receber(e.body as never, e.header, { rawBody: e.raw } as Request & { rawBody?: Buffer }),
     ).resolves.toBe("ok");
+  });
+});
+
+describe("recibo da Meta na conferência + categoria do template", () => {
+  const enviar = (c: MetaWebhookController, e: ReturnType<typeof evento>) =>
+    c.receber(e.body as never, e.header, { rawBody: e.raw } as Request & { rawBody?: Buffer });
+
+  it("status com wamid da conferência anexa o STATUS à trilha da linha (com o contaId dela)", async () => {
+    const { c, confFindFirst, confRaw } = controller();
+    confFindFirst.mockResolvedValueOnce({ id: "L1", contaId: "conta-A", trilha: [], wamid: "wamid.ABC", lembreteWamid: null });
+    await enviar(c, evento(STATUS({ status: "delivered", timestamp: "1790000000" })));
+    expect(confRaw).toHaveBeenCalledOnce();
+    const args = confRaw.mock.calls[0]!;
+    expect(args.slice(-2)).toEqual(["L1", "conta-A"]);
+    expect(JSON.parse(args[1] as string)).toMatchObject({ evento: "STATUS", detalhe: { status: "delivered", alvo: "PERGUNTA" } });
+  });
+
+  it("failed 131049 grava erroEnvio e devolve 200 mesmo se o wamid é desconhecido", async () => {
+    const { c, confFindFirst, confUpdateMany, confRaw } = controller();
+    const falha = { status: "failed", errors: [{ code: 131049, title: "Undeliverable", message: "marketing limit" }] };
+    confFindFirst.mockResolvedValueOnce({ id: "L1", contaId: "conta-A", trilha: [], wamid: "wamid.ABC", lembreteWamid: null });
+    await enviar(c, evento(STATUS(falha)));
+    expect(confUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "L1", contaId: "conta-A" } }));
+    confRaw.mockClear();
+    await expect(enviar(c, evento(STATUS(falha)))).resolves.toBe("ok");
+    expect(confRaw).not.toHaveBeenCalled();
+  });
+
+  it("template_category_update UTILITY -> MARKETING vai pro ErrorLog; o inverso não", async () => {
+    const { c, reportar } = controller();
+    const cat = (previous_category: string, new_category: string) => ({
+      entry: [{ changes: [{ field: "template_category_update", value: { message_template_name: "conferencia_diaria", message_template_language: "pt_BR", previous_category, new_category } }] }],
+    });
+    await enviar(c, evento(cat("UTILITY", "MARKETING")));
+    expect(reportar).toHaveBeenCalledOnce();
+    expect(reportar.mock.calls[0]![0].message).toContain("conferencia_diaria");
+    reportar.mockClear();
+    await enviar(c, evento(cat("MARKETING", "UTILITY")));
+    expect(reportar).not.toHaveBeenCalled();
   });
 });

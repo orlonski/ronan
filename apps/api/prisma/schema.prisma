@@ -4971,6 +4971,9 @@ model ConferenciaDiaria {
   @@unique([contaId, motoristaId, dia])
   @@index([contaId, dia])
   @@index([contaId, estado])
+  /// O webhook de status da Meta acha a linha pelo wamid (sem conta no contexto).
+  @@index([wamid])
+  @@index([lembreteWamid])
   @@map("conferencia_diaria")
 }
 
