@@ -34,6 +34,7 @@ import {
 import { Combobox } from "@/components/ui/combobox";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { AppVersaoCell, type AppVersaoInfo } from "@/components/app-versao-badge";
+import { LINHA_CLICAVEL_CLASSES, useLinhaClicavel } from "@/components/data-table/linha-clicavel";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource, useApiQuery } from "@/lib/client-api";
@@ -142,6 +143,7 @@ function AceiteBadge({ aceite }: { aceite: Motorista["aceite"] }) {
 
 export default function MotoristasPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
+  const linhaClicavel = useLinhaClicavel();
   const list = usePaginatedList<Motorista>(PATH, tableState);
   const update = useUpdateResource<{ ativo?: boolean }, Motorista>(PATH, PATH);
   const { viewMode, setViewMode } = useListViewMode("motoristas");
@@ -236,7 +238,7 @@ export default function MotoristasPage() {
           <span className="flex items-center gap-2">
             <Link
               href={`/motoristas/${row.original.id}`}
-              className="font-medium hover:underline"
+              className="rounded-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               title="Abrir a ficha"
             >
               {row.original.nome}
@@ -538,6 +540,7 @@ export default function MotoristasPage() {
         isError={list.isError}
         error={list.error}
         onRetry={() => void list.refetch()}
+        getRowHref={(m) => `/motoristas/${m.id}`}
         toolbar={
           <DataTableToolbar
             state={tableState}
@@ -633,7 +636,10 @@ export default function MotoristasPage() {
         }
         viewMode={viewMode}
         renderMobileCard={(m) => (
-          <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+          <Card
+            className={`${LINHA_CLICAVEL_CLASSES} overflow-hidden border-border/60 p-0 transition-all hover:border-primary/40 hover:bg-muted/30 hover:shadow-md`}
+            {...linhaClicavel(`/motoristas/${m.id}`)}
+          >
             <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
               <div className="flex items-center gap-3">
                 {podeLote && (
@@ -656,7 +662,7 @@ export default function MotoristasPage() {
                   <HardHat className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <Link
                     href={`/motoristas/${m.id}`}
-                    className="truncate font-medium hover:underline"
+                    className="truncate rounded-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     title="Abrir a ficha"
                   >
                     {m.nome}

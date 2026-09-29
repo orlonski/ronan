@@ -23,6 +23,7 @@ import { ErroCard, ErroEstado } from "@/components/erro-estado";
 import { temFiltroDoUsuario, type DataTableState } from "@/hooks/use-data-table-state";
 import type { Pagination } from "@/lib/client-api";
 import { DataTablePagination } from "./data-table-pagination";
+import { LINHA_CLICAVEL_CLASSES, useLinhaClicavel } from "./linha-clicavel";
 
 export type DataTableProps<T> = {
   columns: ColumnDef<T, unknown>[];
@@ -54,6 +55,12 @@ export type DataTableProps<T> = {
   isError?: boolean;
   error?: unknown;
   onRetry?: () => void;
+  /**
+   * Torna a LINHA inteira clicável (navega pra esse href). Controles internos
+   * (botões, links, switches, checkboxes) seguem funcionando sem navegar.
+   * Mantenha também um <a> real numa célula (teclado/nova aba). Opcional.
+   */
+  getRowHref?: (row: T) => string | undefined;
 };
 
 export function DataTable<T>({
@@ -70,7 +77,9 @@ export function DataTable<T>({
   isError,
   error,
   onRetry,
+  getRowHref,
 }: DataTableProps<T>) {
+  const linhaClicavel = useLinhaClicavel();
   const sorting: SortingState = React.useMemo(
     () => (state.sort ? [{ id: state.sort, desc: state.order === "desc" }] : []),
     [state.sort, state.order],
@@ -200,7 +209,11 @@ export function DataTable<T>({
             )}
             {!isLoading &&
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  className={getRowHref ? LINHA_CLICAVEL_CLASSES : undefined}
+                  {...(getRowHref ? linhaClicavel(getRowHref(row.original)) : {})}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
