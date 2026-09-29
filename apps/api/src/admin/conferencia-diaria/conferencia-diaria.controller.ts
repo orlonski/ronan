@@ -5,12 +5,14 @@ import {
   CalendarioConferenciaQuerySchema,
   DecidirSugestaoGestorSchema,
   DefinirRecebimentoConferenciaSchema,
+  PerguntaDeTesteSchema,
 } from "@ronan/shared-types";
 import type {
   AtualizarConfigConferenciaDiaria,
   CalendarioConferenciaQuery,
   DecidirSugestaoGestor,
   DefinirRecebimentoConferencia,
+  PerguntaDeTeste,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
@@ -134,14 +136,19 @@ export class ConferenciaDiariaController {
   /**
    * "Enviar pergunta de teste": manda a pergunta a ESTE motorista agora, sem
    * depender do job nem da regra. Não exige a conferência ligada; exige a Meta,
-   * o canal do motorista e o módulo. Sem corpo. Fora do escopo = 404.
+   * o canal do motorista e o módulo. Corpo opcional `{ dia }` ("Perguntar sobre este dia":
+   * passado, dentro da janela; senão 400). Sem corpo = último dia útil. Fora do escopo = 404.
    */
   @RequerPermissao("conferencia-diaria.decidir")
   @HttpCode(200)
   @Post("motoristas/:id/pergunta-de-teste")
-  async perguntaDeTeste(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+  async perguntaDeTeste(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthAdminUser,
+    @Body(new ZodValidationPipe(PerguntaDeTesteSchema.optional())) body?: PerguntaDeTeste,
+  ) {
     await this.motoristas.findOne(id, user.escopo);
-    return this.service.enviarPerguntaDeTeste(id, user.id);
+    return this.service.enviarPerguntaDeTeste(id, user.id, new Date(), body?.dia);
   }
 
   /**

@@ -39,7 +39,7 @@ import {
 } from "../../common/conferencia-diaria";
 import { montarCalendarioConferencia, ultimoDiaDoMes } from "../../common/conferencia-calendario";
 import { anexarTrilha } from "../../common/conferencia-trilha";
-import { diaDaPerguntaDeTeste, ehPerguntaDeTeste, mascararTelefone } from "../../common/conferencia-teste";
+import { diaDaPerguntaDeTeste, ehPerguntaDeTeste, mascararTelefone, motivoDiaDeTesteInvalido } from "../../common/conferencia-teste";
 import { MOTIVO_RELIGAR_MIN, ORIGEM_TESTE_PAINEL } from "@ronan/shared-types";
 import type {
   EstadoConferenciaMotorista,
@@ -894,6 +894,11 @@ export class ConferenciaDiariaService {
    *  - linha SUPRIMIDA/SOMBRA não bloqueia (é teste) — vira teste e não conta como
    *    "pergunta feita"; o que a linha tinha vai pra trilha;
    *  - a linha de teste não entra no intervalo mínimo nem no máximo semanal;
+   *  - com `diaEscolhido` a pergunta fala DAQUELE dia (a linha do job segue sendo a de
+   *    HOJE, por causa do @@unique [conta, motorista, dia]; o dia perguntado mora em
+   *    `evidencias.diasEsperadosVerificados`). Se a linha de hoje já falava de outro
+   *    dia, o dia antigo fica na trilha (`antes.diaPerguntado`) e em
+   *    `snapshot.diasPerguntadosAntes`: o calendário passa a mostrar o mais recente;
    *  - fail-closed: sem Meta, sem canal ou acima do teto por hora, recusa com motivo
    *    e não grava nada.
    */
@@ -901,7 +906,14 @@ export class ConferenciaDiariaService {
     motoristaId: string,
     usuarioId: string,
     agora: Date = new Date(),
+    /** "Perguntar sobre este dia": AAAA-MM-DD escolhido no calendário. Sem ele, o último dia útil. */
+    diaEscolhido?: string,
   ): Promise<ResultadoPerguntaDeTeste> {
+    // Fail-closed antes de qualquer consulta ou envio: dia inválido/hoje/futuro/velho demais = 400.
+    if (diaEscolhido != null) {
+      const invalido = motivoDiaDeTesteInvalido(diaEscolhido, hojeYmd(agora));
+      if (invalido) throw new BadRequestException(invalido);
+    }
     const m = await this.prisma.motorista.findFirst({
       where: { id: motoristaId },
       select: {
@@ -957,7 +969,14 @@ export class ConferenciaDiariaService {
     // Sem configuração a empresa nunca ligou a conferência: vale "ontem". Nada é criado aqui.
     const cfg = await this.prisma.configuracaoConferenciaDiaria.findFirst();
     const feriados = cfg?.ignorarFeriados ? await this.feriadosNacionais(dia) : null;
-    const diaPerguntado = diaDaPerguntaDeTeste(hoje, cfg, feriados);
+    const snapAtual = (linha?.snapshot ?? null) as { evidencias?: { diasEsperadosVerificados?: string[] } } | null;
+    // O dia sobre o qual a linha de hoje já falava (o que o calendário mostra hoje).
+    const diaAnterior = linha ? (snapAtual?.evidencias?.diasEsperadosVerificados?.[0] ?? somarDias(hoje, -1)) : null;
+    const linhaEhDeTeste = !!linha && ehPerguntaDeTeste(linha.snapshot);
+    const daRegraSemEnvio = linha?.estado === "SUPRIMIDA" || linha?.estado === "SOMBRA";
+    // Pergunta de verdade do job, sem dia escolhido: mantém o dia dela (comportamento de sempre).
+    const diaPerguntado =
+      diaEscolhido ?? (linha && !linhaEhDeTeste && !daRegraSemEnvio ? diaAnterior! : diaDaPerguntaDeTeste(hoje, cfg, feriados));
     const marca = { origem: ORIGEM_TESTE_PAINEL, testePedidoPor: usuarioId, testePedidoEm: agora.toISOString() };
     const antes = linha
       ? {
@@ -967,6 +986,7 @@ export class ConferenciaDiariaService {
           enviadaEm: linha.enviadaEm?.toISOString() ?? null,
           respondidaEm: linha.respondidaEm?.toISOString() ?? null,
           respostaTexto: linha.respostaTexto,
+          diaPerguntado: diaAnterior,
         }
       : null;
 
@@ -1005,12 +1025,17 @@ export class ConferenciaDiariaService {
       // Linha que a regra NÃO mandou enviar (SUPRIMIDA/SOMBRA) vira teste: marca a
       // origem (não conta como pergunta feita) e aponta o dia perguntado. Linha
       // que já foi pergunta de verdade continua sendo (o contador dela não muda).
-      const daRegraSemEnvio = linha.estado === "SUPRIMIDA" || linha.estado === "SOMBRA";
       const snap = (linha.snapshot ?? {}) as Record<string, unknown>;
-      const snapshotNovo = daRegraSemEnvio
+      // Reescreve o dia perguntado quando a linha é de teste/sem envio (o teste anterior
+      // pode ter falado de outro dia) ou quando o gestor escolheu um dia diferente.
+      const mudaODia = diaAnterior !== diaPerguntado;
+      const reescreve = daRegraSemEnvio || linhaEhDeTeste || (diaEscolhido != null && mudaODia);
+      const antigos = Array.isArray(snap.diasPerguntadosAntes) ? (snap.diasPerguntadosAntes as string[]) : [];
+      const snapshotNovo = reescreve
         ? ({
             ...snap,
-            ...marca,
+            ...(daRegraSemEnvio ? marca : {}),
+            ...(mudaODia && diaAnterior ? { diasPerguntadosAntes: [...antigos, diaAnterior].slice(-20) } : {}),
             evidencias: { ...((snap.evidencias as object | undefined) ?? {}), hoje, diasEsperadosVerificados: [diaPerguntado] },
           } as unknown as Prisma.InputJsonValue)
         : undefined;
@@ -1048,6 +1073,7 @@ export class ConferenciaDiariaService {
       origem: ORIGEM_TESTE_PAINEL,
       linhaCriada: !linha,
       diaPerguntado,
+      diaEscolhido: diaEscolhido != null,
       reenvio: reenvios,
       telefone: mascararTelefone(telefone),
       ...(antes ? { antes } : {}),
@@ -1076,6 +1102,7 @@ export class ConferenciaDiariaService {
           motoristaId,
           linhaCriada: !linha,
           diaPerguntado,
+          dia: diaEscolhido ?? null,
           telefone: mascararTelefone(telefone),
           wamid: r.enviado ? r.idExterno : null,
           enviado: r.enviado,

@@ -1,11 +1,12 @@
 import "reflect-metadata";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { ConflictException, ExecutionContext, ForbiddenException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ExecutionContext, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { moduloDaChave } from "@ronan/shared-types";
+import { moduloDaChave, PerguntaDeTesteSchema } from "@ronan/shared-types";
 import { PERMISSAO_KEY } from "../../auth/decorators/requer-permissao.decorator";
 import { PermissaoGuard } from "../../auth/guards/permissao.guard";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
+import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { comConta, comoSistema } from "../../common/conta/conta-context";
 import { inicioDoDiaData } from "../../common/timezone";
 import type { PrismaService } from "../../prisma/prisma.service";
@@ -281,6 +282,116 @@ describe.skipIf(!URL_TESTE)("conferência diária: pergunta de teste (Prisma rea
     expect(envio.tentarEnviar).not.toHaveBeenCalled();
     const [lt] = await linhasDe(contaOutra, testador.id);
     expect(lt!.estado).toBe("PENDENTE"); // intocada pelo job
+  });
+
+  describe("(g) Perguntar sobre este dia (corpo { dia })", () => {
+    const textoDoEnvio = () => (envio.tentarEnviar.mock.calls.at(-1)![0] as { params: string[]; texto: string });
+    const trilhaDe = async (contaId: string, id: string) => (await linhasDe(contaId, id))[0]!.trilha as { evento: string; detalhe: Record<string, any> }[];
+
+    it("(g1) dia passado válido: cria a linha de HOJE, o dia perguntado é o escolhido e o texto cita a data", async () => {
+      const m = await novoMotorista(contaComConfig);
+      envio.tentarEnviar.mockClear();
+      const r = await comConta(contaComConfig, () => servico.enviarPerguntaDeTeste(m.id, admin, SEGUNDA, "2026-09-22"));
+      expect(r).toMatchObject({ enviado: true, estado: "ENVIADA", diaPerguntado: "2026-09-22", linhaCriada: true });
+      const [l] = await linhasDe(contaComConfig, m.id);
+      expect(l!.dia.toISOString()).toBe(DIA_SEGUNDA.toISOString()); // a linha do job segue sendo a de hoje
+      expect(l!.snapshot).toMatchObject({ origem: "TESTE_PAINEL", evidencias: { diasEsperadosVerificados: ["2026-09-22"] } });
+      expect(textoDoEnvio().params[0]).toContain("22/09");
+      expect(textoDoEnvio().texto).toMatch(/22\/09/);
+      const aud = await prisma.auditLog.findMany({ where: { entidade: "ConferenciaDiaria", entidadeId: l!.id } });
+      expect(aud[0]!.acao).toBe("CONFERENCIA_PERGUNTA_TESTE");
+      expect((aud[0]!.metadata as Record<string, unknown>).dia).toBe("2026-09-22");
+    });
+
+    it("(g2) hoje, futuro, velho demais e formato inválido: 400 sem envio e sem linha", async () => {
+      const m = await novoMotorista(contaComConfig);
+      envio.tentarEnviar.mockClear();
+      for (const ruim of ["2026-09-28", "2026-09-29", "2027-01-01", "2026-07-29", "2026-02-30", "ontem", ""]) {
+        await expect(comConta(contaComConfig, () => servico.enviarPerguntaDeTeste(m.id, admin, SEGUNDA, ruim))).rejects.toBeInstanceOf(BadRequestException);
+      }
+      expect(envio.tentarEnviar).not.toHaveBeenCalled();
+      expect(await linhasDe(contaComConfig, m.id)).toHaveLength(0);
+      // O limite da janela (60 dias) passa.
+      const ok = await comConta(contaComConfig, () => servico.enviarPerguntaDeTeste(m.id, admin, SEGUNDA, "2026-07-30"));
+      expect(ok.diaPerguntado).toBe("2026-07-30");
+    });
+
+    it("(g3) segundo teste com OUTRO dia zera a linha e preserva o dia antigo na trilha; o calendário mostra o mais recente", async () => {
+      const m = await novoMotorista(contaComConfig);
+      await comConta(contaComConfig, () => servico.enviarPerguntaDeTeste(m.id, admin, SEGUNDA, "2026-09-22"));
+      // O motorista respondeu à primeira.
+      await comConta(contaComConfig, () =>
+        prisma.conferenciaDiaria.updateMany({ where: { motoristaId: m.id }, data: { estado: "RESPONDIDA", opcao: "NAO_TIVE", respondidaEm: new Date("2026-09-28T12:05:00Z") } }),
+      );
+      const r = await comConta(contaComConfig, () => servico.enviarPerguntaDeTeste(m.id, admin, SEGUNDA, "2026-09-24"));
+      expect(r).toMatchObject({ diaPerguntado: "2026-09-24", reenvios: 1, linhaCriada: false, estado: "ENVIADA" });
+      expect(textoDoEnvio().params[0]).toContain("24/09");
+      const linhas = await linhasDe(contaComConfig, m.id);
+      expect(linhas).toHaveLength(1);
+      expect(linhas[0]).toMatchObject({ opcao: null, respondidaEm: null });
+      expect(linhas[0]!.snapshot).toMatchObject({ evidencias: { diasEsperadosVerificados: ["2026-09-24"] }, diasPerguntadosAntes: ["2026-09-22"] });
+      const teste = (await trilhaDe(contaComConfig, m.id)).filter((e) => e.evento === "TESTE");
+      expect(teste).toHaveLength(2);
+      expect(teste[1]!.detalhe).toMatchObject({ diaPerguntado: "2026-09-24", diaEscolhido: true });
+      expect(teste[1]!.detalhe.antes).toMatchObject({ estado: "RESPONDIDA", opcao: "NAO_TIVE", diaPerguntado: "2026-09-22" });
+
+      const cal = await comConta(contaComConfig, () => servico.calendarioDoMotorista(m.id, "2026-09", SEGUNDA, true));
+      expect(cal.dias).toHaveLength(30);
+      expect(cal.dias.find((d) => d.dia === "2026-09-24")!.pergunta).toMatchObject({ estado: "ENVIADA", linhaDia: "2026-09-28" });
+      expect(cal.dias.find((d) => d.dia === "2026-09-22")!.pergunta).toBeUndefined();
+      expect(cal.dias.find((d) => d.dia === "2026-09-10")).toMatchObject({ lancou: false, viagens: 0 });
+    });
+
+    it("(g4) o teste do topo (sem dia) depois de um dia escolhido volta ao último dia útil, sem herdar o dia velho", async () => {
+      const m = await novoMotorista(contaComConfig);
+      await comConta(contaComConfig, () => servico.enviarPerguntaDeTeste(m.id, admin, SEGUNDA, "2026-09-22"));
+      const r = await testar(contaComConfig, m.id);
+      expect(r.diaPerguntado).toBe("2026-09-25");
+      expect(textoDoEnvio().params[0]).toContain("25/09");
+      expect((await linhasDe(contaComConfig, m.id))[0]!.snapshot).toMatchObject({ evidencias: { diasEsperadosVerificados: ["2026-09-25"] } });
+    });
+
+    it("(g5) linha de pergunta de verdade do job: com dia escolhido, o dia muda e o dia do job vai pra trilha/snapshot; a linha segue sendo do job", async () => {
+      const m = await novoMotorista(contaComConfig);
+      await comConta(contaComConfig, () =>
+        prisma.conferenciaDiaria.create({
+          data: { motoristaId: m.id, dia: DIA_SEGUNDA, estado: "ENVIADA", motivo: "job", enviadaEm: SEGUNDA, snapshot: { evidencias: { diasEsperadosVerificados: ["2026-09-25"] } } } as never,
+        }),
+      );
+      const r = await comConta(contaComConfig, () => servico.enviarPerguntaDeTeste(m.id, admin, SEGUNDA, "2026-09-23"));
+      expect(r.diaPerguntado).toBe("2026-09-23");
+      const [l] = await linhasDe(contaComConfig, m.id);
+      expect(l!.snapshot).toMatchObject({ evidencias: { diasEsperadosVerificados: ["2026-09-23"] }, diasPerguntadosAntes: ["2026-09-25"] });
+      expect(l!.snapshot).not.toHaveProperty("origem");
+    });
+
+    it("(g6) motorista sem canal: recusa com o motivo mesmo com dia escolhido, sem gravar nem enviar", async () => {
+      const m = await novoMotorista(contaComConfig, { telefone: null });
+      envio.tentarEnviar.mockClear();
+      await expect(comConta(contaComConfig, () => servico.enviarPerguntaDeTeste(m.id, admin, SEGUNDA, "2026-09-22"))).rejects.toThrow(/não tem telefone cadastrado/);
+      expect(await linhasDe(contaComConfig, m.id)).toHaveLength(0);
+      expect(envio.tentarEnviar).not.toHaveBeenCalled();
+    });
+
+    it("(g7) escopo: outra empresa = 404 pelo controller com corpo; o corpo é validado pelo Zod (dia não-string = 400)", async () => {
+      const deOutra = await novoMotorista(contaOutra);
+      const motoristasStub = {
+        findOne: async (id: string) => {
+          const x = await prisma.motorista.findFirst({ where: { id } });
+          if (!x) throw new NotFoundException("Motorista não encontrado");
+          return x;
+        },
+      };
+      const c = new ConferenciaDiariaController(servico, {} as never, motoristasStub as never);
+      envio.tentarEnviar.mockClear();
+      await expect(comConta(contaComConfig, () => c.perguntaDeTeste(deOutra.id, { id: admin, escopo: null } as never, { dia: "2026-09-22" }))).rejects.toBeInstanceOf(NotFoundException);
+      expect(envio.tentarEnviar).not.toHaveBeenCalled();
+      const pipe = new ZodValidationPipe(PerguntaDeTesteSchema.optional());
+      expect(() => pipe.transform({ dia: 20260922 }, {} as never)).toThrow();
+      expect(pipe.transform(undefined, {} as never)).toBeUndefined();
+      expect(pipe.transform({}, {} as never)).toEqual({});
+      expect(pipe.transform({ dia: "2026-09-22" }, {} as never)).toEqual({ dia: "2026-09-22" });
+    });
   });
 
   describe("(e)(f) escopo, permissão e módulo", () => {

@@ -18,7 +18,7 @@ import {
   Send,
   type LucideIcon,
 } from "lucide-react";
-import { formatTelefone } from "@ronan/shared-types";
+import { JANELA_PERGUNTA_DE_TESTE_DIAS, formatTelefone } from "@ronan/shared-types";
 import type {
   CalendarioConferencia,
   DadosTecnicosConferencia,
@@ -60,6 +60,20 @@ function diaLongo(ymd: string): string {
   const [a = 0, m = 1, d = 1] = ymd.split("-").map(Number);
   const s = SEMANA_LONGA[new Date(Date.UTC(a, m - 1, d)).getUTCDay()] ?? "";
   return `${s.charAt(0).toUpperCase()}${s.slice(1)}, ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
+}
+
+/** Soma dias a uma data civil (AAAA-MM-DD), sem passar por fuso. */
+function somarDiasYmd(ymd: string, n: number): string {
+  const [a = 0, m = 1, d = 1] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+/**
+ * "Perguntar sobre este dia" só vale pra dia PASSADO (antes de hoje em São Paulo) e
+ * dentro da janela. A API confere de novo: aqui só decide se o botão aparece.
+ */
+export function diaPodeSerPerguntado(dia: string, hoje: string): boolean {
+  return dia < hoje && dia >= somarDiasYmd(hoje, -JANELA_PERGUNTA_DE_TESTE_DIAS);
 }
 
 function dataHora(iso: string): { data: string; hora: string } {
@@ -157,7 +171,7 @@ function resumo(t: CalendarioConferencia["totais"]): string {
 }
 
 /** O que aconteceu no dia, em frases de quem opera. */
-function detalhe(d: DiaDoCalendarioConferencia): string[] {
+function detalhe(d: DiaDoCalendarioConferencia, hoje: string): string[] {
   const linhas: string[] = [];
   const p = d.pergunta;
   if (p) {
@@ -193,6 +207,7 @@ function detalhe(d: DiaDoCalendarioConferencia): string[] {
       );
     }
   }
+  if (!d.lancou) linhas.push(d.dia > hoje ? "Este dia ainda não chegou." : "Sem viagem lançada neste dia.");
   if (d.lancou && !d.pergunta?.retroativo) {
     linhas.push(
       d.pergunta
@@ -401,9 +416,12 @@ export function motivoSemCanal(f: FichaParaTeste): string | null {
 function EnviarPerguntaDeTeste({
   motoristaId,
   aoEnviar,
+  dia,
 }: {
   motoristaId: string;
   aoEnviar: (r: ResultadoPerguntaDeTeste) => void;
+  /** AAAA-MM-DD: "Perguntar sobre este dia". Sem ele, é o teste do topo (último dia útil). */
+  dia?: string;
 }) {
   const token = useAuthToken();
   const [confirmando, setConfirmando] = useState(false);
@@ -415,6 +433,7 @@ function EnviarPerguntaDeTeste({
       fetchApi<ResultadoPerguntaDeTeste>(`/admin/conferencia-diaria/motoristas/${motoristaId}/pergunta-de-teste`, {
         method: "POST",
         token,
+        ...(dia ? { body: JSON.stringify({ dia }) } : {}),
       }),
     onSuccess: (r) => {
       setConfirmando(false);
@@ -438,10 +457,11 @@ function EnviarPerguntaDeTeste({
       <div
         className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900"
         role="alert"
-        data-testid="pergunta-teste-confirmacao"
+        data-testid={dia ? "pergunta-dia-confirmacao" : "pergunta-teste-confirmacao"}
       >
         <p className="font-medium">
-          Vai mandar de verdade, por WhatsApp, para {f.nome} no número {formatTelefone(f.telefone)}.
+          Vai mandar de verdade, por WhatsApp, para {f.nome} no número {formatTelefone(f.telefone)}
+          {dia ? `, perguntando sobre ${diaLongo(dia)}` : ""}.
         </p>
         <p className="mt-1 text-sm">Use só com motorista de teste seu ou com quem já combinou.</p>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -458,15 +478,15 @@ function EnviarPerguntaDeTeste({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <Button
-        data-testid="pergunta-teste-botao"
+        data-testid={dia ? "pergunta-dia-botao" : "pergunta-teste-botao"}
         disabled={!f || !!motivo}
         onClick={() => setConfirmando(true)}
       >
         <Send className="h-4 w-4" aria-hidden />
-        Enviar pergunta de teste
+        {dia ? "Perguntar sobre este dia" : "Enviar pergunta de teste"}
       </Button>
       {motivo && (
-        <p className="text-sm text-amber-800" data-testid="pergunta-teste-motivo">
+        <p className="text-sm text-amber-800" data-testid={dia ? "pergunta-dia-motivo" : "pergunta-teste-motivo"}>
           {motivo} Não dá pra mandar a pergunta.
         </p>
       )}
@@ -566,20 +586,18 @@ export function ConferenciaCalendarioMotorista({ motoristaId }: { motoristaId: s
               const s = situacaoDoDia(d);
               const numero = Number(d.dia.slice(8));
               const ehHoje = d.dia === dados.hoje;
-              const rotulo = `${diaLongo(d.dia)}${s ? `: ${s.longo}` : ""}`;
+              const futuro = d.dia > dados.hoje;
+              const rotulo = `${diaLongo(d.dia)}: ${s ? s.longo : futuro ? "dia que ainda não chegou" : "sem viagem lançada"}`;
               return (
                 <button
                   key={d.dia}
                   type="button"
-                  disabled={!s}
                   aria-label={rotulo}
                   aria-pressed={aberto === d.dia}
                   onClick={() => setAberto(aberto === d.dia ? null : d.dia)}
                   className={cn(
-                    "flex min-h-14 flex-col items-center justify-between rounded-md border p-1 text-xs sm:min-h-16",
-                    s ? TOM[s.tom] : "border-transparent bg-muted/30 text-muted-foreground",
-                    s && "cursor-pointer hover:brightness-95",
-                    !s && "cursor-default",
+                    "flex min-h-14 cursor-pointer flex-col items-center justify-between rounded-md border p-1 text-xs hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground sm:min-h-16",
+                    s ? TOM[s.tom] : "border-slate-200 bg-background text-muted-foreground",
                     aberto === d.dia && "ring-2 ring-foreground/60",
                     ehHoje && "outline outline-2 outline-offset-1 outline-primary",
                   )}
@@ -616,13 +634,23 @@ export function ConferenciaCalendarioMotorista({ motoristaId }: { motoristaId: s
                   return s ? ` — ${s.longo}` : "";
                 })()}
               </p>
-              {detalhe(escolhido).map((l, i) => (
+              {detalhe(escolhido, dados.hoje).map((l, i) => (
                 <p key={i} className="mt-1 text-muted-foreground">
                   {l}
                 </p>
               ))}
               {podeDecidir && escolhido.pergunta?.linhaDia === dados.hoje && escolhido.pergunta.estado !== "SUPRIMIDA" && (
                 <ReenviarPergunta key={escolhido.dia} motoristaId={motoristaId} aoTerminar={() => void q.refetch()} />
+              )}
+              {podeTestar && diaPodeSerPerguntado(escolhido.dia, dados.hoje) && (
+                <div className="mt-3">
+                  <EnviarPerguntaDeTeste
+                    key={escolhido.dia}
+                    motoristaId={motoristaId}
+                    dia={escolhido.dia}
+                    aoEnviar={mostrarDiaPerguntado}
+                  />
+                </div>
               )}
               {escolhido.pergunta?.tecnico && <DadosTecnicos t={escolhido.pergunta.tecnico} />}
             </div>

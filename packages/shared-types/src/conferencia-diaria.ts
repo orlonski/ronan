@@ -376,7 +376,25 @@ export const ResultadoReenvioPergunta = z.object({
 });
 export type ResultadoReenvioPergunta = z.infer<typeof ResultadoReenvioPergunta>;
 
-/** Resposta de `POST /admin/conferencia-diaria/motoristas/:id/pergunta-de-teste`. Não há corpo. */
+/**
+ * Até quantos dias pra trás o painel deixa "Perguntar sobre este dia". Pergunta sobre
+ * um dia velho demais não faz sentido pro motorista (ele não lembra) e o calendário
+ * não precisa dela. A API confere de novo: o painel só esconde o botão.
+ */
+export const JANELA_PERGUNTA_DE_TESTE_DIAS = 60;
+
+/**
+ * Corpo (opcional) de `POST /admin/conferencia-diaria/motoristas/:id/pergunta-de-teste`.
+ * Sem corpo ou sem `dia`: pergunta sobre o último dia útil antes de hoje. Com `dia`
+ * (AAAA-MM-DD): pergunta sobre AQUELE dia, que tem que ser passado e dentro da janela
+ * — a conferência dos dias é da API (mensagem em PT-BR), não do schema.
+ */
+export const PerguntaDeTesteSchema = z.object({
+  dia: z.string().max(10).optional(),
+});
+export type PerguntaDeTeste = z.infer<typeof PerguntaDeTesteSchema>;
+
+/** Resposta de `POST /admin/conferencia-diaria/motoristas/:id/pergunta-de-teste`. */
 export const ResultadoPerguntaDeTeste = ResultadoReenvioPergunta.extend({
   /** Telefone que recebeu, MASCARADO (o painel mostra o completo antes de enviar, na confirmação). */
   telefoneMascarado: z.string(),

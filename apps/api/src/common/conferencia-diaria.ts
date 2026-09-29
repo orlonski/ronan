@@ -99,7 +99,7 @@ export function diaDaSemanaYmd(y: Ymd): number {
   return new Date(paraMs(y)).getUTCDay();
 }
 
-function diasEntre(de: Ymd, ate: Ymd): number {
+export function diasEntre(de: Ymd, ate: Ymd): number {
   return Math.round((paraMs(ate) - paraMs(de)) / DIA_MS);
 }
 

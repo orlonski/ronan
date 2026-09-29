@@ -1,5 +1,5 @@
-import { ORIGEM_TESTE_PAINEL } from "@ronan/shared-types";
-import { diasEsperadosAntesDeHoje, somarDias } from "./conferencia-diaria";
+import { JANELA_PERGUNTA_DE_TESTE_DIAS, ORIGEM_TESTE_PAINEL } from "@ronan/shared-types";
+import { diasEsperadosAntesDeHoje, diasEntre, somarDias } from "./conferencia-diaria";
 import type { Ymd } from "./ponto-jornada";
 
 /**
@@ -36,4 +36,24 @@ export function diaDaPerguntaDeTeste(
 export function mascararTelefone(telefone: string): string {
   const d = telefone.replace(/\D/g, "");
   return d.length < 4 ? "••••" : `••••-${d.slice(-4)}`;
+}
+
+/**
+ * O dia que o gestor escolheu no calendário serve pra uma pergunta de teste?
+ * Fail-closed: formato inválido (inclusive data que não existe, como 31/02), hoje,
+ * futuro e velho demais (janela) são recusados com a mensagem pra quem clicou.
+ * Devolve `null` quando serve.
+ */
+export function motivoDiaDeTesteInvalido(dia: string, hoje: Ymd): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return "Data inválida. Escolha um dia no calendário.";
+  const [a, m, d] = dia.split("-").map(Number);
+  const real = new Date(Date.UTC(a!, m! - 1, d!));
+  if (real.getUTCFullYear() !== a || real.getUTCMonth() !== m! - 1 || real.getUTCDate() !== d) {
+    return "Data inválida. Escolha um dia no calendário.";
+  }
+  if (dia >= hoje) return "Só dá pra perguntar sobre um dia que já passou. Hoje e os próximos dias ainda não fecharam.";
+  if (diasEntre(dia, hoje) > JANELA_PERGUNTA_DE_TESTE_DIAS) {
+    return `Esse dia é antigo demais. Dá pra perguntar até ${JANELA_PERGUNTA_DE_TESTE_DIAS} dias pra trás.`;
+  }
+  return null;
 }
