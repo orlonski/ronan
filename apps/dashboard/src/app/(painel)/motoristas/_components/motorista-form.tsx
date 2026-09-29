@@ -483,8 +483,8 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
         return;
       }
     }
-    // Edição volta pra ficha de quem foi editado; cadastro novo volta pra lista.
-    router.push(initial ? (`/motoristas/${initial.id}` as never) : "/motoristas");
+    // Salvar (edição ou cadastro novo) volta pra listagem.
+    router.push("/motoristas");
   }
 
   const saving = create.isPending || update.isPending;
@@ -893,7 +893,7 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
       )}
 
       <div className="flex justify-end gap-2">
-        <BotaoCancelar href={initial ? `/motoristas/${initial.id}` : "/motoristas"} sujo={sujo} />
+        <BotaoCancelar href="/motoristas" sujo={sujo} />
         <Button type="submit" disabled={saving}>
           {!initial && usaOApp ? "Enviar convite" : "Salvar"}
         </Button>
