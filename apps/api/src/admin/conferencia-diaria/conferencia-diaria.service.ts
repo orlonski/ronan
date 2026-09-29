@@ -37,6 +37,7 @@ import {
   type EvidenciasConferencia,
   type MotoristaParaConferencia,
 } from "../../common/conferencia-diaria";
+import { montarCalendarioConferencia, ultimoDiaDoMes } from "../../common/conferencia-calendario";
 
 type Config = Awaited<ReturnType<ConferenciaDiariaService["config"]>>;
 
@@ -205,6 +206,45 @@ export class ConferenciaDiariaService {
         };
       }),
     };
+  }
+
+  /**
+   * O calendário do mês na ficha do motorista: só LEITURA, duas consultas.
+   * A montagem (dia perguntado, retroativo) é da regra pura em `conferencia-calendario`.
+   * Quem chama já conferiu o escopo do motorista (404 fora dele).
+   */
+  async calendarioDoMotorista(motoristaId: string, mes?: string, agora: Date = new Date()) {
+    const alvo = mes ?? hojeYmd(agora).slice(0, 7);
+    const primeiro = `${alvo}-01`;
+    const ultimo = ultimoDiaDoMes(alvo);
+    const emData = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
+    const [viagens, linhas] = await Promise.all([
+      this.prisma.viagem.findMany({
+        where: { motoristaId, data: { gte: emData(primeiro), lte: emData(ultimo) } },
+        select: { data: true, sincronizadoEm: true, criadoOfflineEm: true },
+      }),
+      // A pergunta é gravada DEPOIS do dia sobre o qual fala (fim de semana, feriado):
+      // folga de 10 dias no fim da janela; a regra pura descarta o que cai fora do mês.
+      this.prisma.conferenciaDiaria.findMany({
+        where: { motoristaId, dia: { gte: emData(somarDias(primeiro, 1)), lte: emData(somarDias(ultimo, 10)) } },
+        select: {
+          dia: true,
+          estado: true,
+          suprimidaPor: true,
+          enviadaEm: true,
+          respondidaEm: true,
+          opcao: true,
+          criadoEm: true,
+          snapshot: true,
+        },
+      }),
+    ]);
+    return montarCalendarioConferencia({
+      mes: alvo,
+      agora,
+      viagens: viagens.filter((v) => v.data).map((v) => ({ ...v, data: dataParaYmd(v.data!) })),
+      linhas: linhas.map((l) => ({ ...l, dia: dataParaYmd(l.dia) })),
+    });
   }
 
   /** Calcula AGORA com a regra salva, sem gravar nada. */

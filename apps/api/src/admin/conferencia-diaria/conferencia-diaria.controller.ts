@@ -1,7 +1,15 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { AtualizarConfigConferenciaDiariaSchema, DecidirSugestaoGestorSchema } from "@ronan/shared-types";
-import type { AtualizarConfigConferenciaDiaria, DecidirSugestaoGestor } from "@ronan/shared-types";
+import {
+  AtualizarConfigConferenciaDiariaSchema,
+  CalendarioConferenciaQuerySchema,
+  DecidirSugestaoGestorSchema,
+} from "@ronan/shared-types";
+import type {
+  AtualizarConfigConferenciaDiaria,
+  CalendarioConferenciaQuery,
+  DecidirSugestaoGestor,
+} from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
@@ -73,6 +81,21 @@ export class ConferenciaDiariaController {
   @Get("sem-canal")
   semCanal() {
     return this.service.listarSemCanal();
+  }
+
+  /**
+   * O calendário do mês na ficha do motorista: o que respondeu à pergunta e se
+   * lançou a viagem depois. Só leitura. Motorista fora do escopo = 404.
+   */
+  @RequerPermissao("conferencia-diaria.ver")
+  @Get("motoristas/:id/calendario")
+  async calendario(
+    @Param("id") id: string,
+    @Query(new ZodValidationPipe(CalendarioConferenciaQuerySchema)) query: CalendarioConferenciaQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    await this.motoristas.findOne(id, user.escopo);
+    return this.service.calendarioDoMotorista(id, query.mes);
   }
 
   /**

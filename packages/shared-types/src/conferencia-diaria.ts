@@ -298,3 +298,52 @@ function descricaoDiaEsperado(dias: number[]): string {
   if (ehUteis(dias)) return "dia útil (segunda a sexta)";
   return `dia esperado (${listaNomes(dias)})`;
 }
+
+// ─── Calendário da conferência (ficha do motorista) ───────────────────────
+
+/** `?mes=YYYY-MM`. Vazio = o mês atual em São Paulo. */
+export const CalendarioConferenciaQuerySchema = z.object({
+  mes: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Informe o mês no formato AAAA-MM.")
+    .optional(),
+});
+export type CalendarioConferenciaQuery = z.infer<typeof CalendarioConferenciaQuerySchema>;
+
+export const PerguntaNoCalendario = z.object({
+  estado: EstadoConferenciaDiaria,
+  /** Quando a pergunta saiu. `null` = não saiu (na fila, falhou ou sem canal). */
+  enviadaEm: z.string().nullable(),
+  respondidaEm: z.string().nullable(),
+  resposta: OpcaoConferenciaDiaria.nullable(),
+  /** Motivo de a pergunta não poder ser feita pelo WhatsApp (SEM_TELEFONE, PAROU…). */
+  semCanal: z.string().nullable(),
+  /** Lançou viagem DESSE dia depois de a pergunta sair. */
+  retroativo: z.boolean(),
+  lancouDepoisEm: z.string().nullable(),
+  viagensDepois: z.number().int(),
+});
+export type PerguntaNoCalendario = z.infer<typeof PerguntaNoCalendario>;
+
+export const DiaDoCalendarioConferencia = z.object({
+  dia: z.string(),
+  lancou: z.boolean(),
+  viagens: z.number().int(),
+  pergunta: PerguntaNoCalendario.optional(),
+});
+export type DiaDoCalendarioConferencia = z.infer<typeof DiaDoCalendarioConferencia>;
+
+export const CalendarioConferencia = z.object({
+  mes: z.string(),
+  hoje: z.string(),
+  dias: z.array(DiaDoCalendarioConferencia),
+  totais: z.object({
+    diasComViagem: z.number().int(),
+    perguntados: z.number().int(),
+    respondidos: z.number().int(),
+    retroativos: z.number().int(),
+    semResposta: z.number().int(),
+    semCanal: z.number().int(),
+  }),
+});
+export type CalendarioConferencia = z.infer<typeof CalendarioConferencia>;

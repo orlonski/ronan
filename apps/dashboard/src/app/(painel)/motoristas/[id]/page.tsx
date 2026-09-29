@@ -13,6 +13,8 @@ import { PedirDocumentos } from "./pedir-documentos";
 import { RegimeCard, type RegimeDaPessoa } from "./regime-card";
 import { AcessoAppCard, type AcessoDaPessoa } from "./acesso-app-card";
 import { WhatsappSuspeitoCard } from "./whatsapp-suspeito-card";
+import { ConferenciaCalendarioMotorista } from "@/components/conferencia-calendario-motorista";
+import { usePermissoes } from "@/lib/permissoes";
 
 type ResumoVersoes = {
   latestUpdateId: string | null;
@@ -26,6 +28,8 @@ export default function EditarMotoristaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { temPermissao, temModulo } = usePermissoes();
+  const verConferencia = temPermissao("conferencia-diaria.ver") && temModulo("conferencia-diaria.ver");
   const item = useResourceItem<
     Motorista &
       AppVersaoInfo & {
@@ -70,6 +74,7 @@ export default function EditarMotoristaPage({
             inalcancavelEm={item.data.whatsappInalcancavelEm}
             parouConferencia={item.data.receberConferenciaDiaria === false}
           />
+          {verConferencia && <ConferenciaCalendarioMotorista motoristaId={id} />}
           <RegimeCard regime={item.data.regime ?? null} motoristaId={id} />
           <AcessoAppCard motoristaId={id} />
           <PedirDocumentos motoristaId={id} />
