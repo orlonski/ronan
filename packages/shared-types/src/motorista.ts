@@ -37,6 +37,22 @@ const TelefoneOpcionalSchema = z
   );
 
 /**
+ * Telefone na EDIÇÃO pelo painel: ausente/"" = não muda; `null` = apagar o
+ * telefone da ficha. Sem isso não havia como limpar um número errado — o
+ * formulário mandava o campo vazio como ausente e o servidor respondia 200
+ * sem mudar nada.
+ */
+const TelefoneEditavelSchema = z.preprocess(
+  (v) => {
+    if (v === null) return null;
+    if (typeof v !== "string") return v;
+    const d = telefoneDigits(v);
+    return d === "" ? undefined : d;
+  },
+  z.string().refine(isTelefoneValid, "Telefone deve ter 10 ou 11 dígitos").nullable().optional(),
+);
+
+/**
  * Email opcional. Trim, lowercase. String vazia vira undefined.
  */
 const EmailOpcionalSchema = z.preprocess(
@@ -140,7 +156,7 @@ export const AtualizarMotoristaInput = z
   .object({
     nome: z.string().min(2).max(120).optional(),
     cpf: CpfSchema.optional(),
-    telefone: TelefoneOpcionalSchema,
+    telefone: TelefoneEditavelSchema,
     email: EmailOpcionalSchema,
     placas: z.array(PlacaInput).optional(),
     transportadoraId: z.string().uuid().nullish(),

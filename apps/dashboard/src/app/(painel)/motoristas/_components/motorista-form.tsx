@@ -445,7 +445,10 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
         ...remuneracao,
         nome: form.nome,
         cpf: cpfDigitos,
-        telefone: telDigitos || undefined,
+        // Na edição, campo vazio APAGA o telefone (null); `undefined` sumiria do
+        // envio e o servidor entenderia "não mudar" — salvava com toast verde e
+        // nada acontecia.
+        telefone: telDigitos || null,
         email: emailTrim || undefined,
         placas: placasPayload,
         transportadoraId: form.transportadoraId ?? null,
