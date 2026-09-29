@@ -633,12 +633,15 @@ export function conferirComJulgamento(
   };
 }
 
+/** Campos cuja dúvida invalida o veredito inteiro — ver `decidirVeredito`. */
+const CAMPOS_QUE_TRAVAM: CampoConferido[] = ["toneladas", "ticket"];
+
 /**
  * A faixa de confiança, escrita como função.
  *
- * Só um caso chega ao motorista: divergência ALTA lida com confiança alta. Todo
- * o resto — inclusive divergência MEDIA com leitura ótima — para na revisão
- * humana do painel.
+ * Só um caso chega ao motorista: divergência ALTA lida com confiança alta, sem
+ * dúvida pendurada em peso ou documento. Todo o resto — inclusive divergência
+ * MEDIA com leitura ótima — para na revisão humana do painel.
  */
 export function decidirVeredito(
   divergencias: Divergencia[],
@@ -657,12 +660,22 @@ export function decidirVeredito(
   // Leitura ruim invalida qualquer conclusão, inclusive a de que está tudo bem.
   if (confianca < limiares.confiancaMinima) return "INCERTO";
 
-  if (incertezas.length > 0) return "INCERTO";
+  // Dúvida em peso ou documento é onde erro de leitura acusaria motorista
+  // honesto (bruto no lugar do líquido, 0/O no número): com ela pendurada,
+  // nenhuma conclusão sai daqui.
+  if (incertezas.some((i) => CAMPOS_QUE_TRAVAM.includes(i.campo))) return "INCERTO";
 
+  // Já dúvida em nome de obra, material, data ou placa é rotina — o ticket usa
+  // razão social e nome técnico, e registra a carreta. Ela não pode esconder um
+  // peso ou um ticket que claramente não batem: antes, "CONSTRUTORA CASTILHO"
+  // escrito diferente no papel mandava pra fila humana uma viagem com 5 t a
+  // mais, e o conferente não poupava trabalho nenhum.
   const temAlta = divergencias.some((d) => d.gravidade === "ALTA");
   if (temAlta) {
     return confianca >= limiares.confiancaParaAvisar ? "DIVERGE" : "INCERTO";
   }
+
+  if (incertezas.length > 0) return "INCERTO";
 
   // Sobrou só MEDIA: alguém olha, mas não se cobra o motorista por isso.
   if (divergencias.length > 0) return "INCERTO";
@@ -700,4 +713,16 @@ export function resumirConferencia(r: ResultadoConferencia): string {
     ...r.incertezas.map((i) => `${i.campo}: ${i.motivo} (ticket: ${i.lido}, lançado: ${i.declarado}).`),
   ];
   return partes.join(" ");
+}
+
+/**
+ * O que vai pro motorista: só o que ele tem que corrigir.
+ *
+ * As dúvidas (nome da obra diferente no papel, placa da carreta) ficam no card
+ * do painel. Mandá-las junto faria o motorista mexer em campo que está certo —
+ * e ler "provável erro de leitura" numa cobrança não ajuda ninguém na estrada.
+ */
+export function resumirParaMotorista(r: ResultadoConferencia): string {
+  if (r.divergencias.length === 0) return resumirConferencia(r);
+  return r.divergencias.map((d) => d.detalhe).join(" ");
 }

@@ -4,6 +4,7 @@ import {
   conferirComJulgamento,
   decidirVeredito,
   precisaSegundaOpiniao,
+  resumirParaMotorista,
   explicarPesoSuspeito,
   normalizarTicket,
   normalizarPlaca,
@@ -275,6 +276,62 @@ describe("veredito — a faixa de confiança", () => {
   it("incerteza sozinha já barra o aviso", () => {
     const inc = [{ campo: "placa" as const, declarado: "a", lido: "b", motivo: "x" }];
     expect(decidirVeredito([], inc, ["placa"], 0.99)).toBe("INCERTO");
+  });
+
+  // O caso que fazia o conferente não poupar trabalho: peso claramente errado
+  // indo pra fila humana só porque o papel escreve a obra de outro jeito.
+  describe("dúvida em campo secundário não esconde erro grave", () => {
+    const peso = [{ campo: "toneladas" as const, declarado: "30,00 t", lido: "35,00 t", gravidade: "ALTA" as const, detalhe: "peso" }];
+    const ticket = [{ campo: "ticket" as const, declarado: "3174", lido: "9921", gravidade: "ALTA" as const, detalhe: "ticket" }];
+    const duvida = (campo: "cliente" | "material" | "data" | "placa" | "ticket" | "toneladas") => [
+      { campo, declarado: "a", lido: "b", motivo: "x" },
+    ];
+
+    it.each(["cliente", "material", "data", "placa"] as const)(
+      "peso ALTA + dúvida em %s: DIVERGE",
+      (campo) => {
+        expect(decidirVeredito(peso, duvida(campo), ["toneladas", campo], 0.9)).toBe("DIVERGE");
+      },
+    );
+
+    it("ticket ALTA + peso ALTA + dúvida de material: DIVERGE", () => {
+      expect(decidirVeredito([...peso, ...ticket], duvida("material"), ["toneladas", "ticket", "material"], 0.9)).toBe(
+        "DIVERGE",
+      );
+    });
+
+    it("peso ALTA + dúvida no TICKET: segue INCERTO (0/O no número não é culpa de ninguém)", () => {
+      expect(decidirVeredito(peso, duvida("ticket"), ["toneladas", "ticket"], 0.95)).toBe("INCERTO");
+    });
+
+    it("ticket ALTA + dúvida no PESO (bruto/tara): segue INCERTO", () => {
+      expect(decidirVeredito(ticket, duvida("toneladas"), ["toneladas", "ticket"], 0.95)).toBe("INCERTO");
+    });
+
+    it("ALTA com dúvida secundária mas leitura média: INCERTO", () => {
+      expect(decidirVeredito(peso, duvida("cliente"), ["toneladas", "cliente"], 0.7)).toBe("INCERTO");
+    });
+
+    it("só dúvida secundária, sem ALTA: segue na fila humana", () => {
+      expect(decidirVeredito([], duvida("cliente"), ["cliente"], 0.99)).toBe("INCERTO");
+    });
+
+    it("pelo caminho completo: peso errado + material escrito diferente no papel avisa o motorista", () => {
+      const r = conferirComJulgamento(
+        { toneladas: 30, ticket: "3174", materialNome: "MASSA DE ASFALTO" },
+        { toneladas: 35, ticket: "3174", materialNome: "CBUQ", confianca: 0.92 },
+        {
+          numeroDocumento: { confere: "sim", porque: "" },
+          toneladas: { confere: "nao", porque: "" },
+          material: { confere: "incerto", porque: "nome técnico diferente" },
+        },
+      );
+      expect(r.veredito).toBe("DIVERGE");
+      // E a mensagem ao motorista fala só do peso — o material está certo.
+      const msg = resumirParaMotorista(r);
+      expect(msg).toContain("35,00 t");
+      expect(msg).not.toContain("material");
+    });
   });
 
   it("o limiar é configurável, não hardcoded", () => {

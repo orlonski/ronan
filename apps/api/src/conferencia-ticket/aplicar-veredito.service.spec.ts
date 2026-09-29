@@ -184,15 +184,19 @@ describe("atuando", () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 
-  it("só mexe em viagem que ainda está ENVIADA ou AJUSTADA", async () => {
+  it("só mexe em viagem esperando conferência e sem decisão de gente", async () => {
     // A última trava contra corrida: se um humano mexeu entre a leitura e
-    // agora, o updateMany não encontra nada e nada acontece.
+    // agora, o updateMany não encontra nada e nada acontece. EM_CONFERENCIA
+    // entra porque só o robô escreve esse status (o caso do "mandar reler").
     const { svc, updateMany } = montar();
     await svc.aplicar(JOB, dados(DIVERGE), false);
-    expect(updateMany.mock.calls[0][0].where.status.in).toEqual([
+    const where = updateMany.mock.calls[0][0].where;
+    expect(where.status.in).toEqual([
       StatusViagem.ENVIADA,
       StatusViagem.AJUSTADA,
+      StatusViagem.EM_CONFERENCIA,
     ]);
+    expect(where.revisadoEm).toBeNull();
   });
 
   it("viagem que mudou no meio não recebe chat nem push", async () => {

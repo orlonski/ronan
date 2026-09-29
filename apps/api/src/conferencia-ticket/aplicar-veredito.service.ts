@@ -11,7 +11,7 @@ import { PushService } from "../push/push.service";
 import { ConferenciaFilaService } from "./conferencia-fila.service";
 import { ConferenciaConfig } from "./conferencia.config";
 import { PreAprovacaoService } from "./pre-aprovacao.service";
-import { resumirConferencia, type ResultadoConferencia } from "../common/conferencia-ticket";
+import { resumirParaMotorista, type ResultadoConferencia } from "../common/conferencia-ticket";
 
 /**
  * O que fazer com o veredito.
@@ -307,7 +307,7 @@ export class AplicarVereditoService {
    * parecendo resolvida.
    */
   private async avisarMotorista(job: ConferenciaTicket, r: ResultadoConferencia): Promise<void> {
-    const texto = resumirConferencia(r);
+    const texto = resumirParaMotorista(r);
     const soMaterial =
       r.divergencias.length === 1 &&
       r.divergencias[0].campo === "material" &&
@@ -315,7 +315,15 @@ export class AplicarVereditoService {
     const tipo = soMaterial ? TipoDivergencia.MATERIAL_DIVERGENTE : TipoDivergencia.OUTRO;
 
     const alterou = await this.prisma.viagem.updateMany({
-      where: { id: job.viagemId, status: { in: [StatusViagem.ENVIADA, StatusViagem.AJUSTADA] } },
+      where: {
+        id: job.viagemId,
+        // EM_CONFERENCIA entra porque só o próprio robô escreve esse status: é
+        // o caso do "mandar reler" numa viagem que a regra antiga tinha parado
+        // na fila e que, lida de novo, diverge de fato. `revisadoEm` null
+        // garante que nenhuma decisão de gente é atropelada.
+        status: { in: [StatusViagem.ENVIADA, StatusViagem.AJUSTADA, StatusViagem.EM_CONFERENCIA] },
+        revisadoEm: null,
+      },
       data: {
         status: StatusViagem.DIVERGENTE,
         motivoStatus: texto,
