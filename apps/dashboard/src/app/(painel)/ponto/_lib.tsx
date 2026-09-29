@@ -103,18 +103,31 @@ export function LiberarPonto() {
 
   return (
     <div className="mt-2 space-y-2 rounded-md border bg-background p-3">
-      <p className="text-sm">
-        Pergunte ao <strong>contador</strong> (ou ao sindicato) se a categoria tem acordo coletivo
-        que permite bater ponto pelo celular. <strong>Se tem, é só confirmar aqui.</strong>
-      </p>
+      <div className="space-y-2 text-sm">
+        <p>
+          <strong>Pra que serve:</strong> a lei só aceita ponto pelo celular, sem relógio de ponto
+          certificado, se a <strong>convenção ou o acordo coletivo da sua categoria</strong>{" "}
+          permitir. Aqui você declara que isso existe.
+        </p>
+        <p>
+          <strong>O que muda no sistema:</strong> só libera as telas do escritório (jornadas,
+          cadastro e fechamento) e guarda quem confirmou e quando. Os cálculos e o app do
+          funcionário não mudam.
+        </p>
+        <p>
+          <strong>Não sabe se tem?</strong> Nem toda empresa tem. Pergunte ao{" "}
+          <strong>contador</strong> ou ao <strong>sindicato</strong> antes de confirmar. Enquanto
+          isso, o funcionário já consegue bater ponto no app: só as telas do escritório esperam.
+        </p>
+      </div>
       <Input
-        aria-label="Qual acordo (opcional)"
-        placeholder="Qual acordo? (opcional — pode preencher depois)"
+        aria-label="Nome ou número do acordo (opcional)"
+        placeholder="Nome ou número do acordo, se souber (opcional — pode preencher depois)"
         value={ref}
         onChange={(e) => setRef(e.target.value)}
       />
       <Button variant="success" disabled={liberar.isPending} onClick={() => liberar.mutate()}>
-        {liberar.isPending ? "Liberando…" : "Confirmar que existe acordo e liberar o ponto"}
+        {liberar.isPending ? "Liberando…" : "Sim, existe acordo coletivo: liberar o ponto"}
       </Button>
     </div>
   );
