@@ -212,6 +212,31 @@ export class AdminRoteamentoWhatsappService {
   }
 
   /**
+   * O ID da conta do WhatsApp (WABA) que a plataforma guardou, ou null.
+   *
+   * Lê com `comoSistema`: a linha é global, sem conta. Não há fallback aqui —
+   * os endpoints que exigem `wabaId` seguem exigindo, e é a tela que preenche.
+   */
+  async pegarWaba(): Promise<{ wabaId: string | null }> {
+    const cfg = await comoSistema(() =>
+      this.prisma.configuracaoPlataforma.findUnique({ where: { id: "singleton" } }),
+    );
+    return { wabaId: cfg?.metaWabaId ?? null };
+  }
+
+  /** Grava (ou apaga, com null) o WABA da plataforma. Idempotente. */
+  async salvarWaba(wabaId: string | null): Promise<{ wabaId: string | null }> {
+    const cfg = await comoSistema(() =>
+      this.prisma.configuracaoPlataforma.upsert({
+        where: { id: "singleton" },
+        create: { id: "singleton", metaWabaId: wabaId },
+        update: { metaWabaId: wabaId },
+      }),
+    );
+    return { wabaId: cfg.metaWabaId ?? null };
+  }
+
+  /**
    * O que a Meta tem cadastrado, confrontado com o que o código espera.
    *
    * A comparação é o ponto: nome igual com idioma diferente é justamente o que

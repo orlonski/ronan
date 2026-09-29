@@ -1302,25 +1302,69 @@ function TemplatesMetaCard() {
   const [wabaId, setWabaId] = useState("");
   const [pedindoUrl, setPedindoUrl] = useState<Record<string, string>>({});
 
-  // O id da WABA fica no navegador de quem opera: não é segredo, não é
-  // configuração da empresa, e digitar de novo a cada visita é o tipo de
-  // atrito que faz a tela não ser usada. Em try/catch porque aba anônima e
-  // site data bloqueado fazem o acesso lançar.
+  // O id da WABA mora no servidor (configuração da plataforma): trocar de
+  // navegador ou limpar os dados não pode obrigar ninguém a digitar de novo.
+  // O localStorage ficou só como cache pra tela já abrir preenchida enquanto o
+  // servidor responde. Em try/catch porque aba anônima e site data bloqueado
+  // fazem o acesso lançar.
+  const [wabaSalvo, setWabaSalvo] = useState<string | null>(null);
+  const [avisoSalvo, setAvisoSalvo] = useState(false);
+
   useEffect(() => {
     try {
-      const salvo = localStorage.getItem("meta-waba-id");
-      if (salvo) setWabaId(salvo);
+      const cache = localStorage.getItem("meta-waba-id");
+      if (cache) setWabaId(cache);
     } catch {
-      /* navegador sem storage: só não lembra */
+      /* navegador sem storage: só não usa o cache */
     }
   }, []);
 
+  const wabaServidor = useQuery({
+    queryKey: ["meta-waba"],
+    enabled: !!token,
+    queryFn: () => fetchApi<{ wabaId: string | null }>("/admin/roteamento-whatsapp/waba", { token }),
+  });
+
+  // O valor do servidor vence o cache local.
+  useEffect(() => {
+    if (!wabaServidor.data) return;
+    const v = wabaServidor.data.wabaId;
+    setWabaSalvo(v);
+    if (v) {
+      setWabaId(v);
+      try {
+        localStorage.setItem("meta-waba-id", v);
+      } catch {
+        /* idem */
+      }
+    }
+  }, [wabaServidor.data]);
+
   function guardarWaba(v: string) {
     setWabaId(v);
+    setAvisoSalvo(false);
     try {
       localStorage.setItem("meta-waba-id", v);
     } catch {
       /* idem */
+    }
+  }
+
+  // Ao conferir com um ID diferente do salvo, grava no servidor sem pedir nada.
+  // Se falhar, a conferência segue: guardar é conveniência, não pré-requisito.
+  async function salvarWabaNoServidor() {
+    const atual = wabaId.trim();
+    if (!atual || atual === wabaSalvo) return;
+    try {
+      const r = await fetchApi<{ wabaId: string | null }>("/admin/roteamento-whatsapp/waba", {
+        token,
+        method: "PUT",
+        body: JSON.stringify({ wabaId: atual }),
+      });
+      setWabaSalvo(r.wabaId);
+      setAvisoSalvo(true);
+    } catch {
+      /* não bloqueia a conferência */
     }
   }
 
@@ -1402,11 +1446,15 @@ function TemplatesMetaCard() {
         <Button
           variant="outline"
           disabled={!wabaId.trim() || lista.isFetching}
-          onClick={() => void lista.refetch()}
+          onClick={() => {
+            void salvarWabaNoServidor();
+            void lista.refetch();
+          }}
         >
           {lista.isFetching ? <Spinner /> : <RefreshCw className="h-4 w-4" />}
           Conferir
         </Button>
+        {avisoSalvo && <span className="text-xs text-muted-foreground">ID salvo</span>}
         {lista.data && (
           <span className="text-xs text-muted-foreground">
             {faltando === 0

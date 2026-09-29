@@ -1014,6 +1014,13 @@ model ConfiguracaoPlataforma {
   /// posts no mesmo dia derrubaram a conta numa verificação anti-bot.
   instagramMaxPorDia Int     @default(3)
 
+  /// ID da conta do WhatsApp Business (WABA) na Meta, pra tela de templates.
+  ///
+  /// É da plataforma, não da empresa: a WABA é uma só e quem opera é a
+  /// Movatruck. Não é segredo (só identifica a conta), então mora em coluna e
+  /// não em env. Nulo = ainda não informado; a tela pede uma vez e guarda.
+  metaWabaId String?
+
   alteradoEm DateTime @updatedAt
 
   @@map("configuracao_plataforma")

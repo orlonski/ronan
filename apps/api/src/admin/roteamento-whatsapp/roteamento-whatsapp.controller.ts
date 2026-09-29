@@ -6,6 +6,7 @@ import {
   AtualizarRoteamentoWhatsappInput,
   CriarTemplateMetaInput,
   RegistrarNumeroMetaInput,
+  SalvarMetaWabaInput,
   SolicitarCodigoMetaInput,
   VerificarCodigoMetaInput,
 } from "@ronan/shared-types";
@@ -95,6 +96,23 @@ export class AdminRoteamentoWhatsappController {
     // `comoSistema` porque a linha não tem conta; `pegar()` no fim precisa de
     // uma pra montar a resposta, então usa a do próprio usuário.
     return comConta(contaAlvo(user), () => this.service.salvarPlataforma(body.rotas, user.id));
+  }
+
+  /**
+   * O ID da conta do WhatsApp (WABA), guardado na plataforma pra a tela de
+   * templates não depender do navegador de quem opera. Sem `contaId`: é um só.
+   */
+  @Get("waba")
+  pegarWaba() {
+    return this.service.pegarWaba();
+  }
+
+  /** Grava o WABA; `{ wabaId: null }` apaga. */
+  @Put("waba")
+  salvarWaba(
+    @Body(new ZodValidationPipe(SalvarMetaWabaInput)) body: SalvarMetaWabaInput,
+  ) {
+    return this.service.salvarWaba(body.wabaId);
   }
 
   /**

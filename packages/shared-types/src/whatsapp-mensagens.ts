@@ -836,6 +836,23 @@ export type AtualizarRoteamentoPlataformaInput = z.infer<
 >;
 
 /**
+ * ID da conta do WhatsApp (WABA) guardado pela plataforma.
+ *
+ * Só dígitos, 5 a 30. Vazio ou null apaga — a tela manda o que o dono digitou
+ * e "apagar o campo" precisa significar "esquecer".
+ */
+export const SalvarMetaWabaInput = z.object({
+  wabaId: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : typeof v === "string" ? v.trim() : v),
+    z
+      .string()
+      .regex(/^\d{5,30}$/, "O ID da conta deve ter só números (de 5 a 30 dígitos)")
+      .nullable(),
+  ),
+});
+export type SalvarMetaWabaInput = z.infer<typeof SalvarMetaWabaInput>;
+
+/**
  * Registro do número na Cloud API.
  *
  * O PIN é a verificação em duas etapas do número. Com ela desligada, este é o
