@@ -261,9 +261,9 @@ export class ConferenciaDiariaService {
           opcao: true,
           criadoEm: true,
           snapshot: true,
-          ...(incluirTecnico
-            ? { id: true, wamid: true, respostaTexto: true, erroEnvio: true, reenvios: true, trilha: true }
-            : {}),
+          // A trilha sempre vem: dela se reconstroem as perguntas anteriores zeradas por teste.
+          trilha: true,
+          ...(incluirTecnico ? { id: true, wamid: true, respostaTexto: true, erroEnvio: true, reenvios: true } : {}),
         },
       }),
     ]);
@@ -898,7 +898,10 @@ export class ConferenciaDiariaService {
    *    HOJE, por causa do @@unique [conta, motorista, dia]; o dia perguntado mora em
    *    `evidencias.diasEsperadosVerificados`). Se a linha de hoje já falava de outro
    *    dia, o dia antigo fica na trilha (`antes.diaPerguntado`) e em
-   *    `snapshot.diasPerguntadosAntes`: o calendário passa a mostrar o mais recente;
+   *    `snapshot.diasPerguntadosAntes` e (com o estado: resposta, hora)
+   *    `snapshot.perguntasAnteriores`. A linha aponta pro dia mais recente; o
+   *    calendário mostra os antigos como "teste anterior" e NÃO perde o que o
+   *    motorista já respondeu (ver `perguntasAnterioresDaLinha`);
    *  - fail-closed: sem Meta, sem canal ou acima do teto por hora, recusa com motivo
    *    e não grava nada.
    */
@@ -1036,6 +1039,27 @@ export class ConferenciaDiariaService {
             ...snap,
             ...(daRegraSemEnvio ? marca : {}),
             ...(mudaODia && diaAnterior ? { diasPerguntadosAntes: [...antigos, diaAnterior].slice(-20) } : {}),
+            // Cópia durável do que a linha JÁ tinha perguntado/recebido sobre o dia antigo (a trilha
+            // só guarda 20 eventos): o calendário lê daqui pra não perder a resposta. Uma por dia.
+            ...(mudaODia && diaAnterior && antes && ["ENVIADA", "RESPONDIDA", "EXPIRADA"].includes(antes.estado)
+              ? {
+                  perguntasAnteriores: [
+                    ...(Array.isArray(snap.perguntasAnteriores) ? (snap.perguntasAnteriores as Array<{ dia?: string }>) : []).filter(
+                      (p) => p?.dia !== diaAnterior,
+                    ),
+                    {
+                      dia: diaAnterior,
+                      estado: antes.estado,
+                      opcao: antes.opcao,
+                      wamid: antes.wamid,
+                      enviadaEm: antes.enviadaEm,
+                      respondidaEm: antes.respondidaEm,
+                      respostaTexto: antes.respostaTexto,
+                      zeradaEm: agora.toISOString(),
+                    },
+                  ].slice(-31),
+                }
+              : {}),
             evidencias: { ...((snap.evidencias as object | undefined) ?? {}), hoje, diasEsperadosVerificados: [diaPerguntado] },
           } as unknown as Prisma.InputJsonValue)
         : undefined;

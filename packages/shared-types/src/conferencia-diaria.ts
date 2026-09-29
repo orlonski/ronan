@@ -424,6 +424,13 @@ export const PerguntaNoCalendario = z.object({
   viagensDepois: z.number().int(),
   /** Dia (AAAA-MM-DD) em que o job gravou a linha — o "hoje" da pergunta de hoje. Ausente em respostas antigas. */
   linhaDia: z.string().optional(),
+  /**
+   * `true` = pergunta ANTERIOR, reconstruída da trilha/snapshot: a linha do job de hoje foi
+   * zerada por um teste/reenvio e passou a falar de outro dia. Ausente em respostas antigas.
+   */
+  historica: z.boolean().optional(),
+  /** De onde vem a pergunta histórica. Ausente na pergunta atual. */
+  origem: z.enum(["TESTE_ANTERIOR"]).optional(),
   /** Só pra quem pode decidir (`conferencia-diaria.decidir`). */
   tecnico: DadosTecnicosConferencia.optional(),
 });

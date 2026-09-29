@@ -338,7 +338,9 @@ describe.skipIf(!URL_TESTE)("conferência diária: pergunta de teste (Prisma rea
       const cal = await comConta(contaComConfig, () => servico.calendarioDoMotorista(m.id, "2026-09", SEGUNDA, true));
       expect(cal.dias).toHaveLength(30);
       expect(cal.dias.find((d) => d.dia === "2026-09-24")!.pergunta).toMatchObject({ estado: "ENVIADA", linhaDia: "2026-09-28" });
-      expect(cal.dias.find((d) => d.dia === "2026-09-22")!.pergunta).toBeUndefined();
+      // O dia antigo NÃO some: vira "teste anterior", com o que o motorista respondeu.
+      expect(cal.dias.find((d) => d.dia === "2026-09-22")!.pergunta).toMatchObject({ historica: true, estado: "RESPONDIDA", resposta: "NAO_TIVE" });
+      expect(linhas[0]!.snapshot).toMatchObject({ perguntasAnteriores: [{ dia: "2026-09-22", estado: "RESPONDIDA", opcao: "NAO_TIVE" }] });
       expect(cal.dias.find((d) => d.dia === "2026-09-10")).toMatchObject({ lancou: false, viagens: 0 });
     });
 

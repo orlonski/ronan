@@ -639,9 +639,20 @@ export function ConferenciaCalendarioMotorista({ motoristaId }: { motoristaId: s
                   {l}
                 </p>
               ))}
-              {podeDecidir && escolhido.pergunta?.linhaDia === dados.hoje && escolhido.pergunta.estado !== "SUPRIMIDA" && (
-                <ReenviarPergunta key={escolhido.dia} motoristaId={motoristaId} aoTerminar={() => void q.refetch()} />
+              {escolhido.pergunta?.historica && (
+                <p
+                  className="mt-2 inline-block rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700"
+                  data-testid="selo-teste-anterior"
+                >
+                  teste anterior
+                </p>
               )}
+              {podeDecidir &&
+                !escolhido.pergunta?.historica &&
+                escolhido.pergunta?.linhaDia === dados.hoje &&
+                escolhido.pergunta.estado !== "SUPRIMIDA" && (
+                  <ReenviarPergunta key={escolhido.dia} motoristaId={motoristaId} aoTerminar={() => void q.refetch()} />
+                )}
               {podeTestar && diaPodeSerPerguntado(escolhido.dia, dados.hoje) && (
                 <div className="mt-3">
                   <EnviarPerguntaDeTeste
