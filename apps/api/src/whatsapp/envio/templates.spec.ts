@@ -77,7 +77,7 @@ describe("catálogo de templates", () => {
     const def = TEMPLATES_WHATSAPP["COBRANCA_AUTORIZACAO_PIX"]!;
     expect(def).toBeDefined();
     expect(def.botao?.tipo).toBe("URL");
-    expect(def.botao?.param).toBe(5);
+    expect(def.botao?.tipo === "URL" && def.botao.param).toBe(5);
     expect(def.corpo).not.toContain(4);
     expect(def.textoAprovacao).not.toContain("br.gov.bcb.pix");
     // Rótulo próprio: "Abrir" ao lado de um valor em reais não diz o que
@@ -96,5 +96,37 @@ describe("catálogo de templates", () => {
       (r) => (r.provedores as readonly string[]).includes("meta") && !TEMPLATES_WHATSAPP[r.chave],
     ).map((r) => r.chave);
     expect(semTemplate.sort()).toEqual(["MENSAGEM_AVULSA", "RESPOSTA_AGENTE"]);
+  });
+
+  /**
+   * A conferência diária tem QUATRO botões de resposta rápida, e o que a Meta
+   * exige dela é o que quebra em silêncio se ninguém conferir.
+   */
+  describe("conferência diária (botões de resposta rápida)", () => {
+    const def = TEMPLATES_WHATSAPP["CONFERENCIA_DIARIA"]!;
+    const rota = rotaWhatsapp("CONFERENCIA_DIARIA")!;
+
+    it("é utility, só Meta, empresa e não crítica", () => {
+      expect(rota.categoria).toBe("utility");
+      expect([...rota.provedores]).toEqual(["meta"]);
+      expect(rota.escopo).toBe("empresa");
+      expect(rota.critica).toBe(false);
+    });
+
+    it("tem os quatro botões, na ordem, cada um dentro do limite da Meta", () => {
+      expect(def.botao?.tipo).toBe("QUICK_REPLY");
+      const rotulos = def.botao?.tipo === "QUICK_REPLY" ? def.botao.rotulos : [];
+      expect(rotulos).toEqual(["Não tive", "Tive, não lancei", "Saí da empresa", "Parar perguntas"]);
+      // Botão de resposta rápida de TEMPLATE aceita 25 caracteres (o limite de 20 é
+      // dos botões de mensagem interativa, que não usamos). A conferir na Meta.
+      for (const r of rotulos) expect(r.length).toBeLessThanOrEqual(25);
+    });
+
+    it("a variável não está no fim do corpo e não há nome de pessoa", () => {
+      expect(def.textoAprovacao.trimEnd().endsWith("}}")).toBe(false);
+      expect(def.textoAprovacao).toBe(
+        "No dia {{1}}, você não teve viagens? Toque em uma das opções abaixo pra me avisar.",
+      );
+    });
   });
 });

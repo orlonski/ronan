@@ -1,8 +1,9 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { AgenteService } from "../whatsapp/agente/agente.service";
+import { ConferenciaRespostaService } from "../admin/conferencia-diaria/conferencia-resposta.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { ConviteService } from "../whatsapp/convite.service";
 import { ChatwootClientService, LABEL_PRECISA_HUMANO } from "./chatwoot-client.service";
@@ -162,6 +163,8 @@ export class ChatwootAgenteService {
     config: ConfigService,
     private readonly atendimento: AtendimentoHumanoService,
     private readonly testeGuiado: TesteGuiadoService,
+    // Opcional só pra o simulador e os testes montarem o agente sem ele.
+    @Optional() private readonly conferencia?: ConferenciaRespostaService,
   ) {
     const bruto = Number(config.get<string>("CHATWOOT_INBOX_COMERCIAL"));
     this.inboxComercial = Number.isInteger(bruto) && bruto > 0 ? bruto : null;
@@ -231,6 +234,17 @@ export class ChatwootAgenteService {
     // caindo no agente dele, como sempre.
     if (this.inboxComercial && evento.inbox?.id === this.inboxComercial) {
       await this.atenderNoComercial(texto, telefone, nomeContato, ondeConversa);
+      return;
+    }
+
+    // Resposta à pergunta da conferência diária (toque num dos botões, ou "1",
+    // "sim", "parar"): quem responde é o webhook da Meta, que já aplicou o
+    // efeito. O toque chega aqui também, como texto — o repasse manda o corpo
+    // inteiro ao Chatwoot — e responder de novo mandaria DUAS mensagens ao
+    // motorista (a nossa e a do agente). Texto que o interpretador não reconhece
+    // NUNCA cai aqui: segue pro agente normalmente.
+    if (telefone && (await this.conferencia?.respostaJaTratada(telefone, texto))) {
+      this.log.log(`conversa ${conversaId}: resposta da conferência diária — o webhook já tratou, agente calado`);
       return;
     }
 

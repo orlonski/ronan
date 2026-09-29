@@ -869,11 +869,13 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
   "/conferencia-diaria": {
     oQue:
       "Os parceiros que provavelmente esqueceram de lançar viagem — o sistema " +
-      "olha o histórico de cada um e separa quem ficou sem lançar nos dias em " +
-      "que era esperado.",
+      "olha o histórico de cada um, pergunta pelo WhatsApp (quando você liga o " +
+      "envio) e junta aqui o que precisa de uma decisão sua.",
     faz: [
-      "Ver quem seria perguntado hoje e o motivo de cada um (última viagem lançada, dias esperados sem viagem)",
-      "Conferir quem foi poupado e por quê: já lançou, já foi perguntado há pouco, viagem em andamento",
+      "Ver quem foi (ou seria) perguntado hoje, o motivo de cada um e o que ele respondeu",
+      "Ver quem não tem como receber a pergunta (sem telefone, pediu pra parar, número que não entrega) e precisa ser contatado por outro meio",
+      "Decidir a fila: quando o parceiro diz que saiu da empresa, aprovar a inativação do vínculo (o sistema nunca inativa sozinho) ou manter ativo",
+      "Ver quem pediu pra parar de receber a pergunta e reverificar um número suspeito de não entregar",
     ],
     naoEAqui: {
       procurando: "mudar quando e a quem o sistema pergunta",
@@ -885,17 +887,20 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
   "/configuracoes/conferencia-diaria": {
     oQue:
       "A regra que decide quem provavelmente esqueceu de lançar viagem: em que " +
-      "dias o sistema confere, o que conta como falta e quantas vezes no máximo " +
-      "ele pergunta pra cada parceiro.",
+      "dias o sistema confere, o que conta como falta, quantas vezes no máximo " +
+      "ele pergunta pra cada parceiro e o que acontece quando ele não responde.",
     faz: [
-      "Ligar ou desligar a conferência — ela nasce desligada e, nesta etapa, só registra quem seria perguntado: nada é enviado",
+      "Ligar ou desligar a conferência — ela nasce desligada e em 'só registrar', sem enviar nada",
+      "Escolher entre só registrar quem seria perguntado ou perguntar pelo WhatsApp (mensagem com quatro botões de resposta)",
       "Escolher a hora, os dias em que roda e quais dias da semana contam como dia de viagem (só dias úteis, todos ou os que você marcar)",
       "Escolher a regra: sem viagem no dia esperado anterior, ou vários dias esperados seguidos sem viagem",
       "Definir a frequência (no máximo 1 pergunta a cada N dias por parceiro), se feriado nacional conta e se quem nunca lançou também entra",
+      "Escolher se manda um lembrete a quem não respondeu, quando a pergunta é encerrada e se o resumo das 20h pula quem já respondeu",
+      "Escrever a orientação que o parceiro lê depois de pedir pra parar, e quando desconfiar de um número que não recebe",
       "Simular na hora e ver quem seria perguntado, com o texto exato da regra em vigor",
     ],
     naoEAqui: {
-      procurando: "ver quem seria perguntado hoje",
+      procurando: "ver quem foi perguntado hoje e decidir a fila",
       vaEm: "Esqueceu de lançar?",
       href: "/conferencia-diaria",
     },

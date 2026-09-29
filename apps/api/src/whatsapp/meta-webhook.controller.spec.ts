@@ -7,21 +7,36 @@ import { MetaWebhookController } from "./meta-webhook.controller";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { ErrorsService } from "../errors/errors.service";
 import type { ChatwootRepasseService } from "./chatwoot-repasse.service";
+import type { ConferenciaAlcanceService } from "../admin/conferencia-diaria/conferencia-alcance.service";
+import type { ConferenciaRespostaService } from "../admin/conferencia-diaria/conferencia-resposta.service";
 
 const SEGREDO = "app-secret-de-teste";
 const VERIFY = "verify-token-de-teste";
 
-function controller(env: Record<string, string> = { META_APP_SECRET: SEGREDO, META_WEBHOOK_VERIFY_TOKEN: VERIFY }) {
+function controller(
+  env: Record<string, string> = { META_APP_SECRET: SEGREDO, META_WEBHOOK_VERIFY_TOKEN: VERIFY },
+  linha: { telefone: string; direcao: string; statusEntrega: string | null } | null = {
+    telefone: "5542991088125",
+    direcao: "SAIDA",
+    statusEntrega: "sent",
+  },
+) {
   const updateMany = vi.fn(async () => ({ count: 1 }));
+  const findFirst = vi.fn(async () => linha);
   const reportar = vi.fn(async (_input: { message: string; extra?: unknown }) => ({}));
   const repassar = vi.fn((_corpo: Buffer, _assinatura?: string) => {});
+  const tratarMensagem = vi.fn(async (_m: unknown) => ({ tratada: false as const, motivo: "x" }));
+  const aoEntregar = vi.fn(async (_t: string) => {});
+  const aoFalhar = vi.fn(async (_t: string, _c: unknown) => true);
   const c = new MetaWebhookController(
     { get: (k: string) => env[k] } as unknown as ConfigService,
-    { whatsappMensagem: { updateMany } } as unknown as PrismaService,
+    { whatsappMensagem: { updateMany, findFirst } } as unknown as PrismaService,
     { reportar } as unknown as ErrorsService,
     { repassar, configurado: () => true } as unknown as ChatwootRepasseService,
+    { tratarMensagem } as unknown as ConferenciaRespostaService,
+    { aoEntregar, aoFalhar } as unknown as ConferenciaAlcanceService,
   );
-  return { c, updateMany, reportar, repassar };
+  return { c, updateMany, reportar, repassar, tratarMensagem, aoEntregar, aoFalhar };
 }
 
 /** Monta o POST como a Meta monta: corpo cru + assinatura hex do HMAC dele. */
@@ -155,6 +170,8 @@ describe("status de entrega", () => {
       } as unknown as PrismaService,
       { reportar: vi.fn(async () => ({})) } as unknown as ErrorsService,
       { repassar: vi.fn(), configurado: () => false } as unknown as ChatwootRepasseService,
+      { tratarMensagem: vi.fn() } as unknown as ConferenciaRespostaService,
+      { aoEntregar: vi.fn(), aoFalhar: vi.fn() } as unknown as ConferenciaAlcanceService,
     );
     const e = evento(STATUS());
     await expect(
@@ -246,5 +263,123 @@ describe("repasse pro Chatwoot", () => {
       c.receber(e.body as never, e.header, { rawBody: e.raw } as Request & { rawBody?: Buffer }),
     ).rejects.toThrow(UnauthorizedException);
     expect(repassar).not.toHaveBeenCalled();
+  });
+});
+
+describe("alcance do número (conferência diária)", () => {
+  const rodar = async (
+    body: unknown,
+    linha?: { telefone: string; direcao: string; statusEntrega: string | null } | null,
+  ) => {
+    const k = controller(undefined, linha);
+    const e = evento(body);
+    const r = await k.c.receber(e.body as never, e.header, { rawBody: e.raw } as Request & { rawBody?: Buffer });
+    return { r, ...k };
+  };
+
+  it("delivered zera o contador do número", async () => {
+    const { aoEntregar, aoFalhar } = await rodar(STATUS({ status: "delivered" }));
+    expect(aoEntregar).toHaveBeenCalledWith("5542991088125");
+    expect(aoFalhar).not.toHaveBeenCalled();
+  });
+
+  it("read também conta como entregue", async () => {
+    const { aoEntregar } = await rodar(STATUS({ status: "read" }));
+    expect(aoEntregar).toHaveBeenCalledOnce();
+  });
+
+  it("failed repassa o código pra allowlist decidir", async () => {
+    const { aoFalhar } = await rodar(STATUS({ status: "failed", errors: [{ code: 131026 }] }));
+    expect(aoFalhar).toHaveBeenCalledWith("5542991088125", 131026);
+  });
+
+  it("o mesmo status reenviado pela Meta não conta duas vezes", async () => {
+    const { aoFalhar } = await rodar(STATUS({ status: "failed", errors: [{ code: 131026 }] }), {
+      telefone: "5542991088125",
+      direcao: "SAIDA",
+      statusEntrega: "failed",
+    });
+    expect(aoFalhar).not.toHaveBeenCalled();
+  });
+
+  it("status de mensagem que não é nossa (sem linha) só é ignorado", async () => {
+    const { r, aoEntregar } = await rodar(STATUS({ status: "delivered" }), null);
+    expect(r).toBe("ok");
+    expect(aoEntregar).not.toHaveBeenCalled();
+  });
+
+  it("erro no alcance não derruba o 200", async () => {
+    const k = controller();
+    k.aoEntregar.mockRejectedValueOnce(new Error("banco"));
+    const e = evento(STATUS({ status: "delivered" }));
+    await expect(
+      k.c.receber(e.body as never, e.header, { rawBody: e.raw } as Request & { rawBody?: Buffer }),
+    ).resolves.toBe("ok");
+    expect(k.updateMany).toHaveBeenCalled();
+  });
+});
+
+describe("resposta da conferência diária", () => {
+  const rodar = async (messages: unknown[]) => {
+    const k = controller();
+    const body = { entry: [{ changes: [{ field: "messages", value: { messages } }] }] };
+    const e = evento(body);
+    const r = await k.c.receber(e.body as never, e.header, { rawBody: e.raw } as Request & { rawBody?: Buffer });
+    return { r, ...k, e };
+  };
+
+  it("entrega cada mensagem ao serviço da conferência e SEMPRE repassa ao Chatwoot", async () => {
+    const m = { id: "wamid.T", from: "554291088125", type: "button", button: { payload: "cv:x:PARAR", text: "Parar" } };
+    const { r, tratarMensagem, repassar, e } = await rodar([m]);
+    expect(r).toBe("ok");
+    expect(tratarMensagem).toHaveBeenCalledWith(m);
+    expect(repassar.mock.calls[0]?.[0]).toBe(e.raw);
+  });
+
+  it("falha na conferência responde 200 e as outras mensagens seguem", async () => {
+    const k = controller();
+    k.tratarMensagem.mockRejectedValueOnce(new Error("boom"));
+    const body = {
+      entry: [{ changes: [{ field: "messages", value: { messages: [{ id: "a" }, { id: "b" }] } }] }],
+    };
+    const e = evento(body);
+    await expect(
+      k.c.receber(e.body as never, e.header, { rawBody: e.raw } as Request & { rawBody?: Buffer }),
+    ).resolves.toBe("ok");
+    expect(k.tratarMensagem).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("avisos da conta (qualidade do número, restrição)", () => {
+  const rodar = async (field: string, value: unknown) => {
+    const k = controller();
+    const e = evento({ entry: [{ changes: [{ field, value }] }] });
+    const r = await k.c.receber(e.body as never, e.header, { rawBody: e.raw } as Request & { rawBody?: Buffer });
+    return { r, ...k };
+  };
+
+  it("phone_number_quality_update vai pro ErrorLog", async () => {
+    const { r, reportar } = await rodar("phone_number_quality_update", {
+      display_phone_number: "554299999999",
+      event: "DOWNGRADE",
+      current_limit: "TIER_1K",
+    });
+    expect(r).toBe("ok");
+    expect(reportar).toHaveBeenCalledOnce();
+    expect(reportar.mock.calls[0]?.[0].message).toContain("phone_number_quality_update");
+  });
+
+  it("account_update vai pro ErrorLog", async () => {
+    const { reportar } = await rodar("account_update", { event: "ACCOUNT_RESTRICTION" });
+    expect(reportar).toHaveBeenCalledOnce();
+  });
+
+  it("erro ao reportar não derruba o 200", async () => {
+    const k = controller();
+    k.reportar.mockRejectedValueOnce(new Error("banco"));
+    const e = evento({ entry: [{ changes: [{ field: "account_update", value: { event: "X" } }] }] });
+    await expect(
+      k.c.receber(e.body as never, e.header, { rawBody: e.raw } as Request & { rawBody?: Buffer }),
+    ).resolves.toBe("ok");
   });
 });

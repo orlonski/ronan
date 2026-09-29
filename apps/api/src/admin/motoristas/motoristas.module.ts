@@ -22,5 +22,7 @@ import { AppDeployController } from "./app-deploy.controller";
     EasUpdateService,
     AppUpdateNotifierService,
   ],
+  // A conferência diária aprova "inativar vínculo" por aqui — nunca reimplementa.
+  exports: [MotoristasService],
 })
 export class MotoristasModule {}

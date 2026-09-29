@@ -1,5 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { custoEstimado, rotaWhatsapp, type ProvedorWhatsapp, type RotaWhatsapp } from "@ronan/shared-types";
+import { codigoDeErroParaGravar } from "../../common/whatsapp-alcance";
 import { contaAtual } from "../../common/conta/conta-context";
 import { PrismaService } from "../../prisma/prisma.service";
 import { EvolutionProvedor } from "./evolution.provedor";
@@ -155,6 +156,9 @@ export class EnvioWhatsappService {
           tipo: "TEXTO",
           provedor: r.provedor,
           idExterno: r.idExterno,
+          // O mesmo formato que o webhook grava ("131026", sem o prefixo META_):
+          // é o que deixa a mesma consulta valer pros dois caminhos.
+          erroCodigo: r.enviado ? null : codigoDeErroParaGravar(r.erro?.codigo),
           rota: envio.rota,
           categoria,
           custoEstimado: custoEstimado(r.provedor, def?.categoria),

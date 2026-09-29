@@ -43,6 +43,7 @@ export type ConfiguracaoPlataformaInput = {
   autoCadastroAberto?: boolean;
   diasTesteGratis?: number;
   maxCodigosPorHora?: number;
+  maxConferenciasPorHora?: number;
   sdrAtivo?: boolean;
   sdrProvider?: string;
   sdrModeloAnthropic?: string;
@@ -860,6 +861,7 @@ export class ContasService implements OnModuleInit {
       autoCadastroAberto: cfg?.autoCadastroAberto ?? false,
       diasTesteGratis: cfg?.diasTesteGratis ?? 14,
       maxCodigosPorHora: cfg?.maxCodigosPorHora ?? 30,
+      maxConferenciasPorHora: cfg?.maxConferenciasPorHora ?? 60,
       sdrAtivo: cfg?.sdrAtivo ?? false,
       sdrProvider: cfg?.sdrProvider ?? "anthropic",
       sdrModeloAnthropic: cfg?.sdrModeloAnthropic ?? "claude-sonnet-4-6",

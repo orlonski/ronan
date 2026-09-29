@@ -15,6 +15,8 @@ type Config = {
   diasTesteGratis: number;
   /** Teto de códigos por hora — cada um é uma mensagem de WhatsApp paga. */
   maxCodigosPorHora: number;
+  /** Teto de perguntas da conferência diária por hora (todas as empresas juntas). */
+  maxConferenciasPorHora: number;
 };
 
 const PATH = "/admin/contas/configuracao";
@@ -31,6 +33,7 @@ export function PortaCadastro() {
   const token = useAuthToken();
   const [dias, setDias] = useState("14");
   const [maxHora, setMaxHora] = useState("30");
+  const [maxConf, setMaxConf] = useState("60");
   const [salvando, setSalvando] = useState(false);
 
   const { data, refetch } = useQuery({
@@ -43,6 +46,7 @@ export function PortaCadastro() {
     if (!data) return;
     setDias(String(data.diasTesteGratis));
     setMaxHora(String(data.maxCodigosPorHora));
+    setMaxConf(String(data.maxConferenciasPorHora));
   }, [data]);
 
   async function salvar(mudanca: Partial<Config>) {
@@ -54,7 +58,9 @@ export function PortaCadastro() {
         body: JSON.stringify(mudanca),
       });
       toast.success(
-        mudanca.maxCodigosPorHora !== undefined
+        mudanca.maxConferenciasPorHora !== undefined
+          ? `Teto de ${novo.maxConferenciasPorHora} perguntas da conferência por hora.`
+          : mudanca.maxCodigosPorHora !== undefined
           ? `Teto de ${novo.maxCodigosPorHora} códigos por hora.`
           : mudanca.autoCadastroAberto === undefined
           ? `Teste grátis agora é de ${novo.diasTesteGratis} dias.`
@@ -132,6 +138,26 @@ export function PortaCadastro() {
                 return;
               }
               void salvar({ maxCodigosPorHora: n });
+            }}
+          />
+        </div>
+        <div className="w-36">
+          <Label htmlFor="maxConf" className="text-xs">
+            Conferências por hora
+          </Label>
+          <Input
+            id="maxConf"
+            inputMode="numeric"
+            title="Teto de gasto: cada pergunta da conferência diária é um template pago da Meta, somando todas as empresas."
+            value={maxConf}
+            onChange={(e) => setMaxConf(e.target.value.replace(/\D/g, ""))}
+            onBlur={() => {
+              const n = Number(maxConf);
+              if (!n || n === data.maxConferenciasPorHora) {
+                setMaxConf(String(data.maxConferenciasPorHora));
+                return;
+              }
+              void salvar({ maxConferenciasPorHora: n });
             }}
           />
         </div>

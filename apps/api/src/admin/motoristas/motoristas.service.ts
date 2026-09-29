@@ -123,6 +123,9 @@ const SAFE_SELECT = {
   podeTelemetria: true,
   podeChat: true,
   receberResumoDiario: true,
+  // O selo do cadastro: WhatsApp suspeito de não entregar / pediu pra parar a pergunta.
+  receberConferenciaDiaria: true,
+  whatsappInalcancavelEm: true,
   perfilAcessoId: true,
   criadoEm: true,
   criadoPor: { select: { id: true, nome: true } },

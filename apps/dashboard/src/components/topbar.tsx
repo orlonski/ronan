@@ -166,6 +166,8 @@ export function IconeTipo({ tipo }: { tipo: string }) {
     return <TriangleAlert className={`${cls} text-red-600`} />;
   if (tipo === "problema-veiculo")
     return <Wrench className={`${cls} text-amber-600`} />;
+  if (tipo === "conferencia-diaria")
+    return <ClipboardCheck className={`${cls} text-amber-600`} />;
   if (tipo === "conta-auto-cadastro" || tipo === "lead-novo" || tipo === "lead-precisa-humano")
     return <Building2 className={`${cls} text-emerald-600`} />;
   if (tipo === "nova-viagem")
@@ -209,6 +211,8 @@ export function rotaParaNotificacao(n: AdminNotificacao): string | null {
   if (n.tipo === "alerta-torre") return "/torre";
   // O aviso se decide na aba "Avisos do motorista" da Manutenção.
   if (n.tipo === "problema-veiculo") return "/frota?aba=avisos";
+  // As sugestões da conferência se decidem na aba "Fila do gestor".
+  if (n.tipo === "conferencia-diaria") return "/conferencia-diaria?aba=fila";
   if (n.tipo === "nova-viagem" && dados.viagemId) {
     return `/viagens/${dados.viagemId}`;
   }

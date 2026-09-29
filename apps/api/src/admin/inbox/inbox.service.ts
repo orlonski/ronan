@@ -35,7 +35,10 @@ export type TipoNotificacaoAdmin =
   // caminhão parado há três dias.
   | "alerta-torre"
   // O motorista avisou problema no caminhão pelo app (Manutenção).
-  | "problema-veiculo";
+  | "problema-veiculo"
+  // Conferência diária de viagens: o sistema tem uma sugestão esperando decisão
+  // (motorista disse que saiu, parou de receber, número que não entrega…).
+  | "conferencia-diaria";
 
 export type DispararNotificacaoInput = {
   tipo: TipoNotificacaoAdmin;

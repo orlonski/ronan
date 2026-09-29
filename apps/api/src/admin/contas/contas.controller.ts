@@ -65,6 +65,8 @@ const ConfiguracaoPlataformaBody = z
     diasTesteGratis: z.number().int().min(1).max(90).optional(),
     // Teto de códigos por hora. Cada um é uma mensagem paga.
     maxCodigosPorHora: z.number().int().min(1).max(1000).optional(),
+    // Teto de perguntas da conferência diária por hora, somando todas as empresas.
+    maxConferenciasPorHora: z.number().int().min(1).max(5000).optional(),
 
     // O SDR: o atendimento comercial automático no WhatsApp. Nasce desligado,
     // e provider/modelo são escolha da casa — o SDR não herda a escolha (nem a

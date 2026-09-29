@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ConferenciaRespostaModule } from "../admin/conferencia-diaria/conferencia-resposta.module";
 import { WhatsappModule } from "../whatsapp/whatsapp.module";
 import { ProspeccaoModule } from "../prospeccao/prospeccao.module";
 import { ChatwootClientModule } from "./chatwoot-client.module";
@@ -21,7 +22,14 @@ import { ChatwootWebhookController } from "./chatwoot-webhook.controller";
  * qualquer de alcançar dado de transportadora.
  */
 @Module({
-  imports: [WhatsappModule, SdrModule, ProspeccaoModule, ChatwootClientModule, EvolutionModule],
+  imports: [
+    WhatsappModule,
+    SdrModule,
+    ProspeccaoModule,
+    ChatwootClientModule,
+    EvolutionModule,
+    ConferenciaRespostaModule,
+  ],
   controllers: [ChatwootWebhookController, MetaLeadsController],
   providers: [ChatwootAgenteService, TesteGuiadoService, MetaLeadsService],
   exports: [ChatwootClientModule],

@@ -37,6 +37,9 @@ const VERSAO_PADRAO = "v25.0";
  */
 const TIMEOUT_MS = 15_000;
 
+/** Limite da Meta pro `payload` de um botão de resposta rápida. */
+const PAYLOAD_MAX = 256;
+
 type RespostaOk = { messages?: Array<{ id?: string }> };
 type RespostaErro = {
   error?: { message?: string; code?: number; error_subcode?: number; error_data?: { details?: string } };
@@ -171,11 +174,34 @@ export class MetaProvedor implements ProvedorWhatsappClient {
       },
     ];
 
-    // Os dois tipos de botão têm o MESMO formato na linha: `sub_type: "url"`,
-    // índice 0, um parâmetro de texto. No template de autenticação esse texto é
-    // o código que o botão copia; no de URL dinâmica é o sufixo que completa a
-    // URL base cadastrada na Meta. A distinção no catálogo é pra quem lê.
-    if (template.botao) {
+    if (template.botao?.tipo === "QUICK_REPLY") {
+      // Resposta rápida: um componente por botão, índice = posição do rótulo, e o
+      // parâmetro é o `payload` que volta no webhook (não texto exibido).
+      const payloads = envio.payloads ?? [];
+      template.botao.rotulos.forEach((rotulo, i) => {
+        const payload = payloads[i];
+        if (!payload) {
+          throw new Error(
+            `template "${template.nome}" precisa de payloads[${i}] (botão "${rotulo}"), e o envio de ${envio.rota} mandou ${payloads.length}.`,
+          );
+        }
+        if (payload.length > PAYLOAD_MAX) {
+          throw new Error(
+            `payloads[${i}] do template "${template.nome}" tem ${payload.length} caracteres; a Meta aceita até ${PAYLOAD_MAX}.`,
+          );
+        }
+        componentes.push({
+          type: "button",
+          sub_type: "quick_reply",
+          index: String(i),
+          parameters: [{ type: "payload", payload }],
+        });
+      });
+    } else if (template.botao) {
+      // Os dois tipos de botão têm o MESMO formato na linha: `sub_type: "url"`,
+      // índice 0, um parâmetro de texto. No template de autenticação esse texto é
+      // o código que o botão copia; no de URL dinâmica é o sufixo que completa a
+      // URL base cadastrada na Meta. A distinção no catálogo é pra quem lê.
       componentes.push({
         type: "button",
         sub_type: "url",

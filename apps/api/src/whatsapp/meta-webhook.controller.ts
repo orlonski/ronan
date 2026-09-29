@@ -17,6 +17,11 @@ import type { Request } from "express";
 import { Public } from "../auth/decorators/public.decorator";
 import { ChatwootRepasseService } from "./chatwoot-repasse.service";
 import { comoSistema } from "../common/conta/conta-context";
+import { ConferenciaAlcanceService } from "../admin/conferencia-diaria/conferencia-alcance.service";
+import {
+  ConferenciaRespostaService,
+  type MensagemRecebida,
+} from "../admin/conferencia-diaria/conferencia-resposta.service";
 import { ErrorsService } from "../errors/errors.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -52,8 +57,15 @@ type ValueMeta = {
     status?: string;
     errors?: Array<{ code?: number; title?: string; message?: string }>;
   }>;
-  messages?: Array<{ id?: string; from?: string; type?: string }>;
+  messages?: MensagemRecebida[];
   metadata?: { phone_number_id?: string };
+  /** `phone_number_quality_update` / `account_update`: os campos variam por evento. */
+  event?: string;
+  display_phone_number?: string;
+  current_limit?: string;
+  ban_info?: unknown;
+  violation_info?: unknown;
+  restriction_info?: unknown;
 } & TemplateStatus;
 
 type CorpoWebhook = {
@@ -71,6 +83,8 @@ export class MetaWebhookController {
     private readonly prisma: PrismaService,
     private readonly errors: ErrorsService,
     private readonly chatwoot: ChatwootRepasseService,
+    private readonly conferencia: ConferenciaRespostaService,
+    private readonly alcance: ConferenciaAlcanceService,
   ) {}
 
   /**
@@ -164,14 +178,36 @@ export class MetaWebhookController {
           continue;
         }
 
+        // Qualidade/limite do número e avisos da conta: é o que antecede uma
+        // restrição de envio. Vai pro ErrorLog, que é a tela onde alguém olha.
+        if (change.field === "phone_number_quality_update" || change.field === "account_update") {
+          await this.registrarAvisoDaConta(change.field, value);
+          continue;
+        }
+
         for (const s of value.statuses ?? []) {
           await this.gravarStatus(s);
         }
 
+        // Resposta à conferência diária (toque no botão ou texto "1/2/3/4",
+        // "sim/não", "parar"). Cada mensagem isolada: erro numa não derruba as
+        // outras nem o 200 pra Meta. Só o que é DA conferência é tratado aqui —
+        // o resto segue pro Chatwoot, como sempre.
+        for (const m of value.messages ?? []) {
+          try {
+            const r = await this.conferencia.tratarMensagem(m);
+            if (r.tratada) {
+              this.log.log(`resposta da conferência diária tratada (${r.origem} → ${r.opcao})`);
+            }
+          } catch (e) {
+            this.log.error(`falha na resposta da conferência: ${(e as Error).message}`);
+          }
+        }
+
         // Mensagem recebida. Quem atende é o Chatwoot, pelo repasse lá em
-        // cima; aqui não se responde nada. O agente segue DESLIGADO em
-        // produção de propósito, e ligá-lo por este caminho seria fazer isso
-        // por acidente.
+        // cima; aqui não se responde nada (a única exceção é a resposta da
+        // conferência, acima). O agente segue DESLIGADO em produção de
+        // propósito, e ligá-lo por este caminho seria fazer isso por acidente.
         if (value.messages?.length) {
           const destino = this.chatwoot.configurado() ? "repassada(s) ao Chatwoot" : "sem tratamento";
           this.log.log(
@@ -219,6 +255,32 @@ export class MetaWebhookController {
   }
 
   /**
+   * `phone_number_quality_update` (qualidade/limite do número) e `account_update`
+   * (restrição, banimento, revisão da conta). Moldado em `gravarStatusTemplate`:
+   * vai pro `ErrorLog` e nunca derruba o webhook.
+   */
+  private async registrarAvisoDaConta(campo: string, v: ValueMeta): Promise<void> {
+    const detalhe = JSON.stringify({
+      evento: v.event ?? null,
+      numero: v.display_phone_number ?? null,
+      limite: v.current_limit ?? null,
+      banimento: v.ban_info ?? null,
+      violacao: v.violation_info ?? null,
+      restricao: v.restriction_info ?? null,
+    });
+    this.log.error(`Meta avisou (${campo}): ${detalhe}`);
+    try {
+      await this.errors.reportar({
+        origem: "api",
+        message: `WhatsApp (Meta) ${campo}: ${v.event ?? "sem evento"}`,
+        extra: { campo, evento: v.event ?? null, valor: v },
+      });
+    } catch (e) {
+      this.log.warn(`não deu pra registrar o aviso da conta: ${(e as Error).message}`);
+    }
+  }
+
+  /**
    * Carimba o status de entrega na linha que a fachada gravou no envio.
    *
    * Roda em `comoSistema` porque o webhook não tem conta no contexto: a trava
@@ -233,6 +295,15 @@ export class MetaWebhookController {
     }
 
     const erro = s.errors?.[0];
+    // Antes de gravar: a linha diz de quem é o número e se este status é novo (a
+    // Meta reenvia webhook — falha repetida não pode contar duas vezes).
+    const antes = await comoSistema(() =>
+      this.prisma.whatsappMensagem.findFirst({
+        where: { idExterno: s.id },
+        select: { telefone: true, direcao: true, statusEntrega: true },
+      }),
+    ).catch(() => null);
+
     const n = await comoSistema(() =>
       this.prisma.whatsappMensagem.updateMany({
         where: { idExterno: s.id },
@@ -242,6 +313,20 @@ export class MetaWebhookController {
         },
       }),
     );
+
+    // Alcance do número (só a conferência diária lê). Falha aqui não pode custar
+    // o 200 — o carimbo de entrega acima já está gravado.
+    if (antes?.direcao === "SAIDA" && antes.telefone && antes.statusEntrega !== s.status) {
+      try {
+        if (s.status === "delivered" || s.status === "read") {
+          await this.alcance.aoEntregar(antes.telefone);
+        } else if (s.status === "failed") {
+          await this.alcance.aoFalhar(antes.telefone, erro?.code);
+        }
+      } catch (e) {
+        this.log.warn(`não deu pra atualizar o alcance do número: ${(e as Error).message}`);
+      }
+    }
 
     if (n.count === 0) {
       // Acontece de verdade: status de mensagem mandada antes desta versão, ou

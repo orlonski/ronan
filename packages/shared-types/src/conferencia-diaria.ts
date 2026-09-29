@@ -1,8 +1,9 @@
 import { z } from "zod";
 
 // Conferência diária de viagens: "você esqueceu de lançar alguma viagem?".
-// Fase 1 = modo SOMBRA: o sistema só registra quem SERIA perguntado. Nada sai
-// por WhatsApp. Os enums espelham os do Prisma.
+// Modo SOMBRA: só registra quem SERIA perguntado. Modo ENVIANDO: manda a pergunta
+// pelo WhatsApp (template da Meta com 4 botões) e trata a resposta. Os enums
+// espelham os do Prisma.
 
 export const RegraConferenciaDiaria = z.enum(["SEM_VIAGEM_NO_DIA_ANTERIOR", "SEM_VIAGEM_HA_N_DIAS"]);
 export type RegraConferenciaDiaria = z.infer<typeof RegraConferenciaDiaria>;
@@ -13,8 +14,93 @@ export type ModoConferenciaDiaria = z.infer<typeof ModoConferenciaDiaria>;
 export const QuemEntraConferenciaDiaria = z.enum(["TODOS_APROVADOS", "SO_MODALIDADES"]);
 export type QuemEntraConferenciaDiaria = z.infer<typeof QuemEntraConferenciaDiaria>;
 
-export const EstadoConferenciaDiaria = z.enum(["SOMBRA", "SUPRIMIDA"]);
+export const EstadoConferenciaDiaria = z.enum([
+  "SOMBRA",
+  "SUPRIMIDA",
+  "PENDENTE",
+  "ENVIADA",
+  "RESPONDIDA",
+  "EXPIRADA",
+  "FALHOU",
+]);
 export type EstadoConferenciaDiaria = z.infer<typeof EstadoConferenciaDiaria>;
+
+/** O que o motorista respondeu. AMBIGUA = texto livre que não bate com nenhum botão. */
+export const OpcaoConferenciaDiaria = z.enum([
+  "NAO_TIVE",
+  "TIVE_NAO_LANCEI",
+  "SAI_DA_EMPRESA",
+  "PARAR",
+  "AMBIGUA",
+]);
+export type OpcaoConferenciaDiaria = z.infer<typeof OpcaoConferenciaDiaria>;
+
+/**
+ * Os quatro botões do template, NA ORDEM em que aparecem. O rótulo é o que a Meta
+ * congela no template aprovado; o `payload` que volta no toque é `cv:<id>:<opcao>`.
+ */
+export const BOTOES_CONFERENCIA_DIARIA = [
+  { opcao: "NAO_TIVE", rotulo: "Não tive" },
+  { opcao: "TIVE_NAO_LANCEI", rotulo: "Tive, não lancei" },
+  { opcao: "SAI_DA_EMPRESA", rotulo: "Saí da empresa" },
+  { opcao: "PARAR", rotulo: "Parar perguntas" },
+] as const satisfies readonly { opcao: Exclude<OpcaoConferenciaDiaria, "AMBIGUA">; rotulo: string }[];
+
+/** Payload do botão. Cabe folgado nos 256 caracteres que a Meta aceita. */
+export function payloadConferencia(conferenciaId: string, opcao: OpcaoConferenciaDiaria): string {
+  return `cv:${conferenciaId}:${opcao}`;
+}
+
+const PAYLOAD_CONFERENCIA = /^cv:([0-9a-fA-F-]{8,64}):([A-Z_]+)$/;
+
+/** Lê `cv:<id>:<opcao>`. `null` = não é payload da conferência (ou a opção não existe). */
+export function lerPayloadConferencia(
+  payload: string | undefined | null,
+): { conferenciaId: string; opcao: Exclude<OpcaoConferenciaDiaria, "AMBIGUA"> } | null {
+  const m = PAYLOAD_CONFERENCIA.exec(payload ?? "");
+  if (!m) return null;
+  const achou = BOTOES_CONFERENCIA_DIARIA.find((b) => b.opcao === m[2]);
+  return achou ? { conferenciaId: m[1]!, opcao: achou.opcao } : null;
+}
+
+export const TipoSugestaoGestor = z.enum([
+  "INATIVAR_VINCULO",
+  "LANCAR_VIAGEM_FALTANTE",
+  "RESPOSTA_AMBIGUA",
+  "MOTORISTA_PAROU_WHATSAPP",
+  "WHATSAPP_INALCANCAVEL",
+]);
+export type TipoSugestaoGestor = z.infer<typeof TipoSugestaoGestor>;
+
+export const StatusSugestaoGestor = z.enum([
+  "ABERTA",
+  "APROVADA",
+  "RECUSADA",
+  "RESOLVIDA_SOZINHA",
+  "EXPIRADA",
+]);
+export type StatusSugestaoGestor = z.infer<typeof StatusSugestaoGestor>;
+
+/** Recusar ou aprovar pede um motivo só quando o gestor quiser deixar um. */
+export const DecidirSugestaoGestorSchema = z.object({
+  motivo: z.string().trim().max(500).optional(),
+});
+export type DecidirSugestaoGestor = z.infer<typeof DecidirSugestaoGestorSchema>;
+
+/** Texto padrão de orientação depois de "Parar perguntas". {empresa} e {contato} são trocados. */
+export const MENSAGEM_AO_PARAR_PADRAO =
+  "Certo, não vamos mais enviar essa pergunta. Só lembrando: viagem que não é lançada no app não entra no seu acerto. Qualquer dúvida, fale com {empresa}{contato}.";
+
+/** Monta a orientação: `{contato}` vira " (contato)" ou some quando a empresa não informou. */
+export function montarMensagemAoParar(
+  modelo: string | null | undefined,
+  empresa: string,
+  contato: string | null | undefined,
+): string {
+  const base = modelo?.trim() ? modelo : MENSAGEM_AO_PARAR_PADRAO;
+  const c = contato?.trim() ? ` (${contato.trim()})` : "";
+  return base.replaceAll("{empresa}", empresa).replaceAll("{contato}", c);
+}
 
 /** Dia da semana como o `getDay()`: 0 = domingo … 6 = sábado. */
 const DiaDaSemana = z.number().int().min(0).max(6);
@@ -46,6 +132,14 @@ export const AtualizarConfigConferenciaDiariaSchema = z
     quemEntra: QuemEntraConferenciaDiaria,
     modalidadeIds: z.array(z.string().uuid()).max(200),
     transportadoraIds: z.array(z.string().uuid()).max(200),
+    reenviar: z.boolean(),
+    horasParaLembrar: z.number().int().min(1).max(48),
+    horasParaExpirar: z.number().int().min(2).max(72),
+    mensagemAoParar: z.string().trim().max(600).nullable(),
+    contatoEmpresa: z.string().trim().max(120).nullable(),
+    suprimirResumoQuemRecebeuPergunta: z.boolean(),
+    mensagensParaSuspeitar: z.number().int().min(2).max(10),
+    diasParaSuspeitar: z.number().int().min(2).max(30),
   })
   .partial()
   .superRefine((v, ctx) => {
@@ -74,6 +168,14 @@ export const ConfigConferenciaDiaria = z.object({
   quemEntra: QuemEntraConferenciaDiaria,
   modalidadeIds: z.array(z.string()),
   transportadoraIds: z.array(z.string()),
+  reenviar: z.boolean(),
+  horasParaLembrar: z.number(),
+  horasParaExpirar: z.number(),
+  mensagemAoParar: z.string().nullable(),
+  contatoEmpresa: z.string().nullable(),
+  suprimirResumoQuemRecebeuPergunta: z.boolean(),
+  mensagensParaSuspeitar: z.number(),
+  diasParaSuspeitar: z.number(),
 });
 export type ConfigConferenciaDiaria = z.infer<typeof ConfigConferenciaDiaria>;
 

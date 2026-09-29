@@ -31,6 +31,13 @@ export type EnvioWhatsapp = {
    * linha, tab ou 4+ espaços. Use `achatarParam` dos shared-types na dúvida.
    */
   params?: string[];
+  /**
+   * `payload` de cada botão de resposta rápida do template, na ordem dos
+   * rótulos (só Meta). É o que volta no webhook quando o motorista toca — no
+   * caso da conferência diária, `cv:<conferenciaId>:<opcao>`. Máx. 256
+   * caracteres cada.
+   */
+  payloads?: string[];
   sessaoId?: string | null;
   /**
    * Por qual número sai (só Meta). O padrão é o transacional. `comercial` é o

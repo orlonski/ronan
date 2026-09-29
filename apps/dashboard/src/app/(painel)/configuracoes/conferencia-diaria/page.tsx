@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Play, Save } from "lucide-react";
+import { AlertTriangle, Play, Save, Send } from "lucide-react";
 import { toast } from "sonner";
 import {
+  MENSAGEM_AO_PARAR_PADRAO,
   descreverRegraConferencia,
   type ConfigConferenciaDiaria,
   type RegraConferenciaDiaria,
@@ -18,6 +19,7 @@ import { ComboboxMulti } from "@/components/ui/combobox-multi";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { ListaConferencia, type RespostaConferencia } from "@/components/conferencia-diaria-lista";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
@@ -129,8 +131,7 @@ function Conteudo() {
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
     if (!form) return;
-    // `modo` fica de fora: nesta etapa é sempre sombra e não se edita na tela.
-    const { id: _id, modo: _modo, ...body } = form;
+    const { id: _id, ...body } = form;
     await salvar.mutateAsync(body);
   }
 
@@ -145,19 +146,30 @@ function Conteudo() {
         </p>
       </div>
 
-      <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>
-          <strong>Modo sombra: nesta etapa nada é enviado.</strong> O sistema só registra quem seria
-          perguntado, pra você conferir se a regra acerta antes de ligar o envio.
-        </p>
-      </div>
+      {cfg.data?.modo === "ENVIANDO" && cfg.data.ativo ? (
+        <div className="flex items-start gap-3 rounded-md border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
+          <Send className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            <strong>Enviando de verdade.</strong> O sistema manda a pergunta pelo WhatsApp pra quem a regra
+            apontar. Se o WhatsApp não estiver pronto, ele só registra e avisa aqui.
+          </p>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            <strong>Só registrando: nada é enviado.</strong> O sistema anota quem seria perguntado, pra você
+            conferir se a regra acerta antes de ligar o envio.
+          </p>
+        </div>
+      )}
 
       <Card className="space-y-2 border-primary/40 bg-primary/5 p-5" data-testid="regra-em-vigor">
         <h2 className="text-base font-semibold">Regra em vigor</h2>
         <p className="max-w-prose text-sm leading-relaxed">{regraEmVigor}</p>
         <p className="text-xs text-muted-foreground">
-          {form.ativo ? "Ligada" : "Desligada"} · modo sombra (nada é enviado).
+          {form.ativo ? "Ligada" : "Desligada"} ·{" "}
+          {form.modo === "ENVIANDO" ? "envia a pergunta pelo WhatsApp." : "só registra (nada é enviado)."}
           {alterado && " Você mudou o formulário — salve pra valer."}
         </p>
       </Card>
@@ -167,9 +179,23 @@ function Conteudo() {
           <h2 className="text-base font-semibold">Ligar a conferência</h2>
           <Field
             label="Conferência ligada"
-            help="Nasce desligada. Ligada, o sistema registra todo dia quem seria perguntado — sem enviar nada."
+            help="Nasce desligada. Ligada, o sistema confere todo dia quem provavelmente esqueceu de lançar."
           >
             <Toggle value={form.ativo} onChange={(v) => set("ativo", v)} disabled={!podeEditar} />
+          </Field>
+          <Field
+            label="O que fazer com quem esqueceu"
+            help="'Só registrar' anota quem seria perguntado, sem mandar nada — bom pra conferir se a regra acerta. 'Perguntar pelo WhatsApp' manda a pergunta com quatro botões de resposta."
+          >
+            <Select
+              value={form.modo}
+              onChange={(e) => set("modo", e.target.value as ConfigConferenciaDiaria["modo"])}
+              disabled={!podeEditar}
+              className="max-w-xs"
+            >
+              <option value="SOMBRA">Só registrar (não enviar nada)</option>
+              <option value="ENVIANDO">Perguntar pelo WhatsApp</option>
+            </Select>
           </Field>
         </Card>
 
@@ -248,9 +274,84 @@ function Conteudo() {
         </Card>
 
         <Card className="space-y-4 p-5">
+          <h2 className="text-base font-semibold">Quando o parceiro não responde</h2>
+          <Field
+            label="Mandar um lembrete"
+            help="Um único lembrete, com a mesma pergunta e os mesmos botões. Não sai de madrugada nem pra quem já lançou viagem depois da pergunta."
+          >
+            <Toggle value={form.reenviar} onChange={(v) => set("reenviar", v)} disabled={!podeEditar} />
+          </Field>
+          {form.reenviar && (
+            <Field label="Lembrar depois de quantas horas">
+              <NumInput value={form.horasParaLembrar} onChange={(v) => set("horasParaLembrar", v)} min={1} max={48} disabled={!podeEditar} />
+            </Field>
+          )}
+          <Field
+            label="Dar a pergunta por encerrada depois de quantas horas"
+            help="Se ele responder depois, a resposta ainda vale."
+          >
+            <NumInput value={form.horasParaExpirar} onChange={(v) => set("horasParaExpirar", v)} min={2} max={72} disabled={!podeEditar} />
+          </Field>
+          <Field
+            label="Resumo das 20h"
+            help="Quem recebeu a pergunta hoje não recebe o resumo genérico do dia (ele já conversou com a gente). Se tiver viagem sem peso ou com problema, o resumo sai do mesmo jeito."
+          >
+            <Toggle
+              value={form.suprimirResumoQuemRecebeuPergunta}
+              onChange={(v) => set("suprimirResumoQuemRecebeuPergunta", v)}
+              disabled={!podeEditar}
+            />
+          </Field>
+        </Card>
+
+        <Card className="space-y-4 p-5">
+          <h2 className="text-base font-semibold">Quando ele pede pra parar</h2>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            O botão &ldquo;Parar perguntas&rdquo; só corta esta pergunta, em todas as empresas em que ele
+            trabalha — não desliga código de acesso nem aviso de viagem sem peso. Cada empresa é avisada aqui.
+            A resposta abaixo é o que ele lê depois de tocar.
+          </p>
+          <Field label="Mensagem de orientação" help="Use {empresa} pro nome da empresa e {contato} pro contato abaixo. Deixe em branco pra usar o texto padrão.">
+            <Textarea
+              value={form.mensagemAoParar ?? ""}
+              onChange={(e) => set("mensagemAoParar", e.target.value || null)}
+              placeholder={MENSAGEM_AO_PARAR_PADRAO}
+              rows={4}
+              maxLength={600}
+              disabled={!podeEditar}
+            />
+          </Field>
+          <Field label="Como falar com a empresa" help="Telefone ou e-mail. Aparece no lugar de {contato}. Opcional.">
+            <Input
+              value={form.contatoEmpresa ?? ""}
+              onChange={(e) => set("contatoEmpresa", e.target.value || null)}
+              placeholder="ex.: (42) 99999-0000"
+              maxLength={120}
+              disabled={!podeEditar}
+              className="max-w-sm"
+            />
+          </Field>
+        </Card>
+
+        <Card className="space-y-4 p-5">
+          <h2 className="text-base font-semibold">Número que parece não receber</h2>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            Se o WhatsApp de um parceiro deixa de entregar, o sistema para de perguntar a ele e te avisa pra
+            contatar por outro meio. Não muda nada no cadastro dele.
+          </p>
+          <Field label="Mensagens seguidas sem entrega pra desconfiar">
+            <NumInput value={form.mensagensParaSuspeitar} onChange={(v) => set("mensagensParaSuspeitar", v)} min={2} max={10} disabled={!podeEditar} />
+          </Field>
+          <Field label="Olhando os últimos (dias)">
+            <NumInput value={form.diasParaSuspeitar} onChange={(v) => set("diasParaSuspeitar", v)} min={2} max={30} disabled={!podeEditar} />
+          </Field>
+        </Card>
+
+        <Card className="space-y-4 p-5">
           <h2 className="text-base font-semibold">Quem entra</h2>
           <p className="text-sm text-muted-foreground">
-            Só entra parceiro aprovado, com telefone, que aceita WhatsApp e não pediu pra sair.
+            Só é perguntado parceiro aprovado, com telefone, que aceita WhatsApp e não pediu pra parar. Quem não
+            tem como receber continua sendo conferido e aparece na lista marcado como &ldquo;sem canal&rdquo;.
           </p>
           <Field label="Quais parceiros">
             <Select

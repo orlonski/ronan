@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ConfigService } from "@nestjs/config";
-import { ROTAS_WHATSAPP, templateWhatsapp } from "@ronan/shared-types";
+import { ROTAS_WHATSAPP, payloadsDeExemplo, templateWhatsapp } from "@ronan/shared-types";
 import { MetaProvedor } from "./meta.provedor";
 import type { EnvioWhatsapp } from "./envio.types";
 
@@ -175,7 +175,7 @@ describe("simulação de payload", () => {
     ROTAS_WHATSAPP.filter((r) => templateWhatsapp(r.chave)).map((r) => [r.chave] as const),
   )("%s: o exemplo do catálogo monta payload válido", (rota) => {
     const t = templateWhatsapp(rota)!;
-    const r = provedor().simular(envio({ rota, params: [...t.exemplo] }));
+    const r = provedor().simular(envio({ rota, params: [...t.exemplo], payloads: payloadsDeExemplo(rota) }));
     expect(r.ok, r.ok ? "" : r.erro).toBe(true);
   });
 
@@ -271,5 +271,62 @@ describe("ciclo de vida do número", () => {
     expect(r.ok).toBe(false);
     expect(r.erro).toContain("token");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("template com botões de resposta rápida (conferência diária)", () => {
+  const ID = "3f2b1c9e-8d4a-4f6b-9a1e-0c7d5e2b6a11";
+  const payloads = ["NAO_TIVE", "TIVE_NAO_LANCEI", "SAI_DA_EMPRESA", "PARAR"].map((o) => `cv:${ID}:${o}`);
+  const conferencia = (over: Partial<EnvioWhatsapp> = {}) =>
+    envio({ rota: "CONFERENCIA_DIARIA", params: ["sexta, 25/09"], payloads, texto: "Ontem…", ...over });
+
+  it("monta o corpo e UM componente quick_reply por botão, com o payload de cada um", () => {
+    // O payload é o que volta no webhook: `cv:<id>:<opcao>`. Índice trocado aqui
+    // faria "Parar perguntas" chegar como "Não tive".
+    const r = provedor().simular(conferencia());
+    expect(r.ok).toBe(true);
+    const c = (r as { corpo: any }).corpo;
+    expect(c.type).toBe("template");
+    expect(c.template.name).toBe("conferencia_diaria");
+    expect(c.template.components[0]).toEqual({
+      type: "body",
+      parameters: [{ type: "text", text: "sexta, 25/09" }],
+    });
+    const botoes = c.template.components.slice(1);
+    expect(botoes).toHaveLength(4);
+    botoes.forEach((b: any, i: number) => {
+      expect(b).toEqual({
+        type: "button",
+        sub_type: "quick_reply",
+        index: String(i),
+        parameters: [{ type: "payload", payload: payloads[i] }],
+      });
+    });
+  });
+
+  it("payload faltando falha ANTES da rede, dizendo qual botão", async () => {
+    const r = await provedor().enviar(conferencia({ payloads: payloads.slice(0, 2) }));
+    expect(r.enviado).toBe(false);
+    expect(r.erro?.codigo).toBe("PAYLOAD_INVALIDO");
+    expect(r.erro?.detalhe).toContain("payloads[2]");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("payload com mais de 256 caracteres é recusado antes da rede", async () => {
+    const longo = ["a".repeat(257), ...payloads.slice(1)];
+    const r = await provedor().enviar(conferencia({ payloads: longo }));
+    expect(r.enviado).toBe(false);
+    expect(r.erro?.detalhe).toContain("256");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("os payloads reais cabem nos 256 caracteres", () => {
+    for (const p of payloads) expect(p.length).toBeLessThanOrEqual(256);
+  });
+
+  it("envia de verdade pra Graph API quando está tudo certo", async () => {
+    const r = await provedor().enviar(conferencia());
+    expect(r.enviado).toBe(true);
+    expect(corpoEnviado(fetchMock).template.components).toHaveLength(5);
   });
 });

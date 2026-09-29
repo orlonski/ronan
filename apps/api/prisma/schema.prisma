@@ -189,6 +189,11 @@ enum AcaoAuditoria {
   ADMIN_ALTEROU_KM
   /// Alguém do painel mexeu na regra da conferência diária de viagens.
   CONFERENCIA_CONFIG_ALTERADA
+  /// O motorista tocou em "Parar essas perguntas" no WhatsApp. Uma linha por vínculo
+  /// afetado (o mesmo telefone pode ter cadastro em várias empresas).
+  CONFERENCIA_OPTOUT
+  /// Alguém do painel aprovou ou recusou uma sugestão da fila da conferência diária.
+  CONFERENCIA_SUGESTAO_DECIDIDA
   MOTORISTA_AJUSTOU_KM
   MOTORISTA_JUSTIFICOU_KM
   MOTORISTA_INFORMOU_PEDAGIO
@@ -579,6 +584,7 @@ model Conta {
   configuracoesTorre            ConfiguracaoTorre[]
   configuracoesConferenciaDiaria ConfiguracaoConferenciaDiaria[]
   conferenciasDiarias           ConferenciaDiaria[]
+  sugestoesGestor               SugestaoGestor[]
   configuracoesIa               ConfiguracaoIa[]
   configuracoesAgente           ConfiguracaoAgente[]
   configuracoesAvisoGrupo       ConfiguracaoAvisoGrupo[]
@@ -898,6 +904,9 @@ model ConfiguracaoPlataforma {
   /// autenticação paga. Os outros dois freios (por IP e por telefone) são
   /// contra insistência, não contra volume.
   maxCodigosPorHora  Int     @default(30)
+  /// Teto de perguntas da conferência diária enviadas por hora, somando todas as
+  /// empresas. Freio de custo: cada pergunta é um template pago da Meta.
+  maxConferenciasPorHora Int  @default(60)
 
   /// O SDR atende prospect no WhatsApp?
   ///
@@ -1432,6 +1441,20 @@ model Motorista {
   /// Hoje só entra no filtro de elegibilidade do job; nada no app liga isso ainda.
   receberConferenciaDiaria Boolean             @default(true)
   conferenciasDiarias     ConferenciaDiaria[]
+  sugestoesGestor         SugestaoGestor[]
+  /// Alcance do WhatsApp DESTE número (vale pro número, não pra empresa). Só a
+  /// conferência diária lê isto — nunca bloqueia OTP, reset de senha nem aviso de peso.
+  /// Falhas SEGUIDAS de "destinatário não alcançável" (allowlist de códigos da Meta).
+  whatsappFalhasSeguidas  Int                  @default(0)
+  /// Desde quando o número não confirma entrega (primeira falha da sequência).
+  whatsappSemEntregaDesde DateTime?
+  /// Última vez que a Meta confirmou entrega (delivered/read) neste número.
+  whatsappUltimaEntregaEm DateTime?
+  /// Preenchido = número SUSPEITO de inalcançável: a conferência diária para de
+  /// perguntar. Volta a null sozinho quando entrega/responde, ou no "reverificar".
+  whatsappInalcancavelEm  DateTime?
+  /// O gestor mandou reverificar: mensagens anteriores a esta data não contam pro detector.
+  whatsappReverificadoEm  DateTime?
   // Versão do app que o motorista está rodando — capturada via headers em
   // toda request pelo AppVersionInterceptor. Como o runtimeVersion usa policy
   // "appVersion", o appVersion sozinho NÃO muda entre updates OTA; o que
@@ -4806,6 +4829,43 @@ enum EstadoConferenciaDiaria {
   SOMBRA
   /// A regra olhou e decidiu não perguntar (o motivo está na linha).
   SUPRIMIDA
+  /// Vai ser perguntado: a linha existe e o envio ainda não saiu (teto por hora,
+  /// ou queda no meio). O job retoma esta linha na batida seguinte.
+  PENDENTE
+  /// A pergunta saiu (a Meta aceitou; `wamid` guardado). Espera resposta.
+  ENVIADA
+  /// O motorista respondeu (`opcao` diz o quê).
+  RESPONDIDA
+  /// Ninguém respondeu no prazo (`horasParaExpirar`). Um toque tardio ainda vale.
+  EXPIRADA
+  /// A Meta recusou o envio (`erroEnvio` diz por quê). Não conta como pergunta feita.
+  FALHOU
+}
+
+/// O que o motorista respondeu (os quatro botões) — ou AMBIGUA quando o texto
+/// livre não bate com nenhum.
+enum OpcaoConferenciaDiaria {
+  NAO_TIVE
+  TIVE_NAO_LANCEI
+  SAI_DA_EMPRESA
+  PARAR
+  AMBIGUA
+}
+
+enum TipoSugestaoGestor {
+  INATIVAR_VINCULO
+  LANCAR_VIAGEM_FALTANTE
+  RESPOSTA_AMBIGUA
+  MOTORISTA_PAROU_WHATSAPP
+  WHATSAPP_INALCANCAVEL
+}
+
+enum StatusSugestaoGestor {
+  ABERTA
+  APROVADA
+  RECUSADA
+  RESOLVIDA_SOZINHA
+  EXPIRADA
 }
 
 /// A regra da conferência diária, por conta. Nasce DESLIGADA e em sombra.
@@ -4835,6 +4895,24 @@ model ConfiguracaoConferenciaDiaria {
   quemEntra             QuemEntraConferenciaDiaria @default(TODOS_APROVADOS)
   modalidadeIds         String[]                   @default([])
   transportadoraIds     String[]                   @default([])
+  /// Manda UM lembrete a quem não respondeu (mesma pergunta, mesmos botões).
+  reenviar              Boolean                    @default(false)
+  /// Quantas horas depois da pergunta sai o lembrete.
+  horasParaLembrar      Int                        @default(4)
+  /// Depois de quantas horas sem resposta a pergunta expira.
+  horasParaExpirar      Int                        @default(24)
+  /// Texto de orientação enviado depois de "Parar essas perguntas". Null = o padrão do código.
+  /// Placeholders: {empresa} e {contato}.
+  mensagemAoParar       String?
+  /// Como falar com a empresa (telefone, e-mail…). Entra no {contato} da mensagem acima.
+  contatoEmpresa        String?
+  /// Quem recebeu a pergunta hoje não recebe o resumo genérico das 20h (pendência de
+  /// peso/divergência sai sempre).
+  suprimirResumoQuemRecebeuPergunta Boolean        @default(true)
+  /// Detector de número inalcançável: N mensagens da Meta seguidas sem entrega…
+  mensagensParaSuspeitar Int                       @default(3)
+  /// …dentro desta janela em dias.
+  diasParaSuspeitar     Int                        @default(7)
   alteradoEm            DateTime                   @updatedAt
   alteradoPor           User?                      @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId         String?
@@ -4857,10 +4935,51 @@ model ConferenciaDiaria {
   /// A regra aplicada e as evidências (último dia com viagem, dias esperados sem viagem…).
   snapshot    Json
   criadoEm    DateTime                @default(now())
+  /// Por que o motorista NÃO pôde ser perguntado apesar de a regra dizer que sim:
+  /// PAROU | INALCANCAVEL | SEM_TELEFONE | NAO_ACEITA_WHATSAPP. É o "sem canal" da lista.
+  suprimidaPor String?
+  /// `wamid` da pergunta (e do lembrete): é como o toque no botão se confirma.
+  wamid        String?
+  enviadaEm    DateTime?
+  lembreteWamid      String?
+  lembreteEnviadoEm  DateTime?
+  erroEnvio    String?
+  opcao        OpcaoConferenciaDiaria?
+  respostaTexto String?
+  respondidaEm DateTime?
 
   @@unique([contaId, motoristaId, dia])
   @@index([contaId, dia])
+  @@index([contaId, estado])
   @@map("conferencia_diaria")
+}
+
+/// A fila do gestor da conferência diária: coisas que o SISTEMA percebeu e que só
+/// uma pessoa decide. Nada aqui altera cadastro sozinho — inativar vínculo, por
+/// exemplo, só acontece quando um humano aprova.
+model SugestaoGestor {
+  id          String               @id @default(uuid())
+  contaId     String               @default("__SEM_CONTA__")
+  conta       Conta                @relation(fields: [contaId], references: [id])
+  tipo        TipoSugestaoGestor
+  status      StatusSugestaoGestor @default(ABERTA)
+  motorista   Motorista?           @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId String?
+  /// A pergunta que originou a sugestão, quando houve.
+  conferenciaId String?
+  resumo      String
+  evidencia   Json
+  /// "<motoristaId>:<tipo>" enquanto ABERTA, NULL depois — uma sugestão aberta por
+  /// motorista e tipo (mesmo truque do `ExcecaoAcessoApp.chaveViva`).
+  chaveViva   String?
+  criadaEm    DateTime             @default(now())
+  decididaEm  DateTime?
+  decididaPorId String?
+  motivoDecisao String?
+
+  @@unique([contaId, chaveViva])
+  @@index([contaId, status])
+  @@map("sugestoes_gestor")
 }
 
 model ConfiguracaoTracking {

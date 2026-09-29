@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BOTOES_CONFERENCIA_DIARIA } from "./conferencia-diaria";
 
 /**
  * Catálogo das mensagens de WhatsApp que o sistema manda, e por qual serviço
@@ -151,6 +152,19 @@ export const ROTAS_WHATSAPP = [
     descricao: "O fechamento do dia do motorista, todo dia às 20h.",
     categoria: "utility",
     provedores: ["evolution", "meta"],
+    critica: false,
+    escopo: "empresa",
+  },
+  {
+    chave: "CONFERENCIA_DIARIA",
+    rotulo: "Conferência diária de viagens",
+    descricao:
+      "Pergunta ao motorista que provavelmente esqueceu de lançar viagem, com quatro botões de resposta (o toque volta pelo webhook da Meta).",
+    categoria: "utility",
+    // Só Meta: o Evolution está banido, e botão de resposta rápida é recurso da
+    // Cloud API. Rota com um provedor só não muda de lugar por configuração.
+    provedores: ["meta"],
+    // Se falhar, ninguém fica travado: é uma pergunta de rotina.
     critica: false,
     escopo: "empresa",
   },
@@ -382,7 +396,15 @@ export type BotaoTemplate =
    * verbo do que vai acontecer. A Meta congela o rótulo no template aprovado,
    * então ele mora aqui junto do resto da forma.
    */
-  | { tipo: "URL"; param: number; texto?: string };
+  | { tipo: "URL"; param: number; texto?: string }
+  /**
+   * Botões de resposta rápida (até 3 por template na Meta, 25 caracteres cada).
+   *
+   * Não levam param de corpo: o que volta no toque é o `payload` que o ENVIO
+   * manda, um por botão e NA MESMA ORDEM dos rótulos (`EnvioWhatsapp.payloads`).
+   * O rótulo fica congelado no template aprovado, por isso mora aqui.
+   */
+  | { tipo: "QUICK_REPLY"; rotulos: readonly string[] };
 
 export type TemplateWhatsappDef = {
   /** Nome exato aprovado na Meta. Minúsculas e underscore — a Meta exige. */
@@ -506,6 +528,17 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "Tá tudo certo, nada pendente.",
       "45 viagens",
     ],
+  },
+  // Sem nome de pessoa da equipe e sem variável no fim do corpo (a Meta recusa).
+  // {{1}} é o dia esperado sem viagem, ex.: "sexta, 25/09". O corpo é factual:
+  // a pergunta é sobre o dia, os botões dizem o resto.
+  CONFERENCIA_DIARIA: {
+    nome: "conferencia_diaria",
+    idioma: "pt_BR",
+    corpo: [0],
+    botao: { tipo: "QUICK_REPLY", rotulos: BOTOES_CONFERENCIA_DIARIA.map((b) => b.rotulo) },
+    textoAprovacao: "No dia {{1}}, você não teve viagens? Toque em uma das opções abaixo pra me avisar.",
+    exemplo: ["sexta, 25/09"],
   },
   // O resumo do gestor tem 12 blocos e cada usuário escolhe os seus. Isso não
   // cabe em corpo fixo: seriam 12 parâmetros com travessão de enchimento na
@@ -773,6 +806,16 @@ export const CriarTemplateMetaInput = z.object({
   urlBase: z.string().url("Use uma URL completa, terminando em barra.").optional(),
 });
 export type CriarTemplateMetaInput = z.infer<typeof CriarTemplateMetaInput>;
+
+/**
+ * `payloads` de mentira pra simular um template com botões de resposta rápida
+ * (o envio real monta os verdadeiros, com o id da pergunta). `undefined` quando
+ * o template não tem esse tipo de botão.
+ */
+export function payloadsDeExemplo(rota: string): string[] | undefined {
+  const b = TEMPLATES_WHATSAPP[rota as RotaWhatsapp]?.botao;
+  return b?.tipo === "QUICK_REPLY" ? b.rotulos.map((_, i) => `exemplo:${i}`) : undefined;
+}
 
 /** O template daquela rota, ou `undefined` se ela não tem um. */
 export function templateWhatsapp(rota: string): TemplateWhatsappDef | undefined {

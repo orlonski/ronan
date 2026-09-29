@@ -220,3 +220,32 @@ describe("rastro do envio", () => {
     expect(prisma.whatsappMensagem.create).not.toHaveBeenCalled();
   });
 });
+
+describe("erroCodigo no caminho síncrono", () => {
+  const dados = (prisma: ReturnType<typeof prismaFake>) =>
+    (prisma.whatsappMensagem.create.mock.calls[0]![0] as { data: Record<string, unknown> }).data;
+
+  it("recusa da Meta grava o código só com os dígitos — o mesmo formato do webhook", async () => {
+    const prisma = prismaFake();
+    const meta = provedorFake({
+      nome: "meta",
+      resultado: { enviado: false, idExterno: null, erro: { tipo: "POLITICA", codigo: "META_131026", detalhe: "não entregável" } },
+    });
+    const s = servico(provedorFake(), "meta", prisma, meta);
+    await comConta("conta-1", () => s.tentarEnviar(paraMotorista("RESUMO_MOTORISTA")));
+    expect(dados(prisma).erroCodigo).toBe("131026");
+  });
+
+  it("código que não é numérico (falha nossa) vai como veio", async () => {
+    const prisma = prismaFake();
+    const s = servico(provedorFake({ configurado: false }), "evolution", prisma);
+    await comConta("conta-1", () => s.tentarEnviar(paraMotorista("RESPOSTA_AGENTE")));
+    expect(dados(prisma).erroCodigo).toBe("PROVEDOR_NAO_CONFIGURADO");
+  });
+
+  it("envio que saiu não tem erroCodigo", async () => {
+    const prisma = prismaFake();
+    await comConta("conta-1", () => servico(provedorFake(), "evolution", prisma).tentarEnviar(paraMotorista("OTP_CADASTRO")));
+    expect(dados(prisma).erroCodigo).toBeNull();
+  });
+});

@@ -12,6 +12,7 @@ import { HistoricoNotificacoes } from "./historico-notificacoes";
 import { PedirDocumentos } from "./pedir-documentos";
 import { RegimeCard, type RegimeDaPessoa } from "./regime-card";
 import { AcessoAppCard, type AcessoDaPessoa } from "./acesso-app-card";
+import { WhatsappSuspeitoCard } from "./whatsapp-suspeito-card";
 
 type ResumoVersoes = {
   latestUpdateId: string | null;
@@ -25,7 +26,14 @@ export default function EditarMotoristaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const item = useResourceItem<Motorista & AppVersaoInfo & { regime?: RegimeDaPessoa }>(
+  const item = useResourceItem<
+    Motorista &
+      AppVersaoInfo & {
+        regime?: RegimeDaPessoa;
+        whatsappInalcancavelEm?: string | null;
+        receberConferenciaDiaria?: boolean;
+      }
+  >(
     "/admin/motoristas",
     id,
   );
@@ -57,6 +65,11 @@ export default function EditarMotoristaPage({
           {/* Vem ANTES dos documentos e do formulário: quem abre a ficha
               precisa saber por onde essa pessoa recebe antes de mexer em
               qualquer coisa que envolva dinheiro. */}
+          <WhatsappSuspeitoCard
+            motoristaId={id}
+            inalcancavelEm={item.data.whatsappInalcancavelEm}
+            parouConferencia={item.data.receberConferenciaDiaria === false}
+          />
           <RegimeCard regime={item.data.regime ?? null} />
           <AcessoAppCard motoristaId={id} />
           <PedirDocumentos motoristaId={id} />

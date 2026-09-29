@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from "@nestjs/common";
 import {
   achatarParam,
   CHAVES_ROTA_WHATSAPP,
+  payloadsDeExemplo,
   provedorAtendeRota,
   ROTAS_DA_PLATAFORMA,
   ROTAS_WHATSAPP,
@@ -68,6 +69,7 @@ export class AdminRoteamentoWhatsappService {
                 rota: r.chave,
                 texto: `[simulação] ${r.rotulo}`,
                 params: t ? [...t.exemplo] : undefined,
+                payloads: payloadsDeExemplo(r.chave),
               })
             : null,
       });
@@ -323,6 +325,14 @@ export class AdminRoteamentoWhatsappService {
             example: [`${urlBase}${achatarParam(def.exemplo[def.botao.param] ?? "")}`],
           },
         ],
+      });
+    }
+
+    if (def.botao && def.botao.tipo === "QUICK_REPLY") {
+      componentes.push({
+        type: "BUTTONS",
+        // Só o rótulo: o `payload` de cada toque é montado no ENVIO, não no template.
+        buttons: def.botao.rotulos.map((texto) => ({ type: "QUICK_REPLY", text: texto })),
       });
     }
 

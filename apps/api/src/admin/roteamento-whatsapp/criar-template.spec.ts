@@ -110,4 +110,37 @@ describe("criar template na Meta", () => {
     await expect(s.criarTemplateNaMeta("waba1", "NAO_EXISTE")).rejects.toThrow();
     expect(chamadas).toHaveLength(0);
   });
+
+  it("conferência diária: corpo do catálogo e quatro botões QUICK_REPLY (só o corpo montado, nada vai à Meta)", async () => {
+    // O `criarTemplate` aqui é um espião: este teste NÃO submete nada.
+    const { s, chamadas } = servico();
+    await s.criarTemplateNaMeta("waba1", "CONFERENCIA_DIARIA");
+
+    const corpo = chamadas[0]!.corpo as {
+      name: string;
+      category: string;
+      components: {
+        type: string;
+        text?: string;
+        example?: { body_text: string[][] };
+        buttons?: { type: string; text: string; url?: string }[];
+      }[];
+    };
+    expect(corpo.name).toBe("conferencia_diaria");
+    expect(corpo.category).toBe("UTILITY");
+    const body = corpo.components.find((c) => c.type === "BODY")!;
+    expect(body.text).toBe("No dia {{1}}, você não teve viagens? Toque em uma das opções abaixo pra me avisar.");
+    expect(body.example!.body_text[0]).toEqual(["sexta, 25/09"]);
+
+    const botoes = corpo.components.find((c) => c.type === "BUTTONS")!.buttons!;
+    expect(botoes.map((b) => b.type)).toEqual(["QUICK_REPLY", "QUICK_REPLY", "QUICK_REPLY", "QUICK_REPLY"]);
+    expect(botoes.map((b) => b.text)).toEqual([
+      "Não tive",
+      "Tive, não lancei",
+      "Saí da empresa",
+      "Parar perguntas",
+    ]);
+    // Resposta rápida não leva URL nem exige urlBase.
+    expect(botoes.every((b) => b.url === undefined)).toBe(true);
+  });
 });

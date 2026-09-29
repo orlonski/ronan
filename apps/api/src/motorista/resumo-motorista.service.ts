@@ -8,6 +8,7 @@ import { inicioDoDiaData, ymdSaoPaulo } from "../common/timezone";
 import { paraCadaConta } from "../common/conta/para-cada-conta";
 import { comLockDeCron } from "../common/cron-exclusivo";
 import { comoSistema } from "../common/conta/conta-context";
+import { deveSuprimirResumo } from "../common/conferencia-resposta";
 
 /**
  * Resumo diário do dia PARA O MOTORISTA no WhatsApp (só os dados dele). Espelha
@@ -79,9 +80,34 @@ export class ResumoMotoristaService {
       select: { id: true, cpf: true, telefone: true, conta: { select: { nome: true } } },
     });
 
+    // Conferência diária: quem recebeu a pergunta hoje já conversou com a gente
+    // sobre o dia, e o resumo genérico logo depois seria ruído. Pendência de
+    // peso/divergência sai SEMPRE (ver `deveSuprimirResumo`).
+    const conferencia = await this.prisma.configuracaoConferenciaDiaria.findFirst({
+      select: { ativo: true, suprimirResumoQuemRecebeuPergunta: true },
+    });
+    const suprimirLigado = !!conferencia?.ativo && conferencia.suprimirResumoQuemRecebeuPergunta;
+    const receberamPergunta = new Set<string>();
+    if (suprimirLigado) {
+      const linhas = await this.prisma.conferenciaDiaria.findMany({
+        where: { dia: inicioDoDiaData(), estado: { in: ["ENVIADA", "RESPONDIDA", "EXPIRADA"] } },
+        select: { motoristaId: true },
+      });
+      for (const l of linhas) receberamPergunta.add(l.motoristaId);
+    }
+
     for (const m of motoristas) {
       try {
         const dados = await this.coletar(m.id);
+        if (
+          deveSuprimirResumo({
+            suprimirLigado,
+            temPendencia: dados.aguardandoPeso > 0 || dados.divergente > 0,
+            recebeuPerguntaHoje: receberamPergunta.has(m.id),
+          })
+        ) {
+          continue;
+        }
         // Não incomoda em dia parado: só envia se teve viagem ou tem pendência.
         if (dados.viagensHoje === 0 && dados.aguardandoPeso === 0 && dados.divergente === 0) {
           continue;
