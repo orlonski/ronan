@@ -123,6 +123,8 @@ const SAFE_SELECT = {
   podeTelemetria: true,
   podeChat: true,
   receberResumoDiario: true,
+  // Mestre dos avisos por WhatsApp: a ficha precisa dele pra dizer por que a pergunta de teste não sai.
+  aceitaWhatsapp: true,
   // O selo do cadastro: WhatsApp suspeito de não entregar / pediu pra parar a pergunta.
   receberConferenciaDiaria: true,
   // Quem/quando desligou a conferência (origem nula com o campo em false = linha

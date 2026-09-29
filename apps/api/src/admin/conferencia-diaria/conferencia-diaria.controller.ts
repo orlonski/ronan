@@ -132,6 +132,19 @@ export class ConferenciaDiariaController {
   }
 
   /**
+   * "Enviar pergunta de teste": manda a pergunta a ESTE motorista agora, sem
+   * depender do job nem da regra. Não exige a conferência ligada; exige a Meta,
+   * o canal do motorista e o módulo. Sem corpo. Fora do escopo = 404.
+   */
+  @RequerPermissao("conferencia-diaria.decidir")
+  @HttpCode(200)
+  @Post("motoristas/:id/pergunta-de-teste")
+  async perguntaDeTeste(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    await this.motoristas.findOne(id, user.escopo);
+    return this.service.enviarPerguntaDeTeste(id, user.id);
+  }
+
+  /**
    * "Aprovar" = fazer o que a sugestão propõe. Pra INATIVAR_VINCULO isso inativa o
    * vínculo, e por isso exige TAMBÉM `motoristas.editar` (conferido no serviço).
    */

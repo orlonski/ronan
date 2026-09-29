@@ -77,7 +77,7 @@ function montar(
     conta: { findUnique: async () => ({ ehPlataforma: false, permissoesPermitidas: [], permissoesExtras: [] }) },
     moduloContratado: { findMany: vi.fn(async () => [{ chave: "conferencia", vigenteDe: null, vigenteAte: null }]) },
     configuracaoConferenciaDiaria: { findFirst: vi.fn(async () => cfg) },
-    conferenciaDiaria: { count: vi.fn(async () => opts.jaRodou ?? 0), createMany, update, updateMany, findMany },
+    conferenciaDiaria: { count: vi.fn(async (a?: { where?: { snapshot?: unknown } }) => (a?.where?.snapshot ? 0 : (opts.jaRodou ?? 0))), createMany, update, updateMany, findMany },
     configuracaoPlataforma: {
       findUnique: vi.fn(async () => (opts.teto === null ? null : { maxConferenciasPorHora: opts.teto ?? 60 })),
     },
@@ -606,5 +606,63 @@ describe("reenviar a pergunta de hoje", () => {
     expect(r).toMatchObject({ enviado: false, estado: "FALHOU", erro: "META_INDISPONIVEL: timeout" });
     const falhou = t.updateMany.mock.calls.map((c) => c[0] as { data: Record<string, unknown> }).find((c) => c.data.estado === "FALHOU");
     expect(falhou).toBeTruthy();
+  });
+});
+
+describe("enviar pergunta de teste (unidade)", () => {
+  const AGORA_T = new Date("2026-09-29T12:00:00Z");
+  const mot = (over: Record<string, unknown> = {}) => ({
+    id: "m1", nome: "Tião", telefone: "42991088125", aceitaWhatsapp: true, receberConferenciaDiaria: true,
+    conferenciaDesligadaOrigem: null, whatsappInalcancavelEm: null, ...over,
+  });
+  function tt(o: Parameters<typeof montar>[0] = {}, m: Record<string, unknown> | null = mot(), linha: Record<string, unknown> | null = null) {
+    const t = montar(o);
+    const create = vi.fn(async (a: { data: Record<string, unknown> }) => ({ id: "NOVA", contaId: "c1", snapshot: a.data.snapshot, dia: a.data.dia }));
+    Object.assign(t.prisma.conferenciaDiaria, {
+      findFirst: vi.fn(async () => linha),
+      create,
+      findUnique: vi.fn(async () => ({ estado: "ENVIADA", erroEnvio: null, wamid: "wamid.NOVO" })),
+    });
+    Object.assign(t.prisma, { feriadoPonto: { findMany: vi.fn(async () => []) }, motorista: { findFirst: vi.fn(async () => m) }, $executeRaw: vi.fn(async () => 1) });
+    return { ...t, create };
+  }
+  const rodar = (t: ReturnType<typeof tt>) => comConta("c1", () => t.svc.enviarPerguntaDeTeste("m1", "u1", AGORA_T));
+
+  it("respeita o teto global por hora (sem gravar nada)", async () => {
+    const t = tt({ teto: 5, usadasNaHora: 5 });
+    await expect(rodar(t)).rejects.toThrow(/limite de envios/);
+    expect(t.create).not.toHaveBeenCalled();
+    expect(t.tentarEnviar).not.toHaveBeenCalled();
+  });
+
+  it("não exige conferência ligada nem modo ENVIANDO", async () => {
+    const t = tt({ cfg: { ativo: false, modo: "SOMBRA" } });
+    const r = await rodar(t);
+    expect(r).toMatchObject({ enviado: true, linhaCriada: true, telefoneMascarado: "••••-8125" });
+    const criada = t.create.mock.calls[0]![0].data as { estado: string; snapshot: { origem: string } };
+    expect(criada.estado).toBe("PENDENTE");
+    expect(criada.snapshot.origem).toBe("TESTE_PAINEL");
+    expect(t.log).toHaveBeenCalledWith(expect.objectContaining({ acao: "CONFERENCIA_PERGUNTA_TESTE", usuarioId: "u1" }));
+  });
+
+  it("linha de hoje no limite de reenvios: 409 e nada é zerado", async () => {
+    const linha = { id: "L1", contaId: "c1", estado: "ENVIADA", reenvios: MAX_REENVIOS_POR_LINHA, snapshot: {}, dia: DIA };
+    const t = tt({}, mot(), linha);
+    await expect(rodar(t)).rejects.toBeInstanceOf(ConflictException);
+    expect(t.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("corrida: a linha nasceu no meio (P2002) vira 409, sem envio", async () => {
+    const t = tt();
+    t.create.mockRejectedValueOnce(Object.assign(new Error("dup"), { code: "P2002" }));
+    await expect(rodar(t)).rejects.toBeInstanceOf(ConflictException);
+    expect(t.tentarEnviar).not.toHaveBeenCalled();
+  });
+
+  it("o teste nunca usa o caminho que exige modo ENVIANDO (config() cria a linha de config: não pode ser chamada)", () => {
+    const src = readFileSync(join(__dirname, "conferencia-diaria.service.ts"), "utf8");
+    const corpo = src.slice(src.indexOf("async enviarPerguntaDeTeste"), src.indexOf("// ─── Fila do gestor"));
+    expect(corpo).not.toMatch(/this\.config\(\)/);
+    expect(corpo).not.toMatch(/podeEnviar\(/);
   });
 });

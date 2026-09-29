@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -18,10 +18,12 @@ import {
   Send,
   type LucideIcon,
 } from "lucide-react";
+import { formatTelefone } from "@ronan/shared-types";
 import type {
   CalendarioConferencia,
   DadosTecnicosConferencia,
   DiaDoCalendarioConferencia,
+  ResultadoPerguntaDeTeste,
   ResultadoReenvioPergunta,
 } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
@@ -222,6 +224,7 @@ const EVENTO_ROTULO: Record<string, string> = {
   LEMBRETE: "Lembrete",
   EXPIRADA: "Expirou",
   REENVIO: "Reenvio pelo painel",
+  TESTE: "Pergunta de teste pelo painel",
   STATUS: "Recibo da Meta",
 };
 
@@ -367,6 +370,110 @@ function ReenviarPergunta({
   );
 }
 
+type FichaParaTeste = {
+  nome: string;
+  telefone: string | null;
+  aceitaWhatsapp?: boolean;
+  receberConferenciaDiaria?: boolean;
+  conferenciaDesligadaOrigem?: "MOTORISTA" | "PAINEL" | null;
+  whatsappInalcancavelEm?: string | null;
+};
+
+/** Por que a pergunta não tem como chegar neste motorista; `null` = tem canal. */
+export function motivoSemCanal(f: FichaParaTeste): string | null {
+  if (!f.telefone) return "Este motorista está sem telefone cadastrado.";
+  if (f.aceitaWhatsapp === false) return "Este motorista desligou as mensagens no WhatsApp.";
+  if (f.receberConferenciaDiaria === false) {
+    return f.conferenciaDesligadaOrigem === "PAINEL"
+      ? "A conferência está desligada para este motorista pela empresa."
+      : "Este motorista pediu pra parar de receber a pergunta.";
+  }
+  if (f.whatsappInalcancavelEm) return "O WhatsApp deste motorista parece não entregar (número suspeito).";
+  return null;
+}
+
+/**
+ * "Enviar pergunta de teste": sempre visível na ficha pra quem decide. Manda a
+ * pergunta a ESTE motorista agora, sem depender do job nem da regra. Confirmação
+ * inline (nunca Modal), com o nome e o telefone completo. Sem canal, mostra o
+ * motivo em vez de deixar falhar depois.
+ */
+function EnviarPerguntaDeTeste({
+  motoristaId,
+  aoEnviar,
+}: {
+  motoristaId: string;
+  aoEnviar: (r: ResultadoPerguntaDeTeste) => void;
+}) {
+  const token = useAuthToken();
+  const [confirmando, setConfirmando] = useState(false);
+  const ficha = useApiQuery<FichaParaTeste>(`/admin/motoristas/${motoristaId}`, { staleTime: 30_000 });
+  const f = ficha.data;
+  const motivo = f ? motivoSemCanal(f) : null;
+  const envio = useMutation({
+    mutationFn: () =>
+      fetchApi<ResultadoPerguntaDeTeste>(`/admin/conferencia-diaria/motoristas/${motoristaId}/pergunta-de-teste`, {
+        method: "POST",
+        token,
+      }),
+    onSuccess: (r) => {
+      setConfirmando(false);
+      if (r.enviado) {
+        toast.success(`Pergunta de teste enviada para ${f?.nome ?? "o motorista"}`, {
+          description: `WhatsApp ${r.telefoneMascarado}`,
+        });
+      } else {
+        toast.error("A pergunta de teste não saiu", { description: r.erro ?? "A Meta recusou o envio." });
+      }
+      aoEnviar(r);
+    },
+    onError: (err: Error) => {
+      setConfirmando(false);
+      toast.error("Não foi possível enviar a pergunta de teste", { description: err.message });
+    },
+  });
+
+  if (confirmando && f?.telefone) {
+    return (
+      <div
+        className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900"
+        role="alert"
+        data-testid="pergunta-teste-confirmacao"
+      >
+        <p className="font-medium">
+          Vai mandar de verdade, por WhatsApp, para {f.nome} no número {formatTelefone(f.telefone)}.
+        </p>
+        <p className="mt-1 text-sm">Use só com motorista de teste seu ou com quem já combinou.</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button variant="success" disabled={envio.isPending} onClick={() => envio.mutate()}>
+            {envio.isPending ? "Enviando…" : "Enviar agora"}
+          </Button>
+          <Button variant="outline" disabled={envio.isPending} onClick={() => setConfirmando(false)}>
+            Voltar
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <Button
+        data-testid="pergunta-teste-botao"
+        disabled={!f || !!motivo}
+        onClick={() => setConfirmando(true)}
+      >
+        <Send className="h-4 w-4" aria-hidden />
+        Enviar pergunta de teste
+      </Button>
+      {motivo && (
+        <p className="text-sm text-amber-800" data-testid="pergunta-teste-motivo">
+          {motivo} Não dá pra mandar a pergunta.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Calendário mensal da conferência de viagens na ficha do motorista: o que ele
  * respondeu à pergunta e se lançou a viagem depois. Só leitura. Cada dia é
@@ -376,14 +483,32 @@ export function ConferenciaCalendarioMotorista({ motoristaId }: { motoristaId: s
   const atual = mesAtualSP();
   const [mes, setMes] = useState(atual);
   const [aberto, setAberto] = useState<string | null>(null);
-  const { temPermissao } = usePermissoes();
+  const { temPermissao, temModulo } = usePermissoes();
   const podeDecidir = temPermissao("conferencia-diaria.decidir");
+  const podeTestar = podeDecidir && temModulo("conferencia-diaria.decidir");
+  const qc = useQueryClient();
+  // Dia a abrir depois de trocar de mês (o efeito abaixo limpa a seleção a cada troca).
+  const abrirDepois = useRef<string | null>(null);
   const q = useApiQuery<CalendarioConferencia>(
     `/admin/conferencia-diaria/motoristas/${motoristaId}/calendario?mes=${mes}`,
     { staleTime: 30_000 },
   );
 
-  useEffect(() => setAberto(null), [mes]);
+  useEffect(() => {
+    setAberto(abrirDepois.current);
+    abrirDepois.current = null;
+  }, [mes]);
+
+  /** Depois do teste: recarrega o calendário e abre o dia sobre o qual a pergunta fala. */
+  function mostrarDiaPerguntado(r: ResultadoPerguntaDeTeste) {
+    void qc.invalidateQueries({ predicate: (x) => String(x.queryKey[0]).includes("/conferencia-diaria/motoristas/") });
+    const mesDoDia = r.diaPerguntado.slice(0, 7);
+    if (mesDoDia === mes) setAberto(r.diaPerguntado);
+    else {
+      abrirDepois.current = r.diaPerguntado;
+      setMes(mesDoDia);
+    }
+  }
 
   const dados = q.data;
   const offset = dados ? new Date(`${dados.dias[0]?.dia}T00:00:00Z`).getUTCDay() : 0;
@@ -420,6 +545,8 @@ export function ConferenciaCalendarioMotorista({ motoristaId }: { motoristaId: s
           </Button>
         </div>
       </div>
+
+      {podeTestar && <EnviarPerguntaDeTeste motoristaId={motoristaId} aoEnviar={mostrarDiaPerguntado} />}
 
       {q.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
       {q.isError && <p className="text-sm text-red-700">Não deu pra carregar o calendário. Tente de novo.</p>}

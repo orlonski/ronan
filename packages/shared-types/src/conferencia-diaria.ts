@@ -339,7 +339,7 @@ export type CalendarioConferenciaQuery = z.infer<typeof CalendarioConferenciaQue
 export const EventoTrilhaConferencia = z.object({
   /** ISO 8601. */
   em: z.string(),
-  evento: z.enum(["ENVIO", "TOQUE", "IGNORADO", "RESPOSTA_GRAVADA", "LEMBRETE", "EXPIRADA", "REENVIO", "STATUS"]),
+  evento: z.enum(["ENVIO", "TOQUE", "IGNORADO", "RESPOSTA_GRAVADA", "LEMBRETE", "EXPIRADA", "REENVIO", "TESTE", "STATUS"]),
   /**
    * Id da linha, opção, origem, `context.id`, wamid, count, motivo… — o que couber ao evento.
    * `STATUS` (recibo da Meta): `{ status, wamid, alvo: "PERGUNTA"|"LEMBRETE", codigo?, titulo?, mensagem?, metaEm? }`.
@@ -375,6 +375,22 @@ export const ResultadoReenvioPergunta = z.object({
   reenvios: z.number().int(),
 });
 export type ResultadoReenvioPergunta = z.infer<typeof ResultadoReenvioPergunta>;
+
+/** Resposta de `POST /admin/conferencia-diaria/motoristas/:id/pergunta-de-teste`. Não há corpo. */
+export const ResultadoPerguntaDeTeste = ResultadoReenvioPergunta.extend({
+  /** Telefone que recebeu, MASCARADO (o painel mostra o completo antes de enviar, na confirmação). */
+  telefoneMascarado: z.string(),
+  /** Id da mensagem na Meta; nulo quando não saiu. */
+  wamid: z.string().nullable(),
+  /** Dia (AAAA-MM-DD) sobre o qual a pergunta fala. */
+  diaPerguntado: z.string(),
+  /** `true` = não havia linha de hoje e o teste criou uma só pra este motorista. */
+  linhaCriada: z.boolean(),
+});
+export type ResultadoPerguntaDeTeste = z.infer<typeof ResultadoPerguntaDeTeste>;
+
+/** Marca no snapshot da linha que a pergunta foi pedida pelo painel, não pelo job. */
+export const ORIGEM_TESTE_PAINEL = "TESTE_PAINEL";
 
 export const PerguntaNoCalendario = z.object({
   estado: EstadoConferenciaDiaria,

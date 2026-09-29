@@ -39,8 +39,13 @@ import {
 } from "../../common/conferencia-diaria";
 import { montarCalendarioConferencia, ultimoDiaDoMes } from "../../common/conferencia-calendario";
 import { anexarTrilha } from "../../common/conferencia-trilha";
-import { MOTIVO_RELIGAR_MIN } from "@ronan/shared-types";
-import type { EstadoConferenciaMotorista, ResultadoReenvioPergunta } from "@ronan/shared-types";
+import { diaDaPerguntaDeTeste, ehPerguntaDeTeste, mascararTelefone } from "../../common/conferencia-teste";
+import { MOTIVO_RELIGAR_MIN, ORIGEM_TESTE_PAINEL } from "@ronan/shared-types";
+import type {
+  EstadoConferenciaMotorista,
+  ResultadoPerguntaDeTeste,
+  ResultadoReenvioPergunta,
+} from "@ronan/shared-types";
 
 type Config = Awaited<ReturnType<ConferenciaDiariaService["config"]>>;
 
@@ -59,6 +64,15 @@ export type ItemConferencia = {
 
 /** Estados em que a pergunta CONTA como feita (entra no intervalo mínimo e no máximo semanal). */
 const ESTADOS_PERGUNTADOS = ["SOMBRA", "PENDENTE", "ENVIADA", "RESPONDIDA", "EXPIRADA"] as const;
+
+/** Por que o motorista não pode receber a pergunta, em frase de quem opera ("Fulano <frase>"). */
+const POR_QUE_SEM_CANAL: Record<SemCanal, string> = {
+  SEM_TELEFONE: "não tem telefone cadastrado",
+  NAO_ACEITA_WHATSAPP: "desligou as mensagens no WhatsApp",
+  PAROU: "pediu pra parar de receber a pergunta",
+  DESLIGADA_PAINEL: "está com a conferência desligada pela empresa",
+  INALCANCAVEL: "está com o WhatsApp sem entregar (número suspeito)",
+};
 
 /** Depois de quantas horas do horário configurado uma pergunta que não saiu deixa de sair. */
 const HORAS_DE_TOLERANCIA_ENVIO = 3;
@@ -378,7 +392,13 @@ export class ConferenciaDiariaService {
     if (!cfg.diasDoJob.includes(diaDaSemanaEmSaoPaulo(agora))) return 0;
 
     const dia = inicioDoDiaData(agora);
-    const jaRodou = await this.prisma.conferenciaDiaria.count({ where: { dia } });
+    // Linha de TESTE do painel não conta: senão testar de manhã cedo faria o job
+    // pular o dia inteiro de todos os outros motoristas.
+    const [noDia, testesNoDia] = await Promise.all([
+      this.prisma.conferenciaDiaria.count({ where: { dia } }),
+      this.prisma.conferenciaDiaria.count({ where: { dia, snapshot: { path: ["origem"], equals: ORIGEM_TESTE_PAINEL } } }),
+    ]);
+    const jaRodou = noDia - testesNoDia;
     if (jaRodou > 0) {
       // O dia já foi gravado — mas talvez em SOMBRA, e a empresa ligou o envio
       // depois (dentro da hora do job). Sem isto o envio só valeria amanhã.
@@ -544,7 +564,7 @@ export class ConferenciaDiariaService {
     const hora = horaEmSaoPaulo(agora);
     if (hora < cfg.horaEnvio) return 0;
 
-    const pendentes = await this.prisma.conferenciaDiaria.findMany({
+    const pendentesDoDia = await this.prisma.conferenciaDiaria.findMany({
       where: { dia, estado: "PENDENTE" },
       select: {
         id: true,
@@ -565,6 +585,8 @@ export class ConferenciaDiariaService {
       orderBy: { criadoEm: "asc" },
       take: 500,
     });
+    // Teste do painel é enviado na hora, por quem pediu; o job nunca o pega (evita envio em dobro).
+    const pendentes = pendentesDoDia.filter((p) => !ehPerguntaDeTeste(p.snapshot));
     if (pendentes.length === 0) return 0;
 
     if (hora > cfg.horaEnvio + HORAS_DE_TOLERANCIA_ENVIO) {
@@ -661,6 +683,8 @@ export class ConferenciaDiariaService {
     let vagas = candidatos.length > 0 ? await this.vagasNestaHora(agora) : 0;
     for (const c of candidatos) {
       if (vagas <= 0) break;
+      // Teste do painel: sem lembrete (ninguém pediu uma segunda mensagem). Só expira.
+      if (ehPerguntaDeTeste(c.snapshot)) continue;
       const m = c.motorista;
       if (this.semCanalDe(m) || !m.telefone) continue;
       // Já lançou desde a pergunta? Então o lembrete só incomodaria.
@@ -772,14 +796,7 @@ export class ConferenciaDiariaService {
     const m = linha.motorista;
     const semCanal = this.semCanalDe(m);
     if (semCanal || !m.telefone) {
-      const porque: Record<SemCanal, string> = {
-        SEM_TELEFONE: "não tem telefone cadastrado",
-        NAO_ACEITA_WHATSAPP: "desligou as mensagens no WhatsApp",
-        PAROU: "pediu pra parar de receber a pergunta",
-        DESLIGADA_PAINEL: "está com a conferência desligada pela empresa",
-        INALCANCAVEL: "está com o WhatsApp sem entregar (número suspeito)",
-      };
-      throw new ConflictException(`${m.nome} ${porque[semCanal ?? "SEM_TELEFONE"]}. Não dá pra mandar a pergunta.`);
+      throw new ConflictException(`${m.nome} ${POR_QUE_SEM_CANAL[semCanal ?? "SEM_TELEFONE"]}. Não dá pra mandar a pergunta.`);
     }
     if (linha.reenvios >= MAX_REENVIOS_POR_LINHA) {
       throw new ConflictException(
@@ -857,6 +874,223 @@ export class ConferenciaDiariaService {
       estado: estadoFinal,
       erro: r.enviado ? null : (final?.erroEnvio ?? "A Meta recusou o envio."),
       reenvios: n,
+    };
+  }
+
+  // ─── Pergunta de teste ─────────────────────────────────────────────────
+
+  /**
+   * "Enviar pergunta de teste": manda a pergunta a ESTE motorista agora, sem
+   * depender do job, da hora certa nem de a regra pegá-lo. É como o gestor confere
+   * que o WhatsApp de um motorista de teste (ou de quem já combinou) funciona.
+   *
+   * O texto é o mesmo template real (`pergunta()`), com os mesmos botões. O que
+   * muda em relação ao job:
+   *  - NÃO exige a conferência ligada nem o modo ENVIANDO (é justamente o teste);
+   *    o módulo `conferencia` é exigido pelo guard da rota;
+   *  - se não existe a linha de hoje, cria SÓ a deste motorista (PENDENTE → ENVIADA),
+   *    marcada `origem: TESTE_PAINEL` no snapshot. Se existe, zera e reenvia como
+   *    o reenvio, e conta como reenvio (teto `MAX_REENVIOS_POR_LINHA` por linha/dia);
+   *  - linha SUPRIMIDA/SOMBRA não bloqueia (é teste) — vira teste e não conta como
+   *    "pergunta feita"; o que a linha tinha vai pra trilha;
+   *  - a linha de teste não entra no intervalo mínimo nem no máximo semanal;
+   *  - fail-closed: sem Meta, sem canal ou acima do teto por hora, recusa com motivo
+   *    e não grava nada.
+   */
+  async enviarPerguntaDeTeste(
+    motoristaId: string,
+    usuarioId: string,
+    agora: Date = new Date(),
+  ): Promise<ResultadoPerguntaDeTeste> {
+    const m = await this.prisma.motorista.findFirst({
+      where: { id: motoristaId },
+      select: {
+        id: true,
+        nome: true,
+        telefone: true,
+        aceitaWhatsapp: true,
+        receberConferenciaDiaria: true,
+        conferenciaDesligadaOrigem: true,
+        whatsappInalcancavelEm: true,
+      },
+    });
+    if (!m) throw new NotFoundException("Motorista não encontrado.");
+
+    const disp = await this.envio.disponivel("CONFERENCIA_DIARIA");
+    if (!disp.ok) {
+      throw new ConflictException(`O envio por WhatsApp não está disponível agora: ${(disp.motivo ?? "sem motivo informado").replace(/[.\s]+$/, "")}.`);
+    }
+    const semCanal = this.semCanalDe(m);
+    if (semCanal || !m.telefone) {
+      throw new ConflictException(`${m.nome} ${POR_QUE_SEM_CANAL[semCanal ?? "SEM_TELEFONE"]}. Não dá pra mandar a pergunta de teste.`);
+    }
+    const telefone = m.telefone;
+
+    const dia = inicioDoDiaData(agora);
+    const hoje = hojeYmd(agora);
+    const linha = await this.prisma.conferenciaDiaria.findFirst({
+      where: { motoristaId, dia },
+      select: {
+        id: true,
+        contaId: true,
+        estado: true,
+        opcao: true,
+        wamid: true,
+        enviadaEm: true,
+        respondidaEm: true,
+        respostaTexto: true,
+        reenvios: true,
+        suprimidaPor: true,
+        snapshot: true,
+        dia: true,
+      },
+    });
+    if (linha && linha.reenvios >= MAX_REENVIOS_POR_LINHA) {
+      throw new ConflictException(
+        `A pergunta de hoje deste motorista já foi enviada ${MAX_REENVIOS_POR_LINHA} vezes além da primeira. Volte amanhã: o limite é por dia.`,
+      );
+    }
+    if ((await this.vagasNestaHora(agora)) <= 0) {
+      throw new ConflictException("O limite de envios por hora foi atingido. Tente de novo daqui a pouco.");
+    }
+
+    // Sem configuração a empresa nunca ligou a conferência: vale "ontem". Nada é criado aqui.
+    const cfg = await this.prisma.configuracaoConferenciaDiaria.findFirst();
+    const feriados = cfg?.ignorarFeriados ? await this.feriadosNacionais(dia) : null;
+    const diaPerguntado = diaDaPerguntaDeTeste(hoje, cfg, feriados);
+    const marca = { origem: ORIGEM_TESTE_PAINEL, testePedidoPor: usuarioId, testePedidoEm: agora.toISOString() };
+    const antes = linha
+      ? {
+          estado: linha.estado,
+          opcao: linha.opcao,
+          wamid: linha.wamid,
+          enviadaEm: linha.enviadaEm?.toISOString() ?? null,
+          respondidaEm: linha.respondidaEm?.toISOString() ?? null,
+          respostaTexto: linha.respostaTexto,
+        }
+      : null;
+
+    let alvo: { id: string; contaId: string; snapshot: Prisma.JsonValue; dia: Date };
+    let reenvios: number;
+    if (!linha) {
+      try {
+        const criada = await this.prisma.conferenciaDiaria.create({
+          data: {
+            contaId: contaIdAtual(),
+            motoristaId,
+            dia,
+            estado: "PENDENTE",
+            motivo: "Pergunta de teste pedida pelo painel.",
+            snapshot: {
+              ...marca,
+              nadaEnviado: false,
+              deveriaPerguntar: false,
+              semCanal: null,
+              regraEmVigor: cfg ? this.descricao(cfg) : "Sem regra configurada: a pergunta de teste fala do dia de ontem.",
+              ...(cfg ? { config: this.configDaRegra(cfg) } : {}),
+              evidencias: { hoje, diasEsperadosVerificados: [diaPerguntado] },
+            } as unknown as Prisma.InputJsonValue,
+          },
+          select: { id: true, contaId: true, snapshot: true, dia: true },
+        });
+        alvo = criada;
+      } catch (e) {
+        if ((e as { code?: string }).code === "P2002") {
+          throw new ConflictException("A pergunta de hoje deste motorista acabou de ser criada. Tente de novo.");
+        }
+        throw e;
+      }
+      reenvios = 0;
+    } else {
+      // Linha que a regra NÃO mandou enviar (SUPRIMIDA/SOMBRA) vira teste: marca a
+      // origem (não conta como pergunta feita) e aponta o dia perguntado. Linha
+      // que já foi pergunta de verdade continua sendo (o contador dela não muda).
+      const daRegraSemEnvio = linha.estado === "SUPRIMIDA" || linha.estado === "SOMBRA";
+      const snap = (linha.snapshot ?? {}) as Record<string, unknown>;
+      const snapshotNovo = daRegraSemEnvio
+        ? ({
+            ...snap,
+            ...marca,
+            evidencias: { ...((snap.evidencias as object | undefined) ?? {}), hoje, diasEsperadosVerificados: [diaPerguntado] },
+          } as unknown as Prisma.InputJsonValue)
+        : undefined;
+      const { count } = await this.prisma.conferenciaDiaria.updateMany({
+        where: { id: linha.id, reenvios: linha.reenvios },
+        data: {
+          estado: "PENDENTE",
+          opcao: null,
+          respondidaEm: null,
+          respostaTexto: null,
+          wamid: null,
+          enviadaEm: null,
+          lembreteWamid: null,
+          lembreteEnviadoEm: null,
+          erroEnvio: null,
+          suprimidaPor: null,
+          reenvios: { increment: 1 },
+          ...(snapshotNovo ? { snapshot: snapshotNovo } : {}),
+        },
+      });
+      if (count === 0) {
+        throw new ConflictException("Esta pergunta acabou de ser mexida por outra pessoa. Recarregue e tente de novo.");
+      }
+      alvo = {
+        id: linha.id,
+        contaId: linha.contaId,
+        dia: linha.dia,
+        snapshot: (snapshotNovo ?? linha.snapshot) as Prisma.JsonValue,
+      };
+      reenvios = linha.reenvios + 1;
+    }
+
+    await anexarTrilha(this.prisma, alvo, "TESTE", {
+      pedidoPor: usuarioId,
+      origem: ORIGEM_TESTE_PAINEL,
+      linhaCriada: !linha,
+      diaPerguntado,
+      reenvio: reenvios,
+      telefone: mascararTelefone(telefone),
+      ...(antes ? { antes } : {}),
+    });
+
+    const r = await this.pergunta(alvo, telefone);
+    await this.registrarEnvio(alvo, r, "teste");
+    const final = await this.prisma.conferenciaDiaria.findUnique({
+      where: { id: alvo.id },
+      select: { estado: true, erroEnvio: true, wamid: true },
+    });
+    const estadoFinal = final?.estado ?? (r.enviado ? "ENVIADA" : "FALHOU");
+
+    // A mensagem já saiu: falha de auditoria não pode esconder o resultado de quem clicou.
+    await this.auditoria
+      .log({
+        usuarioId,
+        entidade: "ConferenciaDiaria",
+        entidadeId: alvo.id,
+        acao: "CONFERENCIA_PERGUNTA_TESTE",
+        campo: "estado",
+        valorAntes: linha?.estado ?? null,
+        valorDepois: estadoFinal,
+        motivo: "Pergunta de teste pedida pelo painel.",
+        metadata: {
+          motoristaId,
+          linhaCriada: !linha,
+          diaPerguntado,
+          telefone: mascararTelefone(telefone),
+          wamid: r.enviado ? r.idExterno : null,
+          enviado: r.enviado,
+        },
+      })
+      .catch((e) => this.log.error(`auditoria da pergunta de teste ${alvo.id} falhou: ${(e as Error).message}`));
+    return {
+      enviado: r.enviado,
+      estado: estadoFinal,
+      erro: r.enviado ? null : (final?.erroEnvio ?? "A Meta recusou o envio."),
+      reenvios,
+      telefoneMascarado: mascararTelefone(telefone),
+      wamid: r.enviado ? (final?.wamid ?? r.idExterno) : null,
+      diaPerguntado,
+      linhaCriada: !linha,
     };
   }
 
@@ -1102,6 +1336,26 @@ export class ConferenciaDiariaService {
     });
   }
 
+  /**
+   * Feriados NACIONAIS dos últimos ~70 dias. Só nacional: estadual e municipal
+   * dependem de onde cada motorista roda, e esta fase não tem essa informação.
+   */
+  private async feriadosNacionais(hojeData: Date): Promise<Set<string>> {
+    const feriadosDb = await this.prisma.feriadoPonto.findMany({
+      where: {
+        abrangencia: "NACIONAL",
+        data: { gte: new Date(hojeData.getTime() - 70 * 86_400_000), lt: hojeData },
+      },
+      select: { data: true, abrangencia: true, uf: true, municipioIbge: true },
+    });
+    return new Set(
+      feriadosDb
+        .map((f) => ({ ...f, data: dataParaYmd(f.data) }))
+        .filter((f) => feriadoAlcanca(f))
+        .map((f) => f.data),
+    );
+  }
+
   /** Avalia todos os motoristas elegíveis da conta da vez. Não grava nada. */
   private async calcular(cfg: Config, agora: Date): Promise<ItemConferencia[]> {
     const hoje = hojeYmd(agora);
@@ -1143,7 +1397,7 @@ export class ConferenciaDiariaService {
     const ids = motoristas.map((m) => m.id);
 
     const desde = new Date(hojeData.getTime() - JANELA_VIAGENS_DIAS * 86_400_000);
-    const [viagens, ultimas, perguntas, feriadosDb] = await Promise.all([
+    const [viagens, ultimas, perguntasBrutas, feriados] = await Promise.all([
       // QUALQUER status conta (inclusive EM_ANDAMENTO/AGUARDANDO_PESO/INCOMPLETA):
       // aqui a pergunta é "ele lançou algo?", não "entra no fechamento?".
       this.prisma.viagem.findMany({
@@ -1161,25 +1415,10 @@ export class ConferenciaDiariaService {
           estado: { in: [...ESTADOS_PERGUNTADOS] },
           dia: { gte: new Date(hojeData.getTime() - JANELA_PERGUNTAS_DIAS * 86_400_000), lt: hojeData },
         },
-        select: { motoristaId: true, dia: true },
+        select: { motoristaId: true, dia: true, snapshot: true },
       }),
-      this.prisma.feriadoPonto.findMany({
-        where: {
-          abrangencia: "NACIONAL",
-          data: { gte: new Date(hojeData.getTime() - 70 * 86_400_000), lt: hojeData },
-        },
-        select: { data: true, abrangencia: true, uf: true, municipioIbge: true },
-      }),
+      this.feriadosNacionais(hojeData),
     ]);
-
-    // Só feriado NACIONAL: estadual e municipal dependem de onde cada motorista
-    // roda, e esta fase não tem essa informação por motorista.
-    const feriados = new Set(
-      feriadosDb
-        .map((f) => ({ ...f, data: dataParaYmd(f.data) }))
-        .filter((f) => feriadoAlcanca(f))
-        .map((f) => f.data),
-    );
 
     const diasPorMotorista = new Map<string, string[]>();
     const emAndamento = new Set<string>();
@@ -1201,6 +1440,8 @@ export class ConferenciaDiariaService {
       diasPorMotorista.set(u.motoristaId, l);
     }
     const perguntasPor = new Map<string, string[]>();
+    // Pergunta de TESTE do painel não conta pro intervalo mínimo nem pro máximo semanal.
+    const perguntas = perguntasBrutas.filter((p) => !ehPerguntaDeTeste(p.snapshot));
     for (const p of perguntas) {
       const l = perguntasPor.get(p.motoristaId) ?? [];
       l.push(dataParaYmd(p.dia));

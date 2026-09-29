@@ -198,6 +198,8 @@ enum AcaoAuditoria {
   CONFERENCIA_SUGESTAO_DECIDIDA
   /// Alguém do painel mandou de novo a pergunta de HOJE pro motorista (operação e teste).
   CONFERENCIA_PERGUNTA_REENVIADA
+  /// Alguém do painel mandou a pergunta de TESTE a um motorista, sem depender do job.
+  CONFERENCIA_PERGUNTA_TESTE
   MOTORISTA_AJUSTOU_KM
   MOTORISTA_JUSTIFICOU_KM
   MOTORISTA_INFORMOU_PEDAGIO
