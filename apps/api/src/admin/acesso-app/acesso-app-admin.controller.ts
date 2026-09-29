@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Patch, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
+  AjustarAcessosMotoristaInput,
   ConfigPlataformaAcessoAppInput,
   CriarExcecaoAppInput,
   ExcecaoLoteAppInput,
@@ -84,6 +85,30 @@ export class AcessoAppAdminController {
   @EscopoPor("motorista")
   explicarMotorista(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.explicarMotorista(id, user.escopo);
+  }
+
+  /** Os interruptores da ficha e da edição: o estado de cada acesso, em linguagem de tela. */
+  @Get("motoristas/:id/itens")
+  @RequerPermissao("motoristas.ver")
+  @EscopoPor("motorista")
+  itensDoMotorista(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.acessosDoMotorista(id, user);
+  }
+
+  /**
+   * Liga/desliga acessos de um motorista, vários numa chamada. Vale pros dois
+   * modelos da empresa (ficha ou regras); nas regras pede, além desta chave, a
+   * `perfis-acesso.aplicar` — a mesma de antes, conferida no serviço.
+   */
+  @Patch("motoristas/:id/itens")
+  @RequerPermissao("motoristas.editar")
+  @EscopoPor("motorista")
+  ajustarItensDoMotorista(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(AjustarAcessosMotoristaInput)) body: AjustarAcessosMotoristaInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.ajustarAcessosDoMotorista(id, body, user);
   }
 
   @Get("funcionarios/:id")

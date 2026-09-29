@@ -5,10 +5,13 @@ import { Prisma } from "@prisma/client";
 import {
   ACESSOS_APP_CHAVES,
   CAMADAS_CORTE,
+  ITEM_RESUMO_DIARIO,
   CAPACIDADE_POR_CHAVE,
   CAPACIDADES_APP,
   type AcessoAppChave,
+  type AcessosDoMotorista,
   type CamadaCorte,
+  type ItemAcessoMotorista,
   type CapacidadeApp,
   type MudancaAcessoApp,
   type PreviaCadastroAppInput,
@@ -26,11 +29,13 @@ import {
   PERFIS_HERDADOS,
   PERFIL_HERDADO_FUNCIONARIO,
   PERFIL_HERDADO_MOTORISTA,
+  capacidadesDasColunas,
   capacidadesDoRegistradoHerdado,
   planejarEspelho,
   type ColunasAcesso,
 } from "./espelho-colunas";
 import {
+  excecaoViva,
   herdadasSuperadas,
   resolverAcessoApp,
   type DecisaoTabela,
@@ -671,6 +676,124 @@ export class AcessoAppService {
       ...resultado,
       excecoes,
     };
+  }
+
+  /**
+   * Os acessos de UM motorista no formato do interruptor: o que aparece na
+   * lista da ficha e da edição.
+   *
+   * ⚠️ "Ligado" quer dizer que o app dele mostra o acesso. No espelho da ficha
+   * quem manda são as colunas `pode*` (é o que os guards leem), então o estado
+   * sai delas — não do efetivo, que só se atualiza de hora em hora. Nas regras
+   * sai do resolvedor, com os cortes: item cujo módulo não foi contratado, ou
+   * que a plataforma não liberou, nem aparece (não é da empresa ligar).
+   *
+   * `interno` diz, por item, o que a escrita precisa saber: se o GRUPO dele já
+   * dá o acesso (`baseTem`) e se hoje ele está concedido antes dos cortes.
+   */
+  async itensDoMotorista(motoristaId: string, plataforma: boolean) {
+    await this.garantirConfig();
+    const agora = new Date();
+    const { config, ctx, pessoas, excecoesPorCpf, motoristas, nomes } = await this.carregarContexto(this.prisma, agora);
+    const m = motoristas.find((x) => x.id === motoristaId);
+    if (!m) return null;
+    const cpf = soDigitos(m.cpf);
+    const pessoa = pessoas.get(cpf);
+    if (!pessoa) return null;
+    const extra = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+      select: { receberResumoDiario: true, telefone: true },
+    });
+    const aprovado = m.ativo && m.status === "APROVADO";
+    const excecoes = excecoesPorCpf.get(cpf) ?? [];
+    const interno = new Map<string, { baseTem: boolean; concedido: boolean }>();
+    const itens: ItemAcessoMotorista[] = [];
+    let capacidadesNoApp: string[];
+
+    if (config.fonte === "REGRAS") {
+      const r = resolverAcessoApp(pessoa, ctx, excecoes, agora);
+      // Uma segunda conta, com um perfil que concede TUDO, só pra saber o que
+      // NÃO é da empresa ligar (módulo não contratado, rollout fechado).
+      const TUDO = "__tudo__";
+      const ctxTudo: ContaAcessoCtx = {
+        ...ctx,
+        perfis: new Map([[TUDO, { id: TUDO, nome: TUDO, ativo: true, capacidades: CAPACIDADES_APP.map((d) => d.chave) }]]),
+        regras: [],
+        perfilPadraoMotoristaId: TUDO,
+        perfilPadraoFuncionarioId: TUDO,
+      };
+      const pessoaTudo: PessoaAcesso = {
+        ...pessoa,
+        motorista: pessoa.motorista ? { ...pessoa.motorista, perfilFixadoId: null } : null,
+        funcionario: pessoa.funcionario ? { ...pessoa.funcionario, perfilFixadoId: null } : null,
+      };
+      const r2 = resolverAcessoApp(pessoaTudo, ctxTudo, [], agora);
+      const efetivo = new Set<string>(r.efetivo);
+      for (const def of CAPACIDADES_APP) {
+        if (def.vinculo === "FUNCIONARIO") continue;
+        if (def.tipo === "PLATAFORMA" && !plataforma) continue;
+        const cortesDuros = r2.explicacao[def.chave]!.cortes.filter(
+          (c) => !c.sombra && c.camada !== "APROVACAO" && c.camada !== "DEPENDENCIA",
+        );
+        if (cortesDuros.length > 0) continue;
+        const ex = r.explicacao[def.chave]!;
+        const concedido = ex.origem !== null && !ex.negadaPor;
+        const ligado = aprovado ? efetivo.has(def.chave) : concedido;
+        interno.set(def.chave, { baseTem: ex.origem?.tipo === "PERFIL", concedido });
+        itens.push({
+          chave: def.chave,
+          label: def.label,
+          efeito: def.efeito,
+          ligado,
+          ajustado: excecoes.some((e) => e.capacidade === def.chave && excecaoViva(e, agora)),
+          precisaDe:
+            aprovado && concedido && !ligado
+              ? (def.dependeDe ?? []).map((d) => CAPACIDADES_APP.find((x) => x.chave === d)!.label)
+              : [],
+          custa: !!def.custa,
+        });
+      }
+      capacidadesNoApp = r.efetivo;
+    } else {
+      const cols = colunasDe(m as unknown as Record<string, unknown>);
+      for (const def of CAPACIDADES_APP) {
+        if (!def.colunaLegada?.espelha) continue;
+        if (def.tipo === "PLATAFORMA" && !plataforma) continue;
+        interno.set(def.chave, { baseTem: false, concedido: cols[def.colunaLegada.coluna] === true });
+        itens.push({
+          chave: def.chave,
+          label: def.label,
+          efeito: def.efeito,
+          ligado: cols[def.colunaLegada.coluna] === true,
+          ajustado: false,
+          precisaDe: [],
+          custa: !!def.custa,
+        });
+      }
+      capacidadesNoApp = capacidadesDasColunas(cols);
+    }
+
+    itens.push({
+      chave: ITEM_RESUMO_DIARIO,
+      label: "Resumo do dia no WhatsApp",
+      efeito: "Toda noite, às 20h, ele recebe o resumo do dia (só se teve movimento ou pendência).",
+      ligado: extra?.receberResumoDiario !== false,
+      ajustado: false,
+      precisaDe: [],
+      custa: false,
+    });
+
+    const publico: AcessosDoMotorista = {
+      motoristaId,
+      nome: nomes.get(cpf) ?? m.nome,
+      fonte: config.fonte,
+      aprovado,
+      itens,
+      ajustes: itens.filter((i) => i.ajustado).length,
+      temTelefone: !!extra?.telefone,
+      capacidadesNoApp,
+    };
+    return { publico, interno, cpf, fonte: config.fonte, colunasAtuais: colunasDe(m as unknown as Record<string, unknown>) };
   }
 
   /**

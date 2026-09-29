@@ -4,9 +4,8 @@ import { use } from "react";
 import type { Route } from "next";
 import { FormPageHeader } from "@/components/form-page-header";
 import { RequerTela } from "@/components/requer-tela";
-import { useResourceItem, useApiQuery } from "@/lib/client-api";
+import { useResourceItem } from "@/lib/client-api";
 import { MotoristaForm, type Motorista } from "../../_components/motorista-form";
-import type { AcessoDaPessoa } from "../acesso-app-card";
 
 /**
  * EDITAR o motorista. A leitura (ficha, versão do app, calendário, acesso,
@@ -28,8 +27,6 @@ export default function EditarMotoristaPage({
 
 function Conteudo({ id }: { id: string }) {
   const item = useResourceItem<Motorista>("/admin/motoristas", id);
-  // Mesma chave do card da ficha: o react-query entrega uma resposta só.
-  const acesso = useApiQuery<AcessoDaPessoa>(`/admin/acesso-app/motoristas/${id}`);
 
   return (
     <div className="space-y-6">
@@ -41,7 +38,7 @@ function Conteudo({ id }: { id: string }) {
         <p className="text-sm text-muted-foreground">Carregando…</p>
       )}
       {item.data && (
-        <MotoristaForm initial={item.data} acessoPorRegras={acesso.data?.fonte === "REGRAS"} />
+        <MotoristaForm initial={item.data} />
       )}
     </div>
   );

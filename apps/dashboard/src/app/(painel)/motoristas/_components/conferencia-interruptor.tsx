@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { StatusToggle } from "@/components/status-toggle";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
 /** O que a API guarda sobre a conferência do vínculo (ficha, lista e PATCH devolvem o mesmo). */
@@ -45,22 +44,18 @@ export function descreverConferencia(c: ConferenciaDoMotorista): string | null {
 }
 
 /**
- * Interruptor "Receber a conferência de viagens" (edição do motorista).
+ * A conferência de viagens por WhatsApp, como um item da lista de acessos do
+ * app (`AcessosDoApp`). Não é mais uma seção à parte.
  *
- * NÃO faz parte do botão Salvar: é ação própria, grava na hora e avisa por
- * toast. Vale só para este cadastro (esta empresa) — o "Parar" que o motorista
- * toca no WhatsApp vale em todas as empresas dele.
+ * Grava na hora (não faz parte de nenhum botão Salvar) e vale só para este
+ * cadastro (esta empresa) — o "Parar" que o motorista toca no WhatsApp vale em
+ * todas as empresas dele.
  *
  * Religar quem o PRÓPRIO motorista desligou pede um motivo escrito, num campo
- * inline (sem Modal). Se foi o painel que desligou, religa direto.
+ * inline (sem Modal), e só nesse momento. Se foi o painel que desligou, religa
+ * direto.
  */
-export function ConferenciaInterruptor({
-  motoristaId,
-  inicial,
-}: {
-  motoristaId: string;
-  inicial: ConferenciaDoMotorista;
-}) {
+export function useConferenciaMotorista(motoristaId: string, inicial: ConferenciaDoMotorista) {
   const token = useAuthToken();
   const qc = useQueryClient();
   const [estado, setEstado] = useState<ConferenciaDoMotorista>({
@@ -68,11 +63,9 @@ export function ConferenciaInterruptor({
     receberConferenciaDiaria: inicial.receberConferenciaDiaria !== false,
   });
   const [pedindoMotivo, setPedindoMotivo] = useState(false);
-  const [motivo, setMotivo] = useState("");
 
   const recebe = estado.receberConferenciaDiaria !== false;
   const foiDoMotorista = !recebe && estado.conferenciaDesligadaOrigem !== "PAINEL";
-  const motivoOk = motivo.trim().length >= MOTIVO_RELIGAR_MIN;
 
   const salvar = useMutation({
     mutationFn: (corpo: { recebe: boolean; motivo?: string }) =>
@@ -84,95 +77,83 @@ export function ConferenciaInterruptor({
     onSuccess: (r) => {
       setEstado(r);
       setPedindoMotivo(false);
-      setMotivo("");
-      toast.success(r.receberConferenciaDiaria ? "Conferência religada." : "Conferência desligada.", {
-        description: r.receberConferenciaDiaria
-          ? "Ele volta a receber a pergunta quando a regra da empresa mandar."
-          : "Ele não recebe mais a pergunta de viagens desta empresa.",
+      toast.success(r.receberConferenciaDiaria ? "Conferência de viagens: ligado" : "Conferência de viagens: desligado", {
+        duration: 2000,
       });
       void qc.invalidateQueries();
     },
-    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Não deu pra salvar."),
+    onError: (e: unknown) =>
+      toast.error(e instanceof Error ? e.message : "Não deu pra salvar. Ficou como estava."),
   });
 
-  function alternar(novo: boolean) {
+  /** `true` = aplicou; `false` = precisa do motivo antes (o campo abre sozinho). */
+  async function definir(novo: boolean): Promise<boolean> {
+    if (novo === recebe) return true;
     if (novo && foiDoMotorista) {
       // Passar por cima do pedido dele: pede o motivo antes.
       setPedindoMotivo(true);
-      return;
+      return false;
     }
-    salvar.mutate({ recebe: novo });
+    try {
+      await salvar.mutateAsync({ recebe: novo });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  const frase = descreverConferencia(estado);
+  return {
+    recebe,
+    definir,
+    ocupado: salvar.isPending,
+    pedindoMotivo,
+    cancelarMotivo: () => setPedindoMotivo(false),
+    religarComMotivo: (motivo: string) => salvar.mutate({ recebe: true, motivo }),
+    frase: descreverConferencia(estado),
+    motivoDoPainel: estado.conferenciaDesligadaMotivo ?? null,
+  };
+}
 
+/** O campo de motivo que aparece SÓ ao religar quem o próprio motorista desligou. */
+export function ConferenciaMotivoInline({
+  ocupado,
+  onReligar,
+  onCancelar,
+}: {
+  ocupado: boolean;
+  onReligar: (motivo: string) => void;
+  onCancelar: () => void;
+}) {
+  const [motivo, setMotivo] = useState("");
+  const motivoOk = motivo.trim().length >= MOTIVO_RELIGAR_MIN;
   return (
-    <div className="space-y-2 border-t pt-4" data-testid="conferencia-interruptor">
-      <div>
-        <Label className="text-base">Conferência de viagens no WhatsApp</Label>
-        <p className="text-xs text-muted-foreground">
-          Quando a regra da empresa indica que ele pode ter esquecido de lançar uma viagem, o sistema pergunta pelo
-          WhatsApp. Desligar aqui vale só para o cadastro dele nesta empresa; se ele trabalha em outras, elas não são
-          afetadas. Grava na hora, sem precisar salvar o formulário.
-        </p>
-      </div>
-      <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
-        <span className="text-sm font-medium text-foreground" id="rotulo-conferencia">
-          Receber a conferência de viagens
-        </span>
-        <StatusToggle
-          active={recebe}
-          onChange={alternar}
+    <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3" data-testid="conferencia-motivo">
+      <Label htmlFor="motivo-religar" className="text-sm">
+        O motorista pediu pra parar de receber a conferência. Por que religar?
+      </Label>
+      <Input
+        id="motivo-religar"
+        value={motivo}
+        onChange={(e) => setMotivo(e.target.value)}
+        placeholder="Ex.: a pedido do motorista"
+        maxLength={500}
+        autoFocus
+      />
+      <p className="text-xs text-muted-foreground">Mínimo de {MOTIVO_RELIGAR_MIN} letras. Fica registrado com o seu nome.</p>
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" size="sm" disabled={ocupado} onClick={onCancelar}>
+          Cancelar
+        </Button>
+        <Button
+          type="button"
+          variant="success"
           size="sm"
-          label
-          disabled={salvar.isPending || pedindoMotivo}
-        />
+          disabled={!motivoOk || ocupado}
+          onClick={() => onReligar(motivo.trim())}
+        >
+          {ocupado ? "Religando…" : "Religar conferência"}
+        </Button>
       </div>
-      {frase && (
-        <p className="text-xs text-amber-700" data-testid="conferencia-estado">
-          {frase}
-          {estado.conferenciaDesligadaMotivo ? ` Motivo: ${estado.conferenciaDesligadaMotivo}` : ""}
-        </p>
-      )}
-      {pedindoMotivo && (
-        <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3" data-testid="conferencia-motivo">
-          <Label htmlFor="motivo-religar" className="text-sm">
-            O motorista pediu pra parar de receber. Por que religar?
-          </Label>
-          <Input
-            id="motivo-religar"
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-            placeholder="Ex.: a pedido do motorista"
-            maxLength={500}
-            autoFocus
-          />
-          <p className="text-xs text-muted-foreground">Mínimo de {MOTIVO_RELIGAR_MIN} letras. Fica registrado com o seu nome.</p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="success"
-              size="sm"
-              disabled={!motivoOk || salvar.isPending}
-              onClick={() => salvar.mutate({ recebe: true, motivo: motivo.trim() })}
-            >
-              {salvar.isPending ? "Religando…" : "Religar"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={salvar.isPending}
-              onClick={() => {
-                setPedindoMotivo(false);
-                setMotivo("");
-              }}
-            >
-              Cancelar
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

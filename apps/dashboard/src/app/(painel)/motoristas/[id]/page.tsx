@@ -198,7 +198,7 @@ export default function FichaMotoristaPage({
           />
           {verConferencia && <ConferenciaCalendarioMotorista motoristaId={id} />}
           <RegimeCard regime={m.regime ?? null} motoristaId={id} />
-          <AcessoAppCard motoristaId={id} />
+          <AcessoAppCard motoristaId={id} conferencia={m} />
           <PedirDocumentos motoristaId={id} />
           <HistoricoNotificacoes motoristaId={id} />
         </>

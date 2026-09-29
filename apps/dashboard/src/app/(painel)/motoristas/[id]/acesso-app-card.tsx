@@ -27,7 +27,8 @@ import {
   fraseDaDiferenca,
   type ExcecaoApp,
 } from "../../acesso-app/_components/excecoes";
-import { DialogFixar, type PerfilOpcao } from "../_components/acesso-em-lote";
+import { AcessosDoApp } from "../_components/acessos-do-app";
+import type { ConferenciaDoMotorista } from "../_components/conferencia-interruptor";
 
 type Base = { perfilId: string; perfilNome: string; via: "FIXADO" | "REGRA" | "PADRAO"; regraNome?: string } | null;
 export type AcessoDaPessoa = {
@@ -45,7 +46,9 @@ export type AcessoDaPessoa = {
  * cadastro que o escritório está olhando: pela ficha do motorista não se mexe
  * no ponto, e vice-versa.
  */
-export type AlvoAcesso = { motoristaId: string } | { funcionarioId: string };
+export type AlvoAcesso =
+  | { motoristaId: string; conferencia: ConferenciaDoMotorista }
+  | { funcionarioId: string };
 
 function urlDoAlvo(alvo: AlvoAcesso) {
   return "motoristaId" in alvo
@@ -63,19 +66,43 @@ function urlDoAlvo(alvo: AlvoAcesso) {
  * só a tela ficou do tamanho da pergunta.
  */
 export function AcessoAppCard(alvo: AlvoAcesso) {
+  return "motoristaId" in alvo ? (
+    <CartaoDoMotorista motoristaId={alvo.motoristaId} conferencia={alvo.conferencia} />
+  ) : (
+    <CartaoDoRegistrado funcionarioId={alvo.funcionarioId} />
+  );
+}
+
+/**
+ * O acesso ao app do MOTORISTA na ficha: a mesma lista de interruptores da
+ * edição. Nada de perfil, regra ou exceção aqui.
+ */
+function CartaoDoMotorista({
+  motoristaId,
+  conferencia,
+}: {
+  motoristaId: string;
+  conferencia: ConferenciaDoMotorista;
+}) {
+  return (
+    <Card className="p-5" data-testid="acesso-app-card">
+      <h2 className="mb-3 font-semibold">Acesso ao app</h2>
+      <AcessosDoApp motoristaId={motoristaId} conferencia={conferencia} />
+    </Card>
+  );
+}
+
+function CartaoDoRegistrado(alvo: { funcionarioId: string }) {
   const acesso = useApiQuery<AcessoDaPessoa>(urlDoAlvo(alvo));
   const { temPermissao } = usePermissoes();
   const [vendo, setVendo] = useState(false);
   const [mudando, setMudando] = useState(false);
-  const [mudandoGrupo, setMudandoGrupo] = useState(false);
   const [desfazendo, setDesfazendo] = useState<ExcecaoApp | null>(null);
-  const painel = useApiQuery<{ perfis: PerfilOpcao[] }>(mudandoGrupo ? "/admin/acesso-app/perfis" : undefined);
 
   const a = acesso.data;
   if (!a) return null;
   const porGrupos = a.fonte === "REGRAS";
   const podeMudar = porGrupos && temPermissao("perfis-acesso.aplicar");
-  const ehMotorista = "motoristaId" in alvo;
   const grupos = [a.base.motorista, a.base.funcionario].filter((b): b is NonNullable<Base> => !!b);
   const efetivo = new Set(a.efetivo);
   const vistos = CAPACIDADES_APP.filter((c) => efetivo.has(c.chave) && c.tipo !== "PLATAFORMA");
@@ -99,9 +126,7 @@ export function AcessoAppCard(alvo: AlvoAcesso) {
                   </span>
                 ))}
                 <span className="block text-xs text-muted-foreground">
-                  {ehMotorista
-                    ? "O tipo vem da modalidade dele (no cadastro, mais abaixo)."
-                    : "Quem não tem cadastro de motorista é “Só bate ponto”."}
+                  Quem não tem cadastro de motorista é “Só bate ponto”.
                 </span>
               </>
             )}
@@ -154,24 +179,11 @@ export function AcessoAppCard(alvo: AlvoAcesso) {
             <Button variant="outline" size="sm" onClick={() => setMudando(true)}>
               Dar ou tirar algo só dele
             </Button>
-            {/* Escolher o tipo na mão não existe mais na tela: o tipo sai do
-                cadastro. Quem já foi posto num grupo na mão pode voltar. */}
-            {ehMotorista && grupos.some((g) => g.via === "FIXADO") && (
-              <button
-                type="button"
-                className="text-xs text-muted-foreground underline"
-                onClick={() => setMudandoGrupo(true)}
-              >
-                Voltar ao automático
-              </button>
-            )}
           </div>
         )
       ) : (
         <p className="mt-4 text-xs text-muted-foreground">
-          {ehMotorista
-            ? "Nesta empresa os acessos ainda são ligados ao editar o motorista: são as chavinhas de “Acessos do app”."
-            : "Nesta empresa quem é registrado recebe o ponto."}
+          Nesta empresa quem é registrado recebe o ponto.
         </p>
       )}
 
@@ -187,15 +199,6 @@ export function AcessoAppCard(alvo: AlvoAcesso) {
       )}
       {mudando && (
         <DarOuTirar alvo={alvo} nome={a.nome} efetivo={efetivo} onFechar={() => setMudando(false)} />
-      )}
-      {mudandoGrupo && "motoristaId" in alvo && (
-        <DialogFixar
-          ids={[alvo.motoristaId]}
-          perfis={painel.data?.perfis ?? []}
-          titulo={`Grupo de ${a.nome}`}
-          onFechar={() => setMudandoGrupo(false)}
-          onFeito={() => undefined}
-        />
       )}
       {desfazendo && <RevogarExcecao excecao={desfazendo} onFechar={() => setDesfazendo(null)} />}
     </Card>
@@ -220,11 +223,10 @@ function DarOuTirar({
   const { plataforma } = usePermissoes();
   const token = useAuthToken();
   const qc = useQueryClient();
-  const ehMotorista = "motoristaId" in alvo;
   // Pela ficha do motorista não se mexe no ponto; pela do registrado, só no
   // que é do registrado. O que é da plataforma não é da empresa dar.
   const itens = CAPACIDADES_APP.filter(
-    (c) => c.tipo !== "PLATAFORMA" && (ehMotorista ? c.vinculo !== "FUNCIONARIO" : c.vinculo !== "MOTORISTA"),
+    (c) => c.tipo !== "PLATAFORMA" && c.vinculo !== "MOTORISTA",
   );
   const [chave, setChave] = useState<CapacidadeApp | "">("");
   const [motivo, setMotivo] = useState("");

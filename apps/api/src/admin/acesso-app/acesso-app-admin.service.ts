@@ -7,7 +7,12 @@ import {
 } from "@nestjs/common";
 import {
   CAMADAS_CORTE,
+  ITEM_RESUMO_DIARIO,
+  MOTIVO_AJUSTE_FICHA,
+  MOTIVO_VOLTOU_AO_PADRAO,
+  CAPACIDADE_POR_CHAVE,
   ehCapacidadeApp,
+  type AjustarAcessosMotoristaInput,
   type ConfigPlataformaAcessoAppInput,
   type CriarExcecaoAppInput,
   type ExcecaoLoteAppInput,
@@ -20,12 +25,15 @@ import {
   type CapacidadeApp,
   type TravasServidorAppInput,
 } from "@ronan/shared-types";
+import { decidirAjuste } from "../../common/acesso-app/ajuste-ficha";
 import { AcessoAppService, ondeExcecaoViva } from "../../common/acesso-app/acesso-app.service";
 import type { DecisaoTabela } from "../../common/acesso-app/resolver";
 import { contaIdAtual } from "../../common/conta/conta-context";
 import { type EscopoAdmin, filtroEscopo } from "../../common/escopo/escopo";
 import { soDigitos } from "../../common/regime-vigente";
-import { Prisma } from "@prisma/client";
+import { AcaoAuditoria, Prisma } from "@prisma/client";
+import { AuditoriaService } from "../../auditoria/auditoria.service";
+import type { AuthAdminUser } from "../../auth/types";
 import { PrismaService } from "../../prisma/prisma.service";
 
 /**
@@ -47,6 +55,7 @@ export class AcessoAppAdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly acesso: AcessoAppService,
+    private readonly auditoria: AuditoriaService,
   ) {}
 
   private exigirGlobal(escopo: EscopoAdmin) {
@@ -170,6 +179,137 @@ export class AcessoAppAdminService {
     });
     if (!m) throw new NotFoundException("Motorista não encontrado");
     return this.acesso.explicar(m.cpf);
+  }
+
+  /** Os interruptores de um motorista (ficha e edição). */
+  async acessosDoMotorista(id: string, user: AuthAdminUser) {
+    // Escopo: quem é restrito só enxerga motorista da frota dele.
+    await this.exigirNoEscopo(id, user.escopo);
+    const e = await this.acesso.itensDoMotorista(id, !!user.plataforma);
+    if (!e) throw new NotFoundException("Motorista não encontrado");
+    return e.publico;
+  }
+
+  private async exigirNoEscopo(id: string, escopo: EscopoAdmin) {
+    if (!escopo) return;
+    const ok = await this.prisma.motorista.findFirst({ where: { id, ...filtroEscopo(escopo) }, select: { id: true } });
+    if (!ok) throw new NotFoundException("Motorista não encontrado");
+  }
+
+  /**
+   * Liga e desliga acessos de UM motorista — vários de uma vez, uma chamada só.
+   *
+   * O interruptor não sabe em que modelo a empresa está:
+   *   - no espelho da ficha, escreve as colunas `pode*` (com auditoria);
+   *   - nas regras, vira exceção só dele, com o motivo padrão
+   *     `MOTIVO_AJUSTE_FICHA` (o log guarda quem e quando). Se o novo estado é
+   *     o que o grupo dele já dá, em vez de empilhar exceção a gente desfaz a
+   *     que existia — o "só dele" some quando não há mais diferença.
+   *
+   * Nada aqui pede motivo: é o fluxo de rotina. O que é destrutivo continua
+   * nas telas de acesso-app.
+   */
+  async ajustarAcessosDoMotorista(id: string, dados: AjustarAcessosMotoristaInput, user: AuthAdminUser) {
+    await this.exigirNoEscopo(id, user.escopo);
+    const est = await this.acesso.itensDoMotorista(id, !!user.plataforma);
+    if (!est) throw new NotFoundException("Motorista não encontrado");
+    const disponiveis = new Set<string>(est.publico.itens.map((i) => i.chave));
+    for (const i of dados.itens) {
+      if (!disponiveis.has(i.chave)) {
+        throw new BadRequestException("Um dos acessos não está disponível pra este motorista.");
+      }
+    }
+    const resumo = dados.itens.find((i) => i.chave === ITEM_RESUMO_DIARIO);
+    const doApp = dados.itens.filter((i) => i.chave !== ITEM_RESUMO_DIARIO);
+
+    if (doApp.length > 0) {
+      if (est.fonte === "COLUNAS") {
+        const data: Record<string, boolean> = {};
+        for (const i of doApp) {
+          const def = ehCapacidadeApp(i.chave) ? CAPACIDADE_POR_CHAVE[i.chave] : undefined;
+          if (!def?.colunaLegada?.espelha) throw new BadRequestException("Um dos acessos não pode ser mudado aqui.");
+          if (est.colunasAtuais[def.colunaLegada.coluna] !== i.ligado) data[def.colunaLegada.coluna] = i.ligado;
+        }
+        if (Object.keys(data).length > 0) {
+          const antes = Object.fromEntries(Object.keys(data).map((k) => [k, est.colunasAtuais[k as keyof typeof est.colunasAtuais]]));
+          await this.prisma.motorista.update({ where: { id }, data });
+          await this.auditoria.logDiff(
+            { usuarioId: user.id, entidade: "Motorista", entidadeId: id, acao: AcaoAuditoria.UPDATE },
+            antes,
+            data,
+          );
+        }
+      } else {
+        if (!user.permissoes.includes("perfis-acesso.aplicar")) {
+          throw new ForbiddenException("Você não tem permissão pra mudar o acesso de um motorista.");
+        }
+        await this.aplicarNasRegras(est.cpf, est.interno, doApp, user.id);
+      }
+    }
+
+    if (resumo) {
+      const antes = { receberResumoDiario: !!est.publico.itens.find((i) => i.chave === ITEM_RESUMO_DIARIO)?.ligado };
+      if (antes.receberResumoDiario !== resumo.ligado) {
+        await this.prisma.motorista.update({ where: { id }, data: { receberResumoDiario: resumo.ligado } });
+        await this.auditoria.logDiff(
+          { usuarioId: user.id, entidade: "Motorista", entidadeId: id, acao: AcaoAuditoria.UPDATE },
+          antes,
+          { receberResumoDiario: resumo.ligado },
+        );
+      }
+    }
+
+    const fresco = await this.acesso.itensDoMotorista(id, !!user.plataforma);
+    return fresco!.publico;
+  }
+
+  private async aplicarNasRegras(
+    cpf: string,
+    interno: Map<string, { baseTem: boolean; concedido: boolean }>,
+    itens: { chave: string; ligado: boolean }[],
+    autorId: string,
+  ) {
+    const mudancas = itens
+      .map((i) => ({ ...i, acao: decidirAjuste(interno.get(i.chave)!, i.ligado) }))
+      .filter((i) => i.acao !== "NADA");
+    if (mudancas.length === 0) return;
+    await this.prisma.$transaction(async (tx) => {
+      for (const i of mudancas) {
+        if (i.acao === "DESFAZER") {
+          // O grupo já dá exatamente isso: desfaz o que estava diferente.
+          const vivas = await tx.excecaoAcessoApp.findMany({
+            where: { cpf, capacidade: i.chave, revogadaEm: null },
+            select: { id: true },
+          });
+          if (vivas.length === 0) continue;
+          await tx.excecaoAcessoApp.updateMany({
+            where: { cpf, capacidade: i.chave, revogadaEm: null },
+            data: {
+              revogadaEm: new Date(),
+              revogadaPorId: autorId,
+              chaveViva: null,
+              motivoRevogacao: MOTIVO_VOLTOU_AO_PADRAO,
+            },
+          });
+          await tx.logAcessoApp.create({
+            data: { tipo: "EXCECAO_REVOGADA", autorId, cpf, alvoId: vivas[0]!.id, motivo: MOTIVO_VOLTOU_AO_PADRAO },
+          });
+        } else {
+          await this.gravarExcecao(
+            tx,
+            cpf,
+            {
+              capacidade: i.chave as CapacidadeApp,
+              efeito: i.acao === "CONCEDER" ? "CONCEDER" : "NEGAR",
+              motivo: MOTIVO_AJUSTE_FICHA,
+              expiraEm: null,
+            },
+            autorId,
+          );
+        }
+      }
+    });
+    await this.acesso.recalcular(`AJUSTE_FICHA:${cpf}`);
   }
 
   async explicarFuncionario(id: string) {

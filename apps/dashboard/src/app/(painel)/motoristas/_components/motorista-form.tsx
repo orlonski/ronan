@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Send, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   cpfDigits,
   isCpfValid,
@@ -30,9 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateResource, useUpdateResource, useAuthToken, fetchApi } from "@/lib/client-api";
-import { StatusToggle } from "@/components/status-toggle";
-import { usePermissoes } from "@/lib/permissoes";
-import { ConferenciaInterruptor } from "./conferencia-interruptor";
+import { AcessosDoApp } from "./acessos-do-app";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
@@ -139,7 +136,7 @@ export function maskCpf(input: string): string {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 }
 
-type Props = { initial?: Motorista; acessoPorRegras?: boolean };
+type Props = { initial?: Motorista };
 
 type PreviaAcesso = {
   fonte: "COLUNAS" | "REGRAS";
@@ -148,80 +145,13 @@ type PreviaAcesso = {
   jaExiste: boolean;
 };
 
-type AcessosState = {
-  podeLancarViagem: boolean;
-  podeIniciarViagem: boolean;
-  podeViagemLifecycle: boolean;
-  podeLancarPedagio: boolean;
-  podeLancarAbastecimento: boolean;
-  podeUsarOcrTicket: boolean;
-  podeVerStories: boolean;
-  podeVerTodosLocais: boolean;
-  podeReferenciaKm: boolean;
-  podeTelemetria: boolean;
-  podeChat: boolean;
-  receberResumoDiario: boolean;
-};
-
-export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
+export function MotoristaForm({ initial }: Props) {
   const router = useRouter();
-  const { temPermissao, temModulo } = usePermissoes();
-  const podeDecidirConferencia =
-    temPermissao("conferencia-diaria.decidir") && temModulo("conferencia-diaria.decidir");
   const create = useCreateResource<Record<string, unknown>, Motorista>(PATH, PATH);
   const update = useUpdateResource<Record<string, unknown>, Motorista>(PATH, PATH);
 
-  const [acessos, setAcessos] = useState<AcessosState>({
-    podeLancarViagem: initial?.podeLancarViagem ?? true,
-    podeIniciarViagem: initial?.podeIniciarViagem ?? true,
-    podeViagemLifecycle: initial?.podeViagemLifecycle ?? false,
-    podeLancarPedagio: initial?.podeLancarPedagio ?? true,
-    podeLancarAbastecimento: initial?.podeLancarAbastecimento ?? true,
-    podeUsarOcrTicket: initial?.podeUsarOcrTicket ?? true,
-    podeVerStories: initial?.podeVerStories ?? true,
-    podeVerTodosLocais: initial?.podeVerTodosLocais ?? false,
-    podeReferenciaKm: initial?.podeReferenciaKm ?? false,
-    podeTelemetria: initial?.podeTelemetria ?? false,
-    podeChat: initial?.podeChat ?? true,
-    receberResumoDiario: initial?.receberResumoDiario ?? true,
-  });
   const token = useAuthToken();
-  const qc = useQueryClient();
 
-  const acessosMutation = useMutation({
-    mutationFn: (body: Partial<AcessosState>) =>
-      fetchApi<AcessosState>(`${PATH}/${initial?.id}/acessos`, {
-        method: "PATCH",
-        body: JSON.stringify(body),
-        token,
-      }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: [PATH] });
-    },
-  });
-  function alterarAcesso(flag: keyof AcessosState, value: boolean) {
-    setAcessos((a) => ({ ...a, [flag]: value }));
-    if (initial) acessosMutation.mutate({ [flag]: value });
-  }
-
-  const temTelefone = !!initial?.telefone;
-  const enviarResumo = useMutation({
-    mutationFn: () =>
-      fetchApi<{ enviado: boolean; motivo?: string }>(
-        `${PATH}/${initial?.id}/enviar-resumo`,
-        { method: "POST", token },
-      ),
-    onSuccess: (r) => {
-      if (r.enviado) {
-        toast.success("Resumo enviado", { description: `WhatsApp de ${initial?.nome ?? "motorista"}.` });
-      } else {
-        toast.error("Não enviado", { description: r.motivo ?? "Motivo desconhecido." });
-      }
-    },
-    onError: (err: Error) => {
-      toast.error("Falha ao enviar", { description: err.message });
-    },
-  });
 
   const [form, setForm] = useState<FormShape>(
     initial
@@ -781,112 +711,14 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
           )}
         </div>
 
-        {/* Nas regras, os interruptores somem: quem manda é o perfil, e a
-            diferença de uma pessoa só é exceção com motivo (card lá em cima). */}
-        {initial && !acessoPorRegras && (
+        {/* Os acessos do app (e a conferência por WhatsApp) são UMA lista de
+            interruptores, a mesma da ficha. Gravam ao tocar: não fazem parte
+            do botão Salvar deste formulário. */}
+        {initial && (
           <div className="space-y-3 border-t pt-4">
-            <div>
-              <Label className="text-base">Acessos do app</Label>
-              <p className="text-xs text-muted-foreground">
-                Cada toggle controla se o motorista vê o botão correspondente
-                no app. Desligar não afeta histórico — ele continua vendo o
-                que já lançou.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-              <AcessoRow
-                label="Lançar viagem feita"
-                active={acessos.podeLancarViagem}
-                onChange={(v) => alterarAcesso("podeLancarViagem", v)}
-              />
-              <AcessoRow
-                label="Iniciar viagem com GPS"
-                active={acessos.podeIniciarViagem}
-                onChange={(v) => alterarAcesso("podeIniciarViagem", v)}
-              />
-              <AcessoRow
-                label="Começar viagem (o app acompanha: carga → descarga → fim)"
-                active={acessos.podeViagemLifecycle}
-                onChange={(v) => alterarAcesso("podeViagemLifecycle", v)}
-              />
-              <AcessoRow
-                label="Lançar pedágio"
-                active={acessos.podeLancarPedagio}
-                onChange={(v) => alterarAcesso("podeLancarPedagio", v)}
-              />
-              <AcessoRow
-                label="Lançar abastecimento"
-                active={acessos.podeLancarAbastecimento}
-                onChange={(v) => alterarAcesso("podeLancarAbastecimento", v)}
-              />
-              <AcessoRow
-                label="Ler ticket com IA (OCR da foto)"
-                active={acessos.podeUsarOcrTicket}
-                onChange={(v) => alterarAcesso("podeUsarOcrTicket", v)}
-              />
-              <AcessoRow
-                label="Stories (foto do trecho, estilo Instagram)"
-                active={acessos.podeVerStories}
-                onChange={(v) => alterarAcesso("podeVerStories", v)}
-              />
-              <AcessoRow
-                label="Buscar todos os locais de descarga (por nome)"
-                active={acessos.podeVerTodosLocais}
-                onChange={(v) => alterarAcesso("podeVerTodosLocais", v)}
-              />
-              <AcessoRow
-                label="Sugestão de km do trajeto (o que a frota já rodou)"
-                active={acessos.podeReferenciaKm}
-                onChange={(v) => alterarAcesso("podeReferenciaKm", v)}
-              />
-              <AcessoRow
-                label="Telemetria de diagnóstico (grava o que ele buscou/selecionou no Lançar viagem feita)"
-                active={acessos.podeTelemetria}
-                onChange={(v) => alterarAcesso("podeTelemetria", v)}
-              />
-              <AcessoRow
-                label="Chat com os outros motoristas (aba Conversas no app)"
-                active={acessos.podeChat}
-                onChange={(v) => alterarAcesso("podeChat", v)}
-              />
-            </div>
-
-            <div className="border-t pt-4">
-              <Label className="text-base">Resumo diário no WhatsApp</Label>
-              <p className="text-xs text-muted-foreground">
-                Toda noite às 20h, um resumo curto do dia dele (viagens, toneladas,
-                km e pendências). Só envia se ele teve movimento ou tem pendência.
-              </p>
-              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-                <AcessoRow
-                  label="Receber resumo diário"
-                  active={acessos.receberResumoDiario}
-                  onChange={(v) => alterarAcesso("receberResumoDiario", v)}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => enviarResumo.mutate()}
-                  disabled={!temTelefone || enviarResumo.isPending}
-                  title={temTelefone ? "Enviar o resumo agora pra testar" : "Motorista sem telefone"}
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  {enviarResumo.isPending ? "Enviando…" : "Enviar resumo agora"}
-                </Button>
-              </div>
-              {!temTelefone && (
-                <p className="mt-1 text-xs text-amber-600">
-                  Cadastre um telefone pra poder enviar o resumo.
-                </p>
-              )}
-            </div>
+            <Label className="text-base">Acesso ao app</Label>
+            <AcessosDoApp motoristaId={initial.id} conferencia={initial} />
           </div>
-        )}
-
-        {/* Fora do bloco de acessos do app: não é botão do app, é pergunta da
-            empresa por WhatsApp, e vale mesmo quando o acesso é por regras. */}
-        {initial && podeDecidirConferencia && (
-          <ConferenciaInterruptor motoristaId={initial.id} inicial={initial} />
         )}
       </Card>
 
@@ -917,21 +749,3 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
     </form>
   );
 }
-
-function AcessoRow({
-  label,
-  active,
-  onChange,
-}: {
-  label: string;
-  active: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
-      <span className="text-sm font-medium text-foreground">{label}</span>
-      <StatusToggle active={active} onChange={onChange} size="sm" label />
-    </div>
-  );
-}
-
