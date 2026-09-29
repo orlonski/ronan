@@ -145,7 +145,13 @@ describe("Parar perguntas (opt-out)", () => {
     const t = montar({ vinculos: dois });
     await t.svc.tratarMensagem(toque("PARAR"));
     for (const c of t.motoristaUpdate.mock.calls) {
-      expect(c[0].data).toEqual({ receberConferenciaDiaria: false });
+      expect(c[0].data).toEqual({
+        receberConferenciaDiaria: false,
+        conferenciaDesligadaEm: expect.any(Date),
+        conferenciaDesligadaOrigem: "MOTORISTA",
+        conferenciaDesligadaPorId: null,
+        conferenciaDesligadaMotivo: null,
+      });
     }
   });
 

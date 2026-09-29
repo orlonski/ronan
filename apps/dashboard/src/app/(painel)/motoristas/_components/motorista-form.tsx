@@ -31,6 +31,8 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateResource, useUpdateResource, useAuthToken, fetchApi } from "@/lib/client-api";
 import { StatusToggle } from "@/components/status-toggle";
+import { usePermissoes } from "@/lib/permissoes";
+import { ConferenciaInterruptor } from "./conferencia-interruptor";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
@@ -71,6 +73,11 @@ export type Motorista = {
   podeTelemetria: boolean;
   podeChat: boolean;
   receberResumoDiario: boolean;
+  receberConferenciaDiaria?: boolean;
+  conferenciaDesligadaEm?: string | null;
+  conferenciaDesligadaOrigem?: "MOTORISTA" | "PAINEL" | null;
+  conferenciaDesligadaPor?: { id: string; nome: string } | null;
+  conferenciaDesligadaMotivo?: string | null;
   tipoRemuneracao: TipoRemuneracaoTipo | null;
   percentualFrete: string | null;
   valorPorViagem: string | null;
@@ -158,6 +165,9 @@ type AcessosState = {
 
 export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
   const router = useRouter();
+  const { temPermissao, temModulo } = usePermissoes();
+  const podeDecidirConferencia =
+    temPermissao("conferencia-diaria.decidir") && temModulo("conferencia-diaria.decidir");
   const create = useCreateResource<Record<string, unknown>, Motorista>(PATH, PATH);
   const update = useUpdateResource<Record<string, unknown>, Motorista>(PATH, PATH);
 
@@ -871,6 +881,12 @@ export function MotoristaForm({ initial, acessoPorRegras = false }: Props) {
               )}
             </div>
           </div>
+        )}
+
+        {/* Fora do bloco de acessos do app: não é botão do app, é pergunta da
+            empresa por WhatsApp, e vale mesmo quando o acesso é por regras. */}
+        {initial && podeDecidirConferencia && (
+          <ConferenciaInterruptor motoristaId={initial.id} inicial={initial} />
         )}
       </Card>
 

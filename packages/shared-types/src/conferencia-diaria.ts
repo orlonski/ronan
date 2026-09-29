@@ -94,6 +94,31 @@ export const DecidirSugestaoGestorSchema = z.object({
 });
 export type DecidirSugestaoGestor = z.infer<typeof DecidirSugestaoGestorSchema>;
 
+/** Mínimo de caracteres do motivo pra religar quem o PRÓPRIO motorista desligou. */
+export const MOTIVO_RELIGAR_MIN = 5;
+
+/**
+ * Liga/desliga a conferência de UM motorista pelo painel. Vale só pra este
+ * vínculo (decisão da empresa sobre o próprio cadastro). O motivo é opcional no
+ * schema porque só é obrigatório em um caso (religar quem o motorista desligou),
+ * que depende do estado no banco e é conferido no serviço.
+ */
+export const DefinirRecebimentoConferenciaSchema = z.object({
+  recebe: z.boolean(),
+  motivo: z.string().trim().max(500).optional(),
+});
+export type DefinirRecebimentoConferencia = z.infer<typeof DefinirRecebimentoConferenciaSchema>;
+
+/** Resposta do PATCH: o estado novo, no mesmo formato que a ficha e a lista leem. */
+export type EstadoConferenciaMotorista = {
+  motoristaId: string;
+  receberConferenciaDiaria: boolean;
+  conferenciaDesligadaEm: string | null;
+  conferenciaDesligadaOrigem: "MOTORISTA" | "PAINEL" | null;
+  conferenciaDesligadaPor: { id: string; nome: string } | null;
+  conferenciaDesligadaMotivo: string | null;
+};
+
 /** Texto padrão de orientação depois de "Parar perguntas". {empresa} e {contato} são trocados. */
 export const MENSAGEM_AO_PARAR_PADRAO =
   "Certo, não vamos mais enviar essa pergunta. Só lembrando: viagem que não é lançada no app não entra no seu acerto. Qualquer dúvida, fale com {empresa}{contato}.";

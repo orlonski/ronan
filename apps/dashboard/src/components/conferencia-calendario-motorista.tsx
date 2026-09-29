@@ -83,6 +83,7 @@ const SEM_CANAL: Record<string, string> = {
   SEM_TELEFONE: "sem telefone cadastrado",
   NAO_ACEITA_WHATSAPP: "desligou as mensagens no WhatsApp",
   PAROU: "pediu pra parar de receber a pergunta",
+  DESLIGADA_PAINEL: "a conferência está desligada pela empresa",
   INALCANCAVEL: "o WhatsApp parece não entregar",
 };
 

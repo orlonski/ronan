@@ -40,6 +40,7 @@ import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource, useApiQuery } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { EstadoVazio } from "@/components/estado-vazio";
+import { descreverConferencia } from "./_components/conferencia-interruptor";
 import { AcessoEmLote, type PerfilOpcao } from "./_components/acesso-em-lote";
 import { AbasDaTela } from "@/components/abas-da-tela";
 
@@ -69,6 +70,11 @@ type Motorista = AppVersaoInfo & {
   viagensMes: number;
   /** Como a pessoa é paga aqui. `null` = ninguém declarou ainda, e é o comum. */
   regime: { tipo: "PARCEIRO" | "EMPREGADO"; desde: string } | null;
+  /** Conferência de viagens no WhatsApp: `false` = este cadastro não recebe. */
+  receberConferenciaDiaria?: boolean;
+  conferenciaDesligadaEm?: string | null;
+  conferenciaDesligadaOrigem?: "MOTORISTA" | "PAINEL" | null;
+  conferenciaDesligadaPor?: { id: string; nome: string } | null;
   /** O perfil do app que está valendo, e quantas exceções a pessoa tem. */
   acessoApp: { perfil: string | null; excecoes: number } | null;
 };
@@ -112,6 +118,24 @@ function AcessoAppCell({ acesso }: { acesso: NonNullable<Motorista["acessoApp"]>
         </span>
       )}
     </span>
+  );
+}
+
+/**
+ * Selo discreto, só quando a conferência está desligada neste cadastro. Não é
+ * botão: ligar/desligar mora na edição. O card/linha inteiro segue clicável.
+ */
+function ConferenciaBadge({ m }: { m: Motorista }) {
+  const { temModulo } = usePermissoes();
+  if (m.receberConferenciaDiaria !== false || !temModulo("conferencia-diaria.ver")) return null;
+  return (
+    <Badge
+      className="border-amber-300 bg-amber-50 text-amber-800"
+      title={descreverConferencia(m) ?? "Conferência de viagens desligada"}
+      data-testid="selo-conferencia-desligada"
+    >
+      Conferência desligada
+    </Badge>
   );
 }
 
@@ -243,6 +267,7 @@ export default function MotoristasPage() {
             >
               {row.original.nome}
             </Link>
+            <ConferenciaBadge m={row.original} />
           </span>
         ),
       },
@@ -673,6 +698,7 @@ export default function MotoristasPage() {
                     <AceiteBadge aceite={m.aceite} />
                   )}
                   <RegimeBadge regime={m.regime} />
+                  <ConferenciaBadge m={m} />
                 </div>
                 {m.status === "PENDENTE_APROVACAO" && (
                   <AprovacaoMotoristaButtons id={m.id} nome={m.nome} />

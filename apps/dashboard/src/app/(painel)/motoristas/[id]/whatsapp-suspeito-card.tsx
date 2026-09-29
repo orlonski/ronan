@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
+import { descreverConferencia, type ConferenciaDoMotorista } from "../_components/conferencia-interruptor";
 
 /**
  * O selo do cadastro: o WhatsApp deste número parece não entregar, ou o parceiro
@@ -16,15 +17,17 @@ import { usePermissoes } from "@/lib/permissoes";
 export function WhatsappSuspeitoCard({
   motoristaId,
   inalcancavelEm,
-  parouConferencia,
+  conferencia,
 }: {
   motoristaId: string;
   inalcancavelEm: string | null | undefined;
-  parouConferencia: boolean;
+  conferencia: ConferenciaDoMotorista;
 }) {
   const token = useAuthToken();
   const qc = useQueryClient();
   const { temPermissao } = usePermissoes();
+  const parouConferencia = conferencia.receberConferenciaDiaria === false;
+  const fraseConferencia = descreverConferencia(conferencia);
   const reverificar = useMutation({
     mutationFn: () =>
       fetchApi(`/admin/conferencia-diaria/motoristas/${motoristaId}/reverificar-whatsapp`, {
@@ -55,7 +58,11 @@ export function WhatsappSuspeitoCard({
             </>
           )}
           {parouConferencia && (
-            <p>Pediu pra parar de receber a pergunta &ldquo;esqueceu de lançar viagem?&rdquo; no WhatsApp.</p>
+            <p data-testid="ficha-conferencia-estado">
+              <span className="font-medium">Conferência de viagens no WhatsApp desligada.</span> {fraseConferencia}
+              {conferencia.conferenciaDesligadaMotivo ? ` Motivo: ${conferencia.conferenciaDesligadaMotivo}` : ""}{" "}
+              Vale só para este cadastro.
+            </p>
           )}
         </div>
       </div>

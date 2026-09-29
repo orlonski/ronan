@@ -192,6 +192,8 @@ enum AcaoAuditoria {
   /// O motorista tocou em "Parar essas perguntas" no WhatsApp. Uma linha por vínculo
   /// afetado (o mesmo telefone pode ter cadastro em várias empresas).
   CONFERENCIA_OPTOUT
+  CONFERENCIA_MOTORISTA_DESLIGADA
+  CONFERENCIA_MOTORISTA_RELIGADA
   /// Alguém do painel aprovou ou recusou uma sugestão da fila da conferência diária.
   CONFERENCIA_SUGESTAO_DECIDIDA
   /// Alguém do painel mandou de novo a pergunta de HOJE pro motorista (operação e teste).
@@ -692,6 +694,7 @@ model User {
   resolucoes                  FechamentoLinha[]
   envios                      EnvioFechamento[]
   auditorias                  AuditLog[]
+  conferenciasDesligadas      Motorista[]           @relation("MotoristaConferenciaDesligadaPor")
   resgatesResolvidos          LancamentoResgatado[]
   layoutsEnvio                LayoutEnvio[]
   configsTracking             ConfiguracaoTracking[]
@@ -1442,6 +1445,16 @@ model Motorista {
   /// Opt-out da conferência diária ("você esqueceu de lançar alguma viagem?").
   /// Hoje só entra no filtro de elegibilidade do job; nada no app liga isso ainda.
   receberConferenciaDiaria Boolean             @default(true)
+  /// Registro de QUEM desligou a conferência e QUANDO (limpo ao religar).
+  /// Origem: "MOTORISTA" (tocou em "Parar perguntas" no WhatsApp, vale em todos os
+  /// vínculos da pessoa) ou "PAINEL" (decisão da empresa sobre ESTE cadastro).
+  /// Linha antiga com `receberConferenciaDiaria=false` e origem nula = MOTORISTA
+  /// (era o único caminho que desligava).
+  conferenciaDesligadaEm  DateTime?
+  conferenciaDesligadaOrigem String?
+  conferenciaDesligadaPorId String?
+  conferenciaDesligadaPor User?                @relation("MotoristaConferenciaDesligadaPor", fields: [conferenciaDesligadaPorId], references: [id], onDelete: SetNull)
+  conferenciaDesligadaMotivo String?
   conferenciasDiarias     ConferenciaDiaria[]
   sugestoesGestor         SugestaoGestor[]
   /// Alcance do WhatsApp DESTE número (vale pro número, não pra empresa). Só a

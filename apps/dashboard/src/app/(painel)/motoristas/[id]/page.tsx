@@ -37,6 +37,10 @@ type Ficha = Motorista &
     ultimoLoginEm?: string | null;
     whatsappInalcancavelEm?: string | null;
     receberConferenciaDiaria?: boolean;
+    conferenciaDesligadaEm?: string | null;
+    conferenciaDesligadaOrigem?: "MOTORISTA" | "PAINEL" | null;
+    conferenciaDesligadaPor?: { id: string; nome: string } | null;
+    conferenciaDesligadaMotivo?: string | null;
   };
 
 const REMUNERACAO_TEXTO: Record<string, string> = {
@@ -190,7 +194,7 @@ export default function FichaMotoristaPage({
           <WhatsappSuspeitoCard
             motoristaId={id}
             inalcancavelEm={m.whatsappInalcancavelEm}
-            parouConferencia={m.receberConferenciaDiaria === false}
+            conferencia={m}
           />
           {verConferencia && <ConferenciaCalendarioMotorista motoristaId={id} />}
           <RegimeCard regime={m.regime ?? null} motoristaId={id} />

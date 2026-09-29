@@ -125,6 +125,12 @@ const SAFE_SELECT = {
   receberResumoDiario: true,
   // O selo do cadastro: WhatsApp suspeito de não entregar / pediu pra parar a pergunta.
   receberConferenciaDiaria: true,
+  // Quem/quando desligou a conferência (origem nula com o campo em false = linha
+  // antiga do motorista). Só aditivo: quem não lê estes campos não muda.
+  conferenciaDesligadaEm: true,
+  conferenciaDesligadaOrigem: true,
+  conferenciaDesligadaMotivo: true,
+  conferenciaDesligadaPor: { select: { id: true, nome: true } },
   whatsappInalcancavelEm: true,
   perfilAcessoId: true,
   criadoEm: true,

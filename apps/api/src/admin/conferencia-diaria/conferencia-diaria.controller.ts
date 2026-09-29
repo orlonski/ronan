@@ -1,14 +1,16 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
   AtualizarConfigConferenciaDiariaSchema,
   CalendarioConferenciaQuerySchema,
   DecidirSugestaoGestorSchema,
+  DefinirRecebimentoConferenciaSchema,
 } from "@ronan/shared-types";
 import type {
   AtualizarConfigConferenciaDiaria,
   CalendarioConferenciaQuery,
   DecidirSugestaoGestor,
+  DefinirRecebimentoConferencia,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
@@ -98,6 +100,22 @@ export class ConferenciaDiariaController {
     // "Dados técnicos" (wamid, trilha…) só pra quem também pode decidir.
     const tecnico = user.permissoes.includes("conferencia-diaria.decidir");
     return this.service.calendarioDoMotorista(id, query.mes, undefined, tecnico);
+  }
+
+  /**
+   * Interruptor "Receber a conferência de viagens" por motorista. Vale SÓ pra
+   * este vínculo (o "Parar" do motorista no WhatsApp vale em todos). Religar quem
+   * o próprio motorista desligou exige motivo. Fora do escopo = 404.
+   */
+  @RequerPermissao("conferencia-diaria.decidir")
+  @Patch("motoristas/:id/recebe")
+  async definirRecebimento(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(DefinirRecebimentoConferenciaSchema)) body: DefinirRecebimentoConferencia,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    await this.motoristas.findOne(id, user.escopo);
+    return this.service.definirRecebimento(id, user, body);
   }
 
   /**

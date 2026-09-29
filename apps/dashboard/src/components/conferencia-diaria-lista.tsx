@@ -2,7 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 
-export type SemCanal = "SEM_TELEFONE" | "NAO_ACEITA_WHATSAPP" | "PAROU" | "INALCANCAVEL";
+export type SemCanal = "SEM_TELEFONE" | "NAO_ACEITA_WHATSAPP" | "PAROU" | "DESLIGADA_PAINEL" | "INALCANCAVEL";
 
 export type ItemConferencia = {
   motoristaId: string;
@@ -38,6 +38,7 @@ const MOTIVO_SEM_CANAL: Record<SemCanal, string> = {
   SEM_TELEFONE: "sem telefone cadastrado",
   NAO_ACEITA_WHATSAPP: "desligou as mensagens no WhatsApp",
   PAROU: "pediu pra parar de receber a pergunta",
+  DESLIGADA_PAINEL: "a conferência está desligada pela empresa",
   INALCANCAVEL: "o WhatsApp dele parece não entregar",
 };
 

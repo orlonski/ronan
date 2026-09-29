@@ -378,6 +378,7 @@ export class ConferenciaRespostaService {
           contaId: true,
           nome: true,
           receberConferenciaDiaria: true,
+          conferenciaDesligadaOrigem: true,
           conta: { select: { nome: true } },
         },
       }),
@@ -387,10 +388,18 @@ export class ConferenciaRespostaService {
     for (const v of vinculos) {
       await comConta(v.contaId, async () => {
         const mudou = v.receberConferenciaDiaria;
-        if (mudou) {
+        // Se a empresa tinha desligado pelo painel e o motorista pede parar, o registro
+        // passa a ser DELE (religar de novo exige motivo). Limpa quem/motivo do painel.
+        if (mudou || v.conferenciaDesligadaOrigem === "PAINEL") {
           await this.prisma.motorista.update({
             where: { id: v.id },
-            data: { receberConferenciaDiaria: false },
+            data: {
+              receberConferenciaDiaria: false,
+              conferenciaDesligadaEm: new Date(),
+              conferenciaDesligadaOrigem: "MOTORISTA",
+              conferenciaDesligadaPorId: null,
+              conferenciaDesligadaMotivo: null,
+            },
           });
         }
         // Pergunta que ainda esperava resposta neste vínculo deixa de esperar.

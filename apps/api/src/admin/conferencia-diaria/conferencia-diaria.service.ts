@@ -39,12 +39,13 @@ import {
 } from "../../common/conferencia-diaria";
 import { montarCalendarioConferencia, ultimoDiaDoMes } from "../../common/conferencia-calendario";
 import { anexarTrilha } from "../../common/conferencia-trilha";
-import type { ResultadoReenvioPergunta } from "@ronan/shared-types";
+import { MOTIVO_RELIGAR_MIN } from "@ronan/shared-types";
+import type { EstadoConferenciaMotorista, ResultadoReenvioPergunta } from "@ronan/shared-types";
 
 type Config = Awaited<ReturnType<ConferenciaDiariaService["config"]>>;
 
 /** Por que a regra diz "pergunte" mas não há como perguntar. É o "sem canal" da lista. */
-export type SemCanal = "SEM_TELEFONE" | "NAO_ACEITA_WHATSAPP" | "PAROU" | "INALCANCAVEL";
+export type SemCanal = "SEM_TELEFONE" | "NAO_ACEITA_WHATSAPP" | "PAROU" | "DESLIGADA_PAINEL" | "INALCANCAVEL";
 
 export type ItemConferencia = {
   motoristaId: string;
@@ -556,6 +557,7 @@ export class ConferenciaDiariaService {
             telefone: true,
             aceitaWhatsapp: true,
             receberConferenciaDiaria: true,
+            conferenciaDesligadaOrigem: true,
             whatsappInalcancavelEm: true,
           },
         },
@@ -649,6 +651,7 @@ export class ConferenciaDiariaService {
             telefone: true,
             aceitaWhatsapp: true,
             receberConferenciaDiaria: true,
+            conferenciaDesligadaOrigem: true,
             whatsappInalcancavelEm: true,
           },
         },
@@ -689,11 +692,13 @@ export class ConferenciaDiariaService {
     telefone: string | null;
     aceitaWhatsapp: boolean;
     receberConferenciaDiaria: boolean;
+    /** "PAINEL" = a empresa desligou; qualquer outra coisa (inclusive nulo, linha antiga) = o motorista. */
+    conferenciaDesligadaOrigem?: string | null;
     whatsappInalcancavelEm: Date | null;
   }): SemCanal | null {
     if (!m.telefone) return "SEM_TELEFONE";
     if (!m.aceitaWhatsapp) return "NAO_ACEITA_WHATSAPP";
-    if (!m.receberConferenciaDiaria) return "PAROU";
+    if (!m.receberConferenciaDiaria) return m.conferenciaDesligadaOrigem === "PAINEL" ? "DESLIGADA_PAINEL" : "PAROU";
     if (m.whatsappInalcancavelEm) return "INALCANCAVEL";
     return null;
   }
@@ -737,6 +742,7 @@ export class ConferenciaDiariaService {
             telefone: true,
             aceitaWhatsapp: true,
             receberConferenciaDiaria: true,
+            conferenciaDesligadaOrigem: true,
             whatsappInalcancavelEm: true,
           },
         },
@@ -770,6 +776,7 @@ export class ConferenciaDiariaService {
         SEM_TELEFONE: "não tem telefone cadastrado",
         NAO_ACEITA_WHATSAPP: "desligou as mensagens no WhatsApp",
         PAROU: "pediu pra parar de receber a pergunta",
+        DESLIGADA_PAINEL: "está com a conferência desligada pela empresa",
         INALCANCAVEL: "está com o WhatsApp sem entregar (número suspeito)",
       };
       throw new ConflictException(`${m.nome} ${porque[semCanal ?? "SEM_TELEFONE"]}. Não dá pra mandar a pergunta.`);
@@ -890,6 +897,108 @@ export class ConferenciaDiariaService {
     }));
   }
 
+  /**
+   * Liga/desliga a conferência de UM motorista pelo painel.
+   *
+   * ⚠️ Vale SÓ pra este vínculo: é decisão da empresa sobre o próprio cadastro.
+   * Diferente do "Parar perguntas" do motorista no WhatsApp, que vale em TODOS os
+   * vínculos da mesma pessoa (ver `ConferenciaRespostaService.pararPerguntas`).
+   *
+   * Regras: desligar sempre vale (fica quem e quando). Religar exige MOTIVO
+   * escrito quando quem desligou foi o próprio motorista (o painel está passando
+   * por cima de um pedido dele); se foi o painel, não exige. Repetir o estado
+   * atual é 200 sem tocar em nada nem duplicar auditoria. O envio em si não muda:
+   * o job só lê `receberConferenciaDiaria`.
+   */
+  async definirRecebimento(
+    motoristaId: string,
+    usuario: Pick<AuthAdminUser, "id">,
+    body: { recebe: boolean; motivo?: string },
+    agora: Date = new Date(),
+  ): Promise<EstadoConferenciaMotorista> {
+    const m = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+      select: {
+        id: true,
+        receberConferenciaDiaria: true,
+        conferenciaDesligadaEm: true,
+        conferenciaDesligadaOrigem: true,
+        conferenciaDesligadaPorId: true,
+        conferenciaDesligadaMotivo: true,
+        conferenciaDesligadaPor: { select: { id: true, nome: true } },
+      },
+    });
+    if (!m) throw new NotFoundException("Motorista não encontrado");
+    const motivo = body.motivo?.trim() || null;
+    const estado = (r: typeof m): EstadoConferenciaMotorista => ({
+      motoristaId: r.id,
+      receberConferenciaDiaria: r.receberConferenciaDiaria,
+      conferenciaDesligadaEm: r.conferenciaDesligadaEm?.toISOString() ?? null,
+      conferenciaDesligadaOrigem: r.receberConferenciaDiaria
+        ? null
+        : r.conferenciaDesligadaOrigem === "PAINEL"
+          ? "PAINEL"
+          : "MOTORISTA",
+      conferenciaDesligadaPor: r.receberConferenciaDiaria ? null : r.conferenciaDesligadaPor,
+      conferenciaDesligadaMotivo: r.receberConferenciaDiaria ? null : r.conferenciaDesligadaMotivo,
+    });
+
+    // Idempotente: já está no estado pedido.
+    if (m.receberConferenciaDiaria === body.recebe) return estado(m);
+
+    const foiDoMotorista = m.conferenciaDesligadaOrigem !== "PAINEL";
+    if (body.recebe && foiDoMotorista && (motivo?.length ?? 0) < MOTIVO_RELIGAR_MIN) {
+      throw new BadRequestException(
+        `O motorista pediu pra parar de receber a conferência. Pra religar, escreva o motivo (mínimo de ${MOTIVO_RELIGAR_MIN} letras), por exemplo: "a pedido do motorista".`,
+      );
+    }
+
+    const data: Prisma.MotoristaUpdateInput = body.recebe
+      ? {
+          receberConferenciaDiaria: true,
+          conferenciaDesligadaEm: null,
+          conferenciaDesligadaOrigem: null,
+          conferenciaDesligadaPor: { disconnect: true },
+          conferenciaDesligadaMotivo: null,
+        }
+      : {
+          receberConferenciaDiaria: false,
+          conferenciaDesligadaEm: agora,
+          conferenciaDesligadaOrigem: "PAINEL",
+          conferenciaDesligadaPor: { connect: { id: usuario.id } },
+          conferenciaDesligadaMotivo: motivo,
+        };
+    const novo = await this.prisma.motorista.update({
+      where: { id: motoristaId },
+      data,
+      select: {
+        id: true,
+        receberConferenciaDiaria: true,
+        conferenciaDesligadaEm: true,
+        conferenciaDesligadaOrigem: true,
+        conferenciaDesligadaPorId: true,
+        conferenciaDesligadaMotivo: true,
+        conferenciaDesligadaPor: { select: { id: true, nome: true } },
+      },
+    });
+    await this.auditoria.log({
+      usuarioId: usuario.id,
+      entidade: "Motorista",
+      entidadeId: motoristaId,
+      acao: body.recebe ? "CONFERENCIA_MOTORISTA_RELIGADA" : "CONFERENCIA_MOTORISTA_DESLIGADA",
+      campo: "receberConferenciaDiaria",
+      valorAntes: m.receberConferenciaDiaria,
+      valorDepois: body.recebe,
+      motivo,
+      metadata: {
+        origem: "painel",
+        desligadaAntesPor: m.receberConferenciaDiaria ? null : foiDoMotorista ? "MOTORISTA" : "PAINEL",
+        desligadaAntesEm: m.conferenciaDesligadaEm?.toISOString() ?? null,
+      },
+    });
+    return estado(novo);
+  }
+
   /** Quem saiu da conferência (parou) ou não tem canal (número que não entrega). */
   async listarSemCanal() {
     const linhas = await this.prisma.motorista.findMany({
@@ -902,6 +1011,7 @@ export class ConferenciaDiariaService {
         id: true,
         nome: true,
         receberConferenciaDiaria: true,
+        conferenciaDesligadaOrigem: true,
         whatsappInalcancavelEm: true,
       },
       orderBy: { nome: "asc" },
@@ -910,6 +1020,8 @@ export class ConferenciaDiariaService {
       motoristaId: m.id,
       nome: m.nome,
       parou: !m.receberConferenciaDiaria,
+      /** Quem desligou: nulo enquanto está ligada. Linha antiga (sem origem) conta como do motorista. */
+      desligadaPor: m.receberConferenciaDiaria ? null : m.conferenciaDesligadaOrigem === "PAINEL" ? "PAINEL" : "MOTORISTA",
       inalcancavelDesde: m.whatsappInalcancavelEm,
     }));
   }
@@ -1022,6 +1134,7 @@ export class ConferenciaDiariaService {
         telefone: true,
         aceitaWhatsapp: true,
         receberConferenciaDiaria: true,
+        conferenciaDesligadaOrigem: true,
         whatsappInalcancavelEm: true,
       },
       orderBy: { nome: "asc" },
