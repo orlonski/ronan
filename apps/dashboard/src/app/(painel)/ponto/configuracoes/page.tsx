@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { SlidersHorizontal } from "lucide-react";
+import { CheckCircle2, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { RequerTela } from "@/components/requer-tela";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
-import { ComecarPonto, PATH, useConfigPonto } from "../_lib";
+import { ComecarPonto, LiberarPonto, PATH, useConfigPonto } from "../_lib";
 
 /**
  * AS REGRAS DE PONTO da empresa — e, antes de tudo, o fundamento.
@@ -71,8 +71,9 @@ function Conteudo() {
         body: JSON.stringify({
           razaoSocial: form.razaoSocial,
           cnpj: form.cnpj.replace(/\D/g, ""),
-          fundamento: form.temFundamento ? "ACORDO_COLETIVO" : undefined,
-          fundamentoReferencia: form.fundamentoReferencia || undefined,
+          // O fundamento só se confirma pelo botão (LiberarPonto); aqui só se
+          // edita o número do acordo, e só depois de confirmado.
+          fundamentoReferencia: form.temFundamento ? form.fundamentoReferencia || undefined : undefined,
           diaFechamento: form.diaFechamento,
           identificacaoRep: form.identificacaoRep,
           diasRetencaoLocalizacao: form.diasRetencaoLocalizacao,
@@ -102,31 +103,30 @@ function Conteudo() {
         </p>
       </div>
 
-      <Card className="space-y-3 p-4">
-        <div>
-          <p className="font-medium">Por que o controle desta empresa vale</p>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            O registro por aplicativo, sem equipamento certificado, depende de previsão em
-            convenção ou acordo coletivo da categoria. Sem isso as telas de cadastro, jornada e
-            fechamento ficam fechadas — mas a marcação pelo app nunca é bloqueada.
+      {/* ⚠️ Antes era um checkbox aqui. Quem preenchia CNPJ, salvava e via
+          "regras salvas" achava que estava pronto — e o ponto seguia fechado
+          porque o checkbox ficou desmarcado. Sem acordo confirmado, o card é
+          o botão; com ele, é só a confirmação e o campo do número do acordo. */}
+      {!form.temFundamento ? (
+        <Card className="space-y-1 border-amber-500/50 bg-amber-500/5 p-4 text-sm">
+          <p className="text-base font-semibold">
+            Passo obrigatório: confirmar que existe acordo coletivo
           </p>
-        </div>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-1"
-            disabled={!podeEditar}
-            checked={form.temFundamento}
-            onChange={(e) => setForm({ ...form, temFundamento: e.target.checked })}
-          />
-          <span>
-            Existe convenção ou acordo coletivo prevendo o controle eletrônico de jornada nesta
-            empresa.
-          </span>
-        </label>
-        {form.temFundamento && (
+          <p className="max-w-prose text-muted-foreground">
+            Sem isso as telas de cadastro, jornada e fechamento continuam fechadas. Salvar as
+            outras regras desta página não libera nada. A marcação de ponto pelo app nunca é
+            bloqueada.
+          </p>
+          <LiberarPonto />
+        </Card>
+      ) : (
+        <Card className="space-y-3 border-emerald-500/40 bg-emerald-500/5 p-4">
+          <p className="flex items-center gap-2 font-medium">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            Acordo coletivo confirmado — o ponto está liberado
+          </p>
           <div>
-            <Label htmlFor="cfg-ref">Qual acordo</Label>
+            <Label htmlFor="cfg-ref">Qual acordo (opcional)</Label>
             <Input
               id="cfg-ref"
               disabled={!podeEditar}
@@ -135,8 +135,8 @@ function Conteudo() {
               onChange={(e) => setForm({ ...form, fundamentoReferencia: e.target.value })}
             />
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
       <Card className="space-y-3 p-4">
         <p className="font-medium">O empregador no comprovante</p>

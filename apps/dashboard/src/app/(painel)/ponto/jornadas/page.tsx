@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarRange, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -95,7 +97,7 @@ function Conteudo() {
       {itens.length === 0 ? (
         <EstadoVazio
           titulo="Nenhuma jornada cadastrada"
-          descricao="Crie ao menos uma: sem jornada o espelho não tem o que comparar."
+          descricao="Toque em “Nova jornada”. Ela já vem preenchida com segunda a sexta, das 8h às 17h: se é o horário de vocês, é só salvar."
         />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -139,11 +141,14 @@ function Conteudo() {
 }
 
 function DialogJornada({ modelo, onFechar }: { modelo: Modelo | null; onFechar: () => void }) {
+  const router = useRouter();
   const token = useAuthToken();
   const qc = useQueryClient();
 
   const [tipo, setTipo] = useState<"SEMANAL" | "CICLO">(modelo?.tipo ?? "SEMANAL");
-  const [nome, setNome] = useState(modelo?.nome ?? "");
+  // Já vem pronta: os dias abaixo começam em segunda a sexta, 8h às 17h. Quem
+  // tem essa jornada só clica em Salvar; nome vazio obrigava a inventar um.
+  const [nome, setNome] = useState(modelo?.nome ?? "Segunda a sexta, 8h às 17h");
   const [cicloDias, setCicloDias] = useState(modelo?.cicloDias ?? 2);
   const [ancoraCiclo, setAncoraCiclo] = useState(modelo?.ancoraCiclo?.slice(0, 10) ?? "");
   const [tolMarcacao, setTolMarcacao] = useState(modelo?.toleranciaPorMarcacaoMin ?? 5);
@@ -202,8 +207,20 @@ function DialogJornada({ modelo, onFechar }: { modelo: Modelo | null; onFechar: 
         }),
       }),
     onSuccess: () => {
-      toast.success("Jornada salva.");
-      void qc.invalidateQueries({ queryKey: [PATH, "jornadas"] });
+      if (modelo) {
+        toast.success("Jornada salva.");
+      } else {
+        // Empurra pro passo seguinte: o gestor da Schaba ficava sem saber pra
+        // onde ir depois de salvar e voltava pelo menu.
+        toast.success("Jornada salva.", {
+          description: "Próximo passo: escolher quem bate ponto.",
+          action: {
+            label: "Ir agora",
+            onClick: () => router.push("/ponto/funcionarios" as Route),
+          },
+        });
+      }
+      void qc.invalidateQueries({ queryKey: [PATH] });
       onFechar();
     },
     onError: (e: Error) => toast.error("Não consegui salvar", { description: e.message }),
@@ -309,6 +326,11 @@ function DialogJornada({ modelo, onFechar }: { modelo: Modelo | null; onFechar: 
             ))}
           </div>
 
+          <details className="rounded border p-3">
+            <summary className="cursor-pointer text-sm font-medium">
+              Ajustes avançados (pode deixar como está)
+            </summary>
+          <div className="mt-3 space-y-3">
           <div className="grid gap-3 md:grid-cols-3">
             <div>
               <Label htmlFor="j-tolm">Tolerância por batida (min)</Label>
@@ -388,6 +410,8 @@ function DialogJornada({ modelo, onFechar }: { modelo: Modelo | null; onFechar: 
               marcação nem viagem.
             </p>
           </div>
+          </div>
+          </details>
         </div>
 
         <DialogFooter>

@@ -70,7 +70,7 @@ export default function EditarMotoristaPage({
             inalcancavelEm={item.data.whatsappInalcancavelEm}
             parouConferencia={item.data.receberConferenciaDiaria === false}
           />
-          <RegimeCard regime={item.data.regime ?? null} />
+          <RegimeCard regime={item.data.regime ?? null} motoristaId={id} />
           <AcessoAppCard motoristaId={id} />
           <PedirDocumentos motoristaId={id} />
           <MotoristaForm initial={item.data} acessoPorRegras={acesso.data?.fonte === "REGRAS"} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Plus, Smartphone, Users } from "lucide-react";
 import Link from "next/link";
@@ -103,6 +103,23 @@ function Conteudo() {
   const [vendoAcesso, setVendoAcesso] = useState<Funcionario | null>(null);
   const [vendoDocs, setVendoDocs] = useState<Funcionario | null>(null);
   const config = useConfigPonto();
+  const [prefill, setPrefill] = useState<{ nome: string; cpf: string } | null>(null);
+
+  // Vindo da ficha do motorista ("Registrar pra bater ponto"): abre a
+  // contratação já com nome e CPF dele. Só o id viaja na URL — CPF em query
+  // string ficaria no histórico do navegador.
+  useEffect(() => {
+    if (!token) return;
+    const id = new URLSearchParams(window.location.search).get("motorista");
+    if (!id) return;
+    window.history.replaceState(null, "", "/ponto/funcionarios");
+    fetchApi<{ nome: string; cpf: string }>(`/admin/motoristas/${id}`, { token })
+      .then((m) => {
+        setPrefill({ nome: m.nome, cpf: m.cpf });
+        setNovo(true);
+      })
+      .catch(() => toast.error("Não consegui abrir os dados do motorista."));
+  }, [token]);
 
   const lista = useQuery({
     queryKey: [PATH, "funcionarios", inativos],
@@ -125,10 +142,9 @@ function Conteudo() {
             Quem bate ponto
           </h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Funcionário registrado em carteira. Se ele também dirige, tem cadastro na tela
-            de Motoristas — o que não pode é ser registrado e parceiro ao mesmo tempo.{" "}
-            <strong className="text-foreground">Quem está aqui é CLT pro app:</strong> bate ponto e
-            manda documentos.
+            <strong className="text-foreground">Quem está nesta lista bate ponto no app.</strong>{" "}
+            Serve para quem é registrado em carteira, motorista ou não. Para incluir alguém,
+            toque em “Registrar contratação”.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -150,8 +166,8 @@ function Conteudo() {
 
       {itens.length === 0 ? (
         <EstadoVazio
-          titulo="Ninguém cadastrado"
-          descricao="Registre a contratação de quem é CLT para ele começar a bater ponto pelo app."
+          titulo="Ninguém bate ponto ainda"
+          descricao="Toque em “Registrar contratação”, no alto da tela, e informe nome e CPF de quem vai bater ponto."
         />
       ) : (
         <Card className="divide-y p-0">
@@ -192,7 +208,15 @@ function Conteudo() {
         </Card>
       )}
 
-      {novo && <DialogContratar onFechar={() => setNovo(false)} />}
+      {novo && (
+        <DialogContratar
+          inicial={prefill}
+          onFechar={() => {
+            setNovo(false);
+            setPrefill(null);
+          }}
+        />
+      )}
       {/* O mesmo card da ficha do motorista: o acesso é da pessoa, e quem só
           é registrado também precisa ver (e explicar) o que aparece no app dele. */}
       {vendoDocs && (
@@ -352,12 +376,18 @@ function Importar() {
   );
 }
 
-function DialogContratar({ onFechar }: { onFechar: () => void }) {
+function DialogContratar({
+  onFechar,
+  inicial,
+}: {
+  onFechar: () => void;
+  inicial?: { nome: string; cpf: string } | null;
+}) {
   const token = useAuthToken();
   const qc = useQueryClient();
   const [form, setForm] = useState({
-    nome: "",
-    cpf: "",
+    nome: inicial?.nome ?? "",
+    cpf: inicial?.cpf ?? "",
     cargo: "",
     matricula: "",
     admitidoEm: hojeSP(),

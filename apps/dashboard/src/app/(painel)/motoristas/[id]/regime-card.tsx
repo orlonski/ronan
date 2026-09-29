@@ -1,6 +1,8 @@
 "use client";
 
 import { Briefcase, HandCoins, HelpCircle } from "lucide-react";
+import Link from "next/link";
+import { usePermissoes } from "@/lib/permissoes";
 
 export type RegimeDaPessoa = {
   tipo: "PARCEIRO" | "EMPREGADO";
@@ -23,20 +25,42 @@ export type RegimeDaPessoa = {
  * tem os dois cadastros de propósito: dirige e bate ponto. O que muda é por
  * onde ele recebe.
  */
-export function RegimeCard({ regime }: { regime: RegimeDaPessoa }) {
+export function RegimeCard({
+  regime,
+  motoristaId,
+}: {
+  regime: RegimeDaPessoa;
+  motoristaId?: string;
+}) {
+  const { temPermissao, temModulo } = usePermissoes();
+  const podeRegistrar = temPermissao("funcionarios.criar") && temModulo("funcionarios.criar");
+
   // "Não declarado" é o caso mais comum e é uma resposta de verdade: o registro
   // só nasce com alocação em obra ou com contratação. Chutar "parceiro" aqui
   // seria o sistema afirmar vínculo — o assunto mais caro que ele toca.
+  //
+  // ⚠️ O botão mora AQUI porque é onde o gestor procura: o da Schaba abriu a
+  // ficha do motorista, foi em "Dar ou tirar algo só dele" e não achou nada de
+  // ponto. O caminho por Ponto › Quem bate ponto existia, mas ninguém dizia
+  // que a ficha não é o lugar. O botão leva pra lá com a pessoa já escolhida.
   if (!regime) {
     return (
       <div className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-4">
         <HelpCircle className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
         <div>
-          <p className="text-sm font-medium">Regime não declarado</p>
+          <p className="text-sm font-medium">Esta pessoa não bate ponto</p>
           <p className="text-sm text-muted-foreground">
-            É o normal para quem só roda frete. O registro nasce quando você aloca a
-            pessoa numa obra ou registra a contratação dela.
+            É o normal para quem só roda frete. Se ela é registrada em carteira e precisa
+            bater ponto no app, registre aqui.
           </p>
+          {podeRegistrar && motoristaId && (
+            <Link
+              href={`/ponto/funcionarios?motorista=${motoristaId}`}
+              className="mt-2 inline-flex h-9 items-center rounded-md bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-700"
+            >
+              Registrar pra bater ponto
+            </Link>
+          )}
         </div>
       </div>
     );
