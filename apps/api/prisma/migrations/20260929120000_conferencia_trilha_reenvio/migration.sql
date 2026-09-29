@@ -1,0 +1,6 @@
+-- AlterEnum
+ALTER TYPE "AcaoAuditoria" ADD VALUE 'CONFERENCIA_PERGUNTA_REENVIADA';
+
+-- AlterTable
+ALTER TABLE "conferencia_diaria" ADD COLUMN     "reenvios" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "trilha" JSONB NOT NULL DEFAULT '[]';

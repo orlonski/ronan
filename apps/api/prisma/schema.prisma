@@ -194,6 +194,8 @@ enum AcaoAuditoria {
   CONFERENCIA_OPTOUT
   /// Alguém do painel aprovou ou recusou uma sugestão da fila da conferência diária.
   CONFERENCIA_SUGESTAO_DECIDIDA
+  /// Alguém do painel mandou de novo a pergunta de HOJE pro motorista (operação e teste).
+  CONFERENCIA_PERGUNTA_REENVIADA
   MOTORISTA_AJUSTOU_KM
   MOTORISTA_JUSTIFICOU_KM
   MOTORISTA_INFORMOU_PEDAGIO
@@ -4959,6 +4961,12 @@ model ConferenciaDiaria {
   opcao        OpcaoConferenciaDiaria?
   respostaTexto String?
   respondidaEm DateTime?
+  /// Trilha durável do que aconteceu com a linha (envio, toque, ignorado, resposta
+  /// gravada, lembrete, expiração, reenvio): array de {em, evento, detalhe}, os
+  /// últimos 20. O dono não vê log; isto é o que ele consegue tirar print.
+  trilha       Json                    @default("[]")
+  /// Quantas vezes a pergunta desta linha foi reenviada pelo painel (teto por dia).
+  reenvios     Int                     @default(0)
 
   @@unique([contaId, motoristaId, dia])
   @@index([contaId, dia])

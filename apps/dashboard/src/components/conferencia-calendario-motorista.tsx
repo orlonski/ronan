@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   BellOff,
@@ -13,12 +15,19 @@ import {
   LogOut,
   Minus,
   PhoneOff,
+  Send,
   type LucideIcon,
 } from "lucide-react";
-import type { CalendarioConferencia, DiaDoCalendarioConferencia } from "@ronan/shared-types";
+import type {
+  CalendarioConferencia,
+  DadosTecnicosConferencia,
+  DiaDoCalendarioConferencia,
+  ResultadoReenvioPergunta,
+} from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useApiQuery } from "@/lib/client-api";
+import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
 import { cn } from "@/lib/utils";
 
 const TZ = "America/Sao_Paulo";
@@ -194,6 +203,148 @@ function detalhe(d: DiaDoCalendarioConferencia): string[] {
   return linhas;
 }
 
+const HORA_COMPLETA = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: TZ,
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+const EVENTO_ROTULO: Record<string, string> = {
+  ENVIO: "Envio",
+  TOQUE: "Toque / resposta recebida",
+  IGNORADO: "Ignorado",
+  RESPOSTA_GRAVADA: "Resposta gravada",
+  LEMBRETE: "Lembrete",
+  EXPIRADA: "Expirou",
+  REENVIO: "Reenvio pelo painel",
+};
+
+/** Um valor da trilha em uma linha só, pra caber no print. */
+function valorCurto(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
+/**
+ * "Dados técnicos" do dia: o que o dono precisa pra tirar print quando algo não
+ * bate (estado da linha, wamid, e a trilha de tudo o que aconteceu com ela).
+ * Recolhido por padrão; só chega pra quem tem `conferencia-diaria.decidir`.
+ */
+function DadosTecnicos({ t }: { t: DadosTecnicosConferencia }) {
+  const campo = (rotulo: string, valor: string | null) => (
+    <div className="flex flex-wrap gap-x-2">
+      <dt className="text-muted-foreground">{rotulo}:</dt>
+      <dd className="break-all font-mono">{valor ?? "—"}</dd>
+    </div>
+  );
+  const quando = (iso: string | null) => (iso ? HORA_COMPLETA.format(new Date(iso)) : null);
+  return (
+    <details className="mt-3 rounded-md border bg-background p-2 text-xs">
+      <summary className="cursor-pointer select-none font-medium">Dados técnicos</summary>
+      <dl className="mt-2 space-y-0.5">
+        {campo("Id da linha", t.id)}
+        {campo("Estado", t.estado)}
+        {campo("Opção", t.opcao)}
+        {campo("wamid", t.wamid)}
+        {campo("Enviada em", quando(t.enviadaEm))}
+        {campo("Respondida em", quando(t.respondidaEm))}
+        {campo("Texto da resposta", t.respostaTexto)}
+        {campo("Erro de envio", t.erroEnvio)}
+        {campo("Reenvios", String(t.reenvios))}
+      </dl>
+      <p className="mt-3 font-medium">Trilha ({t.trilha.length})</p>
+      {t.trilha.length === 0 ? (
+        <p className="text-muted-foreground">Nada registrado ainda para esta pergunta.</p>
+      ) : (
+        <ol className="mt-1 space-y-1.5">
+          {t.trilha.map((e, i) => (
+            <li key={i} className="rounded border bg-muted/30 p-1.5">
+              <p>
+                <span className="font-mono">{HORA_COMPLETA.format(new Date(e.em))}</span>{" "}
+                <span className="font-semibold">{EVENTO_ROTULO[e.evento] ?? e.evento}</span>
+              </p>
+              <p className="break-all font-mono text-[11px] text-muted-foreground">
+                {Object.entries(e.detalhe)
+                  .filter(([k]) => k !== "linhaId")
+                  .map(([k, v]) => `${k}=${valorCurto(v)}`)
+                  .join("  ")}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+    </details>
+  );
+}
+
+/**
+ * "Reenviar pergunta": só no dia de hoje e só pra quem decide. A confirmação é
+ * inline (nunca Modal). Depois de enviar, recarrega o calendário.
+ */
+function ReenviarPergunta({
+  motoristaId,
+  aoTerminar,
+}: {
+  motoristaId: string;
+  aoTerminar: () => void;
+}) {
+  const token = useAuthToken();
+  const [confirmando, setConfirmando] = useState(false);
+  // O nome só é buscado quando a confirmação abre.
+  const ficha = useApiQuery<{ nome: string }>(`/admin/motoristas/${motoristaId}`, {
+    enabled: confirmando,
+    staleTime: 60_000,
+  });
+  const nome = ficha.data?.nome ?? "este motorista";
+  const envio = useMutation({
+    mutationFn: () =>
+      fetchApi<ResultadoReenvioPergunta>(`/admin/conferencia-diaria/motoristas/${motoristaId}/reenviar-pergunta`, {
+        method: "POST",
+        token,
+      }),
+    onSuccess: (r) => {
+      setConfirmando(false);
+      if (r.enviado) toast.success(`Pergunta reenviada para ${nome}`);
+      else toast.error("A pergunta não saiu", { description: r.erro ?? "A Meta recusou o envio." });
+      aoTerminar();
+    },
+    onError: (err: Error) => {
+      setConfirmando(false);
+      toast.error("Não foi possível reenviar", { description: err.message });
+    },
+  });
+
+  if (!confirmando) {
+    return (
+      <Button className="mt-3" onClick={() => setConfirmando(true)}>
+        <Send className="h-4 w-4" aria-hidden />
+        Reenviar pergunta
+      </Button>
+    );
+  }
+  return (
+    <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900" role="alert">
+      <p className="font-medium">Vai mandar de novo a pergunta por WhatsApp para {nome}.</p>
+      <p className="mt-1 text-sm">
+        A resposta de hoje volta a ficar esperando; o que ele já respondeu continua guardado nos dados técnicos.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button variant="success" disabled={envio.isPending} onClick={() => envio.mutate()}>
+          {envio.isPending ? "Enviando…" : "Reenviar agora"}
+        </Button>
+        <Button variant="outline" disabled={envio.isPending} onClick={() => setConfirmando(false)}>
+          Voltar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Calendário mensal da conferência de viagens na ficha do motorista: o que ele
  * respondeu à pergunta e se lançou a viagem depois. Só leitura. Cada dia é
@@ -203,6 +354,8 @@ export function ConferenciaCalendarioMotorista({ motoristaId }: { motoristaId: s
   const atual = mesAtualSP();
   const [mes, setMes] = useState(atual);
   const [aberto, setAberto] = useState<string | null>(null);
+  const { temPermissao } = usePermissoes();
+  const podeDecidir = temPermissao("conferencia-diaria.decidir");
   const q = useApiQuery<CalendarioConferencia>(
     `/admin/conferencia-diaria/motoristas/${motoristaId}/calendario?mes=${mes}`,
     { staleTime: 30_000 },
@@ -319,6 +472,10 @@ export function ConferenciaCalendarioMotorista({ motoristaId }: { motoristaId: s
                   {l}
                 </p>
               ))}
+              {podeDecidir && escolhido.pergunta?.linhaDia === dados.hoje && escolhido.pergunta.estado !== "SUPRIMIDA" && (
+                <ReenviarPergunta key={escolhido.dia} motoristaId={motoristaId} aoTerminar={() => void q.refetch()} />
+              )}
+              {escolhido.pergunta?.tecnico && <DadosTecnicos t={escolhido.pergunta.tecnico} />}
             </div>
           )}
         </>

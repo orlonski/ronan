@@ -310,6 +310,44 @@ export const CalendarioConferenciaQuerySchema = z.object({
 });
 export type CalendarioConferenciaQuery = z.infer<typeof CalendarioConferenciaQuerySchema>;
 
+/** O que a trilha da linha registra. Um evento por coisa que aconteceu com a pergunta. */
+export const EventoTrilhaConferencia = z.object({
+  /** ISO 8601. */
+  em: z.string(),
+  evento: z.enum(["ENVIO", "TOQUE", "IGNORADO", "RESPOSTA_GRAVADA", "LEMBRETE", "EXPIRADA", "REENVIO"]),
+  /** Id da linha, opção, origem, `context.id`, wamid, count, motivo… — o que couber ao evento. */
+  detalhe: z.record(z.unknown()),
+});
+export type EventoTrilhaConferencia = z.infer<typeof EventoTrilhaConferencia>;
+
+/** Quantos eventos a trilha guarda por linha (os mais recentes). */
+export const TRILHA_CONFERENCIA_MAX = 20;
+
+/** "Dados técnicos" do dia: só sai pra quem tem `conferencia-diaria.decidir`. */
+export const DadosTecnicosConferencia = z.object({
+  id: z.string(),
+  estado: EstadoConferenciaDiaria,
+  opcao: OpcaoConferenciaDiaria.nullable(),
+  wamid: z.string().nullable(),
+  enviadaEm: z.string().nullable(),
+  respondidaEm: z.string().nullable(),
+  respostaTexto: z.string().nullable(),
+  erroEnvio: z.string().nullable(),
+  reenvios: z.number().int(),
+  trilha: z.array(EventoTrilhaConferencia),
+});
+export type DadosTecnicosConferencia = z.infer<typeof DadosTecnicosConferencia>;
+
+/** Resposta de `POST /admin/conferencia-diaria/motoristas/:id/reenviar-pergunta`. */
+export const ResultadoReenvioPergunta = z.object({
+  enviado: z.boolean(),
+  estado: EstadoConferenciaDiaria,
+  /** Preenchido quando a Meta recusou. */
+  erro: z.string().nullable(),
+  reenvios: z.number().int(),
+});
+export type ResultadoReenvioPergunta = z.infer<typeof ResultadoReenvioPergunta>;
+
 export const PerguntaNoCalendario = z.object({
   estado: EstadoConferenciaDiaria,
   /** Quando a pergunta saiu. `null` = não saiu (na fila, falhou ou sem canal). */
@@ -322,6 +360,10 @@ export const PerguntaNoCalendario = z.object({
   retroativo: z.boolean(),
   lancouDepoisEm: z.string().nullable(),
   viagensDepois: z.number().int(),
+  /** Dia (AAAA-MM-DD) em que o job gravou a linha — o "hoje" da pergunta de hoje. Ausente em respostas antigas. */
+  linhaDia: z.string().optional(),
+  /** Só pra quem pode decidir (`conferencia-diaria.decidir`). */
+  tecnico: DadosTecnicosConferencia.optional(),
 });
 export type PerguntaNoCalendario = z.infer<typeof PerguntaNoCalendario>;
 

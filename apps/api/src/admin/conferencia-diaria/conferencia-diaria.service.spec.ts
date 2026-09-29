@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { ConflictException, ForbiddenException } from "@nestjs/common";
-import { ConferenciaDiariaService } from "./conferencia-diaria.service";
+import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
+import { comConta } from "../../common/conta/conta-context";
+import { ConferenciaDiariaService, MAX_REENVIOS_POR_LINHA } from "./conferencia-diaria.service";
 
 // 28/09/2026 é segunda-feira. 08:10 em Brasília = 11:10Z.
 const AGORA = new Date("2026-09-28T11:10:00Z");
@@ -58,15 +59,17 @@ function montar(
     envioResultado?: Record<string, unknown>;
     sugestao?: Record<string, unknown> | null;
     lancouDepois?: boolean;
+    updateManyCount?: number;
+    paraExpirar?: Record<string, unknown>[];
   } = {},
 ) {
   const cfg = { ...CFG, ...opts.cfg };
   const createMany = vi.fn(async (a: { data: unknown[] }) => ({ count: a.data.length }));
   const update = vi.fn(async (_a: unknown) => ({}));
-  const updateMany = vi.fn(async (_a: unknown) => ({ count: 0 }));
-  const findMany = vi.fn(async (a: { where: { estado?: string } }) => {
+  const updateMany = vi.fn(async (_a: unknown) => ({ count: opts.updateManyCount ?? 1 }));
+  const findMany = vi.fn(async (a: { where: { estado?: string; lembreteEnviadoEm?: null } }) => {
     if (a.where.estado === "PENDENTE") return opts.pendentes ?? [];
-    if (a.where.estado === "ENVIADA") return opts.candidatosLembrete ?? [];
+    if (a.where.estado === "ENVIADA") return a.where.lembreteEnviadoEm === null ? (opts.candidatosLembrete ?? []) : (opts.paraExpirar ?? []);
     if (a.where.estado === "SOMBRA") return opts.sombra ?? [];
     return [];
   });
@@ -103,6 +106,7 @@ function montar(
 
 const pend = (id: string, tel: string | null = "42991088125", over: Record<string, unknown> = {}) => ({
   id,
+  contaId: "c1",
   snapshot: { evidencias: EVID },
   dia: DIA,
   motorista: {
@@ -187,11 +191,12 @@ describe("modo sombra x enviando", () => {
       item("b", { deveriaPerguntar: false }),
     ] as never);
     await t.svc.rodarDaVez("c1", AGORA);
-    const chamadas = t.update.mock.calls.map(
-      (c) => c[0] as { where: { id: string }; data: { estado: string; snapshot: Record<string, unknown> } },
+    const chamadas = t.updateMany.mock.calls.map(
+      (c) => c[0] as { where: { id: string; estado: string }; data: { estado: string; snapshot: Record<string, unknown> } },
     );
     const promovidas = chamadas.filter((c) => c.data.estado === "PENDENTE");
     expect(promovidas.map((c) => c.where.id)).toEqual(["l1"]);
+    expect(promovidas[0]!.where.estado).toBe("SOMBRA");
     expect(promovidas[0]!.data.snapshot).toMatchObject({ nadaEnviado: false, promovidaDeSombra: true });
     expect(promovidas[0]!.data.snapshot).not.toHaveProperty("semEnvioPorque");
     expect(t.createMany).not.toHaveBeenCalled();
@@ -246,10 +251,12 @@ describe("envio da pergunta", () => {
   it("guarda o wamid e marca ENVIADA", async () => {
     const t = montar({ pendentes: [pend("a")] });
     await t.svc.enviarPendentes(t.cfg as never, AGORA);
-    expect(t.update).toHaveBeenCalledWith({
-      where: { id: "a" },
+    // Condicional a PENDENTE: nenhuma gravação posterior rebaixa uma linha que já andou.
+    expect(t.updateMany).toHaveBeenCalledWith({
+      where: { id: "a", estado: "PENDENTE" },
       data: expect.objectContaining({ estado: "ENVIADA", wamid: "wamid.NOVO", enviadaEm: expect.any(Date) }),
     });
+    expect(t.update).not.toHaveBeenCalled();
   });
 
   it("a Meta recusa (política): FALHOU com o motivo", async () => {
@@ -258,8 +265,8 @@ describe("envio da pergunta", () => {
       envioResultado: { enviado: false, erro: { tipo: "POLITICA", codigo: "META_132001", detalhe: "template não existe" } },
     });
     await t.svc.enviarPendentes(t.cfg as never, AGORA);
-    expect(t.update).toHaveBeenCalledWith({
-      where: { id: "a" },
+    expect(t.updateMany).toHaveBeenCalledWith({
+      where: { id: "a", estado: "PENDENTE" },
       data: { estado: "FALHOU", erroEnvio: "META_132001: template não existe" },
     });
   });
@@ -270,7 +277,7 @@ describe("envio da pergunta", () => {
       envioResultado: { enviado: false, erro: { tipo: "TRANSPORTE", codigo: "META_INDISPONIVEL", detalhe: "timeout" } },
     });
     await t.svc.enviarPendentes(t.cfg as never, AGORA);
-    const data = (t.update.mock.calls[0]![0] as { data: Record<string, unknown> }).data;
+    const data = (t.updateMany.mock.calls[0]![0] as { data: Record<string, unknown> }).data;
     expect(data.estado).toBeUndefined();
     expect(data.erroEnvio).toContain("META_INDISPONIVEL");
   });
@@ -299,7 +306,10 @@ describe("envio da pergunta", () => {
     const t = montar({ pendentes: [pend("a", "42991088125", { receberConferenciaDiaria: false })] });
     await t.svc.enviarPendentes(t.cfg as never, AGORA);
     expect(t.tentarEnviar).not.toHaveBeenCalled();
-    expect(t.update).toHaveBeenCalledWith({ where: { id: "a" }, data: { estado: "SUPRIMIDA", suprimidaPor: "PAROU" } });
+    expect(t.updateMany).toHaveBeenCalledWith({
+      where: { id: "a", estado: "PENDENTE" },
+      data: { estado: "SUPRIMIDA", suprimidaPor: "PAROU" },
+    });
   });
 
   it("número suspeito de inalcançável não recebe", async () => {
@@ -330,11 +340,13 @@ describe("lembrete e expiração", () => {
   const cfg = { ...CFG, reenviar: true };
 
   it("expira a pergunta sem resposta depois das horas configuradas", async () => {
-    const t = montar();
+    const t = montar({ paraExpirar: [{ id: "x", contaId: "c1" }] });
     await t.svc.lembrarEExpirar({ ...CFG, horasParaExpirar: 12 } as never, AGORA);
-    const a = t.updateMany.mock.calls[0]![0] as { where: { estado: string; enviadaEm: { lt: Date } }; data: { estado: string } };
+    const q = t.prisma.conferenciaDiaria.findMany.mock.calls[0]![0] as { where: { enviadaEm: { lt: Date } } };
+    expect(q.where.enviadaEm.lt.getTime()).toBe(AGORA.getTime() - 12 * 3_600_000);
+    const a = t.updateMany.mock.calls[0]![0] as { where: { id: { in: string[] }; estado: string }; data: { estado: string } };
     expect(a.data.estado).toBe("EXPIRADA");
-    expect(a.where.enviadaEm.lt.getTime()).toBe(AGORA.getTime() - 12 * 3_600_000);
+    expect(a.where).toEqual({ id: { in: ["x"] }, estado: "ENVIADA" });
   });
 
   it("manda UM lembrete (mesmos botões) e carimba, quando a empresa quis", async () => {
@@ -358,7 +370,9 @@ describe("lembrete e expiração", () => {
   it("só pega quem ainda não recebeu lembrete e está dentro da janela", async () => {
     const t = montar();
     await t.svc.lembrarEExpirar(cfg as never, AGORA);
-    const q = t.prisma.conferenciaDiaria.findMany.mock.calls[0]![0] as {
+    const q = t.prisma.conferenciaDiaria.findMany.mock.calls.find(
+      (c) => (c[0] as { where: { lembreteEnviadoEm?: null } }).where.lembreteEnviadoEm === null,
+    )![0] as {
       where: { lembreteEnviadoEm: null; enviadaEm: { lte: Date; gt: Date } };
     };
     expect(q.where.lembreteEnviadoEm).toBeNull();
@@ -489,5 +503,107 @@ describe("invariante: o sistema nunca inativa motorista sozinho", () => {
     expect(alcance).not.toMatch(/aceitaWhatsapp\s*:\s*(false|true)/);
     expect(alcance).not.toMatch(/bloqueadoAte\s*:/);
     expect(alcance).not.toMatch(/status\s*:\s*"(REJEITADO|PENDENTE)/);
+  });
+});
+
+describe("corrida: o envio grava depois do toque", () => {
+  it("count 0 no update pós-envio: NÃO sobrescreve a resposta; só guarda o wamid que faltava", async () => {
+    const t = montar({ pendentes: [pend("a")], updateManyCount: 0 });
+    const n = await t.svc.enviarPendentes(t.cfg as never, AGORA);
+    expect(n).toBe(0);
+    const chamadas = t.updateMany.mock.calls.map((c) => c[0] as { where: Record<string, unknown>; data: Record<string, unknown> });
+    // 1º: condicional a PENDENTE; 2º: só wamid/enviadaEm, sem `estado`, e só onde o wamid ainda é nulo.
+    expect(chamadas[0]!.where).toEqual({ id: "a", estado: "PENDENTE" });
+    expect(chamadas[1]!.where).toEqual({ id: "a", wamid: null });
+    expect(chamadas[1]!.data).not.toHaveProperty("estado");
+    expect(chamadas[1]!.data.wamid).toBe("wamid.NOVO");
+  });
+
+  it("nenhum writer da conferência usa update por id sem condição de estado", () => {
+    const src = readFileSync(join(__dirname, "conferencia-diaria.service.ts"), "utf8");
+    const updates = src.match(/conferenciaDiaria\.update\(/g) ?? [];
+    // Sobrou só o carimbo do lembrete, que não mexe em estado.
+    expect(updates.length).toBe(1);
+  });
+});
+
+describe("reenviar a pergunta de hoje", () => {
+  const HOJE = new Date("2026-09-29T12:00:00Z");
+  const linhaHoje = (over: Record<string, unknown> = {}) => ({
+    id: "L1",
+    contaId: "c1",
+    estado: "RESPONDIDA",
+    opcao: "NAO_TIVE",
+    wamid: "wamid.VELHO",
+    enviadaEm: new Date("2026-09-29T12:00:00Z"),
+    respondidaEm: new Date("2026-09-29T12:01:00Z"),
+    respostaTexto: "Não tive",
+    reenvios: 0,
+    snapshot: { evidencias: EVID },
+    dia: new Date("2026-09-29T00:00:00Z"),
+    motorista: { id: "m1", nome: "Tião", telefone: "42991088125", aceitaWhatsapp: true, receberConferenciaDiaria: true, whatsappInalcancavelEm: null },
+    ...over,
+  });
+  function tc(o: Parameters<typeof montar>[0] = {}, linha: Record<string, unknown> | null = linhaHoje()) {
+    const t = montar(o);
+    (t.prisma.conferenciaDiaria as unknown as Record<string, unknown>).findFirst = vi.fn(async () => linha);
+    (t.prisma.conferenciaDiaria as unknown as Record<string, unknown>).findUnique = vi.fn(async () => ({ estado: "ENVIADA", erroEnvio: null, wamid: "wamid.NOVO" }));
+    (t.prisma as unknown as Record<string, unknown>).$executeRaw = vi.fn(async () => 1);
+    (t.prisma.configuracaoConferenciaDiaria as unknown as Record<string, unknown>).upsert = vi.fn(async () => t.cfg);
+    return t;
+  }
+
+  it("zera a linha, manda AGORA pelo mesmo template/payloads e audita quem pediu", async () => {
+    const t = tc();
+    const r = await comConta("c1", () => t.svc.reenviarPerguntaDeHoje("m1", "u1", HOJE));
+    expect(r).toMatchObject({ enviado: true, estado: "ENVIADA", reenvios: 1, erro: null });
+    const zera = t.updateMany.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(zera.data).toMatchObject({ estado: "PENDENTE", opcao: null, respondidaEm: null, respostaTexto: null, wamid: null, lembreteWamid: null, lembreteEnviadoEm: null });
+    expect(t.tentarEnviar.mock.calls[0]![0].payloads[0]).toBe("cv:L1:NAO_TIVE");
+    expect(t.log).toHaveBeenCalledWith(expect.objectContaining({ acao: "CONFERENCIA_PERGUNTA_REENVIADA", usuarioId: "u1", entidadeId: "L1" }));
+  });
+
+  it("sem linha de hoje: 404 claro", async () => {
+    await expect(comConta("c1", () => tc({}, null).svc.reenviarPerguntaDeHoje("m1", "u1", HOJE))).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it.each(["SUPRIMIDA", "SOMBRA"])("linha %s nunca é reenviada", async (estado) => {
+    const t = tc({}, linhaHoje({ estado }));
+    await expect(comConta("c1", () => t.svc.reenviarPerguntaDeHoje("m1", "u1", HOJE))).rejects.toBeInstanceOf(ConflictException);
+    expect(t.tentarEnviar).not.toHaveBeenCalled();
+  });
+
+  it("desligada, em sombra ou sem Meta: 409 com motivo, e nada é zerado", async () => {
+    for (const o of [{ cfg: { ativo: false } }, { cfg: { modo: "SOMBRA" } }, { disponivel: false }] as Parameters<typeof montar>[0][]) {
+      const t = tc(o);
+      await expect(comConta("c1", () => t.svc.reenviarPerguntaDeHoje("m1", "u1", HOJE))).rejects.toBeInstanceOf(ConflictException);
+      expect(t.updateMany).not.toHaveBeenCalled();
+    }
+  });
+
+  it("motorista sem canal (parou) => 409 com o nome", async () => {
+    const t = tc({}, linhaHoje({ motorista: { ...linhaHoje().motorista, receberConferenciaDiaria: false } }));
+    await expect(comConta("c1", () => t.svc.reenviarPerguntaDeHoje("m1", "u1", HOJE))).rejects.toThrow(/Tião.*parar/);
+  });
+
+  it("passou do limite de reenvios do dia => 409", async () => {
+    const t = tc({}, linhaHoje({ reenvios: MAX_REENVIOS_POR_LINHA }));
+    await expect(comConta("c1", () => t.svc.reenviarPerguntaDeHoje("m1", "u1", HOJE))).rejects.toThrow(/reenviada/);
+    expect(t.tentarEnviar).not.toHaveBeenCalled();
+  });
+
+  it("respeita o teto por hora", async () => {
+    const t = tc({ teto: 5, usadasNaHora: 5 });
+    await expect(comConta("c1", () => t.svc.reenviarPerguntaDeHoje("m1", "u1", HOJE))).rejects.toThrow(/limite de envios/);
+    expect(t.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("a Meta recusa: a linha fica FALHOU com o motivo (o reenvio não faz repetir pela batida seguinte)", async () => {
+    const t = tc({ envioResultado: { enviado: false, erro: { tipo: "TRANSPORTE", codigo: "META_INDISPONIVEL", detalhe: "timeout" } } });
+    (t.prisma.conferenciaDiaria as unknown as Record<string, unknown>).findUnique = vi.fn(async () => ({ estado: "FALHOU", erroEnvio: "META_INDISPONIVEL: timeout", wamid: null }));
+    const r = await comConta("c1", () => t.svc.reenviarPerguntaDeHoje("m1", "u1", HOJE));
+    expect(r).toMatchObject({ enviado: false, estado: "FALHOU", erro: "META_INDISPONIVEL: timeout" });
+    const falhou = t.updateMany.mock.calls.map((c) => c[0] as { data: Record<string, unknown> }).find((c) => c.data.estado === "FALHOU");
+    expect(falhou).toBeTruthy();
   });
 });

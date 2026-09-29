@@ -366,3 +366,69 @@ describe("mesmoTelefone", () => {
     expect(mesmoTelefone("42991088125", "554299999999")).toBe(false);
   });
 });
+
+describe("toque com a linha ainda PENDENTE (chegou antes do update pós-envio)", () => {
+  it("é aceito: payload da própria linha + telefone que confere; grava RESPONDIDA e responde", async () => {
+    const t = montar({ estado: "PENDENTE", wamid: null });
+    const r = await t.svc.tratarMensagem(toque("NAO_TIVE"));
+    expect(r).toEqual({ tratada: true, opcao: "NAO_TIVE", origem: "BOTAO" });
+    const a = t.updateMany.mock.calls[0]![0] as { where: { estado: { in: string[] } } };
+    expect(a.where.estado.in).toContain("PENDENTE");
+    expect(t.tentarEnviar).toHaveBeenCalledOnce();
+  });
+
+  it("de número que não é do motorista continua ignorado", async () => {
+    const t = montar({ estado: "PENDENTE", wamid: null });
+    const r = await t.svc.tratarMensagem(toque("NAO_TIVE", { from: "5511999990000" }));
+    expect(r).toEqual({ tratada: false, motivo: "remetente não confere" });
+    expect(t.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("estado que não pode receber resposta (FALHOU) segue ignorado, com o motivo", async () => {
+    const t = montar({ estado: "FALHOU" });
+    expect(await t.svc.tratarMensagem(toque("NAO_TIVE"))).toEqual({ tratada: false, motivo: "estado FALHOU" });
+  });
+});
+
+describe("trilha durável do toque", () => {
+  function comTrilha(o: Parameters<typeof montar>[0] = {}) {
+    const t = montar(o);
+    const raw = vi.fn(async (..._a: unknown[]) => 1);
+    (t.prisma as unknown as { $executeRaw: unknown }).$executeRaw = raw;
+    // O JSON do evento é o 1º valor interpolado (depois das partes do template).
+    const eventos = () => raw.mock.calls.map((c) => JSON.parse(c[1] as string) as { evento: string; detalhe: Record<string, unknown> });
+    return { ...t, eventos };
+  }
+
+  it("toque gravado deixa TOQUE e RESPOSTA_GRAVADA (com count, opção, origem, context.id e wamid da linha)", async () => {
+    const t = comTrilha();
+    await t.svc.tratarMensagem(toque("NAO_TIVE"));
+    const ev = t.eventos();
+    expect(ev.map((e) => e.evento)).toEqual(["TOQUE", "RESPOSTA_GRAVADA"]);
+    expect(ev[0]!.detalhe).toMatchObject({
+      linhaId: ID,
+      opcao: "NAO_TIVE",
+      origem: "BOTAO",
+      contextId: "wamid.PERGUNTA",
+      wamidLinha: "wamid.PERGUNTA",
+    });
+    expect(ev[1]!.detalhe).toMatchObject({ count: 1, opcao: "NAO_TIVE" });
+  });
+
+  it("toque ignorado deixa o motivo na trilha", async () => {
+    const t = comTrilha();
+    await t.svc.tratarMensagem(toque("NAO_TIVE", { context: { id: "wamid.OUTRA" } }));
+    const ev = t.eventos();
+    expect(ev.map((e) => e.evento)).toEqual(["TOQUE", "IGNORADO"]);
+    expect(ev[1]!.detalhe).toMatchObject({ motivo: "wamid não confere", contextId: "wamid.OUTRA" });
+  });
+
+  it("falha ao gravar a trilha nunca derruba o tratamento", async () => {
+    const t = montar();
+    (t.prisma as unknown as { $executeRaw: unknown }).$executeRaw = vi.fn(async () => {
+      throw new Error("banco caiu");
+    });
+    const r = await t.svc.tratarMensagem(toque("NAO_TIVE"));
+    expect(r.tratada).toBe(true);
+  });
+});

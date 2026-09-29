@@ -16,6 +16,7 @@ import {
   normalizarResposta,
   sufixoTelefone,
 } from "../../common/conferencia-resposta";
+import { anexarTrilha } from "../../common/conferencia-trilha";
 import { EnvioWhatsappService } from "../../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../../whatsapp/sessao.service";
 import { ConferenciaAlcanceService, telefonesParaBusca } from "./conferencia-alcance.service";
@@ -135,30 +136,54 @@ export class ConferenciaRespostaService {
         },
       }),
     );
-    if (!conf) return { tratada: false, motivo: "conferência não existe" };
+    if (!conf) {
+      this.log.warn(`toque com payload de conferência inexistente (${conferenciaId}) — ignorado`);
+      return { tratada: false, motivo: "conferência não existe" };
+    }
+
+    const ctx = msg.context?.id;
+    const base = {
+      opcao,
+      origem: "BOTAO",
+      contextId: ctx ?? null,
+      wamidLinha: conf.wamid,
+      estadoAntes: conf.estado,
+      mensagemId: msg.id ?? null,
+    };
+    await this.trilha(conf, "TOQUE", base);
+    const ignorar = async (motivo: string): Promise<ResultadoTratamento> => {
+      await this.trilha(conf, "IGNORADO", { ...base, motivo });
+      return { tratada: false, motivo };
+    };
 
     // O remetente tem que ser o motorista da pergunta: o payload é só um id, e
     // quem manda o toque é o número que escreveu.
     if (!conf.motorista.telefone || !mesmoTelefone(conf.motorista.telefone, from)) {
       this.log.warn(`toque da conferência ${conf.id} veio de número que não é do motorista — ignorado`);
-      return { tratada: false, motivo: "remetente não confere" };
+      return ignorar("remetente não confere");
     }
     // Confirma pelo wamid: o toque responde À mensagem que a gente mandou (ou ao
     // lembrete). Sem `context` (alguns clientes omitem) o payload + telefone bastam.
-    const ctx = msg.context?.id;
     if (ctx && conf.wamid && ctx !== conf.wamid && ctx !== conf.lembreteWamid) {
       this.log.warn(`toque da conferência ${conf.id} respondendo a outra mensagem (${ctx}) — ignorado`);
-      return { tratada: false, motivo: "wamid não confere" };
+      return ignorar("wamid não confere");
     }
-    if (!["ENVIADA", "EXPIRADA", "RESPONDIDA"].includes(conf.estado)) {
-      return { tratada: false, motivo: `estado ${conf.estado}` };
+    // PENDENTE: o toque chegou ANTES de o envio gravar o wamid (a Meta entrega a
+    // mensagem e o motorista toca antes de o update pós-envio rodar). Não dá pra
+    // conferir o `context.id` (a linha ainda não tem wamid), então o critério é:
+    // payload `cv:<id>` da própria linha + telefone que confere (checado acima).
+    // O `context.id` fica na trilha pra conferência posterior. Ignorar aqui deixava
+    // o motorista sem resposta e sem registro nenhum.
+    if (!["PENDENTE", "ENVIADA", "EXPIRADA", "RESPONDIDA"].includes(conf.estado)) {
+      return ignorar(`estado ${conf.estado}`);
     }
     // Mesmo toque de novo (Meta reenviou, ou ele apertou duas vezes): nada a fazer.
     if (conf.estado === "RESPONDIDA" && conf.opcao === opcao) {
+      await this.trilha(conf, "IGNORADO", { ...base, motivo: "toque repetido (já respondida com esta opção)" });
       return { tratada: true, opcao, origem: "BOTAO" };
     }
 
-    await this.aplicar(conf, opcao, from, textoDaMensagem(msg));
+    await this.aplicar(conf, opcao, from, textoDaMensagem(msg), { ...base, criterio: conf.estado === "PENDENTE" ? "PENDENTE: payload e telefone conferem" : "wamid/contexto" });
     return { tratada: true, opcao, origem: "BOTAO" };
   }
 
@@ -187,7 +212,18 @@ export class ConferenciaRespostaService {
 
     const texto = textoDaMensagem(msg);
     const opcao = interpretarRespostaConferencia(texto);
+    const base = {
+      opcao,
+      origem: "TEXTO",
+      contextId: msg.context?.id ?? null,
+      wamidLinha: conf.wamid,
+      estadoAntes: conf.estado,
+      mensagemId: msg.id ?? null,
+      texto: texto?.slice(0, 100) ?? null,
+    };
+    await this.trilha(conf, "TOQUE", base);
     if (opcao === "AMBIGUA") {
+      await this.trilha(conf, "IGNORADO", { ...base, motivo: "resposta ambígua" });
       await comConta(conf.contaId, async () => {
         const r = await this.sugestoes.abrir({
           tipo: "RESPOSTA_AMBIGUA",
@@ -208,7 +244,7 @@ export class ConferenciaRespostaService {
       return { tratada: false, motivo: "resposta ambígua" };
     }
 
-    await this.aplicar(conf, opcao, from, texto);
+    await this.aplicar(conf, opcao, from, texto, { ...base, criterio: "texto livre: última pergunta ENVIADA do telefone" });
     return { tratada: true, opcao, origem: "TEXTO" };
   }
 
@@ -219,6 +255,7 @@ export class ConferenciaRespostaService {
     opcao: OpcaoConferenciaDiaria,
     from: string,
     texto: string | null,
+    base: Record<string, unknown> = {},
   ): Promise<void> {
     const agora = new Date();
     await comConta(conf.contaId, async () => {
@@ -226,7 +263,7 @@ export class ConferenciaRespostaService {
       const { count } = await this.prisma.conferenciaDiaria.updateMany({
         where: {
           id: conf.id,
-          estado: { in: ["ENVIADA", "EXPIRADA", "RESPONDIDA"] },
+          estado: { in: ["PENDENTE", "ENVIADA", "EXPIRADA", "RESPONDIDA"] },
           NOT: { estado: "RESPONDIDA", opcao },
         },
         data: {
@@ -235,6 +272,12 @@ export class ConferenciaRespostaService {
           respondidaEm: agora,
           respostaTexto: texto?.slice(0, 300) ?? null,
         },
+      });
+      await this.trilha(conf, "RESPOSTA_GRAVADA", {
+        ...base,
+        opcao,
+        count,
+        ...(count === 0 ? { motivo: "nenhuma linha mudou (já tinha esta resposta, ou o estado não permite)" } : {}),
       });
       if (count === 0) return;
 
@@ -288,6 +331,14 @@ export class ConferenciaRespostaService {
           break;
       }
     });
+  }
+
+  private trilha(
+    conf: { id: string; contaId: string },
+    evento: "TOQUE" | "IGNORADO" | "RESPOSTA_GRAVADA",
+    detalhe: Record<string, unknown>,
+  ): Promise<void> {
+    return anexarTrilha(this.prisma, conf, evento, detalhe);
   }
 
   private async responder(from: string, texto: string): Promise<void> {

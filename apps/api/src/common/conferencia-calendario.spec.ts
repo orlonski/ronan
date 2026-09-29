@@ -171,3 +171,20 @@ describe("montarCalendarioConferencia", () => {
     expect(c.totais.perguntados).toBe(1);
   });
 });
+
+describe("dados técnicos do dia (só pra quem decide)", () => {
+  const l = linha({ id: "L1", estado: "RESPONDIDA", opcao: "NAO_TIVE", wamid: "wamid.X", reenvios: 1, respostaTexto: "Não tive", trilha: [{ em: "2026-09-29T12:00:00.000Z", evento: "TOQUE", detalhe: {} }] });
+
+  it("sem o pedido, a resposta é a de sempre (retrocompatível) e só ganha `linhaDia`", () => {
+    const p = dia(monta({ linhas: [l] }), "2026-09-25").pergunta!;
+    expect(p).not.toHaveProperty("tecnico");
+    expect(p.linhaDia).toBe(l.dia);
+  });
+
+  it("com o pedido, traz id, estado, opção, wamid, respostaTexto e a trilha em ordem", () => {
+    const c = montarCalendarioConferencia({ mes: "2026-09", viagens: [], linhas: [l as never], agora: AGORA, incluirTecnico: true });
+    const t = dia(c, "2026-09-25").pergunta!.tecnico!;
+    expect(t).toMatchObject({ id: "L1", estado: "RESPONDIDA", opcao: "NAO_TIVE", wamid: "wamid.X", reenvios: 1, respostaTexto: "Não tive" });
+    expect(t.trilha.map((e) => e.evento)).toEqual(["TOQUE"]);
+  });
+});

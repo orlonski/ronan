@@ -38,6 +38,8 @@ import {
   type MotoristaParaConferencia,
 } from "../../common/conferencia-diaria";
 import { montarCalendarioConferencia, ultimoDiaDoMes } from "../../common/conferencia-calendario";
+import { anexarTrilha } from "../../common/conferencia-trilha";
+import type { ResultadoReenvioPergunta } from "@ronan/shared-types";
 
 type Config = Awaited<ReturnType<ConferenciaDiariaService["config"]>>;
 
@@ -62,6 +64,8 @@ const HORAS_DE_TOLERANCIA_ENVIO = 3;
 /** Lembrete só em horário de gente acordada. */
 const LEMBRETE_HORA_MIN = 7;
 const LEMBRETE_HORA_MAX = 21;
+/** Quantas vezes o painel pode reenviar a pergunta da MESMA linha (= do mesmo dia). Freio anti-abuso. */
+export const MAX_REENVIOS_POR_LINHA = 5;
 /** O teto de envios por hora quando a linha da plataforma ainda não existe. */
 const TETO_HORA_PADRAO = 60;
 
@@ -213,7 +217,13 @@ export class ConferenciaDiariaService {
    * A montagem (dia perguntado, retroativo) é da regra pura em `conferencia-calendario`.
    * Quem chama já conferiu o escopo do motorista (404 fora dele).
    */
-  async calendarioDoMotorista(motoristaId: string, mes?: string, agora: Date = new Date()) {
+  async calendarioDoMotorista(
+    motoristaId: string,
+    mes?: string,
+    agora: Date = new Date(),
+    /** "Dados técnicos" (wamid, trilha…) só saem pra quem tem `conferencia-diaria.decidir`. */
+    incluirTecnico = false,
+  ) {
     const alvo = mes ?? hojeYmd(agora).slice(0, 7);
     const primeiro = `${alvo}-01`;
     const ultimo = ultimoDiaDoMes(alvo);
@@ -236,12 +246,16 @@ export class ConferenciaDiariaService {
           opcao: true,
           criadoEm: true,
           snapshot: true,
+          ...(incluirTecnico
+            ? { id: true, wamid: true, respostaTexto: true, erroEnvio: true, reenvios: true, trilha: true }
+            : {}),
         },
       }),
     ]);
     return montarCalendarioConferencia({
       mes: alvo,
       agora,
+      incluirTecnico,
       viagens: viagens.filter((v) => v.data).map((v) => ({ ...v, data: dataParaYmd(v.data!) })),
       linhas: linhas.map((l) => ({ ...l, dia: dataParaYmd(l.dia) })),
     });
@@ -334,8 +348,9 @@ export class ConferenciaDiariaService {
     for (const l of sombra) {
       if (!aindaPerguntar.has(l.motoristaId)) continue;
       const { semEnvioPorque: _descartado, ...resto } = (l.snapshot ?? {}) as Record<string, unknown>;
-      await this.prisma.conferenciaDiaria.update({
-        where: { id: l.id },
+      // Condicional: só sai de SOMBRA se ainda for SOMBRA (nenhuma gravação rebaixa uma linha que andou).
+      const { count } = await this.prisma.conferenciaDiaria.updateMany({
+        where: { id: l.id, estado: "SOMBRA" },
         data: {
           estado: "PENDENTE",
           snapshot: {
@@ -346,7 +361,7 @@ export class ConferenciaDiariaService {
           } as unknown as Prisma.InputJsonValue,
         },
       });
-      promovidas++;
+      if (count > 0) promovidas++;
     }
     if (promovidas > 0) {
       this.log.log(`Conferência diária: ${promovidas} linha(s) de sombra do dia promovidas a PENDENTE (envio ligado depois).`);
@@ -459,6 +474,64 @@ export class ConferenciaDiariaService {
   }
 
   /**
+   * Grava o resultado de um envio NA LINHA, sem nunca rebaixá-la.
+   *
+   * O envio é lento (HTTP na Meta) e a mensagem pode chegar — e o motorista tocar —
+   * antes de este update rodar. Por isso todo update é CONDICIONAL a `PENDENTE`:
+   * se a linha já andou (RESPONDIDA/EXPIRADA…), o `count` volta 0, a resposta
+   * gravada é preservada e só completamos o `wamid`/`enviadaEm` que faltam.
+   * Devolve `true` quando a linha ficou ENVIADA por este envio.
+   */
+  private async registrarEnvio(
+    linha: { id: string; contaId: string },
+    r: Awaited<ReturnType<ConferenciaDiariaService["pergunta"]>>,
+    etapa: string,
+  ): Promise<boolean> {
+    const alvo = { id: linha.id, contaId: linha.contaId };
+    if (r.enviado) {
+      const enviadaEm = new Date();
+      const { count } = await this.prisma.conferenciaDiaria.updateMany({
+        where: { id: linha.id, estado: "PENDENTE" },
+        data: { estado: "ENVIADA", wamid: r.idExterno, enviadaEm, erroEnvio: null },
+      });
+      if (count === 0) {
+        // A linha mudou entre o envio e agora (toque chegou antes do update). Não
+        // sobrescreve o estado; só guarda o wamid pra o toque poder ser conferido.
+        await this.prisma.conferenciaDiaria.updateMany({
+          where: { id: linha.id, wamid: null },
+          data: { wamid: r.idExterno, enviadaEm },
+        });
+        this.log.warn(
+          `Conferência ${linha.id}: a linha já não estava PENDENTE quando o envio foi gravado (${etapa}); estado preservado, wamid ${r.idExterno} guardado.`,
+        );
+      }
+      await anexarTrilha(this.prisma, alvo, "ENVIO", {
+        etapa,
+        enviado: true,
+        wamid: r.idExterno,
+        count,
+        ...(count === 0 ? { motivo: "linha já não estava PENDENTE; estado preservado" } : {}),
+      });
+      return count > 0;
+    }
+    const erro = `${r.erro?.codigo ?? "?"}: ${r.erro?.detalhe ?? ""}`.slice(0, 500);
+    if (r.erro?.tipo === "TRANSPORTE" && etapa === "enviarPendentes") {
+      // Meta fora do ar: continua PENDENTE e tenta na batida seguinte.
+      await this.prisma.conferenciaDiaria.updateMany({
+        where: { id: linha.id, estado: "PENDENTE" },
+        data: { erroEnvio: erro },
+      });
+    } else {
+      await this.prisma.conferenciaDiaria.updateMany({
+        where: { id: linha.id, estado: "PENDENTE" },
+        data: { estado: "FALHOU", erroEnvio: erro },
+      });
+    }
+    await anexarTrilha(this.prisma, alvo, "ENVIO", { etapa, enviado: false, erro });
+    return false;
+  }
+
+  /**
    * Manda as perguntas que ficaram PENDENTES hoje (o dia acabou de ser gravado,
    * o teto por hora segurou, ou a Meta oscilou). Retoma na batida seguinte; passada
    * a tolerância, a linha vira FALHOU — perguntar "ontem você não teve viagens" às
@@ -474,6 +547,7 @@ export class ConferenciaDiariaService {
       where: { dia, estado: "PENDENTE" },
       select: {
         id: true,
+        contaId: true,
         snapshot: true,
         dia: true,
         motorista: {
@@ -493,7 +567,7 @@ export class ConferenciaDiariaService {
 
     if (hora > cfg.horaEnvio + HORAS_DE_TOLERANCIA_ENVIO) {
       await this.prisma.conferenciaDiaria.updateMany({
-        where: { id: { in: pendentes.map((p) => p.id) } },
+        where: { id: { in: pendentes.map((p) => p.id) }, estado: "PENDENTE" },
         data: { estado: "FALHOU", erroEnvio: "Não saiu no horário (teto de envios por hora ou Meta indisponível)." },
       });
       return 0;
@@ -511,32 +585,15 @@ export class ConferenciaDiariaService {
       // (tocou "Parar" à noite, o número passou a falhar): confere de novo.
       const semCanal = this.semCanalDe(m);
       if (semCanal || !m.telefone) {
-        await this.prisma.conferenciaDiaria.update({
-          where: { id: p.id },
+        await this.prisma.conferenciaDiaria.updateMany({
+          where: { id: p.id, estado: "PENDENTE" },
           data: { estado: "SUPRIMIDA", suprimidaPor: semCanal ?? "SEM_TELEFONE" },
         });
         continue;
       }
       vagas--;
       const r = await this.pergunta(p, m.telefone);
-      if (r.enviado) {
-        await this.prisma.conferenciaDiaria.update({
-          where: { id: p.id },
-          data: { estado: "ENVIADA", wamid: r.idExterno, enviadaEm: new Date(), erroEnvio: null },
-        });
-        enviadas++;
-      } else if (r.erro?.tipo === "TRANSPORTE") {
-        // Meta fora do ar: continua PENDENTE e tenta na batida seguinte.
-        await this.prisma.conferenciaDiaria.update({
-          where: { id: p.id },
-          data: { erroEnvio: `${r.erro.codigo}: ${r.erro.detalhe}`.slice(0, 500) },
-        });
-      } else {
-        await this.prisma.conferenciaDiaria.update({
-          where: { id: p.id },
-          data: { estado: "FALHOU", erroEnvio: `${r.erro?.codigo ?? "?"}: ${r.erro?.detalhe ?? ""}`.slice(0, 500) },
-        });
-      }
+      if (await this.registrarEnvio(p, r, "enviarPendentes")) enviadas++;
     }
     if (enviadas > 0) this.log.log(`Conferência diária: ${enviadas} pergunta(s) enviada(s).`);
     return enviadas;
@@ -548,10 +605,20 @@ export class ConferenciaDiariaService {
    */
   async lembrarEExpirar(cfg: Config, agora: Date): Promise<{ expiradas: number; lembretes: number }> {
     const limiteExpirar = new Date(agora.getTime() - cfg.horasParaExpirar * 3_600_000);
-    const { count: expiradas } = await this.prisma.conferenciaDiaria.updateMany({
+    const paraExpirar = await this.prisma.conferenciaDiaria.findMany({
       where: { estado: "ENVIADA", enviadaEm: { lt: limiteExpirar } },
-      data: { estado: "EXPIRADA" },
+      select: { id: true, contaId: true },
     });
+    const { count: expiradas } =
+      paraExpirar.length === 0
+        ? { count: 0 }
+        : await this.prisma.conferenciaDiaria.updateMany({
+            where: { id: { in: paraExpirar.map((l) => l.id) }, estado: "ENVIADA" },
+            data: { estado: "EXPIRADA" },
+          });
+    for (const l of paraExpirar) {
+      await anexarTrilha(this.prisma, l, "EXPIRADA", { horasParaExpirar: cfg.horasParaExpirar });
+    }
 
     let lembretes = 0;
     const hora = horaEmSaoPaulo(agora);
@@ -572,6 +639,7 @@ export class ConferenciaDiariaService {
       },
       select: {
         id: true,
+        contaId: true,
         snapshot: true,
         dia: true,
         enviadaEm: true,
@@ -608,6 +676,10 @@ export class ConferenciaDiariaService {
           ...(r.enviado ? { lembreteWamid: r.idExterno } : {}),
         },
       });
+      await anexarTrilha(this.prisma, c, "LEMBRETE", {
+        enviado: r.enviado,
+        ...(r.enviado ? { lembreteWamid: r.idExterno } : { erro: `${r.erro?.codigo ?? "?"}: ${r.erro?.detalhe ?? ""}`.slice(0, 300) }),
+      });
       if (r.enviado) lembretes++;
     }
     return { expiradas, lembretes };
@@ -624,6 +696,161 @@ export class ConferenciaDiariaService {
     if (!m.receberConferenciaDiaria) return "PAROU";
     if (m.whatsappInalcancavelEm) return "INALCANCAVEL";
     return null;
+  }
+
+  // ─── Reenviar a pergunta de hoje ───────────────────────────────────────
+
+  /**
+   * Ferramenta de operação e de teste: zera a linha de HOJE do motorista e manda
+   * a pergunta de novo, AGORA, pelo mesmo caminho do job (`pergunta()`).
+   *
+   * Só a linha de hoje (São Paulo). Exige conferência ativa em modo ENVIANDO, Meta
+   * disponível e motorista com canal. O histórico não some: o que a linha tinha
+   * (estado, resposta, wamid) vai pra trilha antes de zerar. Freios: teto por hora
+   * global, no máximo `MAX_REENVIOS_POR_LINHA` por linha e nunca SUPRIMIDA/SOMBRA
+   * (a regra mandou não perguntar). Auditoria com quem pediu.
+   */
+  async reenviarPerguntaDeHoje(
+    motoristaId: string,
+    usuarioId: string,
+    agora: Date = new Date(),
+  ): Promise<ResultadoReenvioPergunta> {
+    const dia = inicioDoDiaData(agora);
+    const linha = await this.prisma.conferenciaDiaria.findFirst({
+      where: { motoristaId, dia },
+      select: {
+        id: true,
+        contaId: true,
+        estado: true,
+        opcao: true,
+        wamid: true,
+        enviadaEm: true,
+        respondidaEm: true,
+        respostaTexto: true,
+        reenvios: true,
+        snapshot: true,
+        dia: true,
+        motorista: {
+          select: {
+            id: true,
+            nome: true,
+            telefone: true,
+            aceitaWhatsapp: true,
+            receberConferenciaDiaria: true,
+            whatsappInalcancavelEm: true,
+          },
+        },
+      },
+    });
+    if (!linha) {
+      throw new NotFoundException(
+        "Não há pergunta de hoje para este motorista. A pergunta de hoje só existe depois que a conferência roda no horário configurado e a regra manda perguntar.",
+      );
+    }
+    if (linha.estado === "SUPRIMIDA" || linha.estado === "SOMBRA") {
+      throw new ConflictException(
+        linha.estado === "SOMBRA"
+          ? "A conferência de hoje rodou em modo sombra: nada foi enviado a este motorista e nada será reenviado."
+          : "Hoje a regra não mandou perguntar a este motorista (ou ele está sem canal). Não dá pra reenviar.",
+      );
+    }
+    const cfg = await this.config();
+    if (!cfg.ativo) throw new ConflictException("A conferência diária está desligada.");
+    if (cfg.modo !== "ENVIANDO") {
+      throw new ConflictException("A conferência está em modo sombra: só registra, não envia mensagem.");
+    }
+    const disp = await this.envio.disponivel("CONFERENCIA_DIARIA");
+    if (!disp.ok) {
+      throw new ConflictException(`O envio por WhatsApp não está disponível agora: ${(disp.motivo ?? "sem motivo informado").replace(/[.\s]+$/, "")}.`);
+    }
+    const m = linha.motorista;
+    const semCanal = this.semCanalDe(m);
+    if (semCanal || !m.telefone) {
+      const porque: Record<SemCanal, string> = {
+        SEM_TELEFONE: "não tem telefone cadastrado",
+        NAO_ACEITA_WHATSAPP: "desligou as mensagens no WhatsApp",
+        PAROU: "pediu pra parar de receber a pergunta",
+        INALCANCAVEL: "está com o WhatsApp sem entregar (número suspeito)",
+      };
+      throw new ConflictException(`${m.nome} ${porque[semCanal ?? "SEM_TELEFONE"]}. Não dá pra mandar a pergunta.`);
+    }
+    if (linha.reenvios >= MAX_REENVIOS_POR_LINHA) {
+      throw new ConflictException(
+        `A pergunta de hoje já foi reenviada ${MAX_REENVIOS_POR_LINHA} vezes. Volte amanhã: o limite é por dia.`,
+      );
+    }
+    if ((await this.vagasNestaHora(agora)) <= 0) {
+      throw new ConflictException("O limite de envios por hora foi atingido. Tente de novo daqui a pouco.");
+    }
+
+    // Zera a linha. Condicional ao número de reenvios lido: dois cliques ao mesmo
+    // tempo não passam os dois do teto.
+    const { count } = await this.prisma.conferenciaDiaria.updateMany({
+      where: { id: linha.id, reenvios: linha.reenvios },
+      data: {
+        estado: "PENDENTE",
+        opcao: null,
+        respondidaEm: null,
+        respostaTexto: null,
+        wamid: null,
+        enviadaEm: null,
+        lembreteWamid: null,
+        lembreteEnviadoEm: null,
+        erroEnvio: null,
+        reenvios: { increment: 1 },
+      },
+    });
+    if (count === 0) {
+      throw new ConflictException("Esta pergunta acabou de ser mexida por outra pessoa. Recarregue e tente de novo.");
+    }
+    const n = linha.reenvios + 1;
+    await anexarTrilha(this.prisma, linha, "REENVIO", {
+      pedidoPor: usuarioId,
+      reenvio: n,
+      antes: {
+        estado: linha.estado,
+        opcao: linha.opcao,
+        wamid: linha.wamid,
+        enviadaEm: linha.enviadaEm?.toISOString() ?? null,
+        respondidaEm: linha.respondidaEm?.toISOString() ?? null,
+        respostaTexto: linha.respostaTexto,
+      },
+    });
+
+    const r = await this.pergunta(linha, m.telefone);
+    await this.registrarEnvio(linha, r, "reenvio");
+    const final = await this.prisma.conferenciaDiaria.findUnique({
+      where: { id: linha.id },
+      select: { estado: true, erroEnvio: true, wamid: true },
+    });
+    const estadoFinal = final?.estado ?? (r.enviado ? "ENVIADA" : "FALHOU");
+
+    // A mensagem já saiu: falha de auditoria não pode esconder o resultado de quem clicou.
+    await this.auditoria
+      .log({
+        usuarioId,
+        entidade: "ConferenciaDiaria",
+        entidadeId: linha.id,
+        acao: "CONFERENCIA_PERGUNTA_REENVIADA",
+        campo: "estado",
+        valorAntes: linha.estado,
+        valorDepois: estadoFinal,
+        motivo: "Pergunta de hoje reenviada pelo painel.",
+        metadata: {
+          motoristaId,
+          reenvio: n,
+          wamidAnterior: linha.wamid,
+          wamidNovo: r.enviado ? r.idExterno : null,
+          enviado: r.enviado,
+        },
+      })
+      .catch((e) => this.log.error(`auditoria do reenvio da conferência ${linha.id} falhou: ${(e as Error).message}`));
+    return {
+      enviado: r.enviado,
+      estado: estadoFinal,
+      erro: r.enviado ? null : (final?.erroEnvio ?? "A Meta recusou o envio."),
+      reenvios: n,
+    };
   }
 
   // ─── Fila do gestor ────────────────────────────────────────────────────

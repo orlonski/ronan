@@ -1,5 +1,6 @@
 import type { CalendarioConferencia, DiaDoCalendarioConferencia } from "@ronan/shared-types";
 import { somarDias, hojeYmd } from "./conferencia-diaria";
+import { lerTrilha } from "./conferencia-trilha";
 import type { Ymd } from "./ponto-jornada";
 
 /**
@@ -34,6 +35,13 @@ export type LinhaParaCalendario = {
   opcao: string | null;
   criadoEm: Date;
   snapshot: unknown;
+  /** Só vêm quando o chamador pediu "dados técnicos". */
+  id?: string;
+  wamid?: string | null;
+  respostaTexto?: string | null;
+  erroEnvio?: string | null;
+  reenvios?: number;
+  trilha?: unknown;
 };
 
 const ESTADOS_ENVIADOS = new Set(["ENVIADA", "RESPONDIDA", "EXPIRADA"]);
@@ -65,6 +73,8 @@ export function montarCalendarioConferencia(input: {
   viagens: ViagemParaCalendario[];
   linhas: LinhaParaCalendario[];
   agora: Date;
+  /** Anexa os "dados técnicos" de cada dia perguntado (wamid, trilha…). */
+  incluirTecnico?: boolean;
 }): CalendarioConferencia {
   const { mes, agora } = input;
   const primeiro: Ymd = `${mes}-01`;
@@ -113,6 +123,23 @@ export function montarCalendarioConferencia(input: {
         retroativo: depois.length > 0,
         lancouDepoisEm: depois[0] ? depois[0].toISOString() : null,
         viagensDepois: depois.length,
+        linhaDia: linha.dia,
+        ...(input.incluirTecnico && linha.id
+          ? {
+              tecnico: {
+                id: linha.id,
+                estado: linha.estado as NonNullable<typeof item.pergunta>["estado"],
+                opcao: (linha.opcao as NonNullable<typeof item.pergunta>["resposta"]) ?? null,
+                wamid: linha.wamid ?? null,
+                enviadaEm: linha.enviadaEm ? linha.enviadaEm.toISOString() : null,
+                respondidaEm: linha.respondidaEm ? linha.respondidaEm.toISOString() : null,
+                respostaTexto: linha.respostaTexto ?? null,
+                erroEnvio: linha.erroEnvio ?? null,
+                reenvios: linha.reenvios ?? 0,
+                trilha: lerTrilha(linha.trilha),
+              },
+            }
+          : {}),
       };
       if (enviadaEm) totais.perguntados++;
       if (linha.estado === "RESPONDIDA") totais.respondidos++;

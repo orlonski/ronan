@@ -95,7 +95,22 @@ export class ConferenciaDiariaController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     await this.motoristas.findOne(id, user.escopo);
-    return this.service.calendarioDoMotorista(id, query.mes);
+    // "Dados técnicos" (wamid, trilha…) só pra quem também pode decidir.
+    const tecnico = user.permissoes.includes("conferencia-diaria.decidir");
+    return this.service.calendarioDoMotorista(id, query.mes, undefined, tecnico);
+  }
+
+  /**
+   * Ferramenta de operação e de teste: manda de novo a pergunta de HOJE pelo
+   * WhatsApp. Só a linha de hoje; ver `reenviarPerguntaDeHoje` pelas regras.
+   * Motorista fora do escopo = 404.
+   */
+  @RequerPermissao("conferencia-diaria.decidir")
+  @HttpCode(200)
+  @Post("motoristas/:id/reenviar-pergunta")
+  async reenviarPergunta(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    await this.motoristas.findOne(id, user.escopo);
+    return this.service.reenviarPerguntaDeHoje(id, user.id);
   }
 
   /**
