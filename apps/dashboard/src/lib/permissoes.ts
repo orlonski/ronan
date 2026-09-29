@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { moduloDaChave } from "@ronan/shared-types";
+import { MODULOS_POR_CHAVE, moduloDaChave } from "@ronan/shared-types";
 import { useApiQuery } from "@/lib/client-api";
 
 type MePayload = {
@@ -44,23 +44,38 @@ export function usePermissoes() {
     staleTime: 5 * 60_000,
   });
   const set = useMemo(() => new Set(data?.permissoes ?? []), [data]);
-  // `undefined` (API antiga, durante um deploy) vale como "tem tudo": a
-  // alternativa seria o painel esvaziar o menu inteiro na janela entre o
-  // frontend novo subir e o backend novo responder.
+  // Sem a lista de módulos (API antiga durante um deploy, resposta incompleta)
+  // o painel NÃO sabe o que a empresa contratou — e não saber vale como "não
+  // contratou", fora o núcleo. Antes valia como "tem tudo", e o custo dos dois
+  // erros não é simétrico: esconder por engano custa um F5; liberar por engano
+  // entrega de graça o módulo que se vende à parte (ex.: Ponto).
   const modulos = useMemo(
-    () => (data?.modulos ? new Set(data.modulos) : null),
+    () => (Array.isArray(data?.modulos) ? new Set(data.modulos) : null),
     [data],
   );
   return {
     isLoading,
     papelNome: data?.papel?.nome ?? null,
     temPermissao: (chave: string) => set.has(chave),
-    /** A empresa contratou o módulo que esta chave pertence? */
+    /**
+     * A empresa contratou o módulo a que esta chave pertence?
+     *
+     * Fail-closed: sem lista de módulos, ou com chave que nenhum módulo
+     * reivindica, só o núcleo passa. (Chave órfã não existe — há teste de
+     * invariante na API —, então `undefined` aqui é catálogo desalinhado, e
+     * desalinhamento não é motivo pra abrir tela.)
+     */
     temModulo: (chave: string) => {
-      if (!modulos) return true;
       const m = moduloDaChave(chave);
-      return m == null || modulos.has(m);
+      if (m && MODULOS_POR_CHAVE[m]?.nucleo) return true;
+      return m != null && modulos != null && modulos.has(m);
     },
+    /**
+     * Já carregou o usuário, mas a resposta veio sem a lista de módulos. A UI
+     * usa pra dizer "recarregue" em vez de "módulo não contratado", que seria
+     * mentira pra quem paga.
+     */
+    modulosIndisponiveis: !isLoading && data != null && modulos == null,
     modulos: data?.modulos ?? null,
     /** false = usuário restrito a transportadora (o backend filtra o que ele lê). */
     acessoGlobal: data?.acessoGlobal ?? true,

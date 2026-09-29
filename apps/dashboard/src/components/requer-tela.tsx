@@ -42,6 +42,23 @@ function ModuloNaoContratado({ chave }: { chave: string }) {
 }
 
 /**
+ * A resposta do servidor veio sem a lista de módulos da empresa (deploy no
+ * meio, resposta incompleta). Não é "não contratou" — é "não consegui
+ * confirmar", e a saída é recarregar, não falar com a Movatruck. Fail-closed:
+ * enquanto não souber, a tela do módulo não abre.
+ */
+function ModulosNaoConfirmados() {
+  return (
+    <div className="rounded-md border bg-muted/30 p-6">
+      <p className="text-base font-semibold">Não consegui confirmar o que a sua empresa contratou</p>
+      <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+        Recarregue a página (F5). Se continuar assim, fale com a Movatruck.
+      </p>
+    </div>
+  );
+}
+
+/**
  * Mostra os filhos só se o papel tiver a permissão. Usado pra esconder botões
  * de ação (Novo, Editar, Excluir, etc.) que o usuário não pode usar.
  */
@@ -88,13 +105,15 @@ export function Permitido({ chave, children }: { chave: string; children: ReactN
  */
 export function TelaGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { temPermissao, temModulo, isLoading } = usePermissoes();
+  const { temPermissao, temModulo, modulosIndisponiveis, isLoading } = usePermissoes();
 
   const perm = permDaRota(pathname);
   if (!perm) return rotaAberta(pathname) ? <>{children}</> : <AcessoRestrito />;
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando…</p>;
   // Módulo primeiro: quem não contratou não deve nem saber que falta permissão.
-  if (!temModulo(perm)) return <ModuloNaoContratado chave={perm} />;
+  if (!temModulo(perm)) {
+    return modulosIndisponiveis ? <ModulosNaoConfirmados /> : <ModuloNaoContratado chave={perm} />;
+  }
   if (!temPermissao(perm)) return <AcessoRestrito />;
   return <>{children}</>;
 }
@@ -105,12 +124,14 @@ export function TelaGuard({ children }: { children: ReactNode }) {
  * (O backend é a fonte de verdade — isto só evita renderizar a tela.)
  */
 export function RequerTela({ chave, children }: { chave: string; children: ReactNode }) {
-  const { temPermissao, temModulo, isLoading } = usePermissoes();
+  const { temPermissao, temModulo, modulosIndisponiveis, isLoading } = usePermissoes();
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Carregando…</p>;
   }
-  if (!temModulo(chave)) return <ModuloNaoContratado chave={chave} />;
+  if (!temModulo(chave)) {
+    return modulosIndisponiveis ? <ModulosNaoConfirmados /> : <ModuloNaoContratado chave={chave} />;
+  }
   if (!temPermissao(chave)) {
     return (
       <div className="rounded-md border bg-muted/30 p-6">

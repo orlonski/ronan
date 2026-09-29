@@ -44,6 +44,9 @@ export function RegimeCard({
   // ponto. O caminho por Ponto › Quem bate ponto existia, mas ninguém dizia
   // que a ficha não é o lugar. O botão leva pra lá com a pessoa já escolhida.
   if (!regime) {
+    // Sem o módulo Ponto o texto abaixo manda "registrar aqui" pra um lugar que
+    // a empresa não tem — some junto com o botão.
+    if (!temModulo("funcionarios.criar")) return null;
     return (
       <div className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-4">
         <HelpCircle className="mt-0.5 size-5 shrink-0 text-muted-foreground" />

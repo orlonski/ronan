@@ -46,7 +46,10 @@ function dataBr(iso: string): string {
 export function PedirDocumentos({ motoristaId }: { motoristaId: string }) {
   const token = useAuthToken();
   const qc = useQueryClient();
-  const { temPermissao } = usePermissoes();
+  const { temPermissao: temPerm, temModulo } = usePermissoes();
+  // Só com o módulo Admissão contratado: sem ele o card não existe (nem o botão,
+  // que voltaria 403 do ModuloGuard).
+  const temPermissao = (chave: string) => temPerm(chave) && temModulo(chave);
   const [ultimo, setUltimo] = useState<string | null>(null);
 
   const convites = useQuery({

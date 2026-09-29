@@ -339,12 +339,17 @@ function fmtDuracaoDias(dias: number | null): string {
 }
 
 function BlocoMes({ d }: { d: Snapshot }) {
+  const { temModulo } = usePermissoes();
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Este mês
       </h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+        {/* Faturamento é o preço materializado: pertence ao módulo Comercial. Sem
+            ele o card mostraria R$ 0 e mandaria cadastrar uma tabela de preços
+            que a empresa não tem. */}
+        {temModulo("tabelas-preco.ver") && (
         <StatCard
           icon={Banknote}
           label="Faturamento"
@@ -356,6 +361,7 @@ function BlocoMes({ d }: { d: Snapshot }) {
           }
           tone="default"
         />
+        )}
         <StatCard
           icon={Truck}
           label="Viagens"
@@ -390,6 +396,8 @@ function BlocoMes({ d }: { d: Snapshot }) {
 }
 
 function BlocoPendencias({ d }: { d: Snapshot }) {
+  // Cada cartão que aponta pra tela de módulo só aparece com o módulo contratado.
+  const { temModulo } = usePermissoes();
   const tone = (n: number): "success" | "warning" => (n > 0 ? "warning" : "success");
   return (
     <section className="space-y-3">
@@ -397,6 +405,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
         Precisa de atenção
       </h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-5">
+        {temModulo("fechamentos.ver") && (
         <StatCard
           icon={FileSpreadsheet}
           label="Fechamentos em revisão"
@@ -405,6 +414,8 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           tone={tone(d.pendencias.fechamentosRevisao)}
           href="/fechamentos?status=AGUARDANDO_REVISAO"
         />
+        )}
+        {temModulo("envios.ver") && (
         <StatCard
           icon={Send}
           label="Envios prontos"
@@ -413,6 +424,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           tone={tone(d.pendencias.enviosAbertos)}
           href="/envios?status=GERADO"
         />
+        )}
         <StatCard
           icon={AlertTriangle}
           label="Viagens divergentes"
@@ -429,6 +441,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           tone={tone(d.pendencias.aguardandoPeso)}
           href="/viagens?status=AGUARDANDO_PESO"
         />
+        {temModulo("erros.ver") && (
         <StatCard
           icon={Bug}
           label="Erros pendentes"
@@ -437,6 +450,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           tone={d.pendencias.errosPendentes > 0 ? "danger" : "success"}
           href="/erros"
         />
+        )}
       </div>
     </section>
   );

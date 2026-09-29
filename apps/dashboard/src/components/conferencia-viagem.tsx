@@ -77,7 +77,8 @@ const CAMPOS: { chave: string; leituraChave: string; rotulo: string }[] = [
  * card serve pra decidir uma viagem.
  */
 export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
-  const { temPermissao } = usePermissoes();
+  const { temPermissao: temPerm, temModulo } = usePermissoes();
+  const temPermissao = (chave: string) => temPerm(chave) && temModulo(chave);
   // O gate mora AQUI, e não em quem monta a tela de viagem: o endpoint por trás
   // é de plataforma, então pra um admin de empresa a chamada volta 403 e o card
   // ficaria vazio sem explicar nada. Barrar antes de pedir evita o 403 de fundo

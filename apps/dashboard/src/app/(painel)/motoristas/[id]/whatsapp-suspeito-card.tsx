@@ -25,7 +25,7 @@ export function WhatsappSuspeitoCard({
 }) {
   const token = useAuthToken();
   const qc = useQueryClient();
-  const { temPermissao } = usePermissoes();
+  const { temPermissao, temModulo } = usePermissoes();
   const parouConferencia = conferencia.receberConferenciaDiaria === false;
   const fraseConferencia = descreverConferencia(conferencia);
   const reverificar = useMutation({
@@ -66,7 +66,7 @@ export function WhatsappSuspeitoCard({
           )}
         </div>
       </div>
-      {inalcancavelEm && temPermissao("conferencia-diaria.decidir") && (
+      {inalcancavelEm && temPermissao("conferencia-diaria.decidir") && temModulo("conferencia-diaria.decidir") && (
         <Button variant="outline" onClick={() => reverificar.mutate()} disabled={reverificar.isPending}>
           Reverificar número
         </Button>
