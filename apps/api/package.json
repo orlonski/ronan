@@ -21,6 +21,7 @@
     "dispensar:retroativo": "ts-node -P tsconfig.json --transpile-only src/scripts/dispensar-conferencia-retroativo.ts",
     "aprovar:retroativo": "ts-node -P tsconfig.json --transpile-only src/scripts/aprovar-conferencias-retroativo.ts",
     "reler:em-conferencia": "ts-node -P tsconfig.json --transpile-only src/scripts/reler-em-conferencia.ts",
+    "diagnosticar:conferencias": "ts-node -P tsconfig.json --transpile-only src/scripts/diagnosticar-conferencias.ts",
     "acesso:espelhar": "ts-node -P tsconfig.json --transpile-only src/scripts/espelhar-acesso-app.ts",
     "simular:atendimento": "ts-node -P tsconfig.json --transpile-only src/scripts/simular-atendimento.ts"
   },
