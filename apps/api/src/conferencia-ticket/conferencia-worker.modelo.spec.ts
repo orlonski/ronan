@@ -18,7 +18,10 @@ function montar(porConta: Record<string, string | null>, padraoEnv = "claude-hai
     modeloConferencia: porConta[args.where.contaId] ?? null,
   }));
   const prisma = { configuracaoIa: { findUnique } } as unknown as PrismaService;
-  const config = { modeloPadrao: padraoEnv } as unknown as ConferenciaConfig;
+  const config = {
+    modeloPadrao: padraoEnv,
+    modeloSegundaOpiniao: "claude-opus-5",
+  } as unknown as ConferenciaConfig;
 
   const worker = new ConferenciaWorkerService(
     prisma,
@@ -30,7 +33,9 @@ function montar(porConta: Record<string, string | null>, padraoEnv = "claude-hai
   );
   const modeloDaConta = () =>
     (worker as unknown as { modeloDaConta: () => Promise<string> }).modeloDaConta();
-  return { modeloDaConta, findUnique };
+  const modeloSegunda = () =>
+    (worker as unknown as { modeloSegundaDaConta: () => Promise<string> }).modeloSegundaDaConta();
+  return { modeloDaConta, modeloSegunda, findUnique };
 }
 
 describe("ConferenciaWorkerService.modeloDaConta", () => {
@@ -82,5 +87,17 @@ describe("ConferenciaWorkerService.modeloDaConta", () => {
       (worker as unknown as { modeloDaConta: () => Promise<string> }).modeloDaConta(),
     );
     expect(r).toBe("claude-haiku-4-5-20251001");
+  });
+});
+
+describe("ConferenciaWorkerService.modeloSegundaDaConta", () => {
+  it("empresa que escolheu MiniMax lê as duas vezes no MiniMax — nada de Anthropic", async () => {
+    const { modeloSegunda } = montar({ "conta-a": "MiniMax-M3" });
+    expect(await comConta("conta-a", () => modeloSegunda())).toBe("MiniMax-M3");
+  });
+
+  it("sem escolha, a segunda leitura segue no modelo forte do ambiente", async () => {
+    const { modeloSegunda } = montar({ "conta-b": null });
+    expect(await comConta("conta-b", () => modeloSegunda())).toBe("claude-opus-5");
   });
 });

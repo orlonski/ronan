@@ -214,6 +214,8 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
       material: declarado.materialNome,
     };
 
+    const modeloSegunda = await this.modeloSegundaDaConta();
+
     let primeira;
     try {
       primeira = await this.leitor.ler({
@@ -247,13 +249,13 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
         !primeira.lido.ticket &&
         primeira.lido.toneladas == null);
 
-    if (naoLeuNada && this.config.modeloSegundaOpiniao && (await this.temCotaDeEscalada())) {
+    if (naoLeuNada && modeloSegunda && (await this.temCotaDeEscalada())) {
       try {
         const forte = await this.leitor.ler({
           fotoBase64,
           mime,
           declarado: paraOModelo,
-          modelo: this.config.modeloSegundaOpiniao,
+          modelo: modeloSegunda,
         });
         const custoAte = primeira.custoUsd + forte.custoUsd;
 
@@ -315,7 +317,7 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
     // Teto zero é "segunda leitura desligada", não "sem cota agora" — senão a
     // divergência ficaria adiada pra sempre.
     const querSegunda =
-      !!this.config.modeloSegundaOpiniao &&
+      !!modeloSegunda &&
       this.config.maxSegundaOpiniaoPorHora > 0 &&
       precisaSegundaOpiniao(resultado, primeira.lido.confianca);
     const temCota = querSegunda && (await this.temCotaDeEscalada());
@@ -367,13 +369,32 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * O modelo da SEGUNDA leitura: o que a empresa escolheu, quando escolheu;
+   * senão o do ambiente (`CONFERENCIA_MODELO_2A_OPINIAO`, Claude forte).
+   *
+   * Decisão do dono em 29/09/2026: quem escolheu MiniMax não usa Anthropic.
+   * A segunda leitura presa ao Claude fazia a conferência da Schaba depender
+   * de uma conta que ela não escolheu — e quando o crédito de lá acabou, toda
+   * divergência parou. Duas leituras do mesmo modelo ainda são uma
+   * confirmação: discordaram, quem decide é gente.
+   */
+  private async modeloSegundaDaConta(): Promise<string> {
+    const escolhido = await this.modeloCache.obter(async (contaId) => {
+      const cfg = await this.prisma.configuracaoIa.findUnique({
+        where: { contaId },
+        select: { modeloConferencia: true },
+      });
+      return cfg?.modeloConferencia?.trim() || null;
+    }, null);
+    return escolhido || this.config.modeloSegundaOpiniao;
+  }
+
+  /**
    * O modelo da primeira passada: escolha da empresa, senão o do ambiente.
    *
-   * A SEGUNDA opinião não passa por aqui de propósito — ela segue no Claude
-   * forte, definido em `CONFERENCIA_MODELO_2A_OPINIAO`. É o que dá a
-   * comparação de graça: o modelo barato lê, e quando o veredito é fraco ou os
-   * dois discordam, quem julga é o modelo que já se sabe que acerta. Deixar a
-   * empresa trocar os dois de uma vez tiraria justamente a régua.
+   * A segunda leitura segue a mesma escolha quando a empresa escolheu (ver
+   * `modeloSegundaDaConta`); sem escolha, primeira no padrão barato e segunda
+   * no Claude forte do ambiente.
    */
   private async modeloDaConta(): Promise<string> {
     const escolhido = await this.modeloCache.obter(async (contaId) => {
