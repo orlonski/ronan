@@ -77,6 +77,7 @@ type Tipo = "CARGA" | "DESCARGA" | "AMBOS";
 type Origem =
   | "MOTORISTA_FORMULARIO"
   | "MOTORISTA_RAPIDO"
+  | "MOTORISTA_ENDERECO"
   | "VIAGEM_OFFLINE"
   | "ADMIN_MANUAL"
   | "ADMIN_AUDITORIA";
@@ -156,6 +157,7 @@ function TipoBadge({ tipo }: { tipo: Tipo }) {
 const ORIGEM_LABEL: Record<Origem, string> = {
   MOTORISTA_FORMULARIO: "Motorista",
   MOTORISTA_RAPIDO: "Motorista (rápido)",
+  MOTORISTA_ENDERECO: "Motorista (endereço buscado)",
   VIAGEM_OFFLINE: "Viagem offline",
   ADMIN_MANUAL: "Admin",
   ADMIN_AUDITORIA: "Admin (auditoria)",

@@ -24,6 +24,7 @@ import {
   type CandidatoRankeado,
 } from "@ronan/shared-types";
 import { showConfirm } from "@/lib/alert";
+import { useLigadaPelaEmpresa } from "@/lib/acessos-app";
 import {
   haversineMetros,
   mensagemGpsFalha,
@@ -155,6 +156,14 @@ export function DescargaPorGps({
   // Busca por nome (todos os locais) — liberada por flag do motorista.
   const me = useMe();
   const podeBuscarPorNome = me.data?.podeVerTodosLocais ?? false;
+  // Endereço novo no mapa: nasce desligado, a empresa liga pra quem quiser.
+  const podeBuscarEndereco = useLigadaPelaEmpresa("app.locais.buscarEndereco");
+  const mostraBusca = podeBuscarPorNome || podeBuscarEndereco;
+  const rotuloBusca = podeBuscarPorNome
+    ? podeBuscarEndereco
+      ? "Buscar local por nome ou endereço"
+      : "Buscar local por nome"
+    : "Buscar endereço";
   const [buscarAberto, setBuscarAberto] = useState(false);
   const criar = useCriarLocalRapido();
   const gpsConfig = useBuscaGpsConfig();
@@ -546,12 +555,10 @@ export function DescargaPorGps({
               Estou no local de descarga
             </Text>
           </Button>
-          {podeBuscarPorNome && (
+          {mostraBusca && (
             <Button variant="outline" onPress={() => setBuscarAberto(true)}>
               <Search size={18} color="#0f172a" />
-              <Text className="text-sm font-semibold text-foreground">
-                Buscar local por nome
-              </Text>
+              <Text className="text-sm font-semibold text-foreground">{rotuloBusca}</Text>
             </Button>
           )}
         </View>
@@ -702,12 +709,10 @@ export function DescargaPorGps({
               </View>
             </Pressable>
           ))}
-          {podeBuscarPorNome && (
+          {mostraBusca && (
             <Button variant="outline" onPress={() => setBuscarAberto(true)} className="mt-1">
               <Search size={18} color="#0f172a" />
-              <Text className="text-sm font-semibold text-foreground">
-                Buscar local por nome
-              </Text>
+              <Text className="text-sm font-semibold text-foreground">{rotuloBusca}</Text>
             </Button>
           )}
           <Button variant="warning" onPress={abrirSemMatch} className="mt-1 h-14">
@@ -932,6 +937,11 @@ export function DescargaPorGps({
         onClose={() => setBuscarAberto(false)}
         onSelecionar={escolherLocalManual}
         telemetria={telemetria}
+        lado="descarga"
+        clienteId={clienteId}
+        mostrarCadastrados={podeBuscarPorNome}
+        permiteEndereco={podeBuscarEndereco}
+        coords={"coords" in estado && estado.coords ? estado.coords : null}
       />
     </View>
   );

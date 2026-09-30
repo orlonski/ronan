@@ -33,6 +33,7 @@ import {
   listPendingStories,
   type PendingStory,
   type FotoPendente,
+  type EnderecoBuscado,
 } from "@/db/database";
 import { api, ApiError } from "./api";
 import { motoristaAtivoId } from "./sessoes";
@@ -2215,16 +2216,18 @@ export function useCriarLocalRapido() {
       fonte?: FonteGps;
       tipo: "CARGA" | "DESCARGA" | "AMBOS";
       clienteIds?: string[];
+      endereco?: EnderecoBuscado;
     }): Promise<Local> => {
       const clientId = gerarUuidLocal();
+      const end = input.endereco;
       const novoLocal: Local = {
         id: clientId,
         nome: input.nome,
-        logradouro: "",
-        numero: null,
-        bairro: null,
-        cidade: "",
-        uf: "",
+        logradouro: end?.logradouro ?? "",
+        numero: end?.numero ?? null,
+        bairro: end?.bairro ?? null,
+        cidade: end?.cidade ?? "",
+        uf: end?.uf ?? "",
         pontoReferencia: null,
         tipo: input.tipo,
         clienteIds: input.clienteIds ?? [],
@@ -2241,6 +2244,7 @@ export function useCriarLocalRapido() {
           ...(input.fonte != null ? { fonte: input.fonte } : {}),
           tipo: input.tipo,
           clienteIds: input.clienteIds,
+          ...(end ? { endereco: end } : {}),
         },
         status: "pending",
         attempts: 0,

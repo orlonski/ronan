@@ -295,6 +295,9 @@ enum OrigemCadastroLocal {
   MOTORISTA_FORMULARIO
   /// Motorista digitou só o nome + GPS; backend completou via reverse geocoding.
   MOTORISTA_RAPIDO
+  /// Motorista achou o endereço na busca do mapa (Google) no app; lat/lng é do
+  /// endereço, não do GPS dele.
+  MOTORISTA_ENDERECO
   /// Recriado no servidor ao sincronizar viagem offline cujo local sumiu.
   VIAGEM_OFFLINE
   /// Admin cadastrou manualmente pelo dashboard.

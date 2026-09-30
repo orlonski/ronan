@@ -59,13 +59,17 @@ export const MOTIVO_ESPELHO = "Já era assim na ficha dele.";
  * "Compartilhar posição", navegação por voz e documentos aparecem pra todo
  * cadastro de empresa. Nascer desligado seria tirar do celular de alguém uma
  * coisa que ele usa, que é exatamente o que não pode acontecer.
+ *
+ * A exceção é `nasceDesligada`: coisa que ninguém usa ainda e que a empresa
+ * liga pra quem quiser. Pular aqui é o que impede o cron do espelho de ligá-la
+ * pra todo mundo de hora em hora.
  */
 export function capacidadesDasColunas(colunas: ColunasAcesso): CapacidadeApp[] {
   const out: CapacidadeApp[] = [];
   for (const def of CAPACIDADES_APP) {
     if (def.colunaLegada) {
       if (colunas[def.colunaLegada.coluna] === true) out.push(def.chave);
-    } else if (def.vinculo !== "FUNCIONARIO" && def.tipo === "EMPRESA") {
+    } else if (def.vinculo !== "FUNCIONARIO" && def.tipo === "EMPRESA" && !def.nasceDesligada) {
       out.push(def.chave);
     }
   }

@@ -30,6 +30,7 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.ticket.ocr",
   "app.km.referencia",
   "app.locais.verTodos",
+  "app.locais.buscarEndereco",
   "app.pedagio.lancar",
   "app.abastecimento.lancar",
   "app.problema.avisar",
@@ -115,6 +116,16 @@ export type CapacidadeAppDef = {
    * (duas capacidades nascidas de uma coluna só).
    */
   colunaLegada?: { coluna: AcessoAppChave; espelha: boolean };
+  /**
+   * Nasce DESLIGADA pra todo mundo: nenhum perfil, grupo ou espelho de coluna
+   * a recebe sozinho. Só existe pra quem a empresa ligar — no tipo de
+   * motorista inteiro (tabela) ou numa pessoa (exceção com motivo).
+   *
+   * É a exceção à regra "capacidade nova nasce ligada", e só cabe em coisa
+   * que NINGUÉM usa ainda: nascer desligado nunca tira nada do celular de
+   * ninguém. Coisa que já existe no app não pode ganhar esta marca.
+   */
+  nasceDesligada?: boolean;
 };
 
 const DEFS: CapacidadeAppDef[] = [
@@ -211,6 +222,25 @@ const DEFS: CapacidadeAppDef[] = [
     gate: "SO_TELA",
     aoPerder: "RECUSAR",
     colunaLegada: { coluna: "podeVerTodosLocais", espelha: true },
+  },
+  {
+    // Pedido do dono (30/09/2026): quando o local não está cadastrado, o
+    // motorista acha o endereço no mapa (a mesma busca do "Novo local" do
+    // painel) e usa na viagem. O local nasce em RASCUNHO e cai em "Em
+    // validação", igual ao cadastrado pelo GPS. Nasce desligado: a empresa
+    // liga pra quem quiser. Só tela — o POST de local já existia.
+    chave: "app.locais.buscarEndereco",
+    label: "Buscar endereço novo",
+    efeito:
+      "Na escolha do local de carga e na busca pelo nome, ele pesquisa um endereço no mapa quando o local não está cadastrado. O local novo vai pra \"Em validação\".",
+    grupo: "Viagens",
+    tipo: "EMPRESA",
+    vinculo: "MOTORISTA",
+    modulo: "operacao",
+    gate: "SO_TELA",
+    custa: true,
+    aoPerder: "VALA",
+    nasceDesligada: true,
   },
   {
     chave: "app.pedagio.lancar",

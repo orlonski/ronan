@@ -350,6 +350,16 @@ export type PendingPonto = {
 
 /** Local de descarga criado offline. clientId vira id real no servidor
  * (POST /m/locais/rapido aceita id pra idempotência). */
+export type EnderecoBuscado = {
+  placeId?: string;
+  logradouro?: string;
+  numero?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+  cep?: string;
+};
+
 export type PendingLocal = {
   clientId: string;
   payload: {
@@ -360,6 +370,8 @@ export type PendingLocal = {
     fonte?: "PRECISA" | "BALANCED" | "CACHE";
     tipo: "CARGA" | "DESCARGA" | "AMBOS";
     clienteIds?: string[];
+    /** Endereço achado na busca do mapa (lat/lng é dele, não do GPS). */
+    endereco?: EnderecoBuscado;
   };
   status: "pending" | "syncing" | "error";
   attempts: number;

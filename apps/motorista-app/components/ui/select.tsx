@@ -32,6 +32,7 @@ export function Select({
   error,
   telemetria,
   campoTelemetria,
+  rodape,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -48,6 +49,9 @@ export function Select({
   telemetria?: TelemetriaViagem;
   /** Rótulo do campo pra telemetria (ex: "cliente", "material", "carga"). */
   campoTelemetria?: string;
+  /** Ação no fim da lista (ex.: "Não achou? Buscar endereço"). Recebe o texto
+   * digitado e um `fechar` — quem abre outra tela fecha esta antes. */
+  rodape?: (ctx: { query: string; fechar: () => void }) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -156,6 +160,7 @@ export function Select({
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             contentContainerStyle={{ paddingBottom: 32 }}
+            ListFooterComponent={rodape ? <>{rodape({ query, fechar })}</> : null}
             ListEmptyComponent={
               typeof emptyMessage === "string" || emptyMessage == null ? (
                 <Text className="py-12 text-center text-base text-muted-foreground">

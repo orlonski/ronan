@@ -97,6 +97,21 @@ describe("espelho do cadastro", () => {
     expect(caps.some((c) => c.startsWith("app.ponto."))).toBe(false);
   });
 
+  it("capacidade marcada nasceDesligada não vem do espelho nem com a ficha toda ligada", () => {
+    const desligadas = CAPACIDADES_APP.filter((d) => d.nasceDesligada).map((d) => d.chave);
+    expect(desligadas).toContain("app.locais.buscarEndereco");
+    const caps = capacidadesDasColunas(todasColunas(true));
+    for (const c of desligadas) expect(caps).not.toContain(c);
+  });
+
+  it("nasceDesligada só em capacidade da empresa e sem coluna legada", () => {
+    // Com coluna, quem manda é o @default da coluna; ROLLOUT/PLATAFORMA já não
+    // são da empresa ligar. Misturar esconderia a intenção.
+    for (const d of CAPACIDADES_APP.filter((x) => x.nasceDesligada)) {
+      expect([d.chave, d.tipo, d.colunaLegada]).toEqual([d.chave, "EMPRESA", undefined]);
+    }
+  });
+
   it("o padrão é o conjunto mais comum, e só quem difere ganha exceção", () => {
     const base = { ...PADRAO_DO_BANCO };
     const plano = planejarEspelho(

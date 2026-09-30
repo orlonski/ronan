@@ -149,3 +149,14 @@ export function usePermite(chave: CapacidadeApp, legado = true): boolean {
   const cap = useCapacidade(chave);
   return legado && cap !== false;
 }
+
+/**
+ * Pra capacidade que NASCE DESLIGADA (`nasceDesligada` no catálogo): só
+ * aparece com um `true` do servidor. Aqui "não sei" é "não": é coisa nova que
+ * ninguém usa, então esconder enquanto não há resposta não tira nada de ninguém
+ * — ao contrário do `usePermite`, que libera no escuro pra não sumir o que já
+ * existia.
+ */
+export function useLigadaPelaEmpresa(chave: CapacidadeApp): boolean {
+  return useCapacidade(chave) === true;
+}

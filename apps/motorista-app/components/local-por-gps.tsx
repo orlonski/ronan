@@ -12,13 +12,15 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowLeft, Check, CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
+import { ArrowLeft, Check, CheckCircle2, MapPin, Plus, Search, X } from "lucide-react-native";
+import { BuscarLocalModal } from "@/components/buscar-local-modal";
+import { useLigadaPelaEmpresa } from "@/lib/acessos-app";
 import { Button } from "@/components/ui/button";
 import type { FonteGps } from "@ronan/shared-types";
 import { marcoConflita, formatarNomeLocal } from "@ronan/shared-types";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
-import { formatarDistancia, mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
+import { formatarDistancia, haversineMetros, mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
 import { AvisoListaCache, AvisoLocalCache, enderecoResumido, LinhaEndereco } from "@/components/local-info";
 import {
   buscarDescargaDuasEtapas,
@@ -26,8 +28,10 @@ import {
   buscarLocaisProximos,
   buscarLocaisProximosOffline,
   useBuscaGpsConfig,
+  useMe,
   BUSCA_GPS_CONFIG_DEFAULTS,
   type Catalogos,
+  type Local,
   type LocalProximo,
 } from "@/lib/queries";
 
@@ -63,7 +67,8 @@ type Estado =
     }
   | { tipo: "sem_match"; coords: CoordsCap }
   // Carga: cliente sem NENHUM local de carga cadastrado (não é mais trava de raio).
-  | { tipo: "bloqueado" };
+  // Guarda o GPS: a busca de endereço ainda pode resolver daqui.
+  | { tipo: "bloqueado"; coords: CoordsCap };
 
 /**
  * Local escolhido/detectado por GPS. `criarOffline` = lugar novo que o
@@ -156,6 +161,37 @@ export function LocalPorGps({
   // Carga é sempre um cadastro existente do cliente — o motorista NUNCA cria
   // local de carga. Só descarga (obra do cliente) permite lugar novo.
   const permiteCriar = lado === "descarga";
+
+  // Exceção que a empresa liga (nasce desligada): achar o endereço no mapa
+  // quando o local não está cadastrado — inclusive o de carga. O local novo
+  // nasce em RASCUNHO e o escritório confere em "Em validação".
+  const podeBuscarEndereco = useLigadaPelaEmpresa("app.locais.buscarEndereco");
+  const me = useMe();
+  const podeVerTodos = me.data?.podeVerTodosLocais ?? false;
+  const [buscaAberta, setBuscaAberta] = useState(false);
+
+  function escolherDaBusca(l: Local) {
+    if (estado.tipo !== "escolha" && estado.tipo !== "bloqueado") return;
+    const cap = estado.coords;
+    const dist =
+      l.lat != null && l.lng != null ? Math.round(haversineMetros(cap.lat, cap.lng, l.lat, l.lng)) : null;
+    const sel: SelecaoLocal = {
+      id: l.id,
+      nome: l.nome,
+      lat: l.lat ?? undefined,
+      lng: l.lng ?? undefined,
+      precisao: cap.precisao,
+      fonte: cap.fonte,
+      // Veio da busca, não do raio do GPS: gravar o raio mentiria na auditoria.
+      raioUsadoM: undefined,
+      distanciaMetros: dist,
+      gpsLat: cap.lat,
+      gpsLng: cap.lng,
+      buscaOffline: cap.buscaOffline,
+    };
+    onSelect(sel);
+    setEstado({ tipo: "selecionado", local: sel });
+  }
 
   async function capturarEBuscar() {
     setErro(null);
@@ -296,7 +332,7 @@ export function LocalPorGps({
       } else {
         // Carga: nem no modo "todos" veio nada → o cliente não tem NENHUM local
         // de carga cadastrado (raio já não bloqueia; isso é falta de cadastro).
-        setEstado({ tipo: "bloqueado" });
+        setEstado({ tipo: "bloqueado", coords: cap });
       }
     } else if (lado === "descarga" && matches.length === 1 && !usouRaioAmpliado) {
       // Só a descarga auto-seleciona quando há 1 match no raio inicial. Carga
@@ -533,6 +569,14 @@ export function LocalPorGps({
               </View>
             </Pressable>
           ))}
+          {podeBuscarEndereco && (
+            <Button variant="outline" onPress={() => setBuscaAberta(true)} className="mt-1">
+              <Search size={18} color="#0f172a" />
+              <Text className="text-sm font-semibold text-foreground">
+                Não está na lista? Buscar endereço
+              </Text>
+            </Button>
+          )}
           {permiteCriar ? (
             <Button variant="warning" onPress={abrirSemMatch} className="mt-1 h-14">
               <Plus size={20} color="#0f172a" />
@@ -557,10 +601,22 @@ export function LocalPorGps({
           <Text className="text-base font-bold text-foreground">
             Esse cliente não tem local de carga cadastrado
           </Text>
-          <Text className="text-sm text-muted-foreground">
-            A carga precisa ser um local já cadastrado do cliente. Fale com o escritório pra
-            cadastrar o local de carga, ou use o <Text className="font-semibold">Lançar viagem feita</Text>.
-          </Text>
+          {podeBuscarEndereco ? (
+            <Text className="text-sm text-muted-foreground">
+              Busque o endereço no mapa — o escritório confere o local depois.
+            </Text>
+          ) : (
+            <Text className="text-sm text-muted-foreground">
+              A carga precisa ser um local já cadastrado do cliente. Fale com o escritório pra
+              cadastrar o local de carga, ou use o <Text className="font-semibold">Lançar viagem feita</Text>.
+            </Text>
+          )}
+          {podeBuscarEndereco && (
+            <Button onPress={() => setBuscaAberta(true)}>
+              <Search size={18} color="white" />
+              <Text className="text-base font-bold text-primary-foreground">Buscar endereço</Text>
+            </Button>
+          )}
           <View className="flex-row gap-2">
             <Button variant="outline" className="flex-1" onPress={() => setEstado({ tipo: "vazio" })}>
               <ArrowLeft size={18} color="#0f172a" />
@@ -583,6 +639,21 @@ export function LocalPorGps({
             </Button>
           )}
         </View>
+      )}
+
+      {podeBuscarEndereco && (
+        <BuscarLocalModal
+          visible={buscaAberta}
+          onClose={() => setBuscaAberta(false)}
+          onSelecionar={escolherDaBusca}
+          lado={lado}
+          clienteId={clienteId}
+          // Carga: a lista do cliente já é toda visível. Descarga: o catálogo
+          // inteiro só pra quem tem "Buscar local pelo nome".
+          mostrarCadastrados={lado === "carga" || podeVerTodos}
+          permiteEndereco
+          coords={estado.tipo === "escolha" || estado.tipo === "bloqueado" ? estado.coords : null}
+        />
       )}
 
       {/* Modal full-screen: nomear lugar novo. */}

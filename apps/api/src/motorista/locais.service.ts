@@ -363,6 +363,14 @@ export class LocaisMotoristaService {
       fonte?: FonteGps;
       tipo: TipoLocal;
       clienteIds?: string[];
+      endereco?: {
+        logradouro?: string;
+        numero?: string;
+        bairro?: string;
+        cidade?: string;
+        uf?: string;
+        cep?: string;
+      };
     },
   ) {
     // Idempotência: se motorista já enviou esse id antes (outbox offline
@@ -389,7 +397,29 @@ export class LocaisMotoristaService {
       }
     }
 
-    const reverse = await this.geocoding.reverseGeocoding(input.lat, input.lng);
+    // Endereço buscado no mapa: o que o Google devolveu vale; o reverse só
+    // preenche o que faltou (place sem cidade/UF acontece em zona rural).
+    const end = input.endereco;
+    const reverse =
+      end?.logradouro && end.cidade && end.uf
+        ? {
+            logradouro: end.logradouro,
+            numero: end.numero,
+            bairro: end.bairro,
+            cidade: end.cidade,
+            uf: end.uf,
+            cep: end.cep,
+          }
+        : await this.geocoding.reverseGeocoding(input.lat, input.lng).then((r) => ({
+            logradouro: end?.logradouro ?? r.logradouro,
+            // Rua do Google com número do reverse seriam duas fontes pro mesmo
+            // endereço: com a rua dele, só o número dele.
+            numero: end?.logradouro ? end.numero : r.numero,
+            bairro: end?.bairro ?? r.bairro,
+            cidade: end?.cidade || r.cidade,
+            uf: end?.uf || r.uf,
+            cep: end?.cep ?? r.cep,
+          }));
     const clienteIds = input.clienteIds ?? [];
     await this.garantirClientes(clienteIds);
     const local = await this.prisma.local.create({
@@ -409,7 +439,9 @@ export class LocaisMotoristaService {
         latLngFonte: input.fonte,
         criadoPorMotoristaId: motoristaId,
         nivelConfianca: NivelConfiancaLocal.RASCUNHO,
-        origemCadastro: OrigemCadastroLocal.MOTORISTA_RAPIDO,
+        origemCadastro: end
+          ? OrigemCadastroLocal.MOTORISTA_ENDERECO
+          : OrigemCadastroLocal.MOTORISTA_RAPIDO,
         clientes: clienteIds.length
           ? { create: clienteIds.map((clienteId) => ({ clienteId })) }
           : undefined,

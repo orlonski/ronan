@@ -66,6 +66,13 @@ const ProximosDescargaQuery = z.object({
   limit: z.coerce.number().int().min(1).max(20).optional(),
 });
 
+const campoEndereco = (max: number) =>
+  z
+    .string()
+    .optional()
+    .catch(undefined)
+    .transform((v) => (v && v.trim() ? v.trim().slice(0, max) : undefined));
+
 const CriarRapidoInput = z.object({
   /** UUID opcional gerado client-side. Quando presente, faz a chamada
    * idempotente — reenvio do mesmo id retorna o local existente sem criar
@@ -81,6 +88,29 @@ const CriarRapidoInput = z.object({
   fonte: z.enum(["PRECISA", "BALANCED", "CACHE"]).optional(),
   tipo: z.enum(["CARGA", "DESCARGA", "AMBOS"]),
   clienteIds: z.array(z.string().uuid()).optional(),
+  /** Endereço que o motorista achou na busca do mapa (capacidade
+   * `app.locais.buscarEndereco`). Presente = o lat/lng é do ENDEREÇO, não do
+   * GPS dele: o servidor usa estes campos em vez do reverse geocoding e
+   * carimba a origem pra quem valida no painel saber de onde veio. */
+  //
+  // Campo fora do padrão é DESCARTADO, nunca recusado: 4xx aqui prende o local
+  // no outbox e, pela FK, a viagem que aponta pra ele (endereço do Paraguai
+  // perto da fronteira tem "UF" de 3+ letras).
+  endereco: z
+    .object({
+      logradouro: campoEndereco(200),
+      numero: campoEndereco(20),
+      bairro: campoEndereco(120),
+      cidade: campoEndereco(120),
+      uf: z
+        .string()
+        .optional()
+        .catch(undefined)
+        .transform((v) => (v && /^[A-Za-z]{2}$/.test(v.trim()) ? v.trim().toUpperCase() : undefined)),
+      cep: campoEndereco(10),
+    })
+    .optional()
+    .catch(undefined),
 });
 
 @ApiTags("motorista/locais")

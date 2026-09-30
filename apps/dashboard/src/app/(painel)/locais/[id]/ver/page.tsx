@@ -32,6 +32,7 @@ type Nivel =
 type Origem =
   | "MOTORISTA_FORMULARIO"
   | "MOTORISTA_RAPIDO"
+  | "MOTORISTA_ENDERECO"
   | "VIAGEM_OFFLINE"
   | "ADMIN_MANUAL"
   | "ADMIN_AUDITORIA";
@@ -77,6 +78,7 @@ const NIVEL_LABEL: Record<Nivel, { label: string; cls: string }> = {
 const ORIGEM_LABEL: Record<Origem, string> = {
   MOTORISTA_FORMULARIO: "Motorista",
   MOTORISTA_RAPIDO: "Motorista (rápido)",
+  MOTORISTA_ENDERECO: "Motorista (endereço buscado)",
   VIAGEM_OFFLINE: "Viagem offline",
   ADMIN_MANUAL: "Admin",
   ADMIN_AUDITORIA: "Admin (auditoria)",

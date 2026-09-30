@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { router, Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { usePreventRemove } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import { Check, Clock, MapPinOff, Trash2, X } from "lucide-react-native";
+import { Check, Clock, MapPinOff, Search, Trash2, X } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -24,6 +24,8 @@ import { AvisoKmEstimado } from "@/components/aviso-km-estimado";
 import { FotoLocal } from "@/components/local-info";
 import { AvisoKmForaDoPadrao, SugestaoKmHistorico } from "@/components/sugestao-km-historico";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
+import { BuscarLocalModal } from "@/components/buscar-local-modal";
+import { useLigadaPelaEmpresa } from "@/lib/acessos-app";
 import { SeletorRotas } from "@/components/seletor-rotas";
 import { PerguntaBotaFora } from "@/components/pergunta-bota-fora";
 import { showAlert, showConfirm } from "@/lib/alert";
@@ -175,6 +177,9 @@ export default function NovaViagem() {
   // Locais criados nesta sessão — merged no Select pra garantir que aparecem
   // mesmo se o cache do TanStack Query ainda não propagou
   const [extraLocais, setExtraLocais] = useState<Local[]>([]);
+  // Endereço novo no mapa pro local de carga (capacidade que nasce desligada).
+  const podeBuscarEndereco = useLigadaPelaEmpresa("app.locais.buscarEndereco");
+  const [buscaCarga, setBuscaCarga] = useState<{ texto: string } | null>(null);
   // GPS pré-aquecido em background — modulo carrega + permissao + fix
   // enquanto motorista preenche o form. Quando toca Salvar, usa o que ja tem.
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -651,7 +656,9 @@ export default function NovaViagem() {
     // reta — dizendo que é linha reta. Enquanto carrega, nenhum número.
     const semEstrada = distanciasEstrada.isError;
     const opt = ({ l, reta }: (typeof cargaOrdenada)[number]): SelectOption => {
-      const base = `${l.cidade}/${l.uf}`;
+      // Local recém-criado pelo endereço pode chegar sem cidade/UF até o
+      // servidor completar: sem isso a linha mostrava só "/".
+      const base = l.cidade || l.uf ? `${l.cidade}/${l.uf}` : "Local novo — em validação";
       const metros = estrada?.[l.id];
       let sublabel = base;
       if (metros != null) {
@@ -1584,7 +1591,50 @@ export default function NovaViagem() {
           </View>
         }
         error={!!val.erroDe("localCarga")}
+        rodape={
+          podeBuscarEndereco
+            ? ({ query, fechar }) =>
+                !form.clienteId ? (
+                  <Text className="mx-4 mt-4 text-center text-sm text-muted-foreground">
+                    Escolha o cliente primeiro pra buscar um endereço novo.
+                  </Text>
+                ) : (
+                <View className="mx-4 mt-4">
+                  <Button
+                    variant="outline"
+                    onPress={() => {
+                      fechar();
+                      // iOS não apresenta um Modal enquanto o anterior ainda
+                      // está saindo: espera a lista fechar antes de abrir a busca.
+                      setTimeout(() => setBuscaCarga({ texto: query }), 450);
+                    }}
+                  >
+                    <Search size={18} color="#0f172a" />
+                    <Text className="text-base font-semibold text-foreground">
+                      Não achou? Buscar endereço
+                    </Text>
+                  </Button>
+                </View>
+              )
+            : undefined
+        }
       />
+      {podeBuscarEndereco && (
+        <BuscarLocalModal
+          visible={buscaCarga != null}
+          onClose={() => setBuscaCarga(null)}
+          onSelecionar={(l) => {
+            setExtraLocais((prev) => (prev.some((x) => x.id === l.id) ? prev : [...prev, l]));
+            val.limpar();
+            update("localCargaId", l.id);
+          }}
+          lado="carga"
+          clienteId={form.clienteId || null}
+          permiteEndereco
+          coords={coords}
+          textoInicial={buscaCarga?.texto}
+        />
+      )}
       {val.erroDe("localCarga") ? <ErroCampo msg={val.erroDe("localCarga")!} /> : null}
       {/* Confirmação visual do local escolhido: a foto do ponto responde "é
           esse lugar mesmo?" — o nome sozinho não responde. Só com internet. */}
