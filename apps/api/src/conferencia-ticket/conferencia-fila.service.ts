@@ -300,6 +300,23 @@ export class ConferenciaFilaService {
   }
 
   /**
+   * Devolve pra fila SEM gastar tentativa — não houve falha, só falta cota de
+   * segunda leitura. Mantém `viagemAtiva`, como o `reagendar`.
+   */
+  async adiar(job: ConferenciaTicket, motivo: string, atrasoMs: number): Promise<void> {
+    await this.prisma.conferenciaTicket.update({
+      where: { id: job.id },
+      data: {
+        status: StatusConferenciaTicket.PENDENTE,
+        proximaTentativaEm: new Date(Date.now() + atrasoMs),
+        workerId: null,
+        reivindicadoEm: null,
+        erro: motivo,
+      },
+    });
+  }
+
+  /**
    * Devolve pra fila as conferências que morreram por falha TRANSITÓRIA.
    *
    * As 3 tentativas do worker cabem em ~4 minutos (30s+60s+120s de backoff).

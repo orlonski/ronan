@@ -21,6 +21,15 @@ import {
 class FalhaInfra extends Error {}
 /** Fim de linha sem julgamento — e sem retentativa. */
 class Descartar extends Error {}
+/**
+ * Não é falha: a viagem vai divergir e a segunda leitura (que confirma antes
+ * de avisar o motorista) está sem cota nesta hora. Volta pra fila mais tarde
+ * sem gastar tentativa — avisar sem confirmar é o que não pode.
+ */
+class Adiar extends Error {}
+
+/** Quanto esperar a cota de segunda leitura abrir de novo. */
+const ADIAR_SEM_COTA_MS = 20 * 60_000;
 
 /**
  * Consome a fila de conferência: lê a foto do storage, manda pro modelo,
@@ -112,6 +121,12 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
       ]);
       if (resultado) await this.aplicar.aplicar(job, resultado, this.config.modoSombra);
     } catch (err) {
+      if (err instanceof Adiar) {
+        await this.fila.adiar(job, err.message, ADIAR_SEM_COTA_MS);
+        this.log.log(`Conferência ${job.id} adiada: ${err.message}`);
+        return;
+      }
+
       if (err instanceof Descartar) {
         await this.fila.finalizar(job, {
           status: StatusConferenciaTicket.DESCARTADA,
@@ -294,13 +309,22 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
     let passadas = 1;
     let escalou = false;
 
-    // Segunda opinião: só quando o dinheiro está em jogo ou a leitura foi
-    // fraca — e só se ainda houver cota na hora. Custa ~5x a primeira.
-    if (
-      this.config.modeloSegundaOpiniao &&
-      precisaSegundaOpiniao(resultado, primeira.lido.confianca) &&
-      (await this.temCotaDeEscalada())
-    ) {
+    // Segunda opinião: quando o dinheiro está em jogo, a leitura foi fraca ou
+    // o motorista vai ser avisado — e só se ainda houver cota na hora. Custa
+    // ~5x a primeira.
+    // Teto zero é "segunda leitura desligada", não "sem cota agora" — senão a
+    // divergência ficaria adiada pra sempre.
+    const querSegunda =
+      !!this.config.modeloSegundaOpiniao &&
+      this.config.maxSegundaOpiniaoPorHora > 0 &&
+      precisaSegundaOpiniao(resultado, primeira.lido.confianca);
+    const temCota = querSegunda && (await this.temCotaDeEscalada());
+    // Sem cota, a divergência espera: ela chegaria ao motorista sem a leitura
+    // que confirma. Os outros vereditos seguem — nenhum deles incomoda ninguém.
+    if (querSegunda && !temCota && resultado.veredito === "DIVERGE") {
+      throw new Adiar("divergência esperando cota de segunda leitura");
+    }
+    if (querSegunda && temCota) {
       try {
         const segunda = await this.leitor.ler({
           fotoBase64,
@@ -321,7 +345,11 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
             ? rSegunda
             : { ...rSegunda, veredito: "INCERTO" };
       } catch (err) {
-        // Falhar na segunda não invalida a primeira — só não escala.
+        // Divergência sem a confirmação não vai pro motorista: tenta de novo.
+        if (resultado.veredito === "DIVERGE") {
+          throw new FalhaInfra(`segunda opinião: ${(err as Error).message}`);
+        }
+        // Nos outros vereditos, falhar na segunda não invalida a primeira.
         this.log.warn(`Segunda opinião falhou: ${(err as Error).message}`);
       }
     }

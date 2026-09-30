@@ -45,6 +45,18 @@ import { resumirParaMotorista, type ResultadoConferencia } from "../common/confe
  *    escrito: o veredito é gravado e mais nada. É assim que dá pra comparar o
  *    robô com o conferente humano antes de deixar ele agir.
  */
+/**
+ * De onde um desfecho pode partir. EM_CONFERENCIA entra pelo "mandar reler":
+ * só o próprio robô escreve esse status, então relida a viagem ele pode
+ * aprovar, pedir foto ou avisar a partir dali. Todo `where` que usa esta lista
+ * também exige `revisadoEm` null — decisão de gente não se atropela.
+ */
+const STATUS_ESPERANDO_CONFERENCIA = [
+  StatusViagem.ENVIADA,
+  StatusViagem.AJUSTADA,
+  StatusViagem.EM_CONFERENCIA,
+];
+
 @Injectable()
 export class AplicarVereditoService {
   private readonly log = new Logger("ConferenciaTicket");
@@ -181,8 +193,9 @@ export class AplicarVereditoService {
       where: {
         id: job.viagemId,
         // Só toca no que ainda está esperando conferência. Se um humano mexeu
-        // no meio, nada acontece.
-        status: { in: [StatusViagem.ENVIADA, StatusViagem.AJUSTADA] },
+        // no meio, nada acontece. EM_CONFERENCIA entra pela releitura: só o
+        // robô escreve esse status, e com `revisadoEm` null ninguém decidiu.
+        status: { in: STATUS_ESPERANDO_CONFERENCIA },
         revisadoEm: null,
       },
       data: {
@@ -238,7 +251,7 @@ export class AplicarVereditoService {
       "com o papel todo no quadro e boa luz?";
 
     const alterou = await this.prisma.viagem.updateMany({
-      where: { id: job.viagemId, status: { in: [StatusViagem.ENVIADA, StatusViagem.AJUSTADA] } },
+      where: { id: job.viagemId, status: { in: STATUS_ESPERANDO_CONFERENCIA }, revisadoEm: null },
       data: {
         status: StatusViagem.DIVERGENTE,
         motivoStatus: texto,
@@ -321,7 +334,7 @@ export class AplicarVereditoService {
         // o caso do "mandar reler" numa viagem que a regra antiga tinha parado
         // na fila e que, lida de novo, diverge de fato. `revisadoEm` null
         // garante que nenhuma decisão de gente é atropelada.
-        status: { in: [StatusViagem.ENVIADA, StatusViagem.AJUSTADA, StatusViagem.EM_CONFERENCIA] },
+        status: { in: STATUS_ESPERANDO_CONFERENCIA },
         revisadoEm: null,
       },
       data: {
