@@ -4,6 +4,7 @@
  *   cd apps/api && pnpm diagnosticar:conferencias
  *   cd apps/api && pnpm diagnosticar:conferencias -- --conta schaba --exemplos 8
  *   cd apps/api && pnpm diagnosticar:conferencias -- --detalhe   # uma linha por viagem
+ *   cd apps/api && pnpm diagnosticar:conferencias -- --aguardando  # viagens "Aguardando" (ENVIADA/AJUSTADA)
  *
  * No container (Easypanel), flags direto:
  *
@@ -91,6 +92,11 @@ async function main() {
   const contaSlug = arg("--conta");
   const nExemplos = Number(arg("--exemplos") ?? 4);
   const detalhe = tem("--detalhe");
+  // "Aguardando" no painel = ENVIADA; AJUSTADA é a que o motorista corrigiu e
+  // espera nova decisão. As duas ficam na mesa de alguém.
+  const aguardando = tem("--aguardando");
+  const statusAlvo = aguardando ? [StatusViagem.ENVIADA, StatusViagem.AJUSTADA] : [StatusViagem.EM_CONFERENCIA];
+  const rotulo = aguardando ? "aguardando (enviada/ajustada)" : "em conferência";
 
   const app = await NestFactory.createApplicationContext(ScriptModule, { logger: false });
   const prisma = app.get(PrismaService);
@@ -106,9 +112,15 @@ async function main() {
   for (const conta of contas) {
     await comConta(conta.id, async () => {
       const viagens = await prisma.viagem.findMany({
-        where: { status: StatusViagem.EM_CONFERENCIA, revisadoEm: null },
+        where: {
+          status: { in: statusAlvo },
+          revisadoEm: null,
+          // Já faturada não é mais assunto da conferência.
+          matchesFechamento: { none: {} },
+        },
         select: {
           id: true,
+          _count: { select: { fotos: true } },
           conferenciasTicket: {
             orderBy: { criadoEm: "desc" },
             take: 5,
@@ -154,6 +166,12 @@ async function main() {
         const c = v.conferenciasTicket.find((x) => x.status === "CONCLUIDA");
         if (!c) {
           semLeitura++;
+          // Nunca lida: sem foto não há o que ler; com foto, falta enfileirar
+          // (o botão "reprocessar" do painel pega essas).
+          const chave = v._count.fotos === 0 ? "nunca lida · sem foto do ticket" : "nunca lida · tem foto — reprocessar pega";
+          const g = grupos.get(chave) ?? { casos: [] };
+          g.casos.push({ viagemId: v.id, linha: "" });
+          grupos.set(chave, g);
           continue;
         }
         const leitura = (c.leitura ?? {}) as Lido & { julgamento?: JulgamentoIa };
@@ -162,7 +180,16 @@ async function main() {
         confs.push(confianca);
         const julgamento = leitura.julgamento ?? {};
         const r = conferirComJulgamento(declarado, { ...leitura, confianca }, julgamento);
-        const ms = motivos(r, confianca, c.veredito, c.passadas ?? 1);
+        const ms =
+          aguardando && r.veredito === "BATE"
+            ? [
+                confianca < 0.9
+                  ? "confere · não aprovada: leitura abaixo de 0,9 (CONFERENCIA_CONFIANCA_APROVAR)"
+                  : "confere · não aprovada: km/pedágio (ver aprovar-conferencias-retroativo)",
+              ]
+            : aguardando && r.veredito === "NAO_APLICAVEL"
+              ? ["nada pra conferir no papel (sem campos lidos) — fica com gente"]
+              : motivos(r, confianca, c.veredito, c.passadas ?? 1);
 
         // O que a IA disse de cada campo em dúvida/divergente — é o texto que
         // mostra se a régua está certa.
@@ -195,7 +222,7 @@ async function main() {
       }
 
       const mediaConf = confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : 0;
-      console.log(`\n══ ${conta.nome} (${conta.slug}): ${viagens.length} em conferência`);
+      console.log(`\n══ ${conta.nome} (${conta.slug}): ${viagens.length} ${rotulo}`);
       console.log(`   confiança média da leitura: ${mediaConf.toFixed(2)}${semLeitura ? ` · ${semLeitura} sem leitura concluída` : ""}`);
       if (situacao.size > 0) {
         console.log(`\n   Leitura mais nova ainda não concluída (o agrupado abaixo usa a anterior):`);
@@ -210,7 +237,7 @@ async function main() {
 
       for (const [motivo, g] of [...grupos.entries()].sort((a, b) => b[1].casos.length - a[1].casos.length)) {
         console.log(`${String(g.casos.length).padStart(4)}  ${motivo}`);
-        for (const caso of g.casos.slice(0, nExemplos)) console.log(`        · ${caso.linha}`);
+        for (const caso of g.casos.slice(0, nExemplos)) if (caso.linha) console.log(`        · ${caso.linha}`);
       }
 
       if (detalhe) {

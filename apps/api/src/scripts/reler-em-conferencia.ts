@@ -27,6 +27,10 @@
  * Só toca no que o próprio robô parou: status EM_CONFERENCIA (que só ele
  * escreve), sem decisão humana (`revisadoEm`), fora de fechamento e com foto.
  *
+ * Com `--nunca-lidas`, faz só outra coisa: enfileira as viagens aguardando
+ * (enviada/ajustada/aguardando peso) que têm foto e nunca foram lidas — o
+ * mesmo que o botão "reprocessar" do painel, até `--limite` por empresa.
+ *
  * Também converte, sem gastar IA, as viagens que o robô já tinha mandado pro
  * motorista como "Outro motivo": elas passam a DADOS_DIVERGENTES com os campos
  * da última conferência, e o app mostra o card de correção no lugar do chat.
@@ -63,6 +67,7 @@ async function main() {
   const aplicar = tem("--aplicar");
   const contaSlug = arg("--conta");
   const limite = Number(arg("--limite") ?? 1000);
+  const nuncaLidas = tem("--nunca-lidas");
 
   const app = await NestFactory.createApplicationContext(ScriptModule, { logger: false });
   const prisma = app.get(PrismaService);
@@ -85,6 +90,24 @@ async function main() {
   let total = 0;
   let enfileiradas = 0;
   let convertidas = 0;
+
+  if (nuncaLidas) {
+    let total = 0;
+    for (const conta of contas) {
+      await comConta(conta.id, async () => {
+        const n = await fila.contarPendentesDeConferencia();
+        if (n === 0) return;
+        console.log(`── ${conta.nome} (${conta.slug}): ${n} viagem(ns) com foto e nunca lidas`);
+        if (!aplicar) return;
+        const r = await fila.reprocessarPendentes(Math.min(500, limite));
+        total += r.enfileiradas;
+        console.log(`   ✓ ${r.enfileiradas} de ${r.candidatas} enfileirada(s)`);
+      });
+    }
+    console.log(aplicar ? `\nPronto: ${total} na fila.` : "\nRode com --aplicar pra valer.");
+    await app.close();
+    return;
+  }
 
   for (const conta of contas) {
     await comConta(conta.id, async () => {
