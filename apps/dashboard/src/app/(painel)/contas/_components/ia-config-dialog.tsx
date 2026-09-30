@@ -51,7 +51,7 @@ const MODELOS_CONFERENCIA: Opcao<ModeloIaConferencia | null>[] = [
     nome: "MiniMax M3",
     custoLabel: "US$ 0,30 / 1,20 por milhão de tokens",
     descricao:
-      "Em avaliação. Cerca de 3x mais barato que o Haiku, mas é outro fornecedor (a foto do ticket sai daqui). A segunda opinião continua no Claude, então erro dele não vira acusação.",
+      "Cerca de 3x mais barato que o Haiku, e outro fornecedor (a foto do ticket sai daqui). A segunda leitura, que confirma antes de avisar o motorista, também é nele — duas leituras que discordam vão pra revisão.",
   },
   {
     id: "claude-sonnet-4-6",
@@ -61,7 +61,12 @@ const MODELOS_CONFERENCIA: Opcao<ModeloIaConferencia | null>[] = [
   },
 ];
 
-/** Quem casa a viagem com a planilha do cliente, no fechamento. */
+/**
+ * O modelo "geral" da empresa: casa a viagem com a planilha do cliente no
+ * fechamento, reconhece as colunas da planilha E lê o ticket no APP (o
+ * preenchimento automático quando o motorista tira a foto). Só Claude — a
+ * leitura do app é extração do zero, e o MiniMax não foi testado nela.
+ */
 const MODELOS_MATCH: Opcao<ModeloIaMatch>[] = [
   {
     id: "claude-haiku-4-5-20251001",
@@ -179,11 +184,11 @@ export function IaConfigDialog({
         {data && (
           <div className="space-y-5">
             <section className="space-y-2">
-              <h3 className="text-sm font-semibold">Quem lê a foto do ticket?</h3>
+              <h3 className="text-sm font-semibold">Quem confere o ticket depois do lançamento?</h3>
               <p className="text-xs text-muted-foreground">
-                É a leitura da Conferência de ticket, que roda sozinha depois que o motorista lança.
-                Quando a leitura sai fraca ou aponta divergência de peso, o Claude Opus dá a segunda
-                opinião — isso não muda aqui. O custo real de cada leitura aparece na tela de{" "}
+                É a Conferência de ticket, que roda sozinha depois que o motorista lança e compara a
+                foto com o que foi lançado. A segunda leitura, que confirma antes de avisar o
+                motorista, usa o mesmo modelo. O custo real de cada leitura aparece na tela de{" "}
                 <a href="/conferencias" className="underline underline-offset-2">
                   Conferência de ticket
                 </a>
@@ -193,9 +198,10 @@ export function IaConfigDialog({
             </section>
 
             <section className="space-y-2">
-              <h3 className="text-sm font-semibold">Quem casa a viagem com a planilha do cliente?</h3>
+              <h3 className="text-sm font-semibold">Fechamento e leitura do ticket no app</h3>
               <p className="text-xs text-muted-foreground">
-                Roda no fechamento, quando a planilha do tomador é conciliada com o que foi lançado.
+                Casa a viagem com a planilha do cliente no fechamento, reconhece as colunas da
+                planilha e preenche o ticket no app quando o motorista tira a foto. Só Claude.
               </p>
               <Opcoes opcoes={MODELOS_MATCH} valor={modelo} onEscolher={setModelo} />
             </section>
