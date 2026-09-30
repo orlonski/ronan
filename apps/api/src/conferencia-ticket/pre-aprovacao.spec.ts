@@ -76,6 +76,12 @@ describe("pedágio da rota", () => {
     expect(r.resumo.join(" ")).toMatch(/não passa por praça/);
   });
 
+  it("ticket repetido sem aceite nunca aprova sozinho, por mais que o resto feche", () => {
+    const r = avaliar({ ...sinais(), ticketRepetido: true });
+    expect(r.aprova).toBe(false);
+    expect(r.motivo).toMatch(/ticket repetido/);
+  });
+
   it("passou por praça e não lançou valor: não aprova", () => {
     const r = avaliar(
       sinais({ pedagio: { pracas: 2, valorInformado: null, mediana: null, amostra: 0 } }),

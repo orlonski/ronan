@@ -75,6 +75,7 @@ export class PreAprovacaoService {
         referencia: viagem.kmReferencia == null ? null : Number(viagem.kmReferencia),
       },
       pedagio: { pracas, valorInformado, ...referencia },
+      ticketRepetido: viagem.ticketDuplicadoDeId != null && viagem.duplicidadeAceitaEm == null,
     };
   }
 
@@ -91,6 +92,8 @@ export class PreAprovacaoService {
         kmReferencia: true,
         valorPedagioTotal: true,
         pedagios: { select: { id: true, valor: true } },
+        ticketDuplicadoDeId: true,
+        duplicidadeAceitaEm: true,
       },
     });
   }

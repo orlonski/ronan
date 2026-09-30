@@ -48,7 +48,16 @@ export type SinaisPedagio = {
   amostra: number;
 };
 
-export type SinaisPreAprovacao = { km: SinaisKm; pedagio: SinaisPedagio };
+export type SinaisPreAprovacao = {
+  km: SinaisKm;
+  pedagio: SinaisPedagio;
+  /**
+   * O número do ticket já existe noutra viagem da empresa e ninguém aceitou a
+   * repetição. O papel pode conferir perfeitamente com a viagem — e ser o
+   * mesmo papel lançado duas vezes. Opcional: ausente = não repetido.
+   */
+  ticketRepetido?: boolean;
+};
 
 export type LimiaresPreAprovacao = {
   exigirKmNoPadrao: boolean;
@@ -94,6 +103,11 @@ export function avaliarPreAprovacao(
 ): PreAprovacao {
   const resumo: string[] = [];
   const recusar = (motivo: string): PreAprovacao => ({ aprova: false, motivo, resumo });
+
+  // Antes de tudo: ticket lançado em duas viagens nunca se aprova sozinho.
+  // Com a releitura depois da correção do motorista, é o caminho em que isso
+  // passaria — ele corrige, o papel confere, e a duplicidade some de vista.
+  if (s.ticketRepetido) return recusar("ticket repetido em outra viagem, sem aceite");
 
   if (limiares.exigirKmNoPadrao && !s.km.aceitoPorHumano) {
     if (s.km.foraDoPadrao === true) {

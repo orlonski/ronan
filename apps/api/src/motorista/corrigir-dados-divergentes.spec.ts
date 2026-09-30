@@ -27,7 +27,7 @@ const VIAGEM = {
   material: { nome: "Brita" },
 };
 
-function montar(viagem: Record<string, unknown> = VIAGEM) {
+function montar(viagem: Record<string, unknown> = VIAGEM, materialExiste = false) {
   const update = vi.fn(async () => ({}));
   const enfileirar = vi.fn(async () => undefined);
   const recalcularSeguro = vi.fn(async () => undefined);
@@ -36,7 +36,7 @@ function montar(viagem: Record<string, unknown> = VIAGEM) {
     viagem: { findUnique: async () => viagem, update },
     veiculo: { findUnique: async ({ where }: { where: { id: string } }) => (where.id === "vei2" ? { placa: "XYZ9A87" } : null) },
     cliente: { findUnique: async () => null },
-    material: { findUnique: async () => null },
+    material: { findUnique: async () => (materialExiste ? { nome: "Rachão" } : null) },
     motorista: { findUnique: async () => ({ nome: "Joao" }) },
   };
   const nada = new Proxy({}, { get: () => async () => undefined }) as never;
@@ -108,8 +108,9 @@ describe("corrigir dados divergentes", () => {
     );
     const escrito = (m.update.mock.calls[0] as unknown as [{ data: Record<string, unknown> }])[0].data;
     expect(escrito.status).toBe("AJUSTADA");
-    // A decisão continua com quem marcou.
-    expect(escrito).not.toHaveProperty("revisadoEm");
+    // Volta pra mesa (conta nos Pendentes), mas quem decide é gente: reler a
+    // mesma foto daria a mesma resposta.
+    expect(escrito.revisadoEm).toBeNull();
     expect(m.enfileirar).not.toHaveBeenCalled();
   });
 
@@ -132,5 +133,29 @@ describe("corrigir dados divergentes", () => {
     await expect(
       emConta(() => m.service.corrigirDadosDivergentes("outro", "v1", { toneladas: 35 })),
     ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("respostas antigas (material) também voltam pro agente", () => {
+  const MATERIAL_DIVERGENTE = { ...VIAGEM, tipoDivergencia: "MATERIAL_DIVERGENTE", camposDivergentes: [] };
+
+  it("trocou o material: relê e a decisão anterior não vale mais", async () => {
+    const m = montar(MATERIAL_DIVERGENTE, true);
+    await emConta(() =>
+      m.service.responderMaterialDivergente("mot1", "v1", { materialId: "mat2", justificativa: "era rachão" }),
+    );
+    const escrito = (m.update.mock.calls[0] as unknown as [{ data: Record<string, unknown> }])[0].data;
+    expect(escrito).toMatchObject({ status: "AJUSTADA", revisadoEm: null, materialId: "mat2" });
+    expect(m.enfileirar).toHaveBeenCalledWith("v1", "correcao-motorista");
+  });
+
+  it("só explicou: volta pra mesa, mas não relê", async () => {
+    const m = montar(MATERIAL_DIVERGENTE, true);
+    await emConta(() =>
+      m.service.responderMaterialDivergente("mot1", "v1", { justificativa: "o meu está certo" }),
+    );
+    const escrito = (m.update.mock.calls[0] as unknown as [{ data: Record<string, unknown> }])[0].data;
+    expect(escrito.revisadoEm).toBeNull();
+    expect(m.enfileirar).not.toHaveBeenCalled();
   });
 });

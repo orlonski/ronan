@@ -492,6 +492,7 @@ export class ViagensMotoristaService {
         valorPedagioTotal: valor,
         status: "AJUSTADA",
         tipoDivergencia: null,
+        ...DECISAO_ANTERIOR_VENCIDA,
       },
     });
 
@@ -530,8 +531,7 @@ export class ViagensMotoristaService {
     );
 
     // Informado o valor, a conferência roda de novo: se ela tinha marcado só
-    // por falta do pedágio, agora pode aprovar sozinha. Pedido do painel
-    // (com `revisadoEm`) não entra na fila — aí quem decide é gente.
+    // por falta do pedágio, agora pode aprovar sozinha.
     void this.conferencia.enfileirar(viagemId, "correcao-motorista");
 
     return this.detalhe(motoristaId, viagemId);
@@ -605,6 +605,7 @@ export class ViagensMotoristaService {
       data: {
         status: "AJUSTADA",
         tipoDivergencia: null,
+        ...DECISAO_ANTERIOR_VENCIDA,
         ...(mudou ? { ticket: ticketNovo } : {}),
         ticketDuplicadoDeId: duplicadoDeId,
         // Número novo = duplicidade nova: o aceite anterior não vale mais.
@@ -647,6 +648,9 @@ export class ViagensMotoristaService {
         : `Explicou o número repetido — viagem aguardando sua revisão`,
       { viagemId, motoristaId, justificativa },
     );
+
+    // Trocou o número: relê o ticket contra o valor novo. Só explicou: fica com gente.
+    if (mudou) void this.conferencia.enfileirar(viagemId, "correcao-motorista");
 
     return this.detalhe(motoristaId, viagemId);
   }
@@ -723,6 +727,7 @@ export class ViagensMotoristaService {
       data: {
         status: "AJUSTADA",
         tipoDivergencia: null,
+        ...DECISAO_ANTERIOR_VENCIDA,
         ...(mudou ? { materialId: materialNovoId } : {}),
       },
     });
@@ -762,6 +767,9 @@ export class ViagensMotoristaService {
         : `Manteve ${nomeAntes} e explicou — viagem aguardando sua revisão`,
       { viagemId, motoristaId, justificativa },
     );
+
+    // Trocou o material: relê o ticket contra o valor novo. Só explicou: fica com gente.
+    if (mudou) void this.conferencia.enfileirar(viagemId, "correcao-motorista");
 
     return this.detalhe(motoristaId, viagemId);
   }
@@ -891,7 +899,8 @@ export class ViagensMotoristaService {
         tipoDivergencia: null,
         camposDivergentes: [],
         motivoStatus: null,
-        ...(corrigiu ? { revisadoEm: null, revisadoPor: { disconnect: true } } : {}),
+        revisadoEm: null,
+        revisadoPor: { disconnect: true },
       },
     });
 
@@ -994,6 +1003,7 @@ export class ViagensMotoristaService {
       data: {
         status: "AJUSTADA",
         tipoDivergencia: null,
+        ...DECISAO_ANTERIOR_VENCIDA,
         // Ele mesmo corrigindo o próprio km: a lei muda junto (kmMotorista
         // acompanha), porque a fonte continua sendo o motorista.
         ...(kmMudou
@@ -1047,6 +1057,9 @@ export class ViagensMotoristaService {
       { viagemId, motoristaId, justificativa, ...(input.km != null ? { km: input.km } : {}) },
     );
 
+    // Km corrigido: a conferência roda de novo (a aprovação olha o km do trajeto).
+    if (kmMudou) void this.conferencia.enfileirar(viagemId, "correcao-motorista");
+
     return this.detalhe(motoristaId, viagemId);
   }
 
@@ -1090,7 +1103,7 @@ export class ViagensMotoristaService {
       });
       await tx.viagem.update({
         where: { id: viagemId },
-        data: { status: "AJUSTADA", tipoDivergencia: null },
+        data: { status: "AJUSTADA", tipoDivergencia: null, ...DECISAO_ANTERIOR_VENCIDA },
       });
       return novaFoto;
     });
@@ -1128,6 +1141,9 @@ export class ViagensMotoristaService {
       `Resposta à divergência de foto — viagem aguardando sua revisão`,
       { viagemId, motoristaId },
     );
+
+    // Foto nova é o que a conferência precisa: relê sozinha.
+    void this.conferencia.enfileirar(viagemId, "correcao-motorista");
 
     return this.detalhe(motoristaId, viagemId);
   }
@@ -2581,3 +2597,13 @@ function fmtDia(iso: string): string {
   const [a, m, d] = iso.slice(0, 10).split("-");
   return `${d}/${m}/${a}`;
 }
+
+/**
+ * Resposta do motorista a uma divergência: a decisão anterior (de quem marcou
+ * divergente) era sobre o valor ANTIGO e não vale mais. Sem limpar,
+ * divergência marcada pelo painel virava AJUSTADA ainda "revisada": sumia do
+ * card de Pendentes e a conferência automática não pegava (robô não passa por
+ * cima de gente). Agora ela volta pra mesa — e, se o motorista corrigiu algo,
+ * pra fila do agente também.
+ */
+const DECISAO_ANTERIOR_VENCIDA = { revisadoEm: null, revisadoPorId: null } as const;
