@@ -201,6 +201,8 @@ async function main() {
         console.log(`\n   Leitura mais nova ainda não concluída (o agrupado abaixo usa a anterior):`);
         for (const [chave, ids] of situacao) {
           console.log(`${String(ids.length).padStart(4)}  ${chave}`);
+          const exemplo = viagens.find((v) => v.id === ids[0].split(" ")[0])?.conferenciasTicket[0]?.erro;
+          if (exemplo) console.log(`        erro completo: ${exemplo.replace(/\s+/g, " ").slice(0, 500)}`);
           for (const id of ids.slice(0, 3)) console.log(`        · ${id}`);
         }
       }

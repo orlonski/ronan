@@ -177,6 +177,7 @@ export class LeitorTicketService {
     falha: "resposta-invalida" | "foto-ilegivel" | null;
   }> {
     const modelo = args.modelo || MODELO_PADRAO;
+    const foto = await caberNoLimite(args.fotoBase64, args.mime, provedorDoModelo(modelo));
     // Lança `ProvedorIaNaoConfigurado` com nome quando falta a chave daquele
     // fornecedor — o worker trata como falha de infra e retenta.
     const cliente = this.clientes.para(modelo);
@@ -211,8 +212,8 @@ export class LeitorTicketService {
                 type: "image",
                 source: {
                   type: "base64",
-                  media_type: args.mime as "image/jpeg" | "image/png" | "image/webp",
-                  data: args.fotoBase64,
+                  media_type: foto.mime as "image/jpeg" | "image/png" | "image/webp",
+                  data: foto.base64,
                 },
               },
               {
@@ -345,4 +346,36 @@ function lerJulgamento(bruto: unknown): JulgamentoIa {
     };
   }
   return j;
+}
+
+/**
+ * A Anthropic recusa imagem acima de 5 MB com 400 — e foto de celular passa
+ * disso. A primeira leitura roda no MiniMax, que aceita; a SEGUNDA, no Claude,
+ * falhava sempre nessas fotos. Durante semanas isso foi engolido (a segunda
+ * opinião falhando só "não escalava"); quando divergência passou a exigir a
+ * confirmação, virou 14 viagens em FALHOU numa noite (29/09/2026).
+ *
+ * Reduzir não custa leitura: o modelo trabalha com o lado maior em ~1.568 px,
+ * então 2.000 px já é mais do que ele usa. Só mexe quando precisa, e sem
+ * `sharp` (binário nativo, pode faltar no build) manda como está.
+ */
+const LIMITE_BASE64_ANTHROPIC = 4_800_000;
+
+export async function caberNoLimite(
+  base64: string,
+  mime: string,
+  provedor: string,
+): Promise<{ base64: string; mime: string }> {
+  if (provedor !== "anthropic" || base64.length <= LIMITE_BASE64_ANTHROPIC) return { base64, mime };
+  try {
+    const sharp = (await import("sharp")).default;
+    const reduzida = await sharp(Buffer.from(base64, "base64"))
+      .rotate()
+      .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    return { base64: reduzida.toString("base64"), mime: "image/jpeg" };
+  } catch {
+    return { base64, mime };
+  }
 }
