@@ -50,6 +50,7 @@ import { KmAtipicoModule } from "../km-atipico/km-atipico.module";
 import { PedagiosRodoviaModule } from "../admin/pedagios-rodovia/pedagios-rodovia.module";
 import { ConferenciaConfig } from "../conferencia-ticket/conferencia.config";
 import { PreAprovacaoService } from "../conferencia-ticket/pre-aprovacao.service";
+import { ConferenciaFilaService } from "../conferencia-ticket/conferencia-fila.service";
 import {
   conferirComJulgamento,
   type Declarado,
@@ -71,7 +72,7 @@ import { inicioDiasAtras } from "../common/timezone";
     KmAtipicoModule,
     PedagiosRodoviaModule,
   ],
-  providers: [ConferenciaConfig, PreAprovacaoService],
+  providers: [ConferenciaConfig, PreAprovacaoService, ConferenciaFilaService],
 })
 class ScriptModule {}
 
@@ -90,6 +91,8 @@ async function main() {
   const prisma = app.get(PrismaService);
   const config = app.get(ConferenciaConfig);
   const preAprovacao = app.get(PreAprovacaoService);
+  const fila = app.get(ConferenciaFilaService);
+  let pedirPedagio = 0;
 
   const contas = await comoSistema(() =>
     prisma.conta.findMany({
@@ -172,6 +175,16 @@ async function main() {
 
         const pre = await preAprovacao.avaliar(job.viagemId);
         if (!pre.aprova) {
+          // Só falta o pedágio: relê pela fila, e o worker pede o valor ao
+          // motorista pelo card de pedágio (custa uma leitura por viagem).
+          if (pre.faltaPedagioPracas) {
+            contarRecusa(recusas, "sem valor de pedágio → pede ao motorista");
+            if (aplicar) {
+              await fila.enfileirar(job.viagemId, "reconferencia");
+              pedirPedagio++;
+            }
+            continue;
+          }
           contarRecusa(recusas, pre.motivo ?? "viagem não fecha");
           continue;
         }
@@ -249,6 +262,9 @@ async function main() {
     console.log("");
   }
 
+  if (pedirPedagio > 0) {
+    console.log(`${pedirPedagio} viagem(ns) sem pedágio voltaram pra conferência — o motorista vai ser chamado a informar.\n`);
+  }
   console.log(
     totalAprovadas === 0
       ? "Nenhuma viagem se encaixa — nada a fazer."

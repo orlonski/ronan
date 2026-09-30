@@ -53,6 +53,7 @@ function montar(
     /** O que a checagem da VIAGEM (km + pedágio) respondeu. Ver pre-aprovacao.ts. */
     preAprova: boolean;
     preMotivo: string;
+    faltaPedagioPracas: number;
   }> = {},
 ) {
   const updateMany = vi.fn().mockResolvedValue({ count: 1 });
@@ -75,6 +76,7 @@ function montar(
       aprova: cfg.preAprova ?? true,
       motivo: cfg.preAprova === false ? (cfg.preMotivo ?? "km fora do padrão do trajeto") : null,
       resumo: ["Km na média do trajeto (referência 120,0 km).", "A rota não passa por praça de pedágio."],
+      ...(cfg.faltaPedagioPracas ? { faltaPedagioPracas: cfg.faltaPedagioPracas } : {}),
     }),
   } as unknown as PreAprovacaoService;
   return {
@@ -374,6 +376,29 @@ describe("aprovação automática", () => {
 
     expect(soVoltouPraFila(updateMany)).toBe(true);
     expect((fila.finalizar as ReturnType<typeof vi.fn>).mock.calls[0][1].acao).toBe("NENHUMA");
+  });
+
+  it("papel confere e só falta o pedágio: pede o valor ao motorista pelo card de pedágio", async () => {
+    const { svc, updateMany, push, fila } = montar({
+      autoAprovar: true,
+      preAprova: false,
+      preMotivo: "a rota passa por 2 praças e a viagem está sem valor de pedágio",
+      faltaPedagioPracas: 2,
+    });
+
+    await svc.aplicar(JOB, comConfianca(BATE, 0.97), false);
+
+    const escrito = updateMany.mock.calls[0][0];
+    expect(escrito.data).toMatchObject({
+      status: StatusViagem.DIVERGENTE,
+      tipoDivergencia: "PEDAGIO_SEM_VALOR",
+    });
+    expect(escrito.data.motivoStatus).toContain("2 praças");
+    // Robô não decide por gente: sem revisadoEm, e só em quem ninguém revisou.
+    expect(escrito.data).not.toHaveProperty("revisadoEm");
+    expect(escrito.where.revisadoEm).toBeNull();
+    expect(push.enviar).toHaveBeenCalled();
+    expect((fila.finalizar as ReturnType<typeof vi.fn>).mock.calls[0][1].acao).toBe("PEDIU_PEDAGIO");
   });
 
   it("só checa a viagem depois de o documento passar — não gasta rota à toa", async () => {

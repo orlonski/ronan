@@ -4,6 +4,7 @@ import { KmAtipicoService } from "../km-atipico/km-atipico.service";
 import { PedagiosRodoviaConsultaService } from "../admin/pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { contaIdAtual } from "../common/conta/conta-context";
 import { inicioDiasAtras } from "../common/timezone";
+import { pedagioDaViagem } from "../common/acerto-motorista";
 import { ConferenciaConfig } from "./conferencia.config";
 import {
   avaliarPreAprovacao,
@@ -55,8 +56,11 @@ export class PreAprovacaoService {
     }
 
     const pracas = await this.pracasNaRota(viagemId);
-    const valorInformado =
-      viagem.valorPedagioTotal == null ? null : Number(viagem.valorPedagioTotal);
+    // A regra central: campo da viagem (app nativo) ou, sem ele, a soma dos
+    // pedágios lançados avulsos e vinculados. Olhar só o campo pedia pedágio
+    // de novo a quem já tinha lançado pela tela de pedágio.
+    const pedagio = Number(pedagioDaViagem(viagem).valor);
+    const valorInformado = pedagio > 0 ? pedagio : null;
 
     const referencia =
       pracas != null && pracas > 0 && viagem.localCargaId && viagem.localDescargaId
@@ -86,6 +90,7 @@ export class PreAprovacaoService {
         kmDesvioPct: true,
         kmReferencia: true,
         valorPedagioTotal: true,
+        pedagios: { select: { id: true, valor: true } },
       },
     });
   }

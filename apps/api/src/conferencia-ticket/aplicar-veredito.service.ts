@@ -185,6 +185,13 @@ export class AplicarVereditoService {
     // O documento confere. Falta a viagem em si: km no padrão do trajeto e
     // pedágio da rota lançado num valor plausível. Nada disso está no papel.
     const pre = await this.preAprovacao.avaliar(job.viagemId);
+    // O papel confere e o único problema é o pedágio que não foi lançado numa
+    // rota que passa por praça: isso o motorista resolve sozinho, pelo card
+    // que o app já tem. Mandar pra fila humana era pôr alguém pra pedir a ele.
+    if (!pre.aprova && pre.faltaPedagioPracas) {
+      const pediu = await this.pedirValorPedagio(job, pre.faltaPedagioPracas);
+      if (pediu) return "PEDIU_PEDAGIO";
+    }
     if (!pre.aprova) {
       // Fica no log pra calibrar depois: é este motivo que diz se a régua está
       // barrando erro de verdade ou só viagem sem histórico.
@@ -299,6 +306,59 @@ export class AplicarVereditoService {
     } catch (err) {
       this.log.warn(`Aviso de foto ilegível falhou: ${(err as Error).message}`);
     }
+  }
+
+  /**
+   * Marca "Falta valor de pedágio" — o mesmo tipo que o painel usa, com o card
+   * de informar o valor nos apps. Quando o motorista informa, a viagem volta
+   * sozinha pra conferência (ver `informarValorPedagio`) e pode ser aprovada.
+   */
+  private async pedirValorPedagio(job: ConferenciaTicket, pracas: number): Promise<boolean> {
+    const texto =
+      `O ticket confere, mas a rota passa por ${pracas === 1 ? "1 praça" : `${pracas} praças`} de ` +
+      "pedágio e a viagem está sem o valor. Informa quanto deu o pedágio?";
+
+    const alterou = await this.prisma.viagem.updateMany({
+      where: { id: job.viagemId, status: { in: STATUS_ESPERANDO_CONFERENCIA }, revisadoEm: null },
+      data: {
+        status: StatusViagem.DIVERGENTE,
+        motivoStatus: texto,
+        tipoDivergencia: TipoDivergencia.PEDAGIO_SEM_VALOR,
+        camposDivergentes: [],
+      },
+    });
+    if (alterou.count === 0) return false;
+
+    try {
+      await this.prisma.viagemMensagem.create({
+        data: {
+          viagemId: job.viagemId,
+          autor: "ADMIN",
+          usuarioId: null,
+          autorNome: "Conferência automática",
+          texto,
+          acao: "MARCOU_DIVERGENTE",
+        },
+      });
+      const viagem = await this.prisma.viagem.findUnique({
+        where: { id: job.viagemId },
+        select: { motoristaId: true, motorista: { select: { expoPushToken: true } } },
+      });
+      if (viagem) {
+        await this.push.enviar({
+          motoristaId: viagem.motoristaId,
+          token: viagem.motorista?.expoPushToken ?? "",
+          titulo: "Falta o valor do pedágio",
+          corpo: texto,
+          dados: { viagemId: job.viagemId, rota: "pedagio-sem-valor" },
+          tipo: "viagem-divergente",
+          criadoPorId: null,
+        });
+      }
+    } catch (err) {
+      this.log.warn(`Aviso de pedágio sem valor falhou: ${(err as Error).message}`);
+    }
+    return true;
   }
 
   /** EM_CONFERENCIA → ENVIADA, só no que o robô parou e ninguém decidiu. */

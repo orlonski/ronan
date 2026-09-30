@@ -529,6 +529,11 @@ export class ViagensMotoristaService {
       { viagemId, motoristaId, valor },
     );
 
+    // Informado o valor, a conferência roda de novo: se ela tinha marcado só
+    // por falta do pedágio, agora pode aprovar sozinha. Pedido do painel
+    // (com `revisadoEm`) não entra na fila — aí quem decide é gente.
+    void this.conferencia.enfileirar(viagemId, "correcao-motorista");
+
     return this.detalhe(motoristaId, viagemId);
   }
 

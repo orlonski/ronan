@@ -65,6 +65,12 @@ export type PreAprovacao = {
   motivo: string | null;
   /** O que foi verificado, em frases prontas pro chat da viagem. */
   resumo: string[];
+  /**
+   * Preenchido quando o ÚNICO problema é pedágio não lançado numa rota que
+   * passa por praça: quantas praças. É o caso que o motorista resolve sozinho
+   * (o app tem card pra informar o valor), então não precisa esperar gente.
+   */
+  faltaPedagioPracas?: number;
 };
 
 const fmtKm = (n: number): string => `${n.toFixed(1).replace(".", ",")} km`;
@@ -117,7 +123,10 @@ export function avaliarPreAprovacao(
     if (n === 0) {
       resumo.push("A rota não passa por praça de pedágio.");
     } else if (valorInformado == null || valorInformado <= 0) {
-      return recusar(`a rota passa por ${pracas(n)} e a viagem está sem valor de pedágio`);
+      return {
+        ...recusar(`a rota passa por ${pracas(n)} e a viagem está sem valor de pedágio`),
+        faltaPedagioPracas: n,
+      };
     } else if (mediana != null && mediana > 0 && amostra >= limiares.amostraMinimaPedagio) {
       const desvio = ((valorInformado - mediana) / mediana) * 100;
       if (Math.abs(desvio) > limiares.desvioPedagioPct) {

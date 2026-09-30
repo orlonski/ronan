@@ -83,6 +83,8 @@ describe("pedágio da rota", () => {
     expect(r.aprova).toBe(false);
     expect(r.motivo).toMatch(/2 praças/);
     expect(r.motivo).toMatch(/sem valor de pedágio/);
+    // É o caso que o motorista resolve sozinho: vem sinalizado com as praças.
+    expect(r.faltaPedagioPracas).toBe(2);
   });
 
   it("valor zerado conta como não lançado", () => {

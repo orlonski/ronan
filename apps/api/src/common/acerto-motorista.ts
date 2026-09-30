@@ -122,7 +122,7 @@ export type AcertoCalculado = {
  *
  * Prioridade pro campo da viagem quando ele existe; senão, a soma dos avulsos.
  */
-export function pedagioDaViagem(v: ViagemParaAcerto): {
+export function pedagioDaViagem(v: Pick<ViagemParaAcerto, "valorPedagioTotal" | "pedagios">): {
   valor: Prisma.Decimal;
   pedagioIds: string[];
 } {
