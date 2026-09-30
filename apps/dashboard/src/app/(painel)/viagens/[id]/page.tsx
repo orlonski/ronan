@@ -10,6 +10,11 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { use, useMemo, useState } from "react";
 import type { FonteGps } from "@ronan/shared-types";
+import {
+  CAMPOS_DIVERGENTES,
+  ROTULO_CAMPO_DIVERGENTE,
+  type CampoDivergente,
+} from "@ronan/shared-types";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Permitido } from "@/components/requer-tela";
 import { SinalGpsBadge } from "@/components/sinal-gps-badge";
@@ -266,6 +271,7 @@ type TipoDivergenciaUI =
   | "KM_DIVERGENTE"
   | "TICKET_DUPLICADO"
   | "MATERIAL_DIVERGENTE"
+  | "DADOS_DIVERGENTES"
   | "OUTRO";
 
 /**
@@ -473,6 +479,7 @@ export default function ViagemDetalhePage({
       status: "OK" | "DIVERGENTE" | "DESFAZER";
       motivo?: string;
       tipo?: TipoDivergenciaUI;
+      campos?: CampoDivergente[];
     }) =>
       fetchApi<{ ok: true }>(`/admin/viagens/${id}/pre-validar`, {
         method: "POST",
@@ -494,6 +501,8 @@ export default function ViagemDetalhePage({
   const [dialogDivergente, setDialogDivergente] = useState(false);
   const [motivoTexto, setMotivoTexto] = useState("");
   const [tipoDivergencia, setTipoDivergencia] = useState<TipoDivergenciaUI>("OUTRO");
+  // Com "Dados do ticket não conferem": quais campos o motorista vai corrigir.
+  const [camposDivergentes, setCamposDivergentes] = useState<CampoDivergente[]>([]);
   const [motivoFoiEditado, setMotivoFoiEditado] = useState(false);
 
   // Props do mapa memoizadas (referência estável) pra o MapaTrajetoViagem (memo)
@@ -565,6 +574,7 @@ export default function ViagemDetalhePage({
 
   function motivoSugeridoPorTipo(
     tipo: TipoDivergenciaUI,
+    campos: CampoDivergente[] = camposDivergentes,
   ): string {
     if (tipo === "PEDAGIO_SEM_VALOR") return motivoSugeridoPedagio;
     if (tipo === "FOTO_ILEGIVEL")
@@ -575,7 +585,30 @@ export default function ViagemDetalhePage({
       return `O ticket ${v.ticket ?? ""} já tinha sido lançado nesta empresa. Confira o número no romaneio e corrija, ou explique por que ele se repete.`.trim();
     if (tipo === "MATERIAL_DIVERGENTE")
       return `O material lançado${v.material ? ` (${v.material.nome})` : ""} parece diferente do que está escrito no ticket. Confira o papel e, se for outro, corrija; se estiver certo, explique.`;
+    if (tipo === "DADOS_DIVERGENTES") return motivoSugeridoDados(campos);
     return "";
+  }
+
+  /** O que foi lançado em cada campo — vai no texto pro motorista saber o que olhar. */
+  function valorLancado(campo: CampoDivergente): string | null {
+    if (campo === "ticket") return v.ticket ?? null;
+    if (campo === "toneladas") {
+      const t = v.toneladasInformada;
+      return t != null ? `${fmtNum(t, 2)} t` : null;
+    }
+    if (campo === "data") return fmtBR(v.data);
+    if (campo === "placa") return v.veiculo.placa;
+    if (campo === "cliente") return v.cliente?.nome ?? null;
+    return v.material?.nome ?? null;
+  }
+
+  function motivoSugeridoDados(lista: CampoDivergente[]): string {
+    if (lista.length === 0) return "";
+    const itens = lista.map((c) => {
+      const val = valorLancado(c);
+      return `${ROTULO_CAMPO_DIVERGENTE[c].toLowerCase()}${val ? ` (lançado: ${val})` : ""}`;
+    });
+    return `Não confere com o ticket: ${itens.join(", ")}. Confira o papel e corrija; se estiver certo, explique.`;
   }
 
   return (
@@ -1028,6 +1061,7 @@ export default function ViagemDetalhePage({
                       variant="destructive"
                       onClick={() => {
                         setTipoDivergencia("OUTRO");
+                        setCamposDivergentes([]);
                         setMotivoTexto("");
                         setMotivoFoiEditado(false);
                         setDialogDivergente(true);
@@ -1122,7 +1156,8 @@ export default function ViagemDetalhePage({
                           ? "PEDAGIO_SEM_VALOR"
                           : "OUTRO";
                         setTipoDivergencia(tipoInicial);
-                        setMotivoTexto(motivoSugeridoPorTipo(tipoInicial));
+                        setCamposDivergentes([]);
+                        setMotivoTexto(motivoSugeridoPorTipo(tipoInicial, []));
                         setMotivoFoiEditado(false);
                         setDialogDivergente(true);
                       }}
@@ -1414,6 +1449,9 @@ export default function ViagemDetalhePage({
                   }
                 }}
               >
+                <option value="DADOS_DIVERGENTES">
+                  Dados do ticket não conferem (motorista corrige)
+                </option>
                 <option value="PEDAGIO_SEM_VALOR">
                   Falta valor de pedágio
                 </option>
@@ -1426,12 +1464,43 @@ export default function ViagemDetalhePage({
                 <option value="TICKET_DUPLICADO">
                   Ticket repetido (motorista confere o número)
                 </option>
-                <option value="MATERIAL_DIVERGENTE">
-                  Material diferente do ticket (motorista corrige)
-                </option>
                 <option value="OUTRO">Outro motivo</option>
               </Select>
             </div>
+            {tipoDivergencia === "DADOS_DIVERGENTES" && (
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">O que não confere com o ticket</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {CAMPOS_DIVERGENTES.map((campo) => {
+                    const marcado = camposDivergentes.includes(campo);
+                    return (
+                      <label
+                        key={campo}
+                        className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={marcado}
+                          onChange={() => {
+                            const nova = marcado
+                              ? camposDivergentes.filter((c) => c !== campo)
+                              : CAMPOS_DIVERGENTES.filter((c) => c === campo || camposDivergentes.includes(c));
+                            setCamposDivergentes(nova);
+                            if (!motivoFoiEditado) setMotivoTexto(motivoSugeridoDados(nova));
+                          }}
+                        />
+                        {ROTULO_CAMPO_DIVERGENTE[campo]}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  O motorista vê um campo pra corrigir cada item marcado. Corrigido, a viagem volta
+                  sozinha pra conferência automática.
+                </p>
+              </fieldset>
+            )}
             <div className="space-y-2">
               <Label htmlFor="page-motivo-minimo-2-caracteres">Motivo (mínimo 2 caracteres)</Label>
               <Textarea id="page-motivo-minimo-2-caracteres"
@@ -1458,6 +1527,7 @@ export default function ViagemDetalhePage({
                     status: "DIVERGENTE",
                     motivo: motivoTexto.trim(),
                     tipo: tipoDivergencia,
+                    ...(tipoDivergencia === "DADOS_DIVERGENTES" ? { campos: camposDivergentes } : {}),
                   },
                   {
                     onSuccess: () => {
@@ -1468,7 +1538,9 @@ export default function ViagemDetalhePage({
                 );
               }}
               disabled={
-                motivoTexto.trim().length < 2 || preValidar.isPending
+                motivoTexto.trim().length < 2 ||
+                preValidar.isPending ||
+                (tipoDivergencia === "DADOS_DIVERGENTES" && camposDivergentes.length === 0)
               }
             >
               Confirmar divergência

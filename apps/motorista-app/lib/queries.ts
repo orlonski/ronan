@@ -22,6 +22,8 @@ import type {
   StoryItem,
   StoryVisualizador,
   TipoEventoViagem as TipoEventoViagemApp,
+  CampoDivergente,
+  CorrigirDadosDivergentesInput,
 } from "@ronan/shared-types";
 import {
   cacheGet,
@@ -241,8 +243,12 @@ export type Viagem = {
     | "KM_DIVERGENTE"
     | "TICKET_DUPLICADO"
     | "MATERIAL_DIVERGENTE"
+    | "DADOS_DIVERGENTES"
     | "OUTRO"
     | null;
+  /** Com DADOS_DIVERGENTES: quais campos corrigir. Opcional — cache antigo
+   *  não tem o campo, e ausente vale como lista vazia. */
+  camposDivergentes?: CampoDivergente[];
   sincronizadoEm: string;
   veiculo: Veiculo;
   cliente: { id: string; nome: string };
@@ -1981,6 +1987,25 @@ export function useResponderMaterialDivergente() {
         `/m/viagens/${args.viagemId}/responder-material-divergente`,
         { materialId: args.materialId, justificativa: args.justificativa },
       );
+    },
+    onSuccess: (atualizada) => {
+      qc.setQueryData(["viagem-detalhe", atualizada.id], atualizada);
+      void qc.invalidateQueries({ queryKey: ["viagens"] });
+      void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+      void qc.invalidateQueries({ queryKey: ["viagem-mensagens", atualizada.id] });
+    },
+  });
+}
+
+/** Responde DADOS_DIVERGENTES: manda só os campos que corrigiu (ou nenhum,
+ *  explicando que está certo). Corrigido, a viagem volta sozinha pra
+ *  conferência automática. */
+export function useCorrigirDadosDivergentes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { viagemId: string } & CorrigirDadosDivergentesInput) => {
+      const { viagemId, ...corpo } = args;
+      return await api.post<ViagemDetalhe>(`/m/viagens/${viagemId}/corrigir-dados-divergentes`, corpo);
     },
     onSuccess: (atualizada) => {
       qc.setQueryData(["viagem-detalhe", atualizada.id], atualizada);

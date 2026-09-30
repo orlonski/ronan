@@ -13,7 +13,10 @@ import type {
   IniciarViagemInput,
   RegistrarEventoInput,
   TrechoViagemInput,
+  CampoDivergente,
+  CorrigirDadosDivergentesInput,
 } from "@ronan/shared-types";
+import { ROTULO_CAMPO_DIVERGENTE } from "@ronan/shared-types";
 import type { AppInfoHeaders } from "../auth/decorators/app-info.decorator";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { garantirCadastro, ItemInexistenteException } from "../common/item-inexistente";
@@ -204,6 +207,7 @@ export class ViagensMotoristaService {
       | "resposta-divergencia-km"
       | "resposta-divergencia-ticket"
       | "resposta-divergencia-material"
+      | "resposta-divergencia-dados"
       | "resposta-divergencia-foto"
       | "nova-mensagem-viagem"
       | "foto-anexada",
@@ -753,6 +757,191 @@ export class ViagensMotoristaService {
         : `Manteve ${nomeAntes} e explicou — viagem aguardando sua revisão`,
       { viagemId, motoristaId, justificativa },
     );
+
+    return this.detalhe(motoristaId, viagemId);
+  }
+
+  /**
+   * Motorista responde DADOS_DIVERGENTES: corrige os campos que a conferência
+   * (robô ou painel) apontou — só esses; o resto do corpo é ignorado.
+   *
+   * Corrigiu alguma coisa → a viagem volta sozinha pra conferência automática,
+   * que relê o ticket contra o valor novo. Por isso `revisadoEm` é limpo: a
+   * marcação de divergente era uma decisão sobre o valor ANTIGO, e com ela
+   * pendurada o robô não confere (robô não passa por cima de gente). O painel
+   * continua vendo a viagem AJUSTADA e pode decidir antes, se quiser.
+   *
+   * Não mudou nada → ele está dizendo que o lançamento está certo e a leitura
+   * errou. Aí a justificativa é obrigatória e quem decide é gente: nada de
+   * reler a mesma foto pra ouvir a mesma resposta.
+   *
+   * Campo com FK sumida (catálogo velho no celular) é 400, nunca 500.
+   */
+  async corrigirDadosDivergentes(
+    motoristaId: string,
+    viagemId: string,
+    input: CorrigirDadosDivergentesInput,
+  ) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: {
+        id: true,
+        motoristaId: true,
+        status: true,
+        tipoDivergencia: true,
+        camposDivergentes: true,
+        ticket: true,
+        toneladas: true,
+        data: true,
+        veiculoId: true,
+        veiculo: { select: { placa: true } },
+        clienteId: true,
+        cliente: { select: { nome: true, empresaId: true } },
+        materialId: true,
+        material: { select: { nome: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    if (viagem.status !== "DIVERGENTE" || viagem.tipoDivergencia !== "DADOS_DIVERGENTES") {
+      throw new ConflictException("Essa viagem não está aguardando correção de dados.");
+    }
+
+    const apontados = new Set(viagem.camposDivergentes);
+    const justificativa = input.justificativa?.trim() ?? "";
+    const data: Prisma.ViagemUpdateInput = {};
+    const mudancas: { campo: CampoDivergente; antes: string; depois: string }[] = [];
+
+    if (apontados.has("ticket") && input.ticket && input.ticket !== viagem.ticket) {
+      data.ticket = input.ticket;
+      data.duplicidadeAceitaEm = null;
+      mudancas.push({ campo: "ticket", antes: viagem.ticket ?? "—", depois: input.ticket });
+    }
+    if (apontados.has("toneladas") && input.toneladas != null && input.toneladas !== Number(viagem.toneladas ?? NaN)) {
+      data.toneladas = input.toneladas;
+      mudancas.push({
+        campo: "toneladas",
+        antes: viagem.toneladas != null ? `${fmtTon(Number(viagem.toneladas))} t` : "—",
+        depois: `${fmtTon(input.toneladas)} t`,
+      });
+    }
+    const diaAntes = viagem.data ? viagem.data.toISOString().slice(0, 10) : null;
+    if (apontados.has("data") && input.data && input.data !== diaAntes) {
+      data.data = new Date(`${input.data}T00:00:00.000Z`);
+      mudancas.push({ campo: "data", antes: diaAntes ? fmtDia(diaAntes) : "—", depois: fmtDia(input.data) });
+    }
+    if (apontados.has("placa") && input.veiculoId && input.veiculoId !== viagem.veiculoId) {
+      const v = await this.prisma.veiculo.findUnique({ where: { id: input.veiculoId }, select: { placa: true } });
+      if (!v) throw new BadRequestException("Esse veículo não existe mais. Atualize o app e tente de novo.");
+      data.veiculo = { connect: { id: input.veiculoId } };
+      mudancas.push({ campo: "placa", antes: viagem.veiculo?.placa ?? "—", depois: v.placa });
+    }
+    let empresaId = viagem.cliente?.empresaId ?? "";
+    if (apontados.has("cliente") && input.clienteId && input.clienteId !== viagem.clienteId) {
+      const c = await this.prisma.cliente.findUnique({
+        where: { id: input.clienteId },
+        select: { nome: true, empresaId: true },
+      });
+      if (!c) throw new BadRequestException("Essa obra não existe mais. Atualize o app e tente de novo.");
+      data.cliente = { connect: { id: input.clienteId } };
+      empresaId = c.empresaId ?? "";
+      mudancas.push({ campo: "cliente", antes: viagem.cliente?.nome ?? "—", depois: c.nome });
+    }
+    let materialId = viagem.materialId;
+    if (apontados.has("material") && input.materialId && input.materialId !== viagem.materialId) {
+      const m = await this.prisma.material.findUnique({ where: { id: input.materialId }, select: { nome: true } });
+      if (!m) throw new BadRequestException("Esse material não existe mais. Atualize o app e tente de novo.");
+      data.material = { connect: { id: input.materialId } };
+      materialId = input.materialId;
+      mudancas.push({ campo: "material", antes: viagem.material?.nome ?? "—", depois: m.nome });
+    }
+
+    if (mudancas.length === 0 && justificativa.length < 5) {
+      throw new BadRequestException(
+        "Corrija o que estiver diferente do ticket ou, se o lançamento estiver certo, explique em poucas palavras.",
+      );
+    }
+
+    // Ticket, obra e material decidem se o número se repete na empresa:
+    // qualquer um mudou, recarimba.
+    const mexeuNoTicket = mudancas.some((m) => m.campo === "ticket" || m.campo === "cliente" || m.campo === "material");
+    if (mexeuNoTicket) {
+      const { duplicadoDeId } = await this.resolverTicketParaEmpresa(
+        empresaId,
+        materialId,
+        (data.ticket as string | undefined) ?? viagem.ticket,
+        viagemId,
+      );
+      data.ticketDuplicadoDe = duplicadoDeId ? { connect: { id: duplicadoDeId } } : { disconnect: true };
+    }
+
+    const corrigiu = mudancas.length > 0;
+    await this.prisma.viagem.update({
+      where: { id: viagemId },
+      data: {
+        ...data,
+        status: "AJUSTADA",
+        tipoDivergencia: null,
+        camposDivergentes: [],
+        motivoStatus: null,
+        ...(corrigiu ? { revisadoEm: null, revisadoPor: { disconnect: true } } : {}),
+      },
+    });
+
+    const nomeMot = (
+      await this.prisma.motorista.findUnique({ where: { id: motoristaId }, select: { nome: true } })
+    )?.nome;
+
+    const resumo = mudancas
+      .map((m) => `${ROTULO_CAMPO_DIVERGENTE[m.campo]} de ${m.antes} para ${m.depois}`)
+      .join("; ");
+    await this.mensagens.criar({
+      viagemId,
+      autor: "MOTORISTA",
+      motoristaId,
+      autorNome: nomeMot ?? "Motorista",
+      texto: [corrigiu ? `Corrigi: ${resumo}.` : "O lançamento está certo.", justificativa]
+        .filter(Boolean)
+        .join(" "),
+      acao: "CORRIGIU_DADOS",
+    });
+
+    for (const m of mudancas) {
+      try {
+        await this.auditoria.log({
+          usuarioId: null,
+          entidade: "Viagem",
+          entidadeId: viagemId,
+          acao: AcaoAuditoria.UPDATE,
+          campo: m.campo,
+          valorAntes: m.antes,
+          valorDepois: m.depois,
+          motivo: `Motorista corrigiu dado apontado na conferência${justificativa ? `: ${justificativa}` : ""}`,
+          metadata: { motoristaId, justificativa },
+        });
+      } catch {
+        // best-effort
+      }
+    }
+
+    void this.notificarAdmins(
+      "resposta-divergencia-dados",
+      `${nomeMot ?? "Motorista"} respondeu os dados da viagem`,
+      corrigiu
+        ? `Corrigiu ${mudancas.map((m) => ROTULO_CAMPO_DIVERGENTE[m.campo].toLowerCase()).join(", ")} — voltou pra conferência automática`
+        : "Manteve o lançamento e explicou — viagem aguardando sua revisão",
+      { viagemId, motoristaId, justificativa },
+    );
+
+    if (corrigiu) {
+      // Peso, obra, material e data entram no preço (ver `mudouInsumoDePreco`).
+      if (mudancas.some((m) => m.campo !== "ticket" && m.campo !== "placa")) {
+        void this.precificacao.recalcularSeguro(viagemId);
+      }
+      void this.conferencia.enfileirar(viagemId, "correcao-motorista");
+    }
 
     return this.detalhe(motoristaId, viagemId);
   }
@@ -2375,4 +2564,15 @@ export function mesRange(mes: string): { inicio: Date; fim: Date } {
   const inicio = new Date(Date.UTC(ano, m - 1, 1));
   const fim = new Date(Date.UTC(ano, m, 1));
   return { inicio, fim };
+}
+
+/** "35.5" → "35,50", como o motorista lê no papel. */
+function fmtTon(n: number): string {
+  return n.toFixed(2).replace(".", ",");
+}
+
+/** "2026-09-29" → "29/09/2026". */
+function fmtDia(iso: string): string {
+  const [a, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${a}`;
 }

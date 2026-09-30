@@ -52,6 +52,7 @@ import {
 } from "@/lib/queries";
 import { enqueueFoto } from "@/lib/sync";
 import { ConversaViagem } from "@/components/conversa-viagem";
+import { CardCorrigirDados } from "@/components/card-corrigir-dados";
 
 const STATUS_VARIANT: Record<
   string,
@@ -583,6 +584,17 @@ export default function ViagemDetalheScreen() {
                   </View>
                 </View>
               </Card>
+            )}
+
+          {/* Dados que não conferem com o ticket: um campo pra corrigir cada um.
+              `key` remonta o card se a lista mudar (nova marcação). */}
+          {detalhe.data.status === "DIVERGENTE" &&
+            detalhe.data.tipoDivergencia === "DADOS_DIVERGENTES" &&
+            (detalhe.data.camposDivergentes?.length ?? 0) > 0 && (
+              <CardCorrigirDados
+                key={(detalhe.data.camposDivergentes ?? []).join(",")}
+                viagem={detalhe.data}
+              />
             )}
 
           {/* Conversa (chat) com a operação — o pedido da divergência aparece

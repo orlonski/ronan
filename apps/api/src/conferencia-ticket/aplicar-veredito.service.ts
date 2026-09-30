@@ -307,25 +307,17 @@ export class AplicarVereditoService {
 
   /**
    * Marca divergente e avisa. Reusa o caminho que o motorista já conhece:
-   * status `DIVERGENTE` + `tipoDivergencia` + mensagem no chat da viagem + push.
+   * status `DIVERGENTE` + mensagem no chat da viagem + push.
    *
-   * `tipoDivergencia` é `OUTRO` na maioria dos casos — o motorista corrige
-   * editando a viagem normal, e o texto do chat diz exatamente o quê. A exceção
-   * é material: quando a ÚNICA coisa que não bate é ele, o desfecho tem card
-   * dedicado nos dois apps (escolhe o material certo e explica), então vale
-   * apontar pra lá em vez de mandar o motorista reeditar a viagem inteira.
-   *
-   * A regra é "única divergência" de propósito: com peso ou placa também fora,
-   * o card do material resolveria só um pedaço e a viagem voltaria AJUSTADA
-   * parecendo resolvida.
+   * O tipo é `DADOS_DIVERGENTES` com a lista dos campos que não bateram: o app
+   * abre um card com um campo pra corrigir cada um, e a correção volta sozinha
+   * pra conferência. Antes era `OUTRO`, que no app não tinha card nenhum — o
+   * motorista só conseguia responder pelo chat.
    */
   private async avisarMotorista(job: ConferenciaTicket, r: ResultadoConferencia): Promise<void> {
     const texto = resumirParaMotorista(r);
-    const soMaterial =
-      r.divergencias.length === 1 &&
-      r.divergencias[0].campo === "material" &&
-      r.incertezas.length === 0;
-    const tipo = soMaterial ? TipoDivergencia.MATERIAL_DIVERGENTE : TipoDivergencia.OUTRO;
+    const campos = [...new Set(r.divergencias.map((d) => d.campo))];
+    const soMaterial = campos.length === 1 && campos[0] === "material";
 
     const alterou = await this.prisma.viagem.updateMany({
       where: {
@@ -340,7 +332,8 @@ export class AplicarVereditoService {
       data: {
         status: StatusViagem.DIVERGENTE,
         motivoStatus: texto,
-        tipoDivergencia: tipo,
+        tipoDivergencia: TipoDivergencia.DADOS_DIVERGENTES,
+        camposDivergentes: campos,
         // NUNCA revisadoEm/revisadoPor aqui — ver o cabeçalho do arquivo.
       },
     });

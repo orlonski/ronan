@@ -16,6 +16,7 @@ import { z } from "zod";
 import {
   CriarViagemBase,
   CompletarPesoInput,
+  CorrigirDadosDivergentesInput,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -301,6 +302,22 @@ export class ViagensMotoristaController {
     body: z.infer<typeof ResponderMaterialDivergenteInput>,
   ) {
     return this.service.responderMaterialDivergente(user.id, id, body);
+  }
+
+  /**
+   * Motorista responde DADOS_DIVERGENTES: corrige os campos que a conferência
+   * apontou (ou explica que estão certos). Corrigido, a viagem volta sozinha
+   * pra conferência automática.
+   */
+  @Post(":id/corrigir-dados-divergentes")
+  @CapacidadeLivre("Continuação de lançamento que já existe: perder acesso não trava trabalho feito.")
+  corrigirDadosDivergentes(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(CorrigirDadosDivergentesInput))
+    body: CorrigirDadosDivergentesInput,
+  ) {
+    return this.service.corrigirDadosDivergentes(user.id, id, body);
   }
 
   /** Chat da viagem: histórico de mensagens. */

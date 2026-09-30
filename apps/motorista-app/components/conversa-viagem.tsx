@@ -21,6 +21,7 @@ const ACAO_LABEL: Record<string, string> = {
   CONFERIU: "Conferido pela IA",
   CORRIGIU_TICKET: "Corrigiu o ticket",
   CORRIGIU_MATERIAL: "Respondeu o material",
+  CORRIGIU_DADOS: "Corrigiu os dados",
 };
 
 /**

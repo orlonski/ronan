@@ -12,6 +12,7 @@ export type TipoNotificacaoAdmin =
   | "resposta-divergencia-km"
   | "resposta-divergencia-ticket"
   | "resposta-divergencia-material"
+  | "resposta-divergencia-dados"
   | "resposta-divergencia-foto"
   | "nova-mensagem-viagem"
   | "foto-anexada"

@@ -58,3 +58,4 @@ export * from "./assinatura";
 export * from "./termo";
 export * from "./ponto";
 export * from "./matriz-por-menu";
+export * from "./divergencia";

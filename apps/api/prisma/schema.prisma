@@ -137,6 +137,11 @@ enum TipoDivergencia {
   /// o papel) e o que a conferência automática mais detecta sozinha. App
   /// mostra card dedicado com a lista de materiais + campo pra explicar.
   MATERIAL_DIVERGENTE
+  /// Um ou mais dados do lançamento não conferem com o ticket (número, peso,
+  /// data, placa, obra, material). Quais são fica em `Viagem.camposDivergentes`,
+  /// e o app mostra um card com um campo pra corrigir cada um. Corrigido, a
+  /// viagem volta sozinha pra conferência automática.
+  DADOS_DIVERGENTES
   /// Qualquer outro motivo. Motorista corrige editando a viagem normal.
   OUTRO
 }
@@ -516,105 +521,105 @@ model Conta {
   criadaEm    DateTime @default(now())
   alteradaEm  DateTime @updatedAt
 
-  users                         User[]                           @relation("UsuarioDaConta")
+  users                          User[]                           @relation("UsuarioDaConta")
   /// Operadores da plataforma que estão dentro desta empresa agora.
-  assumidaPor                   User[]                           @relation("ContaAssumida")
-  papeis                        Papel[]
-  adminNotificacoes             AdminNotificacao[]
-  motoristas                    Motorista[]
-  redefinicoesSenhaPendentes    RedefinicaoSenhaPendente[]
-  motoristaPosicaoConfigs       MotoristaPosicaoConfig[]
-  motoristaPosicoes             MotoristaPosicao[]
-  motoristaDocumentos           MotoristaDocumento[]
-  motoristaVeiculos             MotoristaVeiculo[]
-  whatsappSessoes               WhatsappSessao[]
-  whatsappConvites              WhatsappConvite[]
-  whatsappMensagens             WhatsappMensagem[]
-  veiculos                      Veiculo[]
-  transportadoras               Transportadora[]
-  usuarioTransportadoras        UsuarioTransportadora[]
-  empresas                      Empresa[]
-  layoutImportBlocos            LayoutImportBloco[]
-  clientes                      Cliente[]
-  materiais                     Material[]
-  tiposServico                  TipoServico[]
-  modalidadesMotorista          ModalidadeMotorista[]
-  regrasMinimo                  RegraMinimo[]
-  tabelasPreco                  TabelaPreco[]
-  viagemValores                 ViagemValor[]
-  acertosMotorista              AcertoMotorista[]
-  itensAcerto                   ItemAcerto[]
-  pedidos                       Pedido[]
-  viagensPlanejadas             ViagemPlanejada[]
-  modulosContratados            ModuloContratado[]
-  faturas                       Fatura[]
-  faturaLinhas                  FaturaLinha[]
-  titulosReceber                TituloReceber[]
-  titulosPagar                  TituloPagar[]
-  baixasTitulo                  BaixaTitulo[]
-  fornecedores                  Fornecedor[]
-  custosFixosVeiculo            CustoFixoVeiculo[]
-  manutencoesVeiculo            ManutencaoVeiculo[]
-  problemasVeiculo              ProblemaVeiculo[]
-  leiturasOdometro              LeituraOdometro[]
-  planosManutencao              PlanoManutencao[]
-  documentosVeiculo             DocumentoVeiculo[]
-  pneus                         Pneu[]
-  multas                        Multa[]
-  alertasOperacionais           AlertaOperacional[]
-  documentosFiscais             DocumentoFiscal[]
-  sequenciasFiscais             SequenciaFiscal[]
-  certificadoDigital            CertificadoDigital?
-  locais                        Local[]
-  locaisClientes                LocalCliente[]
-  locaisEvidencias              LocalEvidencia[]
-  viagens                       Viagem[]
-  trechosViagem                 TrechoViagem[]
-  tiposEventoViagem             TipoEventoViagem[]
-  eventosViagem                 EventoViagem[]
-  viagensDivergencias           ViagemDivergencia[]
-  viagensMensagens              ViagemMensagem[]
-  ticketFotos                   TicketFoto[]
-  viagensCompartilhamentos      ViagemCompartilhamento[]
-  stories                       Story[]
-  storyVisualizacoes            StoryVisualizacao[]
-  storyReacoes                  StoryReacao[]
-  viagensPontos                 ViagemPonto[]
-  pedagios                      Pedagio[]
-  fechamentos                   Fechamento[]
-  fechamentoLinhas              FechamentoLinha[]
-  layoutsEnvio                  LayoutEnvio[]
-  enviosFechamento              EnvioFechamento[]
-  auditLogs                     AuditLog[]
-  configuracoesTracking         ConfiguracaoTracking[]
-  configuracoesTorre            ConfiguracaoTorre[]
+  assumidaPor                    User[]                           @relation("ContaAssumida")
+  papeis                         Papel[]
+  adminNotificacoes              AdminNotificacao[]
+  motoristas                     Motorista[]
+  redefinicoesSenhaPendentes     RedefinicaoSenhaPendente[]
+  motoristaPosicaoConfigs        MotoristaPosicaoConfig[]
+  motoristaPosicoes              MotoristaPosicao[]
+  motoristaDocumentos            MotoristaDocumento[]
+  motoristaVeiculos              MotoristaVeiculo[]
+  whatsappSessoes                WhatsappSessao[]
+  whatsappConvites               WhatsappConvite[]
+  whatsappMensagens              WhatsappMensagem[]
+  veiculos                       Veiculo[]
+  transportadoras                Transportadora[]
+  usuarioTransportadoras         UsuarioTransportadora[]
+  empresas                       Empresa[]
+  layoutImportBlocos             LayoutImportBloco[]
+  clientes                       Cliente[]
+  materiais                      Material[]
+  tiposServico                   TipoServico[]
+  modalidadesMotorista           ModalidadeMotorista[]
+  regrasMinimo                   RegraMinimo[]
+  tabelasPreco                   TabelaPreco[]
+  viagemValores                  ViagemValor[]
+  acertosMotorista               AcertoMotorista[]
+  itensAcerto                    ItemAcerto[]
+  pedidos                        Pedido[]
+  viagensPlanejadas              ViagemPlanejada[]
+  modulosContratados             ModuloContratado[]
+  faturas                        Fatura[]
+  faturaLinhas                   FaturaLinha[]
+  titulosReceber                 TituloReceber[]
+  titulosPagar                   TituloPagar[]
+  baixasTitulo                   BaixaTitulo[]
+  fornecedores                   Fornecedor[]
+  custosFixosVeiculo             CustoFixoVeiculo[]
+  manutencoesVeiculo             ManutencaoVeiculo[]
+  problemasVeiculo               ProblemaVeiculo[]
+  leiturasOdometro               LeituraOdometro[]
+  planosManutencao               PlanoManutencao[]
+  documentosVeiculo              DocumentoVeiculo[]
+  pneus                          Pneu[]
+  multas                         Multa[]
+  alertasOperacionais            AlertaOperacional[]
+  documentosFiscais              DocumentoFiscal[]
+  sequenciasFiscais              SequenciaFiscal[]
+  certificadoDigital             CertificadoDigital?
+  locais                         Local[]
+  locaisClientes                 LocalCliente[]
+  locaisEvidencias               LocalEvidencia[]
+  viagens                        Viagem[]
+  trechosViagem                  TrechoViagem[]
+  tiposEventoViagem              TipoEventoViagem[]
+  eventosViagem                  EventoViagem[]
+  viagensDivergencias            ViagemDivergencia[]
+  viagensMensagens               ViagemMensagem[]
+  ticketFotos                    TicketFoto[]
+  viagensCompartilhamentos       ViagemCompartilhamento[]
+  stories                        Story[]
+  storyVisualizacoes             StoryVisualizacao[]
+  storyReacoes                   StoryReacao[]
+  viagensPontos                  ViagemPonto[]
+  pedagios                       Pedagio[]
+  fechamentos                    Fechamento[]
+  fechamentoLinhas               FechamentoLinha[]
+  layoutsEnvio                   LayoutEnvio[]
+  enviosFechamento               EnvioFechamento[]
+  auditLogs                      AuditLog[]
+  configuracoesTracking          ConfiguracaoTracking[]
+  configuracoesTorre             ConfiguracaoTorre[]
   configuracoesConferenciaDiaria ConfiguracaoConferenciaDiaria[]
-  conferenciasDiarias           ConferenciaDiaria[]
-  sugestoesGestor               SugestaoGestor[]
-  configuracoesIa               ConfiguracaoIa[]
-  configuracoesAgente           ConfiguracaoAgente[]
-  configuracoesAvisoGrupo       ConfiguracaoAvisoGrupo[]
-  configuracoesRoteamentoWpp    ConfiguracaoRoteamentoWhatsapp[]
-  configuracoesBuscaLocais      ConfiguracaoBuscaLocais[]
-  configuracoesKmAtipico        ConfiguracaoKmAtipico[]
-  configuracoesForcaAtualizacao ConfiguracaoForcaAtualizacao[]
-  camposLayout                  CampoLayout[]
-  errorLogs                     ErrorLog[]
-  lancamentosResgatados         LancamentoResgatado[]
-  eventosMotorista              EventoMotorista[]
-  abastecimentos                Abastecimento[]
-  abastecimentoFotos            AbastecimentoFoto[]
-  notificacoes                  Notificacao[]
-  conversas                     Conversa[]
-  conversaParticipantes         ConversaParticipante[]
-  mensagensChat                 MensagemChat[]
-  bloqueiosChat                 BloqueioChat[]
-  denunciasMensagemChat         DenunciaMensagemChat[]
-  usosIa                        UsoIa[]
-  conferenciasTicket            ConferenciaTicket[]
-  assinaturas                   Assinatura[]
-  cobrancasAssinatura           CobrancaAssinatura[]
-  aceitesTermo                  AceiteTermo[]
+  conferenciasDiarias            ConferenciaDiaria[]
+  sugestoesGestor                SugestaoGestor[]
+  configuracoesIa                ConfiguracaoIa[]
+  configuracoesAgente            ConfiguracaoAgente[]
+  configuracoesAvisoGrupo        ConfiguracaoAvisoGrupo[]
+  configuracoesRoteamentoWpp     ConfiguracaoRoteamentoWhatsapp[]
+  configuracoesBuscaLocais       ConfiguracaoBuscaLocais[]
+  configuracoesKmAtipico         ConfiguracaoKmAtipico[]
+  configuracoesForcaAtualizacao  ConfiguracaoForcaAtualizacao[]
+  camposLayout                   CampoLayout[]
+  errorLogs                      ErrorLog[]
+  lancamentosResgatados          LancamentoResgatado[]
+  eventosMotorista               EventoMotorista[]
+  abastecimentos                 Abastecimento[]
+  abastecimentoFotos             AbastecimentoFoto[]
+  notificacoes                   Notificacao[]
+  conversas                      Conversa[]
+  conversaParticipantes          ConversaParticipante[]
+  mensagensChat                  MensagemChat[]
+  bloqueiosChat                  BloqueioChat[]
+  denunciasMensagemChat          DenunciaMensagemChat[]
+  usosIa                         UsoIa[]
+  conferenciasTicket             ConferenciaTicket[]
+  assinaturas                    Assinatura[]
+  cobrancasAssinatura            CobrancaAssinatura[]
+  aceitesTermo                   AceiteTermo[]
 
   documentosExigidos   DocumentoExigido[]
   convitesColeta       ConviteColeta[]
@@ -696,7 +701,7 @@ model User {
   resolucoes                  FechamentoLinha[]
   envios                      EnvioFechamento[]
   auditorias                  AuditLog[]
-  conferenciasDesligadas      Motorista[]           @relation("MotoristaConferenciaDesligadaPor")
+  conferenciasDesligadas      Motorista[]                        @relation("MotoristaConferenciaDesligadaPor")
   resgatesResolvidos          LancamentoResgatado[]
   layoutsEnvio                LayoutEnvio[]
   configsTracking             ConfiguracaoTracking[]
@@ -895,25 +900,25 @@ model FaixaPreco {
 /// duração do teste são decisões comerciais, e virariam deploy se ficassem
 /// no código.
 model ConfiguracaoPlataforma {
-  id                 String  @id @default("singleton")
+  id                     String  @id @default("singleton")
   /// A porta pública de auto-cadastro está aberta?
   ///
   /// Nasce FECHADA de propósito: quem sobe a migration não está
   /// necessariamente pronto pra receber cadastro de estranho no mesmo minuto.
   /// Abrir é um clique na tela de Empresas.
-  autoCadastroAberto Boolean @default(false)
+  autoCadastroAberto     Boolean @default(false)
   /// Quantos dias dura o período de teste de quem se cadastra sozinho.
-  diasTesteGratis    Int     @default(14)
+  diasTesteGratis        Int     @default(14)
   /// Teto de códigos de cadastro enviados por hora, somando o mundo inteiro.
   ///
   /// É a trava que protege o bolso, e a única que funciona quando o ataque vem
   /// de muitos IPs e muitos telefones: cada código é uma mensagem de
   /// autenticação paga. Os outros dois freios (por IP e por telefone) são
   /// contra insistência, não contra volume.
-  maxCodigosPorHora  Int     @default(30)
+  maxCodigosPorHora      Int     @default(30)
   /// Teto de perguntas da conferência diária enviadas por hora, somando todas as
   /// empresas. Freio de custo: cada pergunta é um template pago da Meta.
-  maxConferenciasPorHora Int  @default(60)
+  maxConferenciasPorHora Int     @default(60)
 
   /// O SDR atende prospect no WhatsApp?
   ///
@@ -958,16 +963,16 @@ model ConfiguracaoPlataforma {
   sdrFollowupHoraInicio     Int     @default(9)
   sdrFollowupHoraFim        Int     @default(19)
 
-  sdrChaveAnthropic String?
-  sdrChaveGemini    String?
-  sdrChaveMinimax   String?
+  sdrChaveAnthropic   String?
+  sdrChaveGemini      String?
+  sdrChaveMinimax     String?
   /// Onde o prospect cria a conta sozinho. Configurável porque o domínio do
   /// painel já mudou uma vez e vai mudar de novo.
-  sdrLinkCadastro   String  @default("https://app.movatruck.com.br/cadastro")
+  sdrLinkCadastro     String  @default("https://app.movatruck.com.br/cadastro")
   /// O que ele MOSTRA na primeira mensagem: vídeo curto quando existir, senão
   /// o site. Quem chega pelo anúncio pediu pra conhecer — recebe algo pra ver,
   /// não um formulário de perguntas.
-  sdrLinkApresentacao String @default("https://www.movatruck.com.br")
+  sdrLinkApresentacao String  @default("https://www.movatruck.com.br")
 
   /// Quem atende quando o robô sai. O nome aparece pro prospect ("o Fernando
   /// vai falar com você por aqui") — "alguém da equipe" sem nome e sem prazo
@@ -998,9 +1003,9 @@ model ConfiguracaoPlataforma {
   /// Horário de atendimento humano, hora cheia em São Paulo, e dias da semana
   /// (0 = domingo). Fora dele o robô diz quando alguém responde, e o prazo de
   /// escalonamento só começa a contar na abertura.
-  atendimentoHoraInicio Int   @default(8)
-  atendimentoHoraFim    Int   @default(18)
-  atendimentoDias       Int[] @default([1, 2, 3, 4, 5, 6])
+  atendimentoHoraInicio    Int      @default(8)
+  atendimentoHoraFim       Int      @default(18)
+  atendimentoDias          Int[]    @default([1, 2, 3, 4, 5, 6])
 
   /// O publicador do Instagram está ligado?
   ///
@@ -1394,36 +1399,36 @@ enum AceiteVinculo {
 }
 
 model Motorista {
-  contaId                 String               @default("__SEM_CONTA__")
-  conta                   Conta                @relation(fields: [contaId], references: [id])
-  id                      String               @id @default(uuid())
+  contaId                    String               @default("__SEM_CONTA__")
+  conta                      Conta                @relation(fields: [contaId], references: [id])
+  id                         String               @id @default(uuid())
   /// A PESSOA dona deste vínculo (ver MotoristaIdentidade).
   ///
   /// Opcional só enquanto a migração roda; depois do backfill vira obrigatória.
   /// Vínculo sem identidade é cadastro criado pelo painel antes desta mudança —
   /// ele ganha uma quando o motorista baixar o app e confirmar o código.
-  identidade              MotoristaIdentidade? @relation(fields: [identidadeId], references: [id])
-  identidadeId            String?
+  identidade                 MotoristaIdentidade? @relation(fields: [identidadeId], references: [id])
+  identidadeId               String?
   /// Cópia do nome/CPF/telefone da identidade, mantida em sincronia por
   /// `sincronizarVinculos`. A fonte da verdade é a identidade — isto aqui existe
   /// porque ~200 consultas do painel, dos relatórios e do export fazem
   /// `select: { nome, cpf }` direto no vínculo.
-  nome                    String
-  cpf                     String // 11 dígitos (sem máscara) — único DENTRO da conta
+  nome                       String
+  cpf                        String // 11 dígitos (sem máscara) — único DENTRO da conta
   /// Legado: a senha mora na identidade desde 09/2026. Fica um ciclo como rede
   /// de segurança e some depois — nada mais LÊ este campo.
-  senhaHash               String
-  telefone                String?
-  email                   String?
-  veiculoDefault          Veiculo?             @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
-  veiculoDefaultId        String?
+  senhaHash                  String
+  telefone                   String?
+  email                      String?
+  veiculoDefault             Veiculo?             @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
+  veiculoDefaultId           String?
   // Status de aprovação do cadastro. Default APROVADO pra não quebrar fluxo
   // existente (admin cria já aprovado; migration seta existentes pra APROVADO).
   // Auto-cadastro pelo app nasce PENDENTE_APROVACAO.
-  status                  StatusMotorista      @default(APROVADO)
-  aprovadoEm              DateTime?
-  aprovadoPor             User?                @relation("AprovouMotorista", fields: [aprovadoPorId], references: [id], onDelete: SetNull)
-  aprovadoPorId           String?
+  status                     StatusMotorista      @default(APROVADO)
+  aprovadoEm                 DateTime?
+  aprovadoPor                User?                @relation("AprovouMotorista", fields: [aprovadoPorId], references: [id], onDelete: SetNull)
+  aprovadoPorId              String?
   /// O lado DELE: a empresa puxou o CPF e ele ainda não respondeu?
   ///
   /// Default ACEITO porque é o que todo vínculo que já existia é — foi ele que
@@ -1431,136 +1436,136 @@ model Motorista {
   /// convite por CPF nasce PENDENTE, e enquanto estiver assim o motorista NÃO
   /// aparece na lista do painel (só na aba de convites): a empresa não começa a
   /// operar com alguém que ainda não disse sim.
-  aceite                  AceiteVinculo        @default(ACEITO)
-  convidadoPor            User?                @relation("ConvidouMotorista", fields: [convidadoPorId], references: [id], onDelete: SetNull)
-  convidadoPorId          String?
-  convidadoEm             DateTime?
-  aceiteEm                DateTime?
-  ativo                   Boolean              @default(true)
-  ultimoLoginEm           DateTime?
-  tentativasLogin         Int                  @default(0)
-  bloqueadoAte            DateTime?
-  expoPushToken           String?
-  pushTokenAtualizadoEm   DateTime?
+  aceite                     AceiteVinculo        @default(ACEITO)
+  convidadoPor               User?                @relation("ConvidouMotorista", fields: [convidadoPorId], references: [id], onDelete: SetNull)
+  convidadoPorId             String?
+  convidadoEm                DateTime?
+  aceiteEm                   DateTime?
+  ativo                      Boolean              @default(true)
+  ultimoLoginEm              DateTime?
+  tentativasLogin            Int                  @default(0)
+  bloqueadoAte               DateTime?
+  expoPushToken              String?
+  pushTokenAtualizadoEm      DateTime?
   // Preferências de recebimento (o motorista controla no app). Default true pra
   // não silenciar ninguém sem escolha. aceitaPush gateia o PushService (choke
   // central); aceitaWhatsapp gateia os avisos por WhatsApp (não o código de
   // cadastro, que é de autenticação).
-  aceitaPush              Boolean              @default(true)
-  aceitaWhatsapp          Boolean              @default(true)
+  aceitaPush                 Boolean              @default(true)
+  aceitaWhatsapp             Boolean              @default(true)
   // Resumo diário do dia no WhatsApp (cron 20h). Gate próprio além do
   // aceitaWhatsapp mestre — o motorista pode querer os avisos mas não o resumo.
-  receberResumoDiario     Boolean              @default(true)
+  receberResumoDiario        Boolean              @default(true)
   /// Opt-out da conferência diária ("você esqueceu de lançar alguma viagem?").
   /// Hoje só entra no filtro de elegibilidade do job; nada no app liga isso ainda.
-  receberConferenciaDiaria Boolean             @default(true)
+  receberConferenciaDiaria   Boolean              @default(true)
   /// Registro de QUEM desligou a conferência e QUANDO (limpo ao religar).
   /// Origem: "MOTORISTA" (tocou em "Parar perguntas" no WhatsApp, vale em todos os
   /// vínculos da pessoa) ou "PAINEL" (decisão da empresa sobre ESTE cadastro).
   /// Linha antiga com `receberConferenciaDiaria=false` e origem nula = MOTORISTA
   /// (era o único caminho que desligava).
-  conferenciaDesligadaEm  DateTime?
+  conferenciaDesligadaEm     DateTime?
   conferenciaDesligadaOrigem String?
-  conferenciaDesligadaPorId String?
-  conferenciaDesligadaPor User?                @relation("MotoristaConferenciaDesligadaPor", fields: [conferenciaDesligadaPorId], references: [id], onDelete: SetNull)
+  conferenciaDesligadaPorId  String?
+  conferenciaDesligadaPor    User?                @relation("MotoristaConferenciaDesligadaPor", fields: [conferenciaDesligadaPorId], references: [id], onDelete: SetNull)
   conferenciaDesligadaMotivo String?
-  conferenciasDiarias     ConferenciaDiaria[]
-  sugestoesGestor         SugestaoGestor[]
+  conferenciasDiarias        ConferenciaDiaria[]
+  sugestoesGestor            SugestaoGestor[]
   /// Alcance do WhatsApp DESTE número (vale pro número, não pra empresa). Só a
   /// conferência diária lê isto — nunca bloqueia OTP, reset de senha nem aviso de peso.
   /// Falhas SEGUIDAS de "destinatário não alcançável" (allowlist de códigos da Meta).
-  whatsappFalhasSeguidas  Int                  @default(0)
+  whatsappFalhasSeguidas     Int                  @default(0)
   /// Desde quando o número não confirma entrega (primeira falha da sequência).
-  whatsappSemEntregaDesde DateTime?
+  whatsappSemEntregaDesde    DateTime?
   /// Última vez que a Meta confirmou entrega (delivered/read) neste número.
-  whatsappUltimaEntregaEm DateTime?
+  whatsappUltimaEntregaEm    DateTime?
   /// Preenchido = número SUSPEITO de inalcançável: a conferência diária para de
   /// perguntar. Volta a null sozinho quando entrega/responde, ou no "reverificar".
-  whatsappInalcancavelEm  DateTime?
+  whatsappInalcancavelEm     DateTime?
   /// O gestor mandou reverificar: mensagens anteriores a esta data não contam pro detector.
-  whatsappReverificadoEm  DateTime?
+  whatsappReverificadoEm     DateTime?
   // Versão do app que o motorista está rodando — capturada via headers em
   // toda request pelo AppVersionInterceptor. Como o runtimeVersion usa policy
   // "appVersion", o appVersion sozinho NÃO muda entre updates OTA; o que
   // identifica o código real é o appUpdateId / appBuiltAt (bundle EAS Update).
-  appVersion              String? // ex: "1.2.0" (Constants.expoConfig.version)
-  appPlatform             String? // "ios" | "android" (Platform.OS) — força-atualização
-  appUpdateId             String? // id do bundle OTA rodando (Updates.updateId)
-  appBuiltAt              DateTime? // quando o bundle foi publicado (Updates.createdAt)
-  appCanal                String? // canal EAS Update (ex: "production")
-  appVistoEm              DateTime? // última vez que o app reportou versão (= visto online)
+  appVersion                 String? // ex: "1.2.0" (Constants.expoConfig.version)
+  appPlatform                String? // "ios" | "android" (Platform.OS) — força-atualização
+  appUpdateId                String? // id do bundle OTA rodando (Updates.updateId)
+  appBuiltAt                 DateTime? // quando o bundle foi publicado (Updates.createdAt)
+  appCanal                   String? // canal EAS Update (ex: "production")
+  appVistoEm                 DateTime? // última vez que o app reportou versão (= visto online)
   // Quando o aviso "fulano entrou no app" foi postado no grupo do WhatsApp.
   // Trava de envio único: uma vez setado, nunca reanuncia esse motorista.
-  avisoGrupoEnviadoEm     DateTime?
+  avisoGrupoEnviadoEm        DateTime?
   /// O molde de acessos que esta pessoa segue. `null` = ninguém aplicou perfil
   /// nenhum, e aí valem as colunas abaixo como sempre valeram.
   ///
   /// ⚠️ Atribuir um perfil ESCREVE as colunas. Coluna que depois diverge do
   /// perfil é EXCEÇÃO, e a ficha mostra quantas são — exceção invisível vira
   /// regra por acidente.
-  perfilAcessoId          String?
-  perfilAcesso            PerfilAcessoApp?     @relation(fields: [perfilAcessoId], references: [id], onDelete: SetNull)
+  perfilAcessoId             String?
+  perfilAcesso               PerfilAcessoApp?     @relation(fields: [perfilAcessoId], references: [id], onDelete: SetNull)
   /// Por que este motorista está FIXADO no perfil acima em vez de seguir as
   /// regras da empresa. Com perfil fixado, regra nenhuma o alcança.
-  perfilFixadoMotivo      String?
-  acessoEfetivoApp        AcessoEfetivoApp?
+  perfilFixadoMotivo         String?
+  acessoEfetivoApp           AcessoEfetivoApp?
   // Acessos por funcionalidade (controle de feature flag por motorista).
   // Default false nos campos sensíveis = novo motorista nasce travado e o admin
   // libera caso a caso pelo dashboard. podeLancarViagem/podeLancarAbastecimento
   // seguem true pra não quebrar fluxo existente.
-  podeLancarViagem        Boolean              @default(true)
-  podeIniciarViagem       Boolean              @default(false)
+  podeLancarViagem           Boolean              @default(true)
+  podeIniciarViagem          Boolean              @default(false)
   /// Lifecycle guiado de viagem (Iniciar → eventos → Finalizar), com viagem
   /// criada no backend já no início (status EM_ANDAMENTO). Flag separada de
   /// podeIniciarViagem (tracking GPS efêmero legado) pra rodar os dois modos
   /// em paralelo durante a transição.
-  podeViagemLifecycle     Boolean              @default(false)
-  podeLancarPedagio       Boolean              @default(false)
-  podeLancarAbastecimento Boolean              @default(true)
+  podeViagemLifecycle        Boolean              @default(false)
+  podeLancarPedagio          Boolean              @default(false)
+  podeLancarAbastecimento    Boolean              @default(true)
   /// Quando true, o app dispara OCR via IA na foto do ticket pra sugerir
   /// preenchimento. False = motorista preenche tudo manualmente.
-  podeUsarOcrTicket       Boolean              @default(false)
+  podeUsarOcrTicket          Boolean              @default(false)
   /// Stories (estilo Instagram): vê a barra na home, posta e reage. Liberado
   /// pra todos (default true); admin pode desligar caso a caso pelo dashboard.
-  podeVerStories          Boolean              @default(true)
+  podeVerStories             Boolean              @default(true)
   /// Quando true, o app mostra "Buscar local por nome" na descarga (lista todos
   /// os locais, não só os do GPS por perto). Default false — admin libera caso a
   /// caso (ex: desenvolvedor testando). Só affordance de UI: o catálogo já traz tudo.
-  podeVerTodosLocais      Boolean              @default(false)
+  podeVerTodosLocais         Boolean              @default(false)
   /// Referência de km por trajeto: ao escolher carga+descarga, o app mostra o que
   /// a frota já rodou nesse par ("7 viagens, quase sempre ~100 km") com um toque
   /// pra usar o valor; e avisa/pede justificativa se o km sair fora do padrão.
   /// Só UX do app — o backend carimba kmForaDoPadrao pra todo mundo independente
   /// desta flag, e o lançamento nunca é bloqueado. Rollout gradual: default false.
-  podeReferenciaKm        Boolean              @default(false)
+  podeReferenciaKm           Boolean              @default(false)
   /// Telemetria de interação na tela "Nova viagem" (o que clicou/buscou/selecionou,
   /// o que a lista trouxe) — pra diagnosticar ex. "descarga errada". Opt-in por
   /// motorista; gate é client-side (só emite os eventos nv_*). Default false.
-  podeTelemetria          Boolean              @default(false)
+  podeTelemetria             Boolean              @default(false)
   /// Chat entre motoristas (aba Conversas). Default TRUE: validado em campo e
   /// liberado pra todo mundo — motorista novo já nasce com a aba. Continua
   /// desligável caso a caso pelo painel (ex: alguém que abusou); desligar
   /// remove a aba e bloqueia /m/chat/*, mas as conversas ficam guardadas.
-  podeChat                Boolean              @default(true)
+  podeChat                   Boolean              @default(true)
   /// Serviço medido por período (diária): o motorista pode escolher o modo de
   /// serviço no lançamento e marcar hora de entrada/saída em vez de peso.
   ///
   // --- remuneração própria deste motorista (vence a da modalidade) ---
   /// null = usa a regra da modalidade. Preenchido = este motorista negociou
   /// diferente, que é a norma com agregado.
-  tipoRemuneracao         TipoRemuneracao?
-  percentualFrete         Decimal?             @db.Decimal(5, 2)
-  valorPorViagem          Decimal?             @db.Decimal(10, 2)
-  valorPorTonelada        Decimal?             @db.Decimal(10, 2)
-  valorPorKm              Decimal?             @db.Decimal(10, 2)
+  tipoRemuneracao            TipoRemuneracao?
+  percentualFrete            Decimal?             @db.Decimal(5, 2)
+  valorPorViagem             Decimal?             @db.Decimal(10, 2)
+  valorPorTonelada           Decimal?             @db.Decimal(10, 2)
+  valorPorKm                 Decimal?             @db.Decimal(10, 2)
   /// Pra onde o pagamento vai. Guardado como o motorista digitou (pode ser CPF,
   /// telefone, e-mail ou chave aleatória) — normalizar chave PIX é errar.
-  chavePix                String?
+  chavePix                   String?
   /// Frota dona do motorista. Null = não classificado (invisível pros usuários
   /// restritos). Usado pra carimbar Viagem/Pedagio/Abastecimento na criação —
   /// mudar aqui NÃO reescreve o histórico já carimbado, de propósito.
-  transportadora          Transportadora?      @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
-  transportadoraId        String?
+  transportadora             Transportadora?      @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadoraId           String?
   /// Vínculo do motorista (próprio / agregado / terceiro). Decide quais fotos o
   /// app exige no abastecimento. Null = não classificado, e aí nada muda pra ele:
   /// vale só o cupom da conta (Conta.exigeFotoAbastecimento).
@@ -1568,10 +1573,10 @@ model Motorista {
   /// ORTOGONAL a transportadora, não sinônimo: aquela é a frota (pessoa jurídica,
   /// com CNPJ) e serve pra particionar quem enxerga o quê no painel. Um agregado
   /// pertence à frota X E é agregado.
-  modalidade              ModalidadeMotorista? @relation(fields: [modalidadeId], references: [id], onDelete: SetNull)
-  modalidadeId            String?
-  criadoEm                DateTime             @default(now())
-  alteradoEm              DateTime             @updatedAt
+  modalidade                 ModalidadeMotorista? @relation(fields: [modalidadeId], references: [id], onDelete: SetNull)
+  modalidadeId               String?
+  criadoEm                   DateTime             @default(now())
+  alteradoEm                 DateTime             @updatedAt
 
   viagens               Viagem[]
   pedagios              Pedagio[]
@@ -4070,6 +4075,10 @@ model Viagem {
   /// motorista resolve. Default null = divergência genérica (motorista corrige
   /// editando a viagem normalmente).
   tipoDivergencia         TipoDivergencia?
+  /// Com `tipoDivergencia = DADOS_DIVERGENTES`: quais campos o motorista tem que
+  /// conferir ("ticket", "toneladas", "data", "placa", "cliente", "material").
+  /// Limpo junto com o tipo quando ele responde.
+  camposDivergentes       String[]           @default([])
   criadoOfflineEm         DateTime?
   sincronizadoEm          DateTime           @default(now())
   alteradoEm              DateTime           @updatedAt
@@ -4901,66 +4910,66 @@ enum StatusSugestaoGestor {
 /// A regra da conferência diária, por conta. Nasce DESLIGADA e em sombra.
 /// Criada sob demanda (upsert) — sem linha valem os defaults.
 model ConfiguracaoConferenciaDiaria {
-  contaId               String                     @default("__SEM_CONTA__")
-  conta                 Conta                      @relation(fields: [contaId], references: [id])
-  id                    String                     @id @default(uuid())
-  ativo                 Boolean                    @default(false)
-  modo                  ModoConferenciaDiaria      @default(SOMBRA)
+  contaId                           String                     @default("__SEM_CONTA__")
+  conta                             Conta                      @relation(fields: [contaId], references: [id])
+  id                                String                     @id @default(uuid())
+  ativo                             Boolean                    @default(false)
+  modo                              ModoConferenciaDiaria      @default(SOMBRA)
   /// Hora cheia (0-23, Brasília) em que o job roda.
-  horaEnvio             Int                        @default(8)
+  horaEnvio                         Int                        @default(8)
   /// Dias da semana em que o job roda (0 = domingo).
-  diasDoJob             Int[]                      @default([1, 2, 3, 4, 5])
-  regra                 RegraConferenciaDiaria     @default(SEM_VIAGEM_NO_DIA_ANTERIOR)
+  diasDoJob                         Int[]                      @default([1, 2, 3, 4, 5])
+  regra                             RegraConferenciaDiaria     @default(SEM_VIAGEM_NO_DIA_ANTERIOR)
   /// N da regra SEM_VIAGEM_HA_N_DIAS.
-  diasSemViagem         Int                        @default(2)
+  diasSemViagem                     Int                        @default(2)
   /// Quais dias da semana contam como "dia esperado de viagem" (0 = domingo).
-  diasConsiderados      Int[]                      @default([1, 2, 3, 4, 5])
+  diasConsiderados                  Int[]                      @default([1, 2, 3, 4, 5])
   /// Só feriados NACIONAIS (FeriadoPonto) deixam de contar.
-  ignorarFeriados       Boolean                    @default(true)
+  ignorarFeriados                   Boolean                    @default(true)
   /// Motorista aprovado que nunca lançou nada também entra.
-  incluirQueNuncaLancou Boolean                    @default(true)
+  incluirQueNuncaLancou             Boolean                    @default(true)
   /// No máximo 1 pergunta por motorista a cada N dias.
-  intervaloMinimoDias   Int                        @default(3)
-  maxPerguntasPorSemana Int                        @default(3)
-  quemEntra             QuemEntraConferenciaDiaria @default(TODOS_APROVADOS)
-  modalidadeIds         String[]                   @default([])
-  transportadoraIds     String[]                   @default([])
+  intervaloMinimoDias               Int                        @default(3)
+  maxPerguntasPorSemana             Int                        @default(3)
+  quemEntra                         QuemEntraConferenciaDiaria @default(TODOS_APROVADOS)
+  modalidadeIds                     String[]                   @default([])
+  transportadoraIds                 String[]                   @default([])
   /// Manda UM lembrete a quem não respondeu (mesma pergunta, mesmos botões).
-  reenviar              Boolean                    @default(false)
+  reenviar                          Boolean                    @default(false)
   /// Quantas horas depois da pergunta sai o lembrete.
-  horasParaLembrar      Int                        @default(4)
+  horasParaLembrar                  Int                        @default(4)
   /// Depois de quantas horas sem resposta a pergunta expira.
-  horasParaExpirar      Int                        @default(24)
+  horasParaExpirar                  Int                        @default(24)
   /// Texto de orientação enviado depois de "Parar essas perguntas". Null = o padrão do código.
   /// Placeholders: {empresa} e {contato}.
-  mensagemAoParar       String?
+  mensagemAoParar                   String?
   /// Como falar com a empresa (telefone, e-mail…). Entra no {contato} da mensagem acima.
-  contatoEmpresa        String?
+  contatoEmpresa                    String?
   /// Quem recebeu a pergunta hoje não recebe o resumo genérico das 20h (pendência de
   /// peso/divergência sai sempre).
-  suprimirResumoQuemRecebeuPergunta Boolean        @default(true)
+  suprimirResumoQuemRecebeuPergunta Boolean                    @default(true)
   /// Detector de número inalcançável: N mensagens da Meta seguidas sem entrega…
-  mensagensParaSuspeitar Int                       @default(3)
+  mensagensParaSuspeitar            Int                        @default(3)
   /// …dentro desta janela em dias.
-  diasParaSuspeitar     Int                        @default(7)
+  diasParaSuspeitar                 Int                        @default(7)
   /// Lembrete DENTRO do app: "você está há N dias sem lançar viagem". Nasce desligado.
-  lembreteNoApp         Boolean                    @default(false)
+  lembreteNoApp                     Boolean                    @default(false)
   /// SO_QUEM_SAIU = só quem tocou "Parar perguntas" no WhatsApp; TODOS_QUE_ATRASARAM = qualquer motorista.
-  lembreteParaQuem      LembreteAppParaQuem        @default(SO_QUEM_SAIU)
+  lembreteParaQuem                  LembreteAppParaQuem        @default(SO_QUEM_SAIU)
   /// Dias esperados sem lançar (mesmos dias considerados e feriados da regra) pra o card aparecer.
-  diasParaLembreteNoApp Int                        @default(3)
+  diasParaLembreteNoApp             Int                        @default(3)
   /// Só pergunta a quem lançou viagem nos últimos N dias. 0 = regra desligada (todos). Quem fica de fora vai pra uma lista do escritório, sem mensagem.
-  janelaAtividadeDias   Int                        @default(0)
+  janelaAtividadeDias               Int                        @default(0)
   /// Pergunta pendente que não saiu até N horas depois da hora do job vira FALHOU (0 = só na hora cheia do job).
-  horasToleranciaEnvio   Int                       @default(3)
+  horasToleranciaEnvio              Int                        @default(3)
   /// Janela de horas do dia (Brasília) em que o lembrete pode sair: de lembreteHoraMin até lembreteHoraMax (inclusive).
-  lembreteHoraMin        Int                       @default(7)
-  lembreteHoraMax        Int                       @default(21)
+  lembreteHoraMin                   Int                        @default(7)
+  lembreteHoraMax                   Int                        @default(21)
   /// Teto de reenvios/testes por pergunta por dia (vale pro reenvio e pra pergunta de teste do painel).
-  maxReenviosPorPergunta Int                       @default(5)
-  alteradoEm            DateTime                   @updatedAt
-  alteradoPor           User?                      @relation(fields: [alteradoPorId], references: [id])
-  alteradoPorId         String?
+  maxReenviosPorPergunta            Int                        @default(5)
+  alteradoEm                        DateTime                   @updatedAt
+  alteradoPor                       User?                      @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId                     String?
 
   @@unique([contaId])
   @@map("configuracao_conferencia_diaria")
@@ -4969,35 +4978,35 @@ model ConfiguracaoConferenciaDiaria {
 /// O que a conferência diária decidiu, por motorista e dia. O unique é a
 /// idempotência do job: rodar duas vezes no mesmo dia não duplica.
 model ConferenciaDiaria {
-  id          String                  @id @default(uuid())
-  contaId     String                  @default("__SEM_CONTA__")
-  conta       Conta                   @relation(fields: [contaId], references: [id])
-  motorista   Motorista               @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
-  motoristaId String
-  dia         DateTime                @db.Date
-  estado      EstadoConferenciaDiaria
-  motivo      String
+  id                String                  @id @default(uuid())
+  contaId           String                  @default("__SEM_CONTA__")
+  conta             Conta                   @relation(fields: [contaId], references: [id])
+  motorista         Motorista               @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId       String
+  dia               DateTime                @db.Date
+  estado            EstadoConferenciaDiaria
+  motivo            String
   /// A regra aplicada e as evidências (último dia com viagem, dias esperados sem viagem…).
-  snapshot    Json
-  criadoEm    DateTime                @default(now())
+  snapshot          Json
+  criadoEm          DateTime                @default(now())
   /// Por que o motorista NÃO pôde ser perguntado apesar de a regra dizer que sim:
   /// PAROU | INALCANCAVEL | SEM_TELEFONE | NAO_ACEITA_WHATSAPP. É o "sem canal" da lista.
-  suprimidaPor String?
+  suprimidaPor      String?
   /// `wamid` da pergunta (e do lembrete): é como o toque no botão se confirma.
-  wamid        String?
-  enviadaEm    DateTime?
-  lembreteWamid      String?
-  lembreteEnviadoEm  DateTime?
-  erroEnvio    String?
-  opcao        OpcaoConferenciaDiaria?
-  respostaTexto String?
-  respondidaEm DateTime?
+  wamid             String?
+  enviadaEm         DateTime?
+  lembreteWamid     String?
+  lembreteEnviadoEm DateTime?
+  erroEnvio         String?
+  opcao             OpcaoConferenciaDiaria?
+  respostaTexto     String?
+  respondidaEm      DateTime?
   /// Trilha durável do que aconteceu com a linha (envio, toque, ignorado, resposta
   /// gravada, lembrete, expiração, reenvio): array de {em, evento, detalhe}, os
   /// últimos 20. O dono não vê log; isto é o que ele consegue tirar print.
-  trilha       Json                    @default("[]")
+  trilha            Json                    @default("[]")
   /// Quantas vezes a pergunta desta linha foi reenviada pelo painel (teto por dia).
-  reenvios     Int                     @default(0)
+  reenvios          Int                     @default(0)
 
   @@unique([contaId, motoristaId, dia])
   @@index([contaId, dia])
@@ -5012,22 +5021,22 @@ model ConferenciaDiaria {
 /// uma pessoa decide. Nada aqui altera cadastro sozinho — inativar vínculo, por
 /// exemplo, só acontece quando um humano aprova.
 model SugestaoGestor {
-  id          String               @id @default(uuid())
-  contaId     String               @default("__SEM_CONTA__")
-  conta       Conta                @relation(fields: [contaId], references: [id])
-  tipo        TipoSugestaoGestor
-  status      StatusSugestaoGestor @default(ABERTA)
-  motorista   Motorista?           @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
-  motoristaId String?
+  id            String               @id @default(uuid())
+  contaId       String               @default("__SEM_CONTA__")
+  conta         Conta                @relation(fields: [contaId], references: [id])
+  tipo          TipoSugestaoGestor
+  status        StatusSugestaoGestor @default(ABERTA)
+  motorista     Motorista?           @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId   String?
   /// A pergunta que originou a sugestão, quando houve.
   conferenciaId String?
-  resumo      String
-  evidencia   Json
+  resumo        String
+  evidencia     Json
   /// "<motoristaId>:<tipo>" enquanto ABERTA, NULL depois — uma sugestão aberta por
   /// motorista e tipo (mesmo truque do `ExcecaoAcessoApp.chaveViva`).
-  chaveViva   String?
-  criadaEm    DateTime             @default(now())
-  decididaEm  DateTime?
+  chaveViva     String?
+  criadaEm      DateTime             @default(now())
+  decididaEm    DateTime?
   decididaPorId String?
   motivoDecisao String?
 
@@ -6010,33 +6019,33 @@ model Lead {
   /// Não dá pra derivar do histórico: uma linha de SAIDA de follow-up é igual
   /// a uma resposta normal. E sem contador o varredor não é idempotente —
   /// rodar duas vezes mandaria duas vezes.
-  followupsEnviados   Int       @default(0)
-  ultimoFollowupEm    DateTime?
+  followupsEnviados        Int       @default(0)
+  ultimoFollowupEm         DateTime?
   /// Quando a conversa foi dada por encerrada. Nulo = ainda viva.
-  conversaEncerradaEm DateTime?
+  conversaEncerradaEm      DateTime?
   /// Um humano assumiu: o robô sai de cena e não escreve mais por cima dele.
   ///
   /// "Assumiu" é qualquer ação de gente na conversa (escrever, atribuir,
   /// etiquetar, nota) OU o robô ter entregado a conversa. Por isso sozinho não
   /// diz se alguém ATENDEU — quem diz é `primeiraRespostaHumanaEm`.
-  sdrPausadoEm        DateTime?
+  sdrPausadoEm             DateTime?
   /// A primeira vez que uma PESSOA escreveu pro lead neste ciclo. É o que
   /// separa "esperando atendente" de "com atendente" — antes as duas coisas
   /// apareciam iguais, e lead esperando parecia lead atendido.
   primeiraRespostaHumanaEm DateTime?
   /// Quando o aviso de "lead esperando gente" saiu. Idempotência do alerta: um
   /// aviso por ciclo, não um por mensagem.
-  alertaHumanoEm      DateTime?
+  alertaHumanoEm           DateTime?
   /// Quando o aviso subiu pro degrau de cima por ninguém ter respondido.
-  alertaEscalonadoEm  DateTime?
+  alertaEscalonadoEm       DateTime?
   /// O "já avisei, um consultor te responde aqui" — uma vez por ciclo, pra
   /// quem escreve de novo depois do repasse e ainda não teve resposta de gente.
-  lembreteEsperaEm    DateTime?
+  lembreteEsperaEm         DateTime?
   /// Onde começa a conversa ATUAL. "Devolver ao robô" e conversa resolvida
   /// abrem conversa nova: o robô não lê nada antes disto. Sem o marco, um
   /// "Oi" depois de devolvido foi respondido como continuação do teste
   /// anterior ("Pode sim, é só me chamar aqui…") — teste do dono, 28/09.
-  cicloIniciadoEm     DateTime?
+  cicloIniciadoEm          DateTime?
 
   /// O teste guiado pelo robô (`sdr/roteiro-comercial.ts`).
   ///
@@ -6058,7 +6067,7 @@ model Lead {
   /// repetível: o varredor passa pelos mesmos leads a cada rodada e só cria o
   /// que ainda não existe. Anúncio e campanha ficam guardados pra responder
   /// "qual anúncio trouxe quem começou o teste".
-  metaLeadgenId   String?   @unique
+  metaLeadgenId   String? @unique
   metaFormId      String?
   metaAdId        String?
   metaAnuncio     String?

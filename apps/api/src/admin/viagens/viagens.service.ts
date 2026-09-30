@@ -14,7 +14,7 @@ import {
   TipoLocal,
   TipoTrecho,
 } from "@prisma/client";
-import type { AtualizarViagemInput, EscolherRotaViagemInput } from "@ronan/shared-types";
+import type { AtualizarViagemInput, CampoDivergente, EscolherRotaViagemInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import {
   detalharRegraMinimo,
@@ -722,7 +722,9 @@ export class ViagensAdminService {
         | "KM_DIVERGENTE"
         | "TICKET_DUPLICADO"
         | "MATERIAL_DIVERGENTE"
+        | "DADOS_DIVERGENTES"
         | "OUTRO";
+      campos?: CampoDivergente[];
     },
     usuarioId: string,
     escopo: EscopoAdmin,
@@ -752,6 +754,7 @@ export class ViagensAdminService {
       data.revisadoPor = { connect: { id: usuarioId } };
       data.motivoStatus = null;
       data.tipoDivergencia = null;
+      data.camposDivergentes = [];
     } else if (input.status === "DIVERGENTE") {
       if (!input.motivo || input.motivo.trim().length < 2) {
         throw new BadRequestException("Motivo obrigatório quando divergente.");
@@ -762,6 +765,7 @@ export class ViagensAdminService {
       data.revisadoPor = { connect: { id: usuarioId } };
       data.motivoStatus = input.motivo.trim();
       data.tipoDivergencia = input.tipo ?? "OUTRO";
+      data.camposDivergentes = input.tipo === "DADOS_DIVERGENTES" ? [...new Set(input.campos ?? [])] : [];
     } else {
       statusNovo = StatusViagem.ENVIADA;
       data.status = StatusViagem.ENVIADA;
@@ -769,6 +773,7 @@ export class ViagensAdminService {
       data.revisadoPor = { disconnect: true };
       data.motivoStatus = null;
       data.tipoDivergencia = null;
+      data.camposDivergentes = [];
     }
 
     await this.prisma.viagem.update({ where: { id }, data });

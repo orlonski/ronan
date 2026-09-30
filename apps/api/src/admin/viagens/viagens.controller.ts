@@ -19,7 +19,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
 import { StatusViagem } from "@prisma/client";
-import { AtualizarViagemInput, EscolherRotaViagemInput } from "@ronan/shared-types";
+import { AtualizarViagemInput, EscolherRotaViagemInput, CAMPOS_DIVERGENTES } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
@@ -57,9 +57,12 @@ const PreValidarInput = z
         "KM_DIVERGENTE",
         "TICKET_DUPLICADO",
         "MATERIAL_DIVERGENTE",
+        "DADOS_DIVERGENTES",
         "OUTRO",
       ])
       .optional(),
+    /** Com tipo DADOS_DIVERGENTES: quais campos o motorista tem que corrigir. */
+    campos: z.array(z.enum(CAMPOS_DIVERGENTES)).max(CAMPOS_DIVERGENTES.length).optional(),
   })
   .refine(
     (d) => d.status !== "DIVERGENTE" || (d.motivo && d.motivo.trim().length >= 2),
@@ -67,7 +70,11 @@ const PreValidarInput = z
       message: "Motivo obrigatório quando divergente.",
       path: ["motivo"],
     },
-  );
+  )
+  .refine((d) => d.tipo !== "DADOS_DIVERGENTES" || (d.campos && d.campos.length > 0), {
+    message: "Marque pelo menos um dado que não confere.",
+    path: ["campos"],
+  });
 type PreValidarInput = z.infer<typeof PreValidarInput>;
 
 const EnviarMensagemInput = z.object({

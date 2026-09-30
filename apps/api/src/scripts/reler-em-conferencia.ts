@@ -26,6 +26,10 @@
  *
  * Só toca no que o próprio robô parou: status EM_CONFERENCIA (que só ele
  * escreve), sem decisão humana (`revisadoEm`), fora de fechamento e com foto.
+ *
+ * Também converte, sem gastar IA, as viagens que o robô já tinha mandado pro
+ * motorista como "Outro motivo": elas passam a DADOS_DIVERGENTES com os campos
+ * da última conferência, e o app mostra o card de correção no lugar do chat.
  */
 try {
   require("dotenv/config");
@@ -35,7 +39,7 @@ try {
 import { Module } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
-import { StatusViagem } from "@prisma/client";
+import { StatusViagem, TipoDivergencia } from "@prisma/client";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
 import { ConferenciaConfig } from "../conferencia-ticket/conferencia.config";
@@ -80,9 +84,52 @@ async function main() {
 
   let total = 0;
   let enfileiradas = 0;
+  let convertidas = 0;
 
   for (const conta of contas) {
     await comConta(conta.id, async () => {
+      // Divergentes que o robô avisou como OUTRO: ganham o card de correção.
+      const avisadas = await prisma.viagem.findMany({
+        where: {
+          status: StatusViagem.DIVERGENTE,
+          tipoDivergencia: TipoDivergencia.OUTRO,
+          revisadoEm: null,
+          matchesFechamento: { none: {} },
+        },
+        select: {
+          id: true,
+          conferenciasTicket: {
+            where: { status: "CONCLUIDA" },
+            orderBy: { criadoEm: "desc" },
+            take: 1,
+            select: { acao: true, divergencias: true },
+          },
+        },
+      });
+      const aConverter = avisadas
+        .map((v) => {
+          const c = v.conferenciasTicket[0];
+          if (c?.acao !== "AVISOU_MOTORISTA") return null;
+          const campos = [
+            ...new Set(((c.divergencias ?? []) as Array<{ campo?: string }>).map((d) => d.campo).filter(Boolean)),
+          ] as string[];
+          return campos.length > 0 ? { id: v.id, campos } : null;
+        })
+        .filter((x): x is { id: string; campos: string[] } => x !== null);
+      if (aConverter.length > 0) {
+        console.log(`── ${conta.nome} (${conta.slug}): ${aConverter.length} divergente(s) do robô sem card de correção`);
+        if (aplicar) {
+          for (const v of aConverter) {
+            const r = await prisma.viagem.updateMany({
+              where: { id: v.id, status: StatusViagem.DIVERGENTE, tipoDivergencia: TipoDivergencia.OUTRO, revisadoEm: null },
+              data: { tipoDivergencia: TipoDivergencia.DADOS_DIVERGENTES, camposDivergentes: v.campos },
+            });
+            convertidas += r.count;
+          }
+          console.log(`   ✓ convertidas`);
+        }
+      }
+
       const viagens = await prisma.viagem.findMany({
         where: {
           status: StatusViagem.EM_CONFERENCIA,
@@ -114,6 +161,7 @@ async function main() {
     });
   }
 
+  if (aplicar && convertidas > 0) console.log(`\n${convertidas} divergente(s) ganharam o card de correção no app.`);
   console.log(
     total === 0
       ? "\nNenhuma viagem parada em conferência — nada a fazer."

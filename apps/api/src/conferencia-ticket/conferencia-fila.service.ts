@@ -41,7 +41,9 @@ export type OrigemConferencia =
   | "completar-peso"
   | "foto-avulsa"
   | "foto-divergente"
-  | "reconferencia";
+  | "reconferencia"
+  /** O motorista corrigiu os dados que a conferência apontou. */
+  | "correcao-motorista";
 
 /**
  * O recorte da lista do painel. `tipo` sozinho não filtra nada: os grupos do

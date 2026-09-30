@@ -224,30 +224,32 @@ describe("atuando", () => {
  * incomoda alguém que reclama, aprovar errado passa dinheiro adiante e ninguém
  * revisa o que já está aprovado. Daí os limiares próprios.
  */
-describe("material que não bate com o ticket", () => {
-  it("aponta pro card dedicado em vez de mandar reeditar a viagem", async () => {
+describe("dados que não batem com o ticket", () => {
+  it("marca DADOS_DIVERGENTES com o campo apontado, pro app abrir o card de correção", async () => {
     const { svc, updateMany } = montar();
 
     await svc.aplicar(JOB, dados(SO_MATERIAL), false);
 
-    expect(updateMany.mock.calls[0][0].data.tipoDivergencia).toBe("MATERIAL_DIVERGENTE");
+    const escrito = updateMany.mock.calls[0][0].data;
+    expect(escrito.tipoDivergencia).toBe("DADOS_DIVERGENTES");
+    expect(escrito.camposDivergentes).toEqual(["material"]);
   });
 
-  it("com outra coisa fora junto, volta pro genérico", async () => {
-    // O card do material resolveria só um pedaço, e a viagem voltaria AJUSTADA
-    // parecendo resolvida.
+  it("com mais de um campo fora, lista todos (sem repetir)", async () => {
     const misto = resultado({
       veredito: "DIVERGE",
-      divergencias: [...SO_MATERIAL.divergencias, ...DIVERGE.divergencias],
+      divergencias: [...SO_MATERIAL.divergencias, ...DIVERGE.divergencias, ...SO_MATERIAL.divergencias],
     });
     const { svc, updateMany } = montar();
 
     await svc.aplicar(JOB, dados(misto), false);
 
-    expect(updateMany.mock.calls[0][0].data.tipoDivergencia).toBe("OUTRO");
+    const campos = updateMany.mock.calls[0][0].data.camposDivergentes as string[];
+    expect(new Set(campos)).toEqual(new Set(["material", ...DIVERGE.divergencias.map((d) => d.campo)]));
+    expect(campos.length).toBe(new Set(campos).size);
   });
 
-  it("incerteza pendurada também derruba o card — quem decide é gente", async () => {
+  it("a dúvida pendurada não vira campo pro motorista corrigir", async () => {
     const comIncerteza = resultado({
       veredito: "DIVERGE",
       divergencias: SO_MATERIAL.divergencias,
@@ -259,7 +261,7 @@ describe("material que não bate com o ticket", () => {
 
     await svc.aplicar(JOB, dados(comIncerteza), false);
 
-    expect(updateMany.mock.calls[0][0].data.tipoDivergencia).toBe("OUTRO");
+    expect(updateMany.mock.calls[0][0].data.camposDivergentes).toEqual(["material"]);
   });
 
   it("continua sem tocar em revisadoEm", async () => {
