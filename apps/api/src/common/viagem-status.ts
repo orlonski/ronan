@@ -22,3 +22,22 @@ export const STATUS_FORA_FECHAMENTO: StatusViagem[] = [
   StatusViagem.AGUARDANDO_PESO,
   StatusViagem.INCOMPLETA,
 ];
+
+/**
+ * O que está na mesa de quem confere: viagem que ninguém revisou e que depende
+ * de gente (ou do robô) decidir — Aguardando, Ajustada (o motorista respondeu)
+ * e Em conferência (o robô ficou em dúvida).
+ *
+ * Fica de fora a DIVERGENTE que o robô marcou: ela tem `revisadoEm` null, mas
+ * está esperando o MOTORISTA corrigir, não a equipe. Contá-la como pendente
+ * inflava o card do painel e o clique abria uma lista que não tinha ela.
+ *
+ * Usar sempre junto de `revisadoEm: null`. É a mesma régua do card "Pendentes"
+ * do painel e do filtro "Pendentes" da lista de viagens — divergir é o card
+ * dizer 48 e a lista mostrar 2.
+ */
+export const STATUS_PENDENTE_CONFERENCIA: StatusViagem[] = [
+  StatusViagem.ENVIADA,
+  StatusViagem.AJUSTADA,
+  StatusViagem.EM_CONFERENCIA,
+];

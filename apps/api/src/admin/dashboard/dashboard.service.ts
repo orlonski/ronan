@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ymdSaoPaulo } from "../../common/timezone";
-import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
+import { STATUS_FORA_FECHAMENTO, STATUS_PENDENTE_CONFERENCIA } from "../../common/viagem-status";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { contaIdAtual } from "../../common/conta/conta-context";
 
@@ -218,10 +218,10 @@ export class DashboardService {
       // Conferência — universo conferível exclui rascunhos offline
       this.prisma.viagem.count({ where: { revisadoEm: { not: null }, ...frota } }),
       this.prisma.viagem.count({
-        // EM_ANDAMENTO/AGUARDANDO_PESO têm revisadoEm null mas não são conferíveis.
+        // A mesma régua do filtro "Pendentes" da lista — ver STATUS_PENDENTE_CONFERENCIA.
         where: {
           revisadoEm: null,
-          status: { notIn: ["RASCUNHO_OFFLINE", ...STATUS_FORA_FECHAMENTO] },
+          status: { in: STATUS_PENDENTE_CONFERENCIA },
           ...frota,
         },
       }),

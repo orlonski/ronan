@@ -28,7 +28,7 @@ import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { mudouInsumoDePreco } from "../../common/viagem-preco";
-import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
+import { STATUS_FORA_FECHAMENTO, STATUS_PENDENTE_CONFERENCIA } from "../../common/viagem-status";
 import { lerChaveFiscal } from "../../common/chave-fiscal";
 import { resolverDivergenciasSupridas } from "../../common/divergencias";
 import { checarAlteracaoKm, fmtKmBr } from "../../common/km-motorista";
@@ -50,7 +50,7 @@ type ListViagensParams = PaginationQuery & {
   empresaId?: string;
   transportadoraId?: string;
   excluirForaFechamento?: boolean;
-  status?: StatusViagem;
+  status?: StatusViagem | "PENDENTES";
   origem?: "guiada" | "direta";
   kmForaDoPadrao?: boolean;
   /** true = só viagens com ticket repetido ainda não conferido. */
@@ -197,7 +197,10 @@ export class ViagensAdminService {
     if (params.empresaId) where.cliente = { is: { empresaId: params.empresaId } };
     // `status` explícito ganha do recorte amplo — quem pediu AGUARDANDO_PESO
     // quer ver AGUARDANDO_PESO, mesmo com a flag ligada.
-    if (params.status) where.status = params.status;
+    if (params.status === "PENDENTES") {
+      where.status = { in: STATUS_PENDENTE_CONFERENCIA };
+      where.revisadoEm = null;
+    } else if (params.status) where.status = params.status;
     else if (params.excluirForaFechamento) where.status = { notIn: STATUS_FORA_FECHAMENTO };
     if (params.origem === "guiada") where.iniciadaGuiada = true;
     else if (params.origem === "direta") where.iniciadaGuiada = false;

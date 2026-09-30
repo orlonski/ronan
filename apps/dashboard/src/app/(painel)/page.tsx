@@ -288,9 +288,9 @@ function BlocoConferencia({ d }: { d: Snapshot }) {
             label="Pendentes"
             value={pendentes}
             subtitle="aguardando conferência"
-            info="Viagens que ainda ninguém conferiu. Estão na fila esperando alguém olhar e marcar como OK ou divergente. Clique pra ver a lista."
+            info="Viagens que ainda ninguém conferiu: aguardando, ajustadas pelo motorista e em conferência. Divergente esperando o motorista corrigir não conta. Clique pra ver a lista — de todos os meses."
             tone={pendentes > 0 ? "warning" : "success"}
-            href="/viagens?status=ENVIADA"
+            href="/viagens?status=PENDENTES"
           />
           <StatCard
             icon={Gauge}

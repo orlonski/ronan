@@ -108,7 +108,9 @@ const ListViagensQuery = paginationQuerySchema.extend({
   // Derivado do enum do Prisma (fonte de verdade) pra não voltar a defasar quando
   // surgem status novos — a lista chumbada antiga não tinha EM_ANDAMENTO nem
   // AGUARDANDO_PESO e quebrava o filtro do painel.
-  status: z.nativeEnum(StatusViagem).optional(),
+  // "PENDENTES" é o recorte do card do painel: o que está na mesa de quem
+  // confere (ver STATUS_PENDENTE_CONFERENCIA). Não é status de verdade.
+  status: z.union([z.nativeEnum(StatusViagem), z.literal("PENDENTES")]).optional(),
   // Origem do lançamento: "guiada" = fluxo "Iniciar viagem" (lifecycle);
   // "direta" = "Nova viagem". Filtra por Viagem.iniciadaGuiada.
   origem: z.enum(["guiada", "direta"]).optional(),

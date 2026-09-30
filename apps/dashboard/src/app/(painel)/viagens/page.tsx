@@ -408,6 +408,8 @@ export default function ViagensPage() {
                   placeholder="Status"
                   showSearch={false}
                   options={[
+                    // O mesmo recorte do card "Pendentes" do painel.
+                    { value: "PENDENTES", label: "Pendentes (a conferir)" },
                     { value: "ENVIADA", label: "Aguardando" },
                     { value: "EM_CONFERENCIA", label: "Em conferência" },
                     { value: "OK", label: "OK" },
