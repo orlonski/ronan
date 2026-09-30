@@ -120,10 +120,19 @@ export class AplicarVereditoService {
     r: ResultadoConferencia,
     confianca: number,
   ): Promise<string> {
-    if (r.veredito === "NAO_APLICAVEL") return "NENHUMA";
+    if (r.veredito === "NAO_APLICAVEL") {
+      await this.tirarDaFilaDeRevisao(job.viagemId);
+      return "NENHUMA";
+    }
 
     if (r.veredito === "BATE") {
-      return this.aprovarSeCabivel(job, r, confianca);
+      const acao = await this.aprovarSeCabivel(job, r, confianca);
+      // Confere mas não foi aprovada sozinha (km fora do padrão, pedágio
+      // faltando, aprovação desligada): numa releitura, a viagem estava
+      // "Em conferência" por causa da régua antiga — volta pra fila normal
+      // de quem confere, em vez de ficar parada com um veredito que bate.
+      if (acao !== "APROVOU") await this.tirarDaFilaDeRevisao(job.viagemId);
+      return acao;
     }
 
     if (r.veredito === "ILEGIVEL") {
@@ -290,6 +299,14 @@ export class AplicarVereditoService {
     } catch (err) {
       this.log.warn(`Aviso de foto ilegível falhou: ${(err as Error).message}`);
     }
+  }
+
+  /** EM_CONFERENCIA → ENVIADA, só no que o robô parou e ninguém decidiu. */
+  private async tirarDaFilaDeRevisao(viagemId: string): Promise<void> {
+    await this.prisma.viagem.updateMany({
+      where: { id: viagemId, status: StatusViagem.EM_CONFERENCIA, revisadoEm: null },
+      data: { status: StatusViagem.ENVIADA },
+    });
   }
 
   private async moverParaConferencia(viagemId: string): Promise<void> {

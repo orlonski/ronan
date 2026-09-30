@@ -96,6 +96,19 @@ const dados = (r: ResultadoConferencia) => ({
   escalou: false,
 });
 
+
+/**
+ * Não aprovar não é "não escrever nada": numa releitura, a viagem que estava
+ * "Em conferência" volta pra fila normal. O que importa é que nada foi
+ * aprovado nem marcado — só essa volta, e só a partir de EM_CONFERENCIA.
+ */
+function soVoltouPraFila(updateMany: ReturnType<typeof vi.fn>): boolean {
+  return updateMany.mock.calls.every(([arg]) => {
+    const a = arg as { where: { status?: unknown }; data: { status?: unknown } };
+    return a.where.status === StatusViagem.EM_CONFERENCIA && a.data.status === StatusViagem.ENVIADA;
+  });
+}
+
 describe("modo sombra (o padrão)", () => {
   it("grava o veredito e NÃO toca na viagem", async () => {
     const { svc, updateMany, push, fila } = montar();
@@ -173,15 +186,24 @@ describe("atuando", () => {
 
     await svc.aplicar(JOB, dados(resultado({ veredito: "BATE" })), false);
 
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(soVoltouPraFila(updateMany)).toBe(true);
     expect(push.enviar).not.toHaveBeenCalled();
     expect((fila.finalizar as ReturnType<typeof vi.fn>).mock.calls[0][1].acao).toBe("NENHUMA");
+  });
+
+  it("releitura que confere mas não é aprovada tira a viagem de 'Em conferência'", async () => {
+    const { svc, updateMany } = montar();
+    await svc.aplicar(JOB, dados(resultado({ veredito: "BATE" })), false);
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    const arg = updateMany.mock.calls[0][0];
+    expect(arg.where).toMatchObject({ status: StatusViagem.EM_CONFERENCIA, revisadoEm: null });
+    expect(arg.data).toEqual({ status: StatusViagem.ENVIADA });
   });
 
   it("NAO_APLICAVEL não faz nada", async () => {
     const { svc, updateMany } = montar();
     await svc.aplicar(JOB, dados(resultado({ veredito: "NAO_APLICAVEL", conferidos: [] })), false);
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(soVoltouPraFila(updateMany)).toBe(true);
   });
 
   it("só mexe em viagem esperando conferência e sem decisão de gente", async () => {
@@ -317,14 +339,14 @@ describe("aprovação automática", () => {
     // pedir uma conferida.
     const { svc, updateMany } = montar({ autoAprovar: true, confiancaParaAprovar: 0.9 });
     await svc.aplicar(JOB, comConfianca(BATE, 0.85), false);
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(soVoltouPraFila(updateMany)).toBe(true);
   });
 
   it("não aprova quando poucos campos foram realmente conferidos", async () => {
     // Viagem em que só o peso deu pra ler não é uma viagem conferida.
     const { svc, updateMany } = montar({ autoAprovar: true, minCamposParaAprovar: 3 });
     await svc.aplicar(JOB, comConfianca(resultado({ conferidos: ["toneladas"] }), 0.98), false);
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(soVoltouPraFila(updateMany)).toBe(true);
   });
 
   it("não aprova com incerteza pendurada", async () => {
@@ -334,7 +356,7 @@ describe("aprovação automática", () => {
       incertezas: [{ campo: "placa", declarado: "A", lido: "B", motivo: "x" }],
     });
     await svc.aplicar(JOB, comConfianca(comIncerteza, 0.98), false);
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(soVoltouPraFila(updateMany)).toBe(true);
   });
 
   it("não toca em viagem que um humano já revisou", async () => {
@@ -350,7 +372,7 @@ describe("aprovação automática", () => {
 
     await svc.aplicar(JOB, comConfianca(BATE, 0.97), false);
 
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(soVoltouPraFila(updateMany)).toBe(true);
     expect((fila.finalizar as ReturnType<typeof vi.fn>).mock.calls[0][1].acao).toBe("NENHUMA");
   });
 
@@ -376,7 +398,7 @@ describe("aprovação automática", () => {
   it("desligada, não aprova nada", async () => {
     const { svc, updateMany } = montar({ autoAprovar: false });
     await svc.aplicar(JOB, comConfianca(BATE, 0.99), false);
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(soVoltouPraFila(updateMany)).toBe(true);
   });
 
   it("em modo sombra não aprova nem com tudo ligado", async () => {
