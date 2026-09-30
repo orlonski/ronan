@@ -13,14 +13,18 @@ import type { ConferenciaConfig } from "./conferencia.config";
  * faturamento de outra — foi exatamente o bug que o `CachePorConta` documenta.
  */
 
-function montar(porConta: Record<string, string | null>, padraoEnv = "claude-haiku-4-5-20251001") {
+function montar(
+  porConta: Record<string, string | null>,
+  padraoEnv = "claude-haiku-4-5-20251001",
+  segundaEnv: string | null = null,
+) {
   const findUnique = vi.fn(async (args: { where: { contaId: string } }) => ({
     modeloConferencia: porConta[args.where.contaId] ?? null,
   }));
   const prisma = { configuracaoIa: { findUnique } } as unknown as PrismaService;
   const config = {
     modeloPadrao: padraoEnv,
-    modeloSegundaOpiniao: "claude-opus-5",
+    modeloSegundaOpiniaoExplicito: segundaEnv,
   } as unknown as ConferenciaConfig;
 
   const worker = new ConferenciaWorkerService(
@@ -96,8 +100,13 @@ describe("ConferenciaWorkerService.modeloSegundaDaConta", () => {
     expect(await comConta("conta-a", () => modeloSegunda())).toBe("MiniMax-M3");
   });
 
-  it("sem escolha, a segunda leitura segue no modelo forte do ambiente", async () => {
-    const { modeloSegunda } = montar({ "conta-b": null });
+  it("sem escolha nem 2ª configurada, lê as duas vezes no padrão do servidor (o caso da Schaba)", async () => {
+    const { modeloSegunda } = montar({ "conta-b": null }, "MiniMax-M3");
+    expect(await comConta("conta-b", () => modeloSegunda())).toBe("MiniMax-M3");
+  });
+
+  it("2ª configurada de propósito no ambiente vale pra quem não escolheu", async () => {
+    const { modeloSegunda } = montar({ "conta-b": null }, "MiniMax-M3", "claude-opus-5");
     expect(await comConta("conta-b", () => modeloSegunda())).toBe("claude-opus-5");
   });
 });

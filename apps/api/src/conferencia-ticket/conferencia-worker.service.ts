@@ -332,7 +332,7 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
           fotoBase64,
           mime,
           declarado: paraOModelo,
-          modelo: this.config.modeloSegundaOpiniao,
+          modelo: modeloSegunda,
         });
         custo += segunda.custoUsd;
         modelo = segunda.modelo;
@@ -370,7 +370,8 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * O modelo da SEGUNDA leitura: o que a empresa escolheu, quando escolheu;
-   * senão o do ambiente (`CONFERENCIA_MODELO_2A_OPINIAO`, Claude forte).
+   * senão o `CONFERENCIA_MODELO_2A_OPINIAO`, se configurado; senão o mesmo da
+   * primeira leitura.
    *
    * Decisão do dono em 29/09/2026: quem escolheu MiniMax não usa Anthropic.
    * A segunda leitura presa ao Claude fazia a conferência da Schaba depender
@@ -386,7 +387,14 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
       });
       return cfg?.modeloConferencia?.trim() || null;
     }, null);
-    return escolhido || this.config.modeloSegundaOpiniao;
+    if (escolhido) return escolhido;
+    // Configurado de propósito no ambiente (vazio = segunda leitura desligada).
+    const doAmbiente = this.config.modeloSegundaOpiniaoExplicito;
+    if (doAmbiente !== null) return doAmbiente;
+    // Sem nada: o mesmo modelo da primeira leitura — que já inclui o padrão do
+    // servidor (`CONFERENCIA_MODELO`). A Schaba lê pelo MiniMax por ele, não
+    // por escolha na tela, e a segunda caía no Claude.
+    return this.modeloDaConta();
   }
 
   /**

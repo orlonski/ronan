@@ -27,6 +27,10 @@
  * Só toca no que o próprio robô parou: status EM_CONFERENCIA (que só ele
  * escreve), sem decisão humana (`revisadoEm`), fora de fechamento e com foto.
  *
+ * Com `--falhas`, faz só isto: relê as viagens esperando decisão (aguardando,
+ * ajustada, em conferência) cuja leitura mais nova FALHOU — crédito de
+ * provedor acabou, resposta fora do formato, queda de rede prolongada.
+ *
  * Com `--nunca-lidas`, faz só outra coisa: enfileira as viagens aguardando
  * (enviada/ajustada/aguardando peso) que têm foto e nunca foram lidas — o
  * mesmo que o botão "reprocessar" do painel, até `--limite` por empresa.
@@ -68,6 +72,7 @@ async function main() {
   const contaSlug = arg("--conta");
   const limite = Number(arg("--limite") ?? 1000);
   const nuncaLidas = tem("--nunca-lidas");
+  const falhas = tem("--falhas");
 
   const app = await NestFactory.createApplicationContext(ScriptModule, { logger: false });
   const prisma = app.get(PrismaService);
@@ -90,6 +95,41 @@ async function main() {
   let total = 0;
   let enfileiradas = 0;
   let convertidas = 0;
+
+  if (falhas) {
+    let total = 0;
+    for (const conta of contas) {
+      await comConta(conta.id, async () => {
+        const viagens = await prisma.viagem.findMany({
+          where: {
+            status: { in: [StatusViagem.ENVIADA, StatusViagem.AJUSTADA, StatusViagem.EM_CONFERENCIA] },
+            revisadoEm: null,
+            matchesFechamento: { none: {} },
+          },
+          select: {
+            id: true,
+            conferenciasTicket: { orderBy: { criadoEm: "desc" }, take: 1, select: { status: true } },
+          },
+        });
+        const falhadas = viagens.filter((v) => v.conferenciasTicket[0]?.status === "FALHOU");
+        if (falhadas.length === 0) return;
+        console.log(`── ${conta.nome} (${conta.slug}): ${falhadas.length} viagem(ns) com a leitura mais nova em FALHOU`);
+        if (!aplicar) return;
+        let n = 0;
+        for (const v of falhadas.slice(0, limite)) {
+          const antes = await prisma.conferenciaTicket.count({ where: { viagemId: v.id } });
+          await fila.enfileirar(v.id, "reconferencia");
+          const depois = await prisma.conferenciaTicket.count({ where: { viagemId: v.id } });
+          if (depois > antes) n++;
+        }
+        total += n;
+        console.log(`   ✓ ${n} enfileirada(s)`);
+      });
+    }
+    console.log(aplicar ? `\nPronto: ${total} na fila.` : "\nRode com --aplicar pra valer.");
+    await app.close();
+    return;
+  }
 
   if (nuncaLidas) {
     let total = 0;

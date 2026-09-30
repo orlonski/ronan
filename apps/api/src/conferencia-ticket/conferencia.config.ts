@@ -189,7 +189,18 @@ export class ConferenciaConfig {
    * Vazio desliga a escada — fica só a primeira passada.
    */
   get modeloSegundaOpiniao(): string {
-    return this.config.get<string>("CONFERENCIA_MODELO_2A_OPINIAO")?.trim() ?? "claude-opus-5";
+    return this.modeloSegundaOpiniaoExplicito ?? this.modeloPadrao;
+  }
+
+  /**
+   * O `CONFERENCIA_MODELO_2A_OPINIAO` quando alguém o configurou (vazio =
+   * desligada); `null` quando não existe — aí a segunda leitura usa o mesmo
+   * modelo da primeira. Antes o padrão era o Claude forte, e a conferência de
+   * quem lê pelo MiniMax dependia de crédito numa conta que não escolheu.
+   */
+  get modeloSegundaOpiniaoExplicito(): string | null {
+    const v = this.config.get<string>("CONFERENCIA_MODELO_2A_OPINIAO");
+    return v === undefined || v === null ? null : v.trim();
   }
 
   /**
