@@ -622,6 +622,18 @@ export function conferirComJulgamento(
     conferidos.push(campo);
     if (parecer.confere === "sim") continue;
 
+    // Lido idêntico ao lançado não é dúvida, por mais que a IA hesite ("CBUQ"
+    // × "CBUQ", "RACHÃO" × "RACHÃO" com a tabela meio cortada). Caso real de
+    // produção. Só vale pra "incerto": "nao" com texto igual é contradição e
+    // fica com gente.
+    if (parecer.confere !== "nao" && temLido) {
+      const igual =
+        campo === "ticket"
+          ? normalizarTicket(dec) === normalizarTicket(lid!)
+          : normalizarTexto(dec) === normalizarTexto(lid!);
+      if (igual) continue;
+    }
+
     // Placa é o único campo desta lista que tem forma canônica: a mesma placa
     // pode estar escrita nos dois formatos ("ATN3B14" no cadastro, "ATN-3614"
     // no ticket) e nenhum modelo precisa opinar sobre isso. Quando o código

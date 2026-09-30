@@ -742,6 +742,17 @@ describe("conferência guiada pelo parecer da IA", () => {
     expect(r.veredito).toBe("BATE");
   });
 
+  it("lido idêntico ao lançado confere mesmo com a IA hesitando", () => {
+    const r = conferirComJulgamento({ ...declarado, materialNome: "CBUQ" }, { ...lido, materialNome: "C.B.U.Q" }, {
+      numeroDocumento: ok,
+      toneladas: ok,
+      material: { confere: "incerto", porque: "confere, mas…" },
+    });
+    expect(r.incertezas).toHaveLength(0);
+    expect(r.conferidos).toContain("material");
+    expect(r.veredito).toBe("BATE");
+  });
+
   it("'incerto' em material COM valor lido segue na revisão (dúvida de verdade)", () => {
     const r = conferirComJulgamento(declarado, { ...lido, materialNome: "PEDRA BRITADA 2" }, {
       numeroDocumento: ok,

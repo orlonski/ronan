@@ -110,10 +110,19 @@ async function main() {
         select: {
           id: true,
           conferenciasTicket: {
-            where: { status: "CONCLUIDA" },
             orderBy: { criadoEm: "desc" },
-            take: 1,
-            select: { veredito: true, confianca: true, passadas: true, declarado: true, leitura: true, modelo: true },
+            take: 5,
+            select: {
+              status: true,
+              veredito: true,
+              confianca: true,
+              passadas: true,
+              declarado: true,
+              leitura: true,
+              modelo: true,
+              erro: true,
+              proximaTentativaEm: true,
+            },
           },
         },
       });
@@ -124,8 +133,25 @@ async function main() {
       let semLeitura = 0;
       const confs: number[] = [];
 
+      // O que aconteceu com a leitura MAIS NOVA, seja qual for o desfecho:
+      // na fila (inclusive adiada esperando cota), falhou, ou descartada.
+      // Sem isto o relatório só via a última concluída — a antiga — e uma
+      // viagem esperando a segunda leitura parecia travada pela régua.
+      const situacao = new Map<string, string[]>();
       for (const v of viagens) {
-        const c = v.conferenciasTicket[0];
+        const u = v.conferenciasTicket[0];
+        if (!u || u.status === "CONCLUIDA") continue;
+        const quando = u.proximaTentativaEm
+          ? ` (próxima tentativa ${u.proximaTentativaEm.toISOString().slice(11, 16)} UTC)`
+          : "";
+        const chave = `${u.status}${quando.replace(/\d{2}:\d{2}/, "hh:mm")} · ${corta(u.erro, 60) }`;
+        const lista = situacao.get(chave) ?? [];
+        lista.push(`${v.id}${quando}`);
+        situacao.set(chave, lista);
+      }
+
+      for (const v of viagens) {
+        const c = v.conferenciasTicket.find((x) => x.status === "CONCLUIDA");
         if (!c) {
           semLeitura++;
           continue;
@@ -171,6 +197,13 @@ async function main() {
       const mediaConf = confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : 0;
       console.log(`\n══ ${conta.nome} (${conta.slug}): ${viagens.length} em conferência`);
       console.log(`   confiança média da leitura: ${mediaConf.toFixed(2)}${semLeitura ? ` · ${semLeitura} sem leitura concluída` : ""}`);
+      if (situacao.size > 0) {
+        console.log(`\n   Leitura mais nova ainda não concluída (o agrupado abaixo usa a anterior):`);
+        for (const [chave, ids] of situacao) {
+          console.log(`${String(ids.length).padStart(4)}  ${chave}`);
+          for (const id of ids.slice(0, 3)) console.log(`        · ${id}`);
+        }
+      }
       console.log(`   (uma viagem pode cair em mais de um grupo)\n`);
 
       for (const [motivo, g] of [...grupos.entries()].sort((a, b) => b[1].casos.length - a[1].casos.length)) {
