@@ -363,8 +363,8 @@ describe("recompararViagem — de graça, e desfazendo o que o robô fez", () =>
         viagemId: "v1",
         leitura: {
           ...LEITURA,
-          placa: "XYZ1234",
-          julgamento: { ...LEITURA.julgamento, placa: { confere: "incerto", porque: "parece a carreta" } },
+          materialNome: "PEDRA BRITADA 2",
+          julgamento: { ...LEITURA.julgamento, material: { confere: "incerto", porque: "rachão ou brita 2?" } },
         },
         veredito: "INCERTO",
         acao: "FILA_REVISAO",

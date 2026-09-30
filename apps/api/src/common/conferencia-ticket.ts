@@ -568,20 +568,20 @@ export function conferirComJulgamento(
     const tolerado = Math.max(limiares.toleranciaToneladas, dec * limiares.toleranciaPesoPct);
 
     if (Math.abs(dec - lid) > tolerado) {
-      const suspeita = explicarPesoSuspeito(dec, lid);
+      // Carga líquida passa de 50 t não existe (o prompt diz o mesmo). Com o
+      // lançado aí e a leitura numa faixa plausível, quem errou foi a
+      // digitação — "56,31" no lugar de "26,31" —, não a IA lendo a tara.
+      const lancadoImpossivel = dec > PESO_LIQUIDO_MAXIMO && lid >= 5 && lid <= PESO_LIQUIDO_MAXIMO;
+      const suspeita = lancadoImpossivel ? null : explicarPesoSuspeito(dec, lid);
       if (suspeita) {
         incertezas.push({ campo: "toneladas", declarado: fmtPeso(dec), lido: fmtPeso(lid), motivo: suspeita });
-      } else if (julgamento.toneladas?.confere === "sim") {
-        // A IA viu o papel e diz que confere apesar do número. Pode ter lido
-        // uma linha diferente da que usou pra julgar — não é o bastante pra
-        // acusar, mas também não é pra ignorar.
-        incertezas.push({
-          campo: "toneladas",
-          declarado: fmtPeso(dec),
-          lido: fmtPeso(lid),
-          motivo: julgamento.toneladas.porque || "a leitura diz que confere, mas os números não fecham",
-        });
       } else {
+        // Inclusive quando a IA diz "confere, é arredondamento": medido em
+        // produção (29/09/2026), era o motorista lançando 33 t num ticket de
+        // 33,98 t — quase uma tonelada que não entrava na conta. O número
+        // lido é o que ela mesma conferiu como bruto − tara; a tolerância de
+        // balança já está no `tolerado`. E peso em jogo sempre passa pela
+        // segunda leitura antes de chegar ao motorista.
         divergencias.push({
           campo: "toneladas",
           declarado: fmtPeso(dec),
@@ -605,8 +605,21 @@ export function conferirComJulgamento(
   for (const { campo, chave, dec, lid, rotulo } of mapa) {
     const parecer = julgamento[chave];
     if (!parecer || !dec) continue;
-    conferidos.push(campo);
+    const temLido = !!lid && lid.trim() !== "" && lid.trim() !== "—";
 
+    // Campo que o papel não traz (em branco, cortado, ilegível) não é dúvida:
+    // é "não verificado". Medido em produção: 30 das 72 viagens paradas eram
+    // isso — cliente em branco, número do ticket vazio, material que a balança
+    // não imprime. Nenhum conferente resolve olhando a mesma foto.
+    if (!temLido && parecer.confere !== "nao") continue;
+
+    // Obra em dúvida também não trava. O ticket de balança mostra quem VENDEU
+    // (a pedreira), "OUTROS", ou quem recebe no fim (a concessionária) — quase
+    // nunca a obra do contrato de frete. "nao" continua divergindo: aí a IA
+    // afirma que é outra obra.
+    if (campo === "cliente" && parecer.confere !== "nao") continue;
+
+    conferidos.push(campo);
     if (parecer.confere === "sim") continue;
 
     // Placa é o único campo desta lista que tem forma canônica: a mesma placa
@@ -615,20 +628,54 @@ export function conferirComJulgamento(
     // consegue provar que é o mesmo caminhão, a prova vale mais que o parecer.
     if (campo === "placa" && lid && equivalenciaPlaca(dec, lid)) continue;
 
+    // Placa tem prova melhor que o parecer: a frota cadastrada. Lida uma placa
+    // que é de OUTRO caminhão da casa, é viagem no caminhão errado — diverge
+    // mesmo com a IA em dúvida. Fora disso, só diverge quando a IA afirma, a
+    // leitura tem cara de placa e não é um caractere torto (0/O, 6/G): o
+    // "VERMELH" que ela leu numa ficha de cor, ou RXX6D82 × RXX6A82, é
+    // leitura, não motorista.
+    if (campo === "placa" && temLido) {
+      const lidaNorm = normalizarPlaca(lid!);
+      const daFrota = (declarado.placasConhecidas ?? []).map(normalizarPlaca).includes(lidaNorm);
+      const formatoDePlaca = RE_PLACA_ANTIGA.test(lidaNorm) || RE_PLACA_MERCOSUL.test(lidaNorm);
+      const umCaractere = distanciaEdicao(normalizarPlaca(dec), lidaNorm, 1) <= 1;
+      if (daFrota) {
+        divergencias.push({
+          campo,
+          declarado: dec,
+          lido: lid!,
+          gravidade: "ALTA",
+          detalhe: `O ticket é do veículo ${lid}, que é outro caminhão da frota, e a viagem foi lançada no ${dec}.`,
+        });
+        continue;
+      }
+      if (parecer.confere !== "nao" || !formatoDePlaca || umCaractere) {
+        conferidos.splice(conferidos.indexOf(campo), 1);
+        continue;
+      }
+    }
+
     // Mesma trava pra data: um dia de diferença é pesagem à noite lançada no
     // dia seguinte. O prompt já pede "sim" nesse caso; aqui o código garante.
     if (campo === "data" && lid && /^\d{4}-\d{2}-\d{2}/.test(lid) && diasEntre(dec, soDia(lid)) <= 1) continue;
 
+    // Mesmo dia e mês, ano diferente (24/09/2020 num lançamento de
+    // 24/09/2026): é o relógio da balança, não a viagem. Fica não verificada.
+    if (campo === "data" && lid && /^\d{4}-\d{2}-\d{2}/.test(lid) && dec.slice(4, 10) === lid.slice(4, 10)) {
+      conferidos.splice(conferidos.indexOf(campo), 1);
+      continue;
+    }
+
     const registro = { campo, declarado: dec, lido: lid ?? "—" };
-    if (parecer.confere === "nao") {
+    // "nao" sem o valor lido não dá pra mandar ao motorista: ele não saberia
+    // pra quê corrigir. Fica com gente.
+    if (parecer.confere === "nao" && temLido) {
       divergencias.push({
         ...registro,
         gravidade: "ALTA",
         // Frase montada pelo código quando há o valor lido: é o motorista que
         // lê, e ele precisa ver os dois lados pra saber o que corrigir.
-        detalhe: lid
-          ? `No ticket, ${rotulo} é ${lid}, e a viagem foi lançada com ${dec}.`
-          : parecer.porque || `O ticket não corresponde ao que foi lançado em ${rotulo}.`,
+        detalhe: `No ticket, ${rotulo} é ${lid}, e a viagem foi lançada com ${dec}.`,
       });
     } else {
       incertezas.push({ ...registro, motivo: parecer.porque || "não deu pra confirmar" });
@@ -642,6 +689,9 @@ export function conferirComJulgamento(
     conferidos,
   };
 }
+
+/** Carga líquida acima disto não existe num caminhão — é digitação. */
+const PESO_LIQUIDO_MAXIMO = 50;
 
 /** Campos cuja dúvida invalida o veredito inteiro — ver `decidirVeredito`. */
 const CAMPOS_QUE_TRAVAM: CampoConferido[] = ["toneladas", "ticket"];

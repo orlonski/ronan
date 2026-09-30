@@ -585,14 +585,89 @@ describe("conferência guiada pelo parecer da IA", () => {
     expect(r.veredito).toBe("DIVERGE");
   });
 
-  it("placa com 'incerto' (a carreta, pelo prompt) segue na revisão", () => {
+  it("placa com 'incerto' fora da frota (a carreta) fica não verificada, sem travar", () => {
     const r = conferirComJulgamento(
       { ...declarado, placa: "ATN3B14" },
       { ...lido, placa: "XYZ1234" },
       { numeroDocumento: ok, toneladas: ok, placa: { confere: "incerto", porque: "parece a carreta" } },
     );
-    expect(r.incertezas[0]).toMatchObject({ campo: "placa" });
+    expect(r.incertezas).toHaveLength(0);
+    expect(r.conferidos).not.toContain("placa");
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("placa lida que é de OUTRO caminhão da frota diverge, mesmo com a IA em dúvida", () => {
+    const r = conferirComJulgamento(
+      { ...declarado, placa: "ATN3B14", placasConhecidas: ["ATN3B14", "XYZ1234"] },
+      { ...lido, placa: "XYZ-1234" },
+      { numeroDocumento: ok, toneladas: ok, placa: { confere: "incerto", porque: "" } },
+    );
+    expect(r.divergencias[0]).toMatchObject({ campo: "placa" });
+    expect(r.veredito).toBe("DIVERGE");
+  });
+
+  it("placa com um caractere torto (RXX6A82 × RXX6D82) é leitura, não motorista", () => {
+    const r = conferirComJulgamento(
+      { ...declarado, placa: "RXX6A82" },
+      { ...lido, placa: "RXX6D82" },
+      { numeroDocumento: ok, toneladas: ok, placa: { confere: "nao", porque: "5º caractere" } },
+    );
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("'nao' em algo que não tem cara de placa ('VERMELH') não diverge", () => {
+    const r = conferirComJulgamento(
+      { ...declarado, placa: "EWU6C38" },
+      { ...lido, placa: "VERMELH" },
+      { numeroDocumento: ok, toneladas: ok, placa: { confere: "nao", porque: "só a cor" } },
+    );
+    expect(r.divergencias).toHaveLength(0);
+  });
+
+  it("campo em branco no ticket é não verificado, não dúvida", () => {
+    const r = conferirComJulgamento(
+      declarado,
+      { ...lido, ticket: null, clienteNome: null, materialNome: null },
+      {
+        numeroDocumento: { confere: "incerto", porque: "campo NÚMERO em branco" },
+        toneladas: ok,
+        cliente: { confere: "incerto", porque: "campo Cliente em branco" },
+        material: { confere: "incerto", porque: "ticket não informa o material" },
+      },
+    );
+    expect(r.incertezas).toHaveLength(0);
+    expect(r.conferidos).toEqual(["toneladas"]);
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("'nao' sem valor lido não vai pro motorista — ele não saberia o que corrigir", () => {
+    const r = conferirComJulgamento(declarado, { ...lido, materialNome: null }, {
+      numeroDocumento: ok,
+      toneladas: ok,
+      material: { confere: "nao", porque: "não parece" },
+    });
+    expect(r.divergencias).toHaveLength(0);
     expect(r.veredito).toBe("INCERTO");
+  });
+
+  it("mesmo dia e mês com ano diferente é relógio da balança", () => {
+    const r = conferirComJulgamento(
+      { ...declarado, data: "2026-09-24" },
+      { ...lido, data: "2020-09-24" },
+      { numeroDocumento: ok, toneladas: ok, data: { confere: "nao", porque: "ticket de 2020" } },
+    );
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("mês diferente continua divergindo (ticket de agosto lançado em setembro)", () => {
+    const r = conferirComJulgamento(
+      { ...declarado, data: "2026-09-28" },
+      { ...lido, data: "2026-08-28" },
+      { numeroDocumento: ok, toneladas: ok, data: { confere: "nao", porque: "mês trocado" } },
+    );
+    expect(r.veredito).toBe("DIVERGE");
   });
 
   it("data com um dia de diferença não diverge nem com 'nao' da IA", () => {
@@ -656,14 +731,24 @@ describe("conferência guiada pelo parecer da IA", () => {
     expect(r.veredito).toBe("DIVERGE");
   });
 
-  it("'incerto' em obra/cliente segue na revisão", () => {
-    const r = conferirComJulgamento(declarado, lido, {
+  it("'incerto' em obra (ticket mostra a pedreira) fica não verificado, sem travar", () => {
+    const r = conferirComJulgamento(declarado, { ...lido, clienteNome: "PEDREIRA GENARO LTDA" }, {
       numeroDocumento: ok,
       toneladas: ok,
-      cliente: { confere: "incerto", porque: "não reconheço o nome" },
+      cliente: { confere: "incerto", porque: "ticket mostra o fornecedor" },
     });
-    expect(r.divergencias).toHaveLength(0);
-    expect(r.incertezas[0].campo).toBe("cliente");
+    expect(r.incertezas).toHaveLength(0);
+    expect(r.conferidos).not.toContain("cliente");
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("'incerto' em material COM valor lido segue na revisão (dúvida de verdade)", () => {
+    const r = conferirComJulgamento(declarado, { ...lido, materialNome: "PEDRA BRITADA 2" }, {
+      numeroDocumento: ok,
+      toneladas: ok,
+      material: { confere: "incerto", porque: "rachão ou brita 2?" },
+    });
+    expect(r.incertezas[0].campo).toBe("material");
     expect(r.veredito).toBe("INCERTO");
   });
 
@@ -673,10 +758,35 @@ describe("conferência guiada pelo parecer da IA", () => {
       numeroDocumento: ok,
       toneladas: { confere: "sim", porque: "achei que batia" },
     });
-    // A IA disse que confere, mas os números não fecham: vira revisão, e não
-    // um "tudo certo" que deixaria passar diferença de carga.
-    expect(r.veredito).toBe("INCERTO");
+    // A IA disse que confere, mas os números não fecham: o número decide.
+    expect(r.veredito).toBe("DIVERGE");
+    expect(r.divergencias[0].campo).toBe("toneladas");
+  });
+
+  it("peso truncado (33 t num ticket de 33,98 t) diverge mesmo com a IA chamando de arredondamento", () => {
+    const r = conferirComJulgamento({ ...declarado, toneladas: 33 }, { ...lido, toneladas: 33.98 }, {
+      numeroDocumento: ok,
+      toneladas: { confere: "sim", porque: "arredondamento" },
+    });
+    expect(r.divergencias[0].detalhe).toContain("33,98 t");
+    expect(r.veredito).toBe("DIVERGE");
+  });
+
+  it("lançado acima de 50 t é digitação, não a IA lendo a tara", () => {
+    const r = conferirComJulgamento({ ...declarado, toneladas: 56.31 }, { ...lido, toneladas: 26.31 }, {
+      numeroDocumento: ok,
+      toneladas: { confere: "nao", porque: "ticket mostra 26.310 kg" },
+    });
+    expect(r.veredito).toBe("DIVERGE");
+  });
+
+  it("a trava da tara continua valendo com lançado plausível", () => {
+    const r = conferirComJulgamento({ ...declarado, toneladas: 35 }, { ...lido, toneladas: 15 }, {
+      numeroDocumento: ok,
+      toneladas: { confere: "nao", porque: "" },
+    });
     expect(r.incertezas[0].campo).toBe("toneladas");
+    expect(r.veredito).toBe("INCERTO");
   });
 
   it("peso divergente sem aval da IA segue divergência ALTA", () => {
