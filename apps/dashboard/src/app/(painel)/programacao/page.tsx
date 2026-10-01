@@ -183,6 +183,10 @@ function Conteudo() {
         <span className="text-sm capitalize text-muted-foreground">{diaExtenso(dia)}</span>
       </Card>
 
+      <Permitido chave="programacao.editar">
+        <RepetirOutroDia dia={dia} onCopiou={recarregar} />
+      </Permitido>
+
       {erro && <Card className="border-l-4 border-l-blue-500 p-3 text-sm">{erro}</Card>}
       {quadro.isLoading && <LoadingCard />}
 
@@ -432,5 +436,138 @@ function CardPlanejada({ p, onMudou }: { p: Planejada; onMudou: () => void }) {
         </Permitido>
       )}
     </div>
+  );
+}
+
+/** Dia útil anterior: segunda copia a sexta; os outros dias, a véspera. */
+function diaUtilAnterior(iso: string): string {
+  const dow = new Date(`${iso}T12:00:00Z`).getUTCDay();
+  return somarDias(iso, dow === 1 ? -3 : dow === 0 ? -2 : -1);
+}
+
+type ResultadoCopia = {
+  gravado: boolean;
+  copiadas: number;
+  itens: {
+    origemId: string;
+    acao: "COPIA" | "JA_EXISTE" | "PEDIDO_ENCERRADO";
+    pedido: { numero: number; cliente: string | null } | null;
+    motorista: string | null;
+    placa: string | null;
+    janelaInicio: string | null;
+  }[];
+};
+
+const ACAO_COPIA: Record<ResultadoCopia["itens"][number]["acao"], { texto: string; cor: string }> = {
+  COPIA: { texto: "Entra", cor: "text-green-700" },
+  JA_EXISTE: { texto: "Já está no dia", cor: "text-muted-foreground" },
+  PEDIDO_ENCERRADO: { texto: "Pedido encerrado ou cumprido — fica de fora", cor: "text-amber-700" },
+};
+
+/**
+ * "Repetir outro dia": o quadro de amanhã quase sempre é o de hoje. Sempre em
+ * dois passos (conferir, copiar) e as cópias nascem sem publicar — o motorista
+ * só fica sabendo quando alguém apertar Publicar.
+ */
+function RepetirOutroDia({ dia, onCopiou }: { dia: string; onCopiou: () => void }) {
+  const token = useAuthToken();
+  const [aberto, setAberto] = React.useState(false);
+  const [de, setDe] = React.useState(() => diaUtilAnterior(dia));
+  const [previa, setPrevia] = React.useState<ResultadoCopia | null>(null);
+  const [ocupado, setOcupado] = React.useState(false);
+  const [erro, setErro] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setDe(diaUtilAnterior(dia));
+    setPrevia(null);
+  }, [dia]);
+  React.useEffect(() => setPrevia(null), [de]);
+
+  async function enviar(simular: boolean) {
+    if (!token) return;
+    setOcupado(true);
+    setErro(null);
+    try {
+      const r = await fetchApi<ResultadoCopia>("/admin/programacao/copiar", {
+        token,
+        method: "POST",
+        body: JSON.stringify({ de, para: dia, simular }),
+      });
+      if (simular) setPrevia(r);
+      else {
+        setPrevia(null);
+        setAberto(false);
+        onCopiou();
+      }
+    } catch (e) {
+      setErro((e as Error).message);
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  if (!aberto) {
+    return (
+      <div>
+        <Button variant="outline" size="sm" onClick={() => setAberto(true)}>
+          Repetir a programação de outro dia
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="copiar-de">Copiar o dia</Label>
+          <Input id="copiar-de" type="date" className="w-40" value={de} onChange={(e) => setDe(e.target.value)} />
+        </div>
+        <p className="pb-2 text-sm text-muted-foreground">
+          para <span className="capitalize">{diaExtenso(dia)}</span>. As viagens entram sem publicar.
+        </p>
+      </div>
+      {erro && <p className="text-sm text-red-700">{erro}</p>}
+
+      {previa && (
+        previa.itens.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Não há nada programado nesse dia.</p>
+        ) : (
+          <ul className="divide-y rounded-md border text-sm">
+            {previa.itens.map((i) => (
+              <li key={i.origemId} className="flex flex-wrap items-baseline justify-between gap-2 px-3 py-1.5">
+                <span>
+                  <span className="font-medium">{i.motorista ?? "Sem motorista"}</span>
+                  {i.placa && <span className="text-muted-foreground"> · {i.placa}</span>}
+                  {i.pedido && (
+                    <span className="text-muted-foreground">
+                      {" "}· pedido #{i.pedido.numero}
+                      {i.pedido.cliente && ` (${i.pedido.cliente})`}
+                    </span>
+                  )}
+                  {i.janelaInicio && <span className="text-muted-foreground"> · {i.janelaInicio}</span>}
+                </span>
+                <span className={ACAO_COPIA[i.acao].cor}>{ACAO_COPIA[i.acao].texto}</span>
+              </li>
+            ))}
+          </ul>
+        )
+      )}
+
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" disabled={ocupado} onClick={() => setAberto(false)}>
+          Cancelar
+        </Button>
+        {previa && previa.copiadas > 0 ? (
+          <Button size="sm" className="bg-green-600 hover:bg-green-700" disabled={ocupado} onClick={() => enviar(false)}>
+            Copiar {previa.copiadas} viagem(ns)
+          </Button>
+        ) : (
+          <Button size="sm" disabled={ocupado} onClick={() => enviar(true)}>
+            {previa ? "Nada pra copiar — conferir de novo" : "Conferir"}
+          </Button>
+        )}
+      </div>
+    </Card>
   );
 }

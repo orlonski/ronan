@@ -3,6 +3,7 @@ import { Cron } from "@nestjs/schedule";
 import { Prisma } from "@prisma/client";
 import type {
   AtualizarViagemPlanejadaInput,
+  CopiarProgramacaoInput,
   CriarViagemPlanejadaInput,
   PublicarProgramacaoInput,
 } from "@ronan/shared-types";
@@ -13,6 +14,8 @@ import { PushService } from "../../push/push.service";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { casarPlanejada, type PlanejadaParaCasar } from "../../common/pedido-saldo";
+import { planejarCopia } from "../../common/programacao-copia";
+import { PedidosService } from "./pedidos.service";
 
 const INCLUDE = {
   pedido: {
@@ -42,6 +45,7 @@ export class ProgramacaoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly push: PushService,
+    private readonly pedidos: PedidosService,
   ) {}
 
   /**
@@ -125,6 +129,73 @@ export class ProgramacaoService {
 
     if (input.pedidoId) await this.marcarPedidoEmCurso(input.pedidoId);
     return criadas;
+  }
+
+  /**
+   * Repete o quadro de outro dia no dia aberto. A decisão do que entra mora em
+   * `common/programacao-copia.ts`; aqui só se busca e grava. As cópias nascem
+   * PLANEJADA: o motorista só é avisado quando alguém publicar.
+   */
+  async copiar(input: CopiarProgramacaoInput, usuarioId: string, escopo: EscopoAdmin) {
+    const filtroMotorista = escopo ? { motorista: filtroEscopo(escopo) as Prisma.MotoristaWhereInput } : {};
+    const [origem, destino] = await Promise.all([
+      this.prisma.viagemPlanejada.findMany({
+        where: {
+          dataPrevista: diaUtc(input.de),
+          status: { notIn: ["CANCELADA", "RECUSADA"] },
+          ...filtroMotorista,
+        },
+        include: INCLUDE,
+        orderBy: [{ sequencia: "asc" }, { criadoEm: "asc" }],
+      }),
+      this.prisma.viagemPlanejada.findMany({
+        where: { dataPrevista: diaUtc(input.para), status: { not: "CANCELADA" }, ...filtroMotorista },
+        select: { id: true, pedidoId: true, motoristaId: true, veiculoId: true },
+      }),
+    ]);
+
+    const pedidoIds = [...new Set(origem.map((o) => o.pedidoId).filter((x): x is string => x != null))];
+    const [pedidos, saldos] = await Promise.all([
+      this.prisma.pedido.findMany({ where: { id: { in: pedidoIds } }, select: { id: true, status: true } }),
+      this.pedidos.saldosDe(pedidoIds),
+    ]);
+    const situacao = new Map(
+      pedidos.map((p) => [p.id, { status: p.status, cumprido: saldos.get(p.id)?.situacao === "CUMPRIDO" }]),
+    );
+
+    const plano = planejarCopia(origem, destino, situacao);
+    const acaoDe = new Map(plano.map((x) => [x.id, x.acao]));
+    const itens = origem.map((o) => ({
+      origemId: o.id,
+      acao: acaoDe.get(o.id)!,
+      pedido: o.pedido ? { numero: o.pedido.numero, cliente: o.pedido.cliente?.nome ?? null } : null,
+      motorista: o.motorista?.nome ?? null,
+      placa: o.veiculo?.placa ?? null,
+      janelaInicio: o.janelaInicio,
+    }));
+    const copiar = origem.filter((o) => acaoDe.get(o.id) === "COPIA");
+
+    if (!input.simular && copiar.length > 0) {
+      const para = diaUtc(input.para);
+      await this.prisma.$transaction(
+        copiar.map((o) =>
+          this.prisma.viagemPlanejada.create({
+            data: {
+              pedidoId: o.pedidoId,
+              motoristaId: o.motoristaId,
+              veiculoId: o.veiculoId,
+              dataPrevista: para,
+              janelaInicio: o.janelaInicio,
+              janelaFim: o.janelaFim,
+              sequencia: o.sequencia,
+              observacao: o.observacao,
+              criadoPorId: usuarioId,
+            },
+          }),
+        ),
+      );
+    }
+    return { gravado: !input.simular, copiadas: copiar.length, itens };
   }
 
   async atualizar(id: string, input: AtualizarViagemPlanejadaInput) {

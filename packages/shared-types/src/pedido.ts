@@ -134,6 +134,16 @@ export const PublicarProgramacaoInput = z.object({
 });
 export type PublicarProgramacaoInput = z.infer<typeof PublicarProgramacaoInput>;
 
+/**
+ * Repetir a programação de outro dia (o padrão na tela é o dia útil anterior).
+ * `simular` (padrão) só diz o que entraria; nada é publicado — as cópias nascem
+ * PLANEJADA e o motorista só fica sabendo quando alguém publica.
+ */
+export const CopiarProgramacaoInput = z
+  .object({ de: DATA, para: DATA, simular: z.boolean().default(true) })
+  .refine((d) => d.de !== d.para, { message: "Escolha um dia diferente do que está aberto.", path: ["de"] });
+export type CopiarProgramacaoInput = z.infer<typeof CopiarProgramacaoInput>;
+
 /** A resposta do motorista, no app dele. */
 export const ResponderProgramacaoInput = z
   .object({

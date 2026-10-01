@@ -7,6 +7,7 @@ import {
   CriarPedidoInput,
   CriarViagemPlanejadaInput,
   PublicarProgramacaoInput,
+  CopiarProgramacaoInput,
   STATUS_PEDIDO,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -125,6 +126,17 @@ export class ProgramacaoController {
   @Delete(":id")
   remover(@Param("id") id: string) {
     return this.service.remover(id);
+  }
+
+  /** Repete o quadro de outro dia. `simular: true` (padrão) só mostra o que entraria. */
+  @EscopoPor("motorista")
+  @RequerPermissao("programacao.editar")
+  @Post("copiar")
+  copiar(
+    @Body(new ZodValidationPipe(CopiarProgramacaoInput)) body: CopiarProgramacaoInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.copiar(body, user.id, user.escopo);
   }
 
   // Publicar é chave separada: montar o quadro é rascunho, publicar avisa o

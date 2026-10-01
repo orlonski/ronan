@@ -189,7 +189,7 @@ export class PedidosService {
   }
 
   /** Saldo de vários pedidos de uma vez. */
-  private async saldosDe(ids: string[]) {
+  async saldosDe(ids: string[]) {
     const mapa = new Map<string, ReturnType<typeof calcularSaldoPedido>>();
     if (ids.length === 0) return mapa;
 
