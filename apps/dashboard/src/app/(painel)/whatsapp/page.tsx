@@ -1272,6 +1272,10 @@ type TemplateEsperado = {
   /** A que o catálogo do código declara, na mesma grafia. */
   categoriaEsperada?: string | null;
   bate: boolean;
+  /** Receita de texto novo que ainda não é de nenhuma rota (ver docs/trocar-template-whatsapp.md). */
+  candidato?: boolean;
+  /** A rota cujo template o candidato vai substituir. */
+  substitui?: string;
   /**
    * O prefixo que o servidor sugere pro botão, quando o link volta pra nós.
    * Vem de lá porque é a `PUBLIC_APP_URL` dele — o painel não sabe o domínio
@@ -1416,7 +1420,9 @@ function TemplatesMetaCard() {
     },
   });
 
-  const faltando = (lista.data?.esperados ?? []).filter((t) => !t.bate).length;
+  // Candidato não conta: é texto novo esperando cadastro, não template que o
+  // código usa e a Meta não tem.
+  const faltando = (lista.data?.esperados ?? []).filter((t) => !t.candidato && !t.bate).length;
 
   return (
     <Card className="space-y-4 p-4">
@@ -1484,7 +1490,9 @@ function TemplatesMetaCard() {
           <TableBody>
             {lista.data.esperados.map((t) => (
               <TableRow key={t.rota}>
-                <TableCell className="font-medium">{t.rota}</TableCell>
+                <TableCell className="font-medium">
+                  {t.candidato ? `Novo texto (substitui ${t.substitui})` : t.rota}
+                </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{t.esperado}</TableCell>
                 <TableCell className="text-xs">
                   {t.bate ? (
@@ -1495,7 +1503,9 @@ function TemplatesMetaCard() {
                 </TableCell>
                 <TableCell className="text-xs">
                   {t.categoria ? (
-                    t.categoriaEsperada && t.categoria !== t.categoriaEsperada ? (
+                    t.candidato && t.categoria === "UTILITY" && t.status === "APPROVED" ? (
+                      <span className="text-emerald-700 dark:text-emerald-400">UTILITY</span>
+                    ) : t.categoriaEsperada && t.categoria !== t.categoriaEsperada ? (
                       <span
                         className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200"
                         title={`O código declara ${t.categoriaEsperada}. Categoria diferente muda limite de entregas e custo.`}
@@ -1510,6 +1520,13 @@ function TemplatesMetaCard() {
                   )}
                 </TableCell>
                 <TableCell className="text-right">
+                  {t.candidato &&
+                    t.status === "APPROVED" &&
+                    t.categoria === "UTILITY" && (
+                      <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                        Pronto para trocar: avise para trocar o nome no código
+                      </span>
+                    )}
                   {/* Em análise não ganha botão: já foi cadastrado, e um
                       segundo cadastro com o mesmo nome a Meta recusa. Aqui a
                       ação certa é esperar, e a tela tem que dizer isso em vez

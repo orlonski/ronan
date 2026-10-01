@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   ROTAS_WHATSAPP,
+  TEMPLATES_CANDIDATOS_WHATSAPP,
   TEMPLATES_WHATSAPP,
+  achatarParam,
   rotaWhatsapp,
+  templateCandidatoWhatsapp,
+  type TemplateCandidatoWhatsappDef,
   type TemplateWhatsappDef,
 } from "@ronan/shared-types";
 
@@ -127,6 +131,74 @@ describe("catálogo de templates", () => {
       expect(def.textoAprovacao).toBe(
         "No dia {{1}}, você não teve viagens? Toque em uma das opções abaixo pra me avisar.",
       );
+    });
+  });
+
+  /**
+   * Candidatos: receitas de texto novo (rota reclassificada pela Meta). Só valem
+   * se forem o MESMO formato do atual — é o que faz a troca ser só renomear.
+   */
+  describe("candidatos a substituir template reclassificado", () => {
+    const cands = Object.entries(TEMPLATES_CANDIDATOS_WHATSAPP) as [string, TemplateCandidatoWhatsappDef][];
+
+    it("existem os dois esperados", () => {
+      expect(cands.map(([k]) => k).sort()).toEqual(["COBRANCA_AUTORIZACAO_PIX_V2", "CONVITE_EMPRESA_V2"]);
+    });
+
+    it.each(cands)("%s: nenhuma rota usa a chave nem o nome do candidato", (chave, def) => {
+      expect(rotaWhatsapp(chave)).toBeUndefined();
+      expect(Object.keys(TEMPLATES_WHATSAPP)).not.toContain(chave);
+      const nomesEmUso = Object.values(TEMPLATES_WHATSAPP).map((t) => t!.nome);
+      expect(nomesEmUso).not.toContain(def.nome);
+      expect(templateCandidatoWhatsapp(chave)).toBe(def);
+      expect(templateCandidatoWhatsapp("CONVITE_EMPRESA")).toBeUndefined();
+    });
+
+    it.each(cands)("%s: substitui uma rota válida, com nome novo e categoria utility", (_c, def) => {
+      const atual = TEMPLATES_WHATSAPP[def.substitui];
+      expect(rotaWhatsapp(def.substitui), "substitui rota inexistente").toBeDefined();
+      expect(atual, "a rota substituída não tem template").toBeDefined();
+      expect(def.nome).not.toBe(atual!.nome);
+      expect(def.categoria).toBe("utility");
+      expect(def.nome).toMatch(/^[a-z0-9_]+$/);
+      expect(def.idioma).toBe(atual!.idioma);
+    });
+
+    it.each(cands)("%s: mesma forma de params e botão do atual (troca = só renomear)", (_c, def) => {
+      const atual = TEMPLATES_WHATSAPP[def.substitui]!;
+      expect([...def.corpo]).toEqual([...atual.corpo]);
+      expect(def.botao).toEqual(atual.botao);
+      expect([...def.exemplo]).toEqual([...atual.exemplo]);
+      expect(placeholders(def.textoAprovacao)).toEqual(
+        Array.from({ length: def.corpo.length }, (_, i) => i + 1),
+      );
+    });
+
+    it.each(cands)("%s: regras da Meta (variável fora das pontas, uma linha, sem emoji)", (_c, def) => {
+      const t = def.textoAprovacao;
+      expect(t.trimStart().startsWith("{{")).toBe(false);
+      expect(t.trimEnd().endsWith("}}")).toBe(false);
+      expect(t.trimEnd().endsWith(".")).toBe(true);
+      expect(/\p{Extended_Pictographic}/u.test(t)).toBe(false);
+      expect(t).not.toContain("\n");
+      for (const i of def.corpo) {
+        const v = def.exemplo[i] ?? "";
+        expect(achatarParam(v)).toBe(v);
+      }
+    });
+
+    it("os textos são exatamente os decididos", () => {
+      expect(TEMPLATES_CANDIDATOS_WHATSAPP.CONVITE_EMPRESA_V2.textoAprovacao).toBe(
+        "Convite de cadastro: {{1}} cadastrou você como motorista no {{2}}. Para aceitar ou recusar, abra o app com este número. Se você não reconhece este convite, ignore esta mensagem.",
+      );
+      expect(TEMPLATES_CANDIDATOS_WHATSAPP.COBRANCA_AUTORIZACAO_PIX_V2.textoAprovacao).toBe(
+        "Olá, {{1}}. Autorização de pagamento da assinatura Movatruck: {{2}} por mês, primeiro vencimento em {{3}}. Para autorizar, pague o Pix pelo botão abaixo.",
+      );
+    });
+
+    it("os templates ATUAIS seguem intactos (nada que envia hoje muda)", () => {
+      expect(TEMPLATES_WHATSAPP.CONVITE_EMPRESA!.nome).toBe("convite_empresa");
+      expect(TEMPLATES_WHATSAPP.COBRANCA_AUTORIZACAO_PIX!.nome).toBe("cobranca_autorizacao_pix_link");
     });
   });
 });

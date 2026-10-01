@@ -787,6 +787,75 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
 };
 
 /**
+ * Receita de um template NOVO que ainda não é de nenhuma rota.
+ *
+ * Nasce quando a Meta reclassifica um template aprovado (UTILITY -> MARKETING):
+ * o nome aprovado é imutável, então o texto corrigido precisa de nome novo, e
+ * nada do que envia hoje pode parar enquanto o novo espera aprovação. O
+ * candidato tem a MESMA forma do template que `substitui` (mesmos params, mesmo
+ * botão) — por isso a troca final é só renomear em `TEMPLATES_WHATSAPP`.
+ *
+ * Não entra em `ROTAS_WHATSAPP`, no envio nem no roteamento: é só "receita a
+ * cadastrar" pelo botão do painel. Procedimento: `docs/trocar-template-whatsapp.md`.
+ */
+export type TemplateCandidatoWhatsappDef = TemplateWhatsappDef & {
+  /** A rota cujo template este candidato vai substituir. */
+  substitui: RotaWhatsapp;
+  /** A categoria que o texto novo tem que receber da Meta. */
+  categoria: "utility";
+};
+
+export type ChaveCandidatoWhatsapp = "CONVITE_EMPRESA_V2" | "COBRANCA_AUTORIZACAO_PIX_V2";
+
+export const TEMPLATES_CANDIDATOS_WHATSAPP: Record<
+  ChaveCandidatoWhatsapp,
+  TemplateCandidatoWhatsappDef
+> = {
+  // O atual ("quer te adicionar", emoji, "abra o app pra aceitar") lia como
+  // oferta a quem não tem relação, e a Meta o reclassificou como MARKETING.
+  // O novo é factual: quem cadastrou, o que fazer, e o que fazer se não conhece.
+  CONVITE_EMPRESA_V2: {
+    nome: "convite_empresa_v2",
+    idioma: "pt_BR",
+    substitui: "CONVITE_EMPRESA",
+    categoria: "utility",
+    corpo: [0, 1],
+    textoAprovacao:
+      "Convite de cadastro: {{1}} cadastrou você como motorista no {{2}}. Para aceitar ou recusar, abra o app com este número. Se você não reconhece este convite, ignore esta mensagem.",
+    exemplo: ["Transportes Schaba", "Movatruck"],
+  },
+  // O atual fala em "ativar a assinatura/cobrança automática", que a Meta leu
+  // como venda. O novo descreve a autorização de pagamento, sem verbo de oferta.
+  COBRANCA_AUTORIZACAO_PIX_V2: {
+    nome: "cobranca_autorizacao_pix_link_v2",
+    idioma: "pt_BR",
+    substitui: "COBRANCA_AUTORIZACAO_PIX",
+    categoria: "utility",
+    corpo: [0, 1, 2],
+    botao: { tipo: "URL", param: 5, texto: "Pagar" },
+    textoAprovacao:
+      "Olá, {{1}}. Autorização de pagamento da assinatura Movatruck: {{2}} por mês, primeiro vencimento em {{3}}. Para autorizar, pague o Pix pelo botão abaixo.",
+    exemplo: [
+      "Marcos",
+      "R$ 1.890,00",
+      "10/09/2026",
+      "",
+      "00020101021226790014br.gov.bcb.pix2557pix.asaas.com/qr/cob/0cd97f06-6965-4c31-80be-2ab8fb31b8de5204000053039865802BR5925MOVATRUCK DESENVOLVIMENTO6009Ponta Grossa62070503***6304ABCD",
+      "k7Qw2mT9xZ0aB3cD5eF6gH8j",
+    ],
+  },
+};
+
+/** O candidato daquela chave, ou `undefined` (chave de rota normal não é candidato). */
+export function templateCandidatoWhatsapp(
+  chave: string,
+): TemplateCandidatoWhatsappDef | undefined {
+  return Object.prototype.hasOwnProperty.call(TEMPLATES_CANDIDATOS_WHATSAPP, chave)
+    ? TEMPLATES_CANDIDATOS_WHATSAPP[chave as ChaveCandidatoWhatsapp]
+    : undefined;
+}
+
+/**
  * Pedir pra Meta cadastrar o template que o código já declara.
  *
  * Só a chave da rota: o corpo, o idioma e os exemplos saem do catálogo acima,

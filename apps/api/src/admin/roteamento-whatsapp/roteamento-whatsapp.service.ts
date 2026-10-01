@@ -7,8 +7,10 @@ import {
   provedorAtendeRota,
   ROTAS_DA_PLATAFORMA,
   ROTAS_WHATSAPP,
+  TEMPLATES_CANDIDATOS_WHATSAPP,
   TEMPLATES_WHATSAPP,
   rotaWhatsapp,
+  templateCandidatoWhatsapp,
   templateWhatsapp,
   type AtualizarRoteamentoWhatsappInput,
   type ProvedorWhatsapp,
@@ -285,7 +287,27 @@ export class AdminRoteamentoWhatsappService {
         urlBaseSugerida: def!.botao?.tipo === "URL" ? this.urlBaseDe(rota) : null,
       };
     });
-    return { bruto: r, esperados };
+
+    // Candidatos: receitas de texto novo que substituem um template atual
+    // reclassificado pela Meta. Não são de nenhuma rota; só dá pra cadastrar e
+    // acompanhar aqui. `categoriaEsperada` é sempre UTILITY — é o que se quer
+    // que a Meta devolva antes de trocar o nome no código.
+    const candidatos = Object.entries(TEMPLATES_CANDIDATOS_WHATSAPP).map(([chave, def]) => {
+      const achado = naMeta.find((t) => t.name === def.nome);
+      return {
+        rota: chave,
+        candidato: true as const,
+        substitui: def.substitui as string,
+        esperado: `${def.nome} / ${def.idioma}`,
+        naMeta: achado ? `${achado.name} / ${achado.language} (${achado.status})` : "NÃO EXISTE",
+        status: achado?.status ?? null,
+        categoria: achado?.category ?? null,
+        categoriaEsperada: def.categoria.toUpperCase(),
+        bate: !!achado && achado.language === def.idioma && achado.status === "APPROVED",
+        urlBaseSugerida: def.botao?.tipo === "URL" ? this.urlBaseDe(def.substitui) : null,
+      };
+    });
+    return { bruto: r, esperados: [...esperados, ...candidatos] };
   }
 
   /**
@@ -312,9 +334,12 @@ export class AdminRoteamentoWhatsappService {
    * NÃO substitui a análise da Meta: isto submete, ela aprova quando quiser.
    */
   async criarTemplateNaMeta(wabaId: string, rota: string, urlBase?: string) {
-    const def = templateWhatsapp(rota);
-    const rotaDef = rotaWhatsapp(rota);
-    if (!def || !rotaDef) {
+    // Candidato (texto novo de uma rota reclassificada) tem chave própria e
+    // categoria UTILITY fixa; não é rota, então não passa pelo catálogo de rotas.
+    const candidato = templateCandidatoWhatsapp(rota);
+    const def = candidato ?? templateWhatsapp(rota);
+    const rotaDef = candidato ? undefined : rotaWhatsapp(rota);
+    if (!def || (!candidato && !rotaDef)) {
       throw new NotFoundException(`A rota "${rota}" não existe ou não tem template no código.`);
     }
 
@@ -322,7 +347,7 @@ export class AdminRoteamentoWhatsappService {
     // OTP e campos de validade que não existem no nosso catálogo. Submeter um
     // palpite aqui criaria um template com nome certo e forma errada — e o
     // nome é o que não dá pra reaproveitar depois.
-    if (rotaDef.categoria === "authentication") {
+    if (rotaDef?.categoria === "authentication") {
       throw new BadRequestException(
         "Template de código (authentication) tem forma própria na Meta e precisa ser criado no console dela.",
       );
@@ -379,7 +404,7 @@ export class AdminRoteamentoWhatsappService {
       language: def.idioma,
       // Primeiro contato com lead é MARKETING pra Meta; mandar como UTILITY faz
       // ela reclassificar ou recusar.
-      category: rotaDef.categoria === "marketing" ? "MARKETING" : "UTILITY",
+      category: rotaDef?.categoria === "marketing" ? "MARKETING" : "UTILITY",
       components: componentes,
     });
   }

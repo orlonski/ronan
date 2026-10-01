@@ -143,4 +143,80 @@ describe("criar template na Meta", () => {
     // Resposta rápida não leva URL nem exige urlBase.
     expect(botoes.every((b) => b.url === undefined)).toBe(true);
   });
+
+  describe("candidatos (texto novo de rota reclassificada)", () => {
+    it("cria o convite v2 com o NOME NOVO, UTILITY e o texto do catálogo", async () => {
+      const { s, chamadas } = servico();
+      await s.criarTemplateNaMeta("waba1", "CONVITE_EMPRESA_V2");
+      const corpo = chamadas[0]!.corpo as {
+        name: string;
+        category: string;
+        components: { type: string; text?: string; example?: { body_text: string[][] } }[];
+      };
+      expect(corpo.name).toBe("convite_empresa_v2");
+      expect(corpo.category).toBe("UTILITY");
+      const body = corpo.components.find((c) => c.type === "BODY")!;
+      expect(body.text).toMatch(/^Convite de cadastro: \{\{1\}\} cadastrou você/);
+      expect(body.example!.body_text[0]).toEqual(["Transportes Schaba", "Movatruck"]);
+      expect(corpo.components.some((c) => c.type === "BUTTONS")).toBe(false);
+    });
+
+    it("cria a cobrança v2 com o mesmo botão Pagar e exige o prefixo", async () => {
+      const { s, chamadas } = servico();
+      await expect(s.criarTemplateNaMeta("waba1", "COBRANCA_AUTORIZACAO_PIX_V2")).rejects.toThrow(/urlBase/i);
+      expect(chamadas).toHaveLength(0);
+      await s.criarTemplateNaMeta("waba1", "COBRANCA_AUTORIZACAO_PIX_V2", "https://app.movatruck.com.br/pagar/");
+      const corpo = chamadas[0]!.corpo as {
+        name: string;
+        category: string;
+        components: { type: string; buttons?: { text: string; url: string; example: string[] }[] }[];
+      };
+      expect(corpo.name).toBe("cobranca_autorizacao_pix_link_v2");
+      expect(corpo.category).toBe("UTILITY");
+      const botao = corpo.components.find((c) => c.type === "BUTTONS")!.buttons![0]!;
+      expect(botao.text).toBe("Pagar");
+      expect(botao.url).toBe("https://app.movatruck.com.br/pagar/{{1}}");
+      expect(botao.example[0]).not.toContain("br.gov.bcb.pix");
+    });
+
+    it("templatesMeta lista os candidatos abaixo dos atuais, com a categoria que a Meta deu", async () => {
+      const meta = {
+        listarTemplates: async () => ({
+          ok: true,
+          resposta: {
+            data: [
+              { name: "convite_empresa", language: "pt_BR", status: "APPROVED", category: "MARKETING" },
+              { name: "convite_empresa_v2", language: "pt_BR", status: "APPROVED", category: "UTILITY" },
+            ],
+          },
+        }),
+      };
+      const s = new AdminRoteamentoWhatsappService(
+        {} as never,
+        {} as never,
+        meta as never,
+        { get: () => "https://app.movatruck.com.br" } as never,
+      );
+      const { esperados } = (await s.templatesMeta("waba1")) as {
+        esperados: Record<string, unknown>[];
+      };
+      const normais = esperados.filter((e) => !e.candidato);
+      const cands = esperados.filter((e) => e.candidato);
+      // candidatos vêm DEPOIS de todos os atuais, e os atuais não ganham o campo
+      expect(esperados.slice(-cands.length)).toEqual(cands);
+      expect(cands.map((c) => c.rota)).toEqual(["CONVITE_EMPRESA_V2", "COBRANCA_AUTORIZACAO_PIX_V2"]);
+      const convite = cands[0]!;
+      expect(convite).toMatchObject({
+        substitui: "CONVITE_EMPRESA",
+        status: "APPROVED",
+        categoria: "UTILITY",
+        categoriaEsperada: "UTILITY",
+        bate: true,
+      });
+      expect(cands[1]).toMatchObject({ naMeta: "NÃO EXISTE", status: null, categoria: null });
+      expect(cands[1]!.urlBaseSugerida).toBe("https://app.movatruck.com.br/pagar/");
+      // o atual segue como estava: aprovado, mas MARKETING (a tela avisa)
+      expect(normais.find((e) => e.rota === "CONVITE_EMPRESA")).toMatchObject({ categoria: "MARKETING", categoriaEsperada: "UTILITY" });
+    });
+  });
 });
