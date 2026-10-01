@@ -211,6 +211,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Ver o que foi abastecido no período, com o total de litros e de dinheiro",
       "Filtrar por tipo de combustível, motorista, cliente e período, ou digitar o posto e a placa na busca",
       "Abrir um abastecimento pra ver a foto e o odômetro que o motorista anotou",
+      "Ver só os que pedem conferência: mais litros do que cabe no tanque, do que o caminhão rodou, ou lançados longe do trajeto do dia",
     ],
     naoEAqui: {
       procurando: "quantos quilômetros por litro cada caminhão está fazendo",

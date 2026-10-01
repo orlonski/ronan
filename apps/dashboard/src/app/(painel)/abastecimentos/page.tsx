@@ -55,6 +55,8 @@ type Abastecimento = {
   motorista: { id: string; nome: string };
   empresa: { id: string; nome: string } | null;
   _count: { fotos: number };
+  /** Sinais de que vale conferir (tanque, consumo, longe do trajeto). Vazio = nada. */
+  conferir?: { tipo: string; texto: string }[];
 };
 
 type Empresa = { id: string; nome: string };
@@ -134,7 +136,10 @@ export default function AbastecimentosPage() {
         accessorKey: "veiculo.placa",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Placa" />,
         cell: ({ row }) => (
-          <span className="font-mono text-sm">{row.original.veiculo.placa}</span>
+          <span className="flex flex-wrap items-center gap-1.5">
+            <span className="font-mono text-sm">{row.original.veiculo.placa}</span>
+            <SeloConferir sinais={row.original.conferir} />
+          </span>
         ),
       },
       {
@@ -310,6 +315,13 @@ export default function AbastecimentosPage() {
                   options={empresaOptions}
                 />
                 )}
+                <Combobox
+                  value={tableState.filters.conferir}
+                  onChange={(v) => tableState.setFilter("conferir", v)}
+                  placeholder="Conferência"
+                  showSearch={false}
+                  options={[{ value: "true", label: "Só os que pedem conferência" }]}
+                />
                 <ToolbarFilterDateRange state={tableState} label="Período" />
               </>
             }
@@ -320,6 +332,23 @@ export default function AbastecimentosPage() {
         renderMobileCard={(a) => <AbastecimentoCard a={a} />}
       />
     </div>
+  );
+}
+
+/**
+ * "Conferir": o número não fecha (mais litros que o tanque, que o caminhão
+ * rodou, ou lançado longe do trajeto). Amarelo de cuidado, não vermelho: é
+ * sinal pra olhar, não acusação — o motivo vai no detalhe e no title.
+ */
+function SeloConferir({ sinais }: { sinais?: { tipo: string; texto: string }[] }) {
+  if (!sinais?.length) return null;
+  return (
+    <Badge
+      className="border-amber-300 bg-amber-100 text-amber-900"
+      title={sinais.map((s) => s.texto).join("\n")}
+    >
+      Conferir
+    </Badge>
   );
 }
 
@@ -360,6 +389,7 @@ function AbastecimentoCard({ a }: { a: Abastecimento }) {
                   Comboio
                 </Badge>
               )}
+              <SeloConferir sinais={a.conferir} />
             </div>
             <span className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground">
               {a._count.fotos > 0 && (

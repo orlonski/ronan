@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { AcaoAuditoria, type Prisma, type TipoCombustivel } from "@prisma/client";
 import type { AtualizarAbastecimentoInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
@@ -8,6 +8,7 @@ import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { inicioDoDiaBR } from "../../common/timezone";
+import { AbastecimentoSinaisService } from "./abastecimento-sinais.service";
 
 type ListAbastecimentosParams = PaginationQuery & {
   motoristaId?: string;
@@ -19,9 +20,13 @@ type ListAbastecimentosParams = PaginationQuery & {
   /** Nome exato do posto, sem diferenciar caixa. Usado pelo drill-down do relatório. */
   posto?: string;
   semPosto?: "true" | "false";
+  conferir?: "true" | "false";
   de?: string;
   ate?: string;
 };
+
+/** Teto do filtro "pedem conferência": um trimestre de uma frota grande cabe folgado. */
+const MAX_CONFERIR = 5_000;
 
 @Injectable()
 export class AbastecimentosAdminService {
@@ -30,6 +35,7 @@ export class AbastecimentosAdminService {
     private readonly uploads: UploadsService,
     private readonly auditoria: AuditoriaService,
     private readonly push: PushService,
+    private readonly sinais: AbastecimentoSinaisService,
   ) {}
 
   async list(params: ListAbastecimentosParams, escopo: EscopoAdmin) {
@@ -54,6 +60,23 @@ export class AbastecimentosAdminService {
       where.data = {};
       if (params.de) where.data.gte = inicioDoDiaBR(params.de);
       if (params.ate) where.data.lt = new Date(inicioDoDiaBR(params.ate).getTime() + 86_400_000);
+    }
+
+    // "Só os que pedem conferência": o sinal é calculado (não gravado — ver
+    // AbastecimentoSinaisService), então o filtro calcula o período inteiro e
+    // vira uma lista de ids. Sem período seria a base toda.
+    if (params.conferir === "true") {
+      if (!params.de) {
+        throw new BadRequestException("Escolha um período pra ver os abastecimentos que pedem conferência.");
+      }
+      const candidatos = await this.prisma.abastecimento.findMany({
+        where: { ...where, ...filtroEscopo(escopo) },
+        select: { id: true },
+        take: MAX_CONFERIR,
+        orderBy: { data: "desc" },
+      });
+      const sinais = await this.sinais.calcular(candidatos.map((c) => c.id));
+      where.id = { in: [...sinais].filter(([, s]) => s.length > 0).map(([id]) => id) };
     }
 
     const [paged, totais] = await Promise.all([
@@ -89,8 +112,15 @@ export class AbastecimentosAdminService {
       }),
     ]);
 
+    const sinaisDaPagina = await this.sinais.calcular(
+      (paged.data as { id: string }[]).map((a) => a.id),
+    );
     return {
       ...paged,
+      data: (paged.data as { id: string }[]).map((a) => ({
+        ...a,
+        conferir: sinaisDaPagina.get(a.id) ?? [],
+      })),
       totais: {
         count: totais._count._all,
         litros: (totais._sum.litros ?? "0").toString(),
@@ -130,7 +160,8 @@ export class AbastecimentosAdminService {
       },
     });
     if (!a) throw new NotFoundException("Abastecimento não encontrado");
-    return a;
+    const sinais = await this.sinais.calcular([a.id]);
+    return { ...a, conferir: sinais.get(a.id) ?? [] };
   }
 
   /**

@@ -40,6 +40,8 @@ const ListAbastecimentosQuery = paginationQuerySchema.extend({
   // agrupa por posto e precisa reabrir a lista exatamente daquele grupo.
   posto: z.string().min(1).max(120).optional(),
   semPosto: z.enum(["true", "false"]).optional(),
+  /** Só os que pedem conferência (ver common/abastecimento-conferir.ts). Exige `de`. */
+  conferir: z.enum(["true", "false"]).optional(),
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });

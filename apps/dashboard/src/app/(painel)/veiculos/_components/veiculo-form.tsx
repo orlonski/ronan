@@ -18,6 +18,7 @@ export type Veiculo = {
   id: string;
   placa: string;
   modelo: string | null;
+  capacidadeTanqueLitros?: number | null;
   ativo: boolean;
   transportadoraId: string | null;
   transportadora: { id: string; nome: string } | null;
@@ -35,6 +36,7 @@ export function VeiculoForm({ initial }: Props) {
   const [form, setForm] = useState({
     placa: initial?.placa ?? "",
     modelo: initial?.modelo ?? "",
+    tanque: initial?.capacidadeTanqueLitros != null ? String(initial.capacidadeTanqueLitros) : "",
     transportadoraId: initial?.transportadoraId ?? undefined,
   });
 
@@ -44,8 +46,10 @@ export function VeiculoForm({ initial }: Props) {
 
   async function onSubmit(ev: React.FormEvent) {
     ev.preventDefault();
+    const tanque = Number(form.tanque.replace(/\D/g, ""));
     const body: Record<string, unknown> = {
       modelo: form.modelo || undefined,
+      capacidadeTanqueLitros: tanque > 0 ? tanque : null,
       transportadoraId: form.transportadoraId ?? null,
     };
     if (initial) {
@@ -92,6 +96,19 @@ export function VeiculoForm({ initial }: Props) {
               onChange={(e) => setForm({ ...form, modelo: e.target.value })}
               placeholder="Ex.: Scania R450"
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="veiculofor-tanque">Tanque de diesel (litros)</Label>
+            <Input id="veiculofor-tanque"
+              inputMode="numeric"
+              className="w-40"
+              value={form.tanque}
+              onChange={(e) => setForm({ ...form, tanque: e.target.value })}
+              placeholder="Ex.: 600"
+            />
+            <p className="text-xs text-muted-foreground">
+              Opcional. Abastecimento acima disso aparece marcado pra conferir. Bitanque: some os dois.
+            </p>
           </div>
         </div>
         <div className="space-y-2">

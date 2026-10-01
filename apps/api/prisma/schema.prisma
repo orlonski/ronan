@@ -2124,6 +2124,9 @@ model Veiculo {
   /// Quanto o caminhão carrega, em toneladas. É o que permite responder
   /// "preciso de quantos caminhões pra 180 t?" na programação.
   capacidadeToneladas Decimal?        @db.Decimal(10, 3)
+  /// Litros que cabem no tanque de diesel (somando os dois, se bitanque).
+  /// Opcional: sem ele o abastecimento não é comparado com o tanque.
+  capacidadeTanqueLitros Int?
   /// Peso do veículo vazio. Obrigatório no MDF-e.
   tara                Decimal?        @db.Decimal(10, 3)
   renavam             String?

@@ -87,6 +87,8 @@ type AbastecimentoDetalhe = {
     tipo?: TipoFotoAbastecimento;
   }[];
   sincronizadoEm: string;
+  /** Sinais de que vale conferir. Vazio = o número fecha. */
+  conferir?: { tipo: string; texto: string }[];
 };
 
 const TIPO_LABEL: Record<string, string> = {
@@ -197,6 +199,22 @@ export default function AbastecimentoDetalhePage({
           loading={historico.isLoading}
           labelForCampo={labelForCampoAbastecimento}
         />
+      )}
+
+      {tab === "dados" && x.conferir && x.conferir.length > 0 && (
+        <Card className="space-y-2 border-l-4 border-l-amber-500 p-4 text-sm">
+          <p className="font-medium">Vale conferir este abastecimento</p>
+          <ul className="list-disc space-y-1 pl-5">
+            {x.conferir.map((c) => (
+              <li key={c.tipo}>{c.texto}</li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">
+            É um sinal, não uma acusação: tanque que não estava cheio de verdade, odômetro
+            digitado errado ou posto fora da rota explicam boa parte. Olhe as fotos e, se
+            precisar, pergunte ao motorista.
+          </p>
+        </Card>
       )}
 
       {tab === "dados" && (
