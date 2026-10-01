@@ -1,3 +1,4 @@
+import { comoSistema } from "../common/conta/conta-context";
 import { PushService } from "../push/push.service";
 import {
   BadRequestException,
@@ -1130,11 +1131,30 @@ export class PontoAdminService {
     try {
       const f = await this.prisma.funcionario.findFirst({
         where: { id: funcionarioId },
-        select: { identidadeId: true },
+        select: { identidadeId: true, cpf: true },
       });
-      if (!f?.identidadeId) return;
+      if (!f) return;
+      /**
+       * ⚠️ `identidadeId` só é preenchido quando a pessoa JÁ tinha o app no dia
+       * do cadastro. O caso comum é o contrário (o escritório cadastra, ela
+       * instala depois), e aí o campo fica nulo pra sempre — o push não saía
+       * pra ninguém. O login liga os dois pelo CPF (`jwt.strategy.ts`); aqui
+       * faz o mesmo, e aproveita pra gravar o vínculo que faltava.
+       */
+      let identidadeId = f.identidadeId;
+      if (!identidadeId) {
+        const cpf = f.cpf.replace(/\D/g, "");
+        const identidade = await comoSistema(() =>
+          this.prisma.motoristaIdentidade.findFirst({ where: { cpf }, select: { id: true } }),
+        );
+        if (!identidade) return;
+        identidadeId = identidade.id;
+        await this.prisma.funcionario
+          .update({ where: { id: funcionarioId }, data: { identidadeId } })
+          .catch(() => {});
+      }
       await this.push.enviarParaIdentidade({
-        identidadeId: f.identidadeId,
+        identidadeId,
         titulo: a.titulo,
         corpo: a.corpo,
         dados: { kind: "ponto-correcao", dia: a.dia, correcaoId: a.correcaoId },

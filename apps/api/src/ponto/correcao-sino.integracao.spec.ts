@@ -17,6 +17,7 @@ import { PontoAdminService } from "./ponto-admin.service";
 const URL_TESTE = process.env.CONFERENCIA_TESTE_DATABASE_URL;
 const SUF = Date.now().toString(36);
 const DIA = "2026-10-01";
+const CPF_JOANA = `9${Date.now()}`.slice(0, 11);
 
 describe.skipIf(!URL_TESTE)("correção de ponto → Hoje + sininho — Prisma real", () => {
   let prisma: PrismaService;
@@ -43,7 +44,7 @@ describe.skipIf(!URL_TESTE)("correção de ponto → Hoje + sininho — Prisma r
     admin = new PontoAdminService(prisma, { log: async () => {} } as never, {} as never, push as never);
     identidadeId = (
       await comoSistema(() =>
-        prisma.motoristaIdentidade.create({ data: { cpf: `9${Date.now()}`.slice(0, 11), nome: "Joana", senhaHash: "x" } }),
+        prisma.motoristaIdentidade.create({ data: { cpf: CPF_JOANA, nome: "Joana", senhaHash: "x" } }),
       )
     ).id;
 
@@ -64,7 +65,9 @@ describe.skipIf(!URL_TESTE)("correção de ponto → Hoje + sininho — Prisma r
         })
       ).id;
       const f = await prisma.funcionario.create({
-        data: { nome: "Joana Teste", cpf: "52998224725", admitidoEm: new Date("2026-01-01"), identidadeId },
+        // SEM identidadeId, de propósito: é o caso comum (cadastrada no painel
+        // antes de instalar o app) e era o que fazia o push não sair.
+        data: { nome: "Joana Teste", cpf: CPF_JOANA, admitidoEm: new Date("2026-01-01") },
       });
       const g = await prisma.funcionario.create({
         data: { nome: "Outro", cpf: "11144477735", admitidoEm: new Date("2026-01-01") },
@@ -192,6 +195,11 @@ describe.skipIf(!URL_TESTE)("correção de ponto → Hoje + sininho — Prisma r
       }),
     );
     await expect(pedir(minha.id)).rejects.toThrow("já não conta");
+    // E o vínculo que faltava ficou gravado.
+    const f = await naConta(() =>
+      prisma.funcionario.findFirst({ where: { id: user.funcionarioId }, select: { identidadeId: true } }),
+    );
+    expect(f?.identidadeId).toBe(identidadeId);
 
     // A lista do escritório diz QUAL batida.
     const lista = await naConta(() => admin.listarCorrecoes());
