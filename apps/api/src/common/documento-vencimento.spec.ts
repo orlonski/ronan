@@ -17,7 +17,7 @@ describe("documento-vencimento", () => {
   });
 
   it("texto em português de gente", () => {
-    expect(textoVencimento("CNH", -3)).toBe("CNH vencido(a) há 3 dias");
+    expect(textoVencimento("CNH", -3)).toBe("CNH venceu há 3 dias");
     expect(textoVencimento("CNH", -1)).toBe("CNH venceu ontem");
     expect(textoVencimento("CRLV", 0)).toBe("CRLV vence hoje");
     expect(textoVencimento("CRLV", 1)).toBe("CRLV vence amanhã");

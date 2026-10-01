@@ -42,7 +42,7 @@ export function situacaoDocumento(
 
 /** "CNH vencida há 3 dias", "CNH vence hoje", "CRLV vence em 5 dias". */
 export function textoVencimento(rotulo: string, dias: number): string {
-  if (dias < -1) return `${rotulo} vencido(a) há ${-dias} dias`;
+  if (dias < -1) return `${rotulo} venceu há ${-dias} dias`;
   if (dias === -1) return `${rotulo} venceu ontem`;
   if (dias === 0) return `${rotulo} vence hoje`;
   if (dias === 1) return `${rotulo} vence amanhã`;
