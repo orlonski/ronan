@@ -30,7 +30,10 @@ describe.skipIf(!URL_TESTE)("correção de ponto → Hoje + sininho — Prisma r
   let outro: AuthFuncionario;
   let admin: PontoAdminService;
   let identidadeId: string;
-  const push = { enviarParaIdentidade: vi.fn(async () => ({ enviado: true })) };
+  const push = {
+    enviarParaIdentidade: vi.fn(async () => ({ enviado: true })),
+    enviar: vi.fn(async () => ({ enviado: true })),
+  };
 
   const naConta = <T>(fn: () => Promise<T>) => comConta(contaId, fn);
 
@@ -44,7 +47,7 @@ describe.skipIf(!URL_TESTE)("correção de ponto → Hoje + sininho — Prisma r
     admin = new PontoAdminService(prisma, { log: async () => {} } as never, {} as never, push as never);
     identidadeId = (
       await comoSistema(() =>
-        prisma.motoristaIdentidade.create({ data: { cpf: CPF_JOANA, nome: "Joana", senhaHash: "x" } }),
+        prisma.motoristaIdentidade.create({ data: { cpf: CPF_JOANA, nome: "Joana", senhaHash: "x", expoPushToken: "ExponentPushToken[joana]" } }),
       )
     ).id;
 
@@ -218,5 +221,34 @@ describe.skipIf(!URL_TESTE)("correção de ponto → Hoje + sininho — Prisma r
       status: "RECUSADA",
       decisaoMotivo: "Você estava de folga",
     });
+  });
+
+  it("motorista CLT: vai pelo cadastro de motorista (entra no sininho do app), sem repetir o aparelho", async () => {
+    await naConta(() =>
+      prisma.motorista.create({
+        data: { nome: "Joana", cpf: CPF_JOANA, senhaHash: "x", expoPushToken: "ExponentPushToken[joana]" },
+      }),
+    );
+    push.enviar.mockClear();
+    push.enviarParaIdentidade.mockClear();
+    const p = await naConta(() =>
+      ponto.pedirCorrecao(user, {
+        dia: DIA,
+        tipo: "INCLUSAO",
+        instantePretendido: "2026-10-01T20:00:00.000Z",
+        motivoCodigo: "ESQUECEU",
+        motivo: "Esqueci",
+      }),
+    );
+    await naConta(() => admin.decidirCorrecao(p.id, "APROVADA", decide));
+    expect(push.enviar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: "ExponentPushToken[joana]",
+        tipo: "ponto-correcao",
+        titulo: "Seu pedido de correção foi aceito",
+      }),
+    );
+    // Mesmo token na pessoa e no cadastro = mesmo aparelho: um push só.
+    expect(push.enviarParaIdentidade).not.toHaveBeenCalled();
   });
 });

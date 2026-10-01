@@ -1117,52 +1117,99 @@ export class PontoAdminService {
   /**
    * Push pro aparelho de quem bate o ponto.
    *
-   * Vai pela PESSOA (`MotoristaIdentidade`), não pelo vínculo de motorista:
-   * funcionário que só é registrado não tem `Motorista`, e é o token da
-   * identidade que o app grava pra qualquer login. Sem token, nada a fazer —
-   * a decisão já aparece no "Hoje" e no espelho quando ele abrir o app.
+   * ⚠️ A mesma pessoa pode estar alcançável por DOIS tokens, e qual deles o
+   * aparelho mantém em dia depende de como ela entra no app:
+   * - motorista CLT (tem cadastro de `Motorista` na empresa): o token vivo é o
+   *   do cadastro — é por ele que viagem, km e manutenção já avisam;
+   * - funcionário só registrado: o token é o da PESSOA (`MotoristaIdentidade`).
+   * A primeira versão mandava só pela identidade, e quem entrava como
+   * motorista não recebia nada. Agora vai pelos dois, sem repetir o mesmo
+   * aparelho. Pelo cadastro de motorista o aviso também entra no sininho do
+   * app e fica com status de entrega gravado — dá pra ver se chegou.
    *
-   * Best-effort: a decisão já está gravada; push falhar não desfaz nada.
+   * Em segundo plano (não esperado): `PushService.enviar` aguarda o recibo da
+   * Expo por 3s, e o escritório não pode ficar esperando isso no clique.
    */
   private async avisarFuncionario(
     funcionarioId: string,
     a: { titulo: string; corpo: string; dia: string; correcaoId: string },
   ) {
+    const dados = { kind: "ponto-correcao", dia: a.dia, correcaoId: a.correcaoId };
     try {
       const f = await this.prisma.funcionario.findFirst({
         where: { id: funcionarioId },
         select: { identidadeId: true, cpf: true },
       });
       if (!f) return;
+      const cpf = f.cpf.replace(/\D/g, "");
+
       /**
        * ⚠️ `identidadeId` só é preenchido quando a pessoa JÁ tinha o app no dia
        * do cadastro. O caso comum é o contrário (o escritório cadastra, ela
-       * instala depois), e aí o campo fica nulo pra sempre — o push não saía
-       * pra ninguém. O login liga os dois pelo CPF (`jwt.strategy.ts`); aqui
-       * faz o mesmo, e aproveita pra gravar o vínculo que faltava.
+       * instala depois). O login liga os dois pelo CPF (`jwt.strategy.ts`);
+       * aqui faz o mesmo, e grava o vínculo que faltava.
        */
       let identidadeId = f.identidadeId;
       if (!identidadeId) {
-        const cpf = f.cpf.replace(/\D/g, "");
         const identidade = await comoSistema(() =>
           this.prisma.motoristaIdentidade.findFirst({ where: { cpf }, select: { id: true } }),
         );
-        if (!identidade) return;
-        identidadeId = identidade.id;
-        await this.prisma.funcionario
-          .update({ where: { id: funcionarioId }, data: { identidadeId } })
-          .catch(() => {});
+        identidadeId = identidade?.id ?? null;
+        if (identidadeId) {
+          await this.prisma.funcionario
+            .update({ where: { id: funcionarioId }, data: { identidadeId } })
+            .catch(() => {});
+        }
       }
-      await this.push.enviarParaIdentidade({
-        identidadeId,
-        titulo: a.titulo,
-        corpo: a.corpo,
-        dados: { kind: "ponto-correcao", dia: a.dia, correcaoId: a.correcaoId },
-      });
+      const [identidade, motorista] = await Promise.all([
+        identidadeId
+          ? comoSistema(() =>
+              this.prisma.motoristaIdentidade.findUnique({
+                where: { id: identidadeId! },
+                select: { expoPushToken: true },
+              }),
+            )
+          : null,
+        this.prisma.motorista.findFirst({
+          where: { cpf, ativo: true },
+          select: { id: true, expoPushToken: true },
+        }),
+      ]);
+
+      const envios: Promise<unknown>[] = [];
+      if (motorista) {
+        envios.push(
+          this.push
+            .enviar({
+              motoristaId: motorista.id,
+              token: motorista.expoPushToken ?? "",
+              titulo: a.titulo,
+              corpo: a.corpo,
+              dados,
+              tipo: "ponto-correcao",
+            })
+            .then((r) => this.log.log(`Push correção ${a.correcaoId} (motorista): ${JSON.stringify(r)}`)),
+        );
+      }
+      const tokenIdentidade = identidade?.expoPushToken ?? null;
+      if (identidadeId && tokenIdentidade && tokenIdentidade !== motorista?.expoPushToken) {
+        envios.push(
+          this.push
+            .enviarParaIdentidade({ identidadeId, titulo: a.titulo, corpo: a.corpo, dados })
+            .then((r) => this.log.log(`Push correção ${a.correcaoId} (pessoa): ${JSON.stringify(r)}`)),
+        );
+      }
+      if (envios.length === 0) {
+        this.log.log(`Push correção ${a.correcaoId}: ninguém alcançável (sem app ou sem token).`);
+      }
+      void Promise.all(envios).catch((e) =>
+        this.log.warn(`Push da correção ${a.correcaoId} falhou: ${e instanceof Error ? e.message : e}`),
+      );
     } catch (e) {
       this.log.warn(`Push da correção ${a.correcaoId} não saiu: ${e instanceof Error ? e.message : e}`);
     }
   }
+
 
   /**
    * A ciência colhida no papel, presencialmente.
