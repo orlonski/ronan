@@ -141,16 +141,24 @@ export function DataTable<T>({
         <div
           className={
             viewMode === "cards"
-              ? "space-y-3"
+              ? // De 1024 a 1535px (MacBook) os cartões formam GRADE (até 2 colunas, cada uma com no mínimo 36rem: com o menu FIXO a tela fica estreita e o cartão de motorista perde o nome): um cartão por
+                // linha, esticado em ~950px, deixava metade da tela vazia. Em 1536px+ (ultrawide)
+                // e abaixo de 1024px segue a coluna única de sempre. `space-y` vira `gap`
+                // (o `space-y` poria margem no 2º cartão da grade).
+                "space-y-3 lg:max-2xl:grid lg:max-2xl:grid-cols-[repeat(auto-fill,minmax(min(100%,36rem),1fr))] lg:max-2xl:gap-3 lg:max-2xl:space-y-0"
               : viewMode === "table"
                 ? "hidden"
                 : "space-y-3 md:hidden"
           }
         >
-          {isLoading && <Card className="p-6"><LoadingInline /></Card>}
-          {showErro && <ErroCard erro={error} onRetry={onRetry} />}
+          {isLoading && <Card className="p-6 lg:max-2xl:col-span-full"><LoadingInline /></Card>}
+          {showErro && (
+            <div className="lg:max-2xl:col-span-full">
+              <ErroCard erro={error} onRetry={onRetry} />
+            </div>
+          )}
           {showEmpty && (
-            <Card className="p-6 text-center text-sm text-muted-foreground">{vazio}</Card>
+            <Card className="p-6 text-center text-sm text-muted-foreground lg:max-2xl:col-span-full">{vazio}</Card>
           )}
           {data.map((row, idx) => (
             <React.Fragment key={getRowKey(row, idx)}>{renderMobileCard(row)}</React.Fragment>

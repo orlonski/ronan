@@ -54,6 +54,98 @@ body {
   }
 }
 
+/* ============================================================
+ * MacBook compacto (Leva 2 / fatia 4) — faixa 768px a 1535px
+ * ============================================================
+ * Tudo que MUDA mora dentro de `@media (min-width: 768px) and (max-width: 1535.98px)`
+ * (MacBook 13–16" em escala normal). Do 1536px pra cima (monitor ultrawide) e abaixo de
+ * 768px (celular) nada muda: fora da faixa as variáveis valem o que as classes do Tailwind
+ * já valiam (`p-8`, `p-6`, `p-3`).
+ *
+ * COMO AFINAR A DENSIDADE — um lugar só, o segundo `:root` abaixo (dentro da faixa):
+ *  - `--ux-fonte`  é O botão. Tamanho do `html` na faixa. O Tailwind é todo em rem, então ele
+ *    escala texto, espaçamento, ícones e a gaveta do menu de uma vez. 16px = como antes;
+ *    15px = ~6% mais compacto (valor atual); 14px = ~12%. Passe disso o texto fica pequeno.
+ *  - `--ux-pad-main`      respiro em volta do conteúdo (fora da faixa: 2rem = `p-8`).
+ *  - `--ux-pad-card`      respiro interno dos cartões (fora da faixa: 1.5rem = `p-6`).
+ *  - `--ux-pad-celula-y`  respiro vertical das linhas de tabela (fora da faixa: 0.75rem = `p-3`).
+ * As três últimas são em rem: crescem/diminuem junto com `--ux-fonte`. Um `className="p-0"` num
+ * Card/Table continua mandando (as variáveis entram como valor da classe, não como override).
+ */
+:root {
+  --ux-pad-main: 2rem;
+  --ux-pad-card: 1.5rem;
+  --ux-pad-celula-y: 0.75rem;
+}
+
+@media (min-width: 768px) and (max-width: 1535.98px) {
+  :root {
+    --ux-fonte: 15px;
+    --ux-pad-main: 1.25rem;
+    --ux-pad-card: 1.25rem;
+    --ux-pad-celula-y: 0.5rem;
+  }
+  html {
+    font-size: var(--ux-fonte);
+  }
+
+  /* ---- Menu recolhido ----
+   * `data-menu` no <html> vem do script do <head> (lib/menu-preferencia.ts), antes da primeira
+   * pintura. Ausente ou "recolhido" = gaveta; "fixo" = a coluna de 16rem de sempre.
+   * O <aside> é o MESMO elemento nos dois modos (os mesmos itens, tooltips, empresa, tema e sair).
+   * Fechada: `visibility: hidden` tira os itens da ordem de Tab e do leitor de tela sem display:none
+   * (a transição de saída ainda anima). */
+  html:not([data-menu="fixo"]) .menu-lateral {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    height: 100dvh;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform 0.2s ease,
+      visibility 0s linear 0.2s;
+  }
+  html:not([data-menu="fixo"]) .menu-lateral[data-aberto="true"] {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.2s ease;
+    box-shadow: 0 0 48px rgb(0 0 0 / 0.28);
+  }
+  html:not([data-menu="fixo"]) .menu-fundo {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgb(0 0 0 / 0.45);
+    opacity: 0;
+    pointer-events: none;
+    display: block;
+    transition: opacity 0.2s ease;
+  }
+  html:not([data-menu="fixo"]) .menu-fundo[data-aberto="true"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  /* Hambúrguer só com o menu recolhido. */
+  html:not([data-menu="fixo"]) .menu-botao {
+    display: inline-flex;
+  }
+  /* Fixar (gaveta) x Soltar (fixo): o rótulo certo já no primeiro quadro. */
+  html:not([data-menu="fixo"]) .menu-fixar {
+    display: inline-flex;
+  }
+  html[data-menu="fixo"] .menu-soltar {
+    display: inline-flex;
+  }
+}
+@media (min-width: 768px) and (max-width: 1535.98px) and (prefers-reduced-motion: reduce) {
+  html:not([data-menu="fixo"]) .menu-lateral,
+  html:not([data-menu="fixo"]) .menu-fundo {
+    transition: none;
+  }
+}
+
 /* Safe-area (notch / home-bar do iPhone) — usadas no header sticky e na
  * bottom-nav. env() cai pra 0px em navegadores/telas sem inset. */
 @layer utilities {

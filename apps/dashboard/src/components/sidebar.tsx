@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { Fragment, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, LogOut, UserCircle } from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, LogOut, Pin, PinOff, UserCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePermissoes } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
@@ -12,12 +12,21 @@ import { ContaSwitcher } from "@/components/conta-switcher";
 import { LogoConta } from "@/components/logo-conta";
 import { limparMarca, useMarcaConta } from "@/lib/marca-conta";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { ID_MENU_LATERAL } from "@/components/menu-lateral";
+import { fixarMenu, soltarMenu, useGavetaAberta } from "@/lib/menu-lateral";
 import { COMECAR_ITEM, GRUPOS, isRotaAtiva, itemAtivo, useMenuVisivel } from "@/lib/menu";
 
 /**
  * Menu lateral do DESKTOP (a partir de 768px). No celular a navegação é a barra
  * inferior + a folha "Mais" (bottom-nav.tsx / folha-mais.tsx); esta coluna nem
  * é desenhada lá. A lista de telas e o filtro de acesso moram em lib/menu.ts.
+ *
+ * Três modos, escolhidos só por CSS (globals.css, bloco "Menu recolhido"):
+ *  - 1536px+: coluna fixa de sempre (nada muda, com ou sem preferência);
+ *  - 768–1535px, menu FIXO (`html[data-menu="fixo"]`): a mesma coluna fixa;
+ *  - 768–1535px, menu RECOLHIDO (o padrão): este MESMO <aside> vira uma gaveta que
+ *    desliza pela esquerda, aberta pelo hambúrguer do cabeçalho (menu-lateral.tsx).
+ * Um elemento só: itens, tooltips, ContaSwitcher, tema e Sair são os mesmos nos três.
  */
 export function Sidebar() {
   const pathname = usePathname();
@@ -32,6 +41,37 @@ export function Sidebar() {
   // painel — é o que a operação usa primeiro. Ao mudar de rota, abre o grupo
   // correspondente.
   const [grupoAberto, setGrupoAberto] = useState<string>("Dia a dia");
+  const gavetaAberta = useGavetaAberta();
+  const asideRef = useRef<HTMLElement>(null);
+
+  // Gaveta recém-aberta: leva o foco pro menu (teclado e leitor de tela). Só vale quando o
+  // <aside> está de fato como gaveta (fixed); na coluna fixa o estado "aberta" nunca é setado.
+  useEffect(() => {
+    if (!gavetaAberta) return;
+    const aside = asideRef.current;
+    if (aside && getComputedStyle(aside).position === "fixed") {
+      aside.querySelector<HTMLElement>("nav a, nav button")?.focus();
+    }
+  }, [gavetaAberta]);
+
+  // Tab não escapa da gaveta pra página que está escurecida atrás dela.
+  function prenderFoco(e: React.KeyboardEvent<HTMLElement>) {
+    const aside = asideRef.current;
+    if (e.key !== "Tab" || !aside || !gavetaAberta || getComputedStyle(aside).position !== "fixed") return;
+    const focaveis = Array.from(
+      aside.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])"),
+    ).filter((el) => el.getBoundingClientRect().width > 0);
+    const primeiro = focaveis[0];
+    const ultimo = focaveis[focaveis.length - 1];
+    if (!primeiro || !ultimo) return;
+    if (e.shiftKey && document.activeElement === primeiro) {
+      e.preventDefault();
+      ultimo.focus();
+    } else if (!e.shiftKey && document.activeElement === ultimo) {
+      e.preventDefault();
+      primeiro.focus();
+    }
+  }
 
   function toggleGrupo(titulo: string) {
     setGrupoAberto((prev) => (prev === titulo ? "" : titulo));
@@ -50,8 +90,13 @@ export function Sidebar() {
 
   return (
       <aside
+        ref={asideRef}
+        id={ID_MENU_LATERAL}
+        aria-label="Menu principal"
+        data-aberto={gavetaAberta ? "true" : "false"}
+        onKeyDown={prenderFoco}
         className={cn(
-          "relative z-50 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground px-4 py-6",
+          "menu-lateral relative z-50 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground px-4 py-6",
           // Celular: sem coluna lateral (a navegação é a barra inferior + folha).
           "max-md:hidden",
         )}
@@ -174,6 +219,27 @@ export function Sidebar() {
 
         <div className="space-y-2 border-t border-sidebar-border pt-4">
           <ThemeSwitcher />
+          {/* Só existe na faixa 768–1535px (CSS). Os DOIS botões ficam no DOM e o CSS mostra
+              o que cabe pelo `data-menu` do <html>: assim o rótulo já nasce certo, sem depender
+              do React hidratar (o menu fixo não pode piscar "Fixar" antes de virar "Soltar"). */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="menu-fixar hidden w-full justify-start gap-2"
+            onClick={fixarMenu}
+          >
+            <Pin className="h-4 w-4" />
+            Fixar menu
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="menu-soltar hidden w-full justify-start gap-2"
+            onClick={soltarMenu}
+          >
+            <PinOff className="h-4 w-4" />
+            Soltar menu
+          </Button>
           <div className="flex items-center gap-2 px-2 text-sm">
             <UserCircle className="h-5 w-5 text-muted-foreground" />
             <div className="min-w-0">

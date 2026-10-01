@@ -63,9 +63,22 @@ inteira vermelha: `UX_SABOTAR=1 pnpm ux` (estoura largura) ou `UX_SABOTAR=estrei
 
 ## E2E e o menu recolhido
 
-As próximas levas recolhem o menu lateral abaixo de 1536px. Os E2E que leem o `aside` chamam
-`fixarMenuAberto(page)` (`tests/e2e/helpers/menu.ts`), que grava `localStorage["ronan.menu"] = "fixo"`.
-**A Leva 1 deve ler essa chave** e manter o menu aberto quando ela valer `fixo`. Hoje o painel ignora a chave.
+Entre 768 e 1535px o menu lateral nasce recolhido numa gaveta (Leva 2 / fatia 4). Os E2E que leem o `aside` chamam
+`fixarMenuAberto(page)` (`tests/e2e/helpers/menu.ts`), que grava `localStorage["ronan.menu"] = "fixo"`; o painel lê a
+chave num script do `<head>` e mantém a coluna fixa. A chave mora em `apps/dashboard/src/lib/menu-preferencia.ts`
+(o helper importa de lá).
+
+## MacBook compacto (Leva 2, fatia 4)
+
+`macbook.dashboard.spec.ts` (projeto `mac1440`, troca o viewport por teste): gaveta fechada/aberta em 1280/1440/1470/1512/1535,
+Esc, clique fora, fechar ao navegar, Fixar/Soltar com persistência, "sem piscar" (o `data-menu` existe antes do `<body>`),
+1536/1728/3440 sempre fixos (com ou sem preferência), grade de 2 cartões só de 1024 a 1535px e o tour com o menu recolhido.
+`capturas-macbook.dashboard.spec.ts` (só com `UX_CAPTURAS=<pasta>`; `UX_LARGURAS`, `UX_MENU=fixo`, `UX_DASH`) grava PNG por
+rota/largura + `medidas.json` pra comparar antes x depois.
+
+**Densidade, um lugar só:** `apps/dashboard/src/app/globals.css`, segundo `:root` (dentro da media query 768–1535px):
+`--ux-fonte` (15px; 16px = como antes) e `--ux-pad-main/card/celula-y`. Como o html passa a 15px, tudo em rem encolhe ~6%
+(ex.: janelas `max-w-md` 448 -> 420px) só nessa faixa.
 
 ## Navegação do celular (Leva 1, fatia 2)
 

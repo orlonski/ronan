@@ -432,6 +432,13 @@ export function estruturaDoMenu(): MenuDescricao {
  * com `/viagens`, então "Viagens" acendia junto de "Viagens em andamento".
  * Ativo é a rota exata ou algo abaixo dela (`/viagens/123`).
  */
+/**
+ * Âncoras do passo a passo que moram no menu ("Começar" + os grupos). Quando o menu
+ * está fora da tela — folha "Mais" do celular, gaveta recolhida do MacBook — o botão
+ * que o abre declara todas elas e serve de alvo no lugar (ver `medirAlvo` em lib/tour.ts).
+ */
+export const ANCORAS_DO_MENU = ["comecar", ...GRUPOS.map((g) => g.coach)].join(" ");
+
 export function isRotaAtiva(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }

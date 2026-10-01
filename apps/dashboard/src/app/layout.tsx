@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Providers } from "@/components/providers";
 import { FundacaoApp } from "@/components/fundacao-app";
 import { PwaRegister } from "@/components/pwa-register";
+import { SCRIPT_MENU_INICIAL } from "@/lib/menu-preferencia";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -52,6 +53,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
+      <head>
+        {/* Preferência do menu lateral (`data-menu` no <html>) ANTES da primeira pintura: o CSS
+            decide menu fixo x gaveta sem piscar e sem ler a largura da janela no render. */}
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_MENU_INICIAL }} />
+      </head>
       <body className="min-h-dvh antialiased">
         <Providers>{children}</Providers>
         <PwaRegister />

@@ -33,5 +33,5 @@ export const TableHead = ({ className, ...props }: React.ThHTMLAttributes<HTMLTa
 );
 
 export const TableCell = ({ className, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) => (
-  <td className={cn("p-3 align-middle [&:has([role=checkbox])]:pr-0", className)} {...props} />
+  <td className={cn("p-3 py-[var(--ux-pad-celula-y)] align-middle [&:has([role=checkbox])]:pr-0", className)} {...props} />
 );

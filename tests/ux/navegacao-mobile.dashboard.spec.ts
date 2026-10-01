@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { test, expect, abrirRota, entrarComo } from "./ambiente";
 import { ROTAS } from "./rotas";
+import { fixarMenuAberto } from "../e2e/helpers/menu";
 
 /**
  * Navegação do celular como app (Leva 1, fatia 2): barra inferior + folha "Mais" + cabeçalho com Voltar.
@@ -55,6 +56,8 @@ async function hrefsDaSidebar(page: Page): Promise<string[]> {
 for (const quem of ["admin", "operador"] as const) {
   test(`folha "Mais" == sidebar (mesmas telas) — ${quem}`, async ({ page }) => {
     await entrarComo(page, quem);
+    // A sidebar do MacBook nasce recolhida (gaveta); aqui ela é lida do DOM, então fica fixa.
+    await fixarMenuAberto(page);
     await abrir(page, "home");
     const folha = await hrefsDaFolha(page);
     const sidebar = await hrefsDaSidebar(page);
@@ -179,6 +182,7 @@ test("o menu do celular não muda o que o painel guarda: tour continua achando �
 });
 
 test("girar pra paisagem (>= 768px) troca pro layout de tela grande, sem folha nem barra", async ({ page }) => {
+  await fixarMenuAberto(page); // em 844px o menu nasce recolhido (gaveta); aqui a coluna fixa é o que se confere
   await abrir(page, "home");
   await barra(page).getByRole("button", { name: "Mais" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();

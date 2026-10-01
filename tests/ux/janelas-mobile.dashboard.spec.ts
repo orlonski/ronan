@@ -252,7 +252,9 @@ test.describe("desktop (MacBook e ultrawide): janela centrada e banner como semp
     const r = await rect(page);
     expect(Math.abs((r.left + r.right) / 2 - r.vw / 2)).toBeLessThan(2);
     expect(Math.abs((r.top + r.bottom) / 2 - r.vh / 2)).toBeLessThan(2);
-    expect(Math.round(r.w)).toBe(448); // max-w-md do uso, como sempre
+    // max-w-md do uso (28rem). Na faixa do MacBook (768–1535px) o html é 15px (fatia 4): 420px; do 1536px
+    // pra cima segue 448px, como sempre.
+    expect(Math.round(r.w)).toBe(r.vw >= 768 && r.vw < 1536 ? 420 : 448);
     await expect(page.locator(`${JANELA} [data-alca-folha]`)).toBeHidden();
     const fechar = await page.locator(`${JANELA} button:has(.sr-only)`).first().boundingBox();
     expect(fechar!.width).toBeLessThan(30);

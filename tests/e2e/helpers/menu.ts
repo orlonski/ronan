@@ -1,21 +1,20 @@
 import type { Page } from "@playwright/test";
 
-/**
- * Preferência FUTURA do menu lateral do painel.
- *
- * As próximas levas de UX (Leva 1) vão RECOLHER o menu lateral abaixo de 1536px de largura.
- * Os E2E rodam em 1280x720 e localizam itens do menu (`aside a, aside button`), então precisam
- * de um jeito de dizer "quero o menu aberto, fixo". Essa é a chave: a Leva 1 deve LER
- * `localStorage["ronan.menu"] === "fixo"` e, quando for isso, manter o menu aberto em qualquer
- * largura. Enquanto o painel não lê a chave, gravá-la é inofensivo (nada muda).
- *
- * A constante mora aqui pra E2E e testes de UX compartilharem; o painel vai declarar a sua
- * com o MESMO valor — se um lado mudar, o outro tem que acompanhar (grep "ronan.menu").
- */
-export const CHAVE_MENU = "ronan.menu";
-export const MENU_FIXO = "fixo";
+// Fonte única da chave: o próprio painel (apps/dashboard/src/lib/menu-preferencia.ts, módulo puro,
+// sem alias `@/`) — o mesmo arquivo que o script do <head> do painel usa. Reexportadas aqui pra os
+// specs que já importam deste helper não precisarem mudar.
+import { CHAVE_MENU, MENU_FIXO, MENU_RECOLHIDO } from "../../../apps/dashboard/src/lib/menu-preferencia";
+
+export { CHAVE_MENU, MENU_FIXO, MENU_RECOLHIDO };
 
 /**
+ * Preferência do menu lateral do painel (Leva 2 / fatia 4).
+ *
+ * Abaixo de 1536px o menu nasce RECOLHIDO numa gaveta (hambúrguer no topo). Os E2E rodam em
+ * 1280x720 e localizam itens do menu (`aside a, aside button`), então precisam do menu aberto,
+ * fixo: o painel lê `localStorage["ronan.menu"] === "fixo"` ANTES da primeira pintura e mantém a
+ * coluna lateral à vista em qualquer largura a partir de 768px.
+ *
  * Grava a preferência de menu aberto/fixo em toda página futura do contexto (addInitScript
  * roda antes do JS da página, a cada navegação). Chame ANTES do `page.goto`.
  */

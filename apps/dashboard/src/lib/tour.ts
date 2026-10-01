@@ -139,6 +139,9 @@ export function medirAlvo(alvo: string): DOMRect | null {
   // menu, que ali moram dentro da folha fechada. Chave com um valor só casa igual.
   const todos = document.querySelectorAll<HTMLElement>(`[data-coach~="${CSS.escape(alvo)}"]`);
   for (const el of todos) {
+    // `visibility: hidden` ainda tem retângulo: é a gaveta do menu recolhida, parada fora da
+    // tela. Sem este corte o furo apontaria pro vazio à esquerda em vez de cair no hambúrguer.
+    if (getComputedStyle(el).visibility === "hidden") continue;
     const r = el.getBoundingClientRect();
     if (r.width >= 2 && r.height >= 2) return r;
   }

@@ -6,13 +6,13 @@ import { usePathname } from "next/navigation";
 import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FolhaMais } from "@/components/folha-mais";
-import { destinosDaBarra, ehPaginaRaiz, GRUPOS, itemAtivo, useMenuVisivel } from "@/lib/menu";
+import { ANCORAS_DO_MENU, destinosDaBarra, ehPaginaRaiz, itemAtivo, useMenuVisivel } from "@/lib/menu";
 import { useTecladoAberto } from "@/lib/teclado";
 
 // O passo a passo aponta pra "Começar" e pros grupos do menu, que no celular
 // moram dentro da folha (fechada = sem medida). O botão "Mais" é a âncora deles:
 // declara todas as chaves, e o medirAlvo usa a primeira que estiver na tela.
-const ANCORAS_DO_TOUR = ["mais", "comecar", ...GRUPOS.map((g) => g.coach)].join(" ");
+const ANCORAS_DO_TOUR = `mais ${ANCORAS_DO_MENU}`;
 
 /**
  * Barra de navegação inferior — só no celular (md:hidden), como a de um app.

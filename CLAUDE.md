@@ -185,6 +185,10 @@ Next.js App Router; tudo de painel dentro de `src/app/(painel)/`. Sessão via **
 - FK grande (Locais/Veículos/Motoristas/Clientes) usa `AsyncCombobox` server-side (wrappers em `fk-comboboxes.tsx`), nunca `useResourceOptions` — o teto de 200 escondia registros.
 - Telas e botões são gatados por permissão (`temPermissao("recurso.acao")` / `<RequerTela>`), espelhando o catálogo em `shared-types/src/permissoes.ts`. Pra colocar algo novo sob permissão: chave no catálogo → gate na UI → `@RequerPermissao` no endpoint. O seed sincroniza o resto.
 
+### MacBook compacto (768–1535px)
+
+Nessa faixa o menu lateral é uma **gaveta** (hambúrguer no topo; "Fixar menu" grava `ronan.menu=fixo` por pessoa), o `html` vai a 15px e cartões de lista viram grade de 2 colunas (≥1024px). **A partir de 1536px nada muda.** Tudo é CSS-first (`data-menu` no `<html>`, script no `<head>`): `lib/menu-preferencia.ts`, bloco "MacBook compacto" do `globals.css` (onde se ajusta a densidade: `--ux-fonte`). Todo ajuste visual novo entra sob `max-2xl:`/media query dessa faixa.
+
 ### Módulos contratados (o que a empresa comprou)
 
 `ModuloContratado` (tabela, não array — módulo tem data e autor) + catálogo em
