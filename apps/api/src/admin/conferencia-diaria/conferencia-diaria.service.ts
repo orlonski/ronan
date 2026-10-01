@@ -38,15 +38,21 @@ import {
   hojeYmd,
   somarDias,
   type ConfigRegraConferencia,
+  numeroConfirmado,
+  SINAIS_NUMERO_CONFIRMADO,
+  sinaisDoNumero,
   type EvidenciasConferencia,
   type MotoristaParaConferencia,
+  type SinaisDoNumero,
 } from "../../common/conferencia-diaria";
 import { montarCalendarioConferencia, ultimoDiaDoMes } from "../../common/conferencia-calendario";
 import { anexarTrilha } from "../../common/conferencia-trilha";
 import { diaDaPerguntaDeTeste, ehPerguntaDeTeste, mascararTelefone, motivoDiaDeTesteInvalido } from "../../common/conferencia-teste";
 import { MOTIVO_RELIGAR_MIN, ORIGEM_TESTE_PAINEL } from "@ronan/shared-types";
+import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import type {
   EstadoConferenciaMotorista,
+  ResultadoConfirmarTelefones,
   ResultadoPerguntaDeTeste,
   ResultadoReenvioPergunta,
 } from "@ronan/shared-types";
@@ -54,7 +60,13 @@ import type {
 type Config = Awaited<ReturnType<ConferenciaDiariaService["config"]>>;
 
 /** Por que a regra diz "pergunte" mas não há como perguntar. É o "sem canal" da lista. */
-export type SemCanal = "SEM_TELEFONE" | "NAO_ACEITA_WHATSAPP" | "PAROU" | "DESLIGADA_PAINEL" | "INALCANCAVEL";
+export type SemCanal =
+  | "SEM_TELEFONE"
+  | "NAO_ACEITA_WHATSAPP"
+  | "PAROU"
+  | "DESLIGADA_PAINEL"
+  | "INALCANCAVEL"
+  | "NUMERO_ERRADO";
 
 export type ItemConferencia = {
   motoristaId: string;
@@ -69,12 +81,19 @@ export type ItemConferencia = {
    * vai pra lista do escritório. Nunca é "sem canal" — é outra fila, com outra decisão.
    */
   semMovimento: boolean;
-  /** Só nos `semMovimento`: pro escritório reconhecer o parceiro sem ver o número inteiro. */
+  /**
+   * A regra mandaria perguntar, mas a empresa só pergunta a número confirmado e este não tem nenhum
+   * sinal: não recebe mensagem e vai pra lista "número não confirmado". Também não é "sem canal".
+   */
+  naoConfirmado: boolean;
+  /** Nos `semMovimento` e `naoConfirmado`: pro escritório reconhecer o parceiro sem ver o número inteiro. */
   telefoneMascarado?: string | null;
 };
 
 /** `suprimidaPor` da linha poupada pela regra de atividade. Não é canal: o calendário e a fila de "sem canal" a ignoram. */
 export const SUPRIMIDA_SEM_MOVIMENTO = "SEM_MOVIMENTO";
+/** Idem para o número não confirmado (`soPerguntarNumeroConfirmado`): outra fila, outra decisão, nunca canal. */
+export const SUPRIMIDA_NAO_CONFIRMADO = "NAO_CONFIRMADO";
 
 /** Estados em que a pergunta CONTA como feita (entra no intervalo mínimo e no máximo semanal). */
 const ESTADOS_PERGUNTADOS = ["SOMBRA", "PENDENTE", "ENVIADA", "RESPONDIDA", "EXPIRADA"] as const;
@@ -86,6 +105,7 @@ const POR_QUE_SEM_CANAL: Record<SemCanal, string> = {
   PAROU: "pediu pra parar de receber a pergunta",
   DESLIGADA_PAINEL: "está com a conferência desligada pela empresa",
   INALCANCAVEL: "está com o WhatsApp sem entregar (número suspeito)",
+  NUMERO_ERRADO: "está com um número que parece não ser dele",
 };
 
 /**
@@ -222,6 +242,10 @@ export class ConferenciaDiariaService {
       include: { motorista: { select: { nome: true, telefone: true } } },
       orderBy: { motorista: { nome: "asc" } },
     });
+    // O número pode ter sido confirmado DEPOIS de a linha ser gravada: o grupo "não confirmado" tem
+    // que refletir o agora, senão o escritório confirma e a lista continua pedindo a mesma coisa.
+    const idsNaoConfirmados = linhas.filter((l) => l.suprimidaPor === SUPRIMIDA_NAO_CONFIRMADO).map((l) => l.motoristaId);
+    const sinais = idsNaoConfirmados.length > 0 ? await this.sinaisPorMotorista(idsNaoConfirmados) : new Map<string, SinaisDoNumero>();
     return {
       dia: dataParaYmd(dia),
       rodou: linhas.length > 0,
@@ -229,13 +253,17 @@ export class ConferenciaDiariaService {
       itens: linhas.map((l) => {
         const snap = l.snapshot as { evidencias?: EvidenciasConferencia; deveriaPerguntar?: boolean } | null;
         const semMovimento = l.suprimidaPor === SUPRIMIDA_SEM_MOVIMENTO;
-        // SEM_MOVIMENTO mora no mesmo campo, mas NÃO é canal: nunca vira a marca "sem canal".
-        const semCanal = semMovimento ? null : ((l.suprimidaPor as SemCanal | null) ?? null);
+        const foiNaoConfirmado = l.suprimidaPor === SUPRIMIDA_NAO_CONFIRMADO;
+        const confirmadoDepois = foiNaoConfirmado && numeroConfirmado(sinais.get(l.motoristaId) ?? {});
+        const naoConfirmado = foiNaoConfirmado && !confirmadoDepois;
+        // SEM_MOVIMENTO e NAO_CONFIRMADO moram no mesmo campo, mas NÃO são canal: nunca viram a marca "sem canal".
+        const semCanal = semMovimento || foiNaoConfirmado ? null : ((l.suprimidaPor as SemCanal | null) ?? null);
         return {
           motoristaId: l.motoristaId,
           nome: l.motorista.nome,
           semMovimento,
-          ...(semMovimento
+          naoConfirmado,
+          ...(semMovimento || naoConfirmado
             ? { telefoneMascarado: l.motorista.telefone ? mascararTelefone(l.motorista.telefone) : null }
             : {}),
           // SUPRIMIDA sem canal ainda é "a regra mandou perguntar": a lista mostra
@@ -245,7 +273,9 @@ export class ConferenciaDiariaService {
           opcao: l.opcao,
           semCanal,
           erroEnvio: l.erroEnvio,
-          motivo: l.motivo,
+          motivo: confirmadoDepois
+            ? "O número foi confirmado depois do horário do envio; a pergunta de hoje não sai mais."
+            : l.motivo,
           evidencias: snap?.evidencias ?? null,
         };
       }),
@@ -345,6 +375,7 @@ export class ConferenciaDiariaService {
     // Cada etapa isolada: uma falha (Meta fora do ar) não pode impedir a
     // expiração nem a fila do gestor.
     const etapas: [string, () => Promise<unknown>][] = [
+      ["promoção dos números confirmados", () => this.promoverConfirmadosDoDia(cfg, agora)],
       ["envio dos pendentes", () => this.enviarPendentes(cfg, agora)],
       ["lembrete e expiração", () => this.lembrarEExpirar(cfg, agora)],
       ["fila do gestor", () => this.sugestoes.manter(agora)],
@@ -410,6 +441,54 @@ export class ConferenciaDiariaService {
     return promovidas;
   }
 
+  /**
+   * O escritório confirmou o número de quem hoje ficou de fora por "número não confirmado":
+   * enquanto ainda está dentro da janela de envio do dia (hora do job + tolerância), a linha volta a
+   * ser PENDENTE e o próximo envio a manda. Recalcula antes (`calcular`): só sai quem ainda cairia na
+   * regra e tem canal. Passada a janela, a linha fica como está — pergunta velha só incomoda — e o
+   * motorista entra normal na próxima rodada. Condicional: nunca mexe numa linha que já andou.
+   */
+  async promoverConfirmadosDoDia(cfg: Config, agora: Date): Promise<number> {
+    if (!cfg.ativo || cfg.modo !== "ENVIANDO") return 0;
+    const hora = horaEmSaoPaulo(agora);
+    if (hora < cfg.horaEnvio || hora > cfg.horaEnvio + (cfg.horasToleranciaEnvio ?? PADRAO_HORAS_TOLERANCIA_ENVIO)) return 0;
+    const dia = inicioDoDiaData(agora);
+    const linhas = await this.prisma.conferenciaDiaria.findMany({
+      where: { dia, estado: "SUPRIMIDA", suprimidaPor: SUPRIMIDA_NAO_CONFIRMADO },
+      select: { id: true, motoristaId: true, snapshot: true },
+    });
+    if (linhas.length === 0) return 0;
+    if (!(await this.podeEnviar(cfg)).ok) return 0;
+
+    const itens = await this.calcular(cfg, agora);
+    const perguntar = new Set(itens.filter((i) => i.deveriaPerguntar && !i.semCanal).map((i) => i.motoristaId));
+    let promovidas = 0;
+    for (const l of linhas) {
+      if (!perguntar.has(l.motoristaId)) continue;
+      const resto = { ...((l.snapshot ?? {}) as Record<string, unknown>) };
+      delete resto.naoConfirmado;
+      const { count } = await this.prisma.conferenciaDiaria.updateMany({
+        where: { id: l.id, estado: "SUPRIMIDA", suprimidaPor: SUPRIMIDA_NAO_CONFIRMADO },
+        data: {
+          estado: "PENDENTE",
+          suprimidaPor: null,
+          motivo: "Número confirmado pelo escritório depois da primeira rodada do dia.",
+          snapshot: {
+            ...resto,
+            deveriaPerguntar: true,
+            nadaEnviado: false,
+            promovidaDeNaoConfirmado: true,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      if (count > 0) promovidas++;
+    }
+    if (promovidas > 0) {
+      this.log.log(`Conferência diária: ${promovidas} linha(s) de número não confirmado promovidas a PENDENTE (número confirmado).`);
+    }
+    return promovidas;
+  }
+
   private async gravarODia(cfg: Config, contaId: string, agora: Date): Promise<number> {
     // Janela: a HORA configurada inteira (o cron tem 6 batidas nela). Se a
     // primeira falhar (deploy no minuto), a seguinte cobre — a idempotência
@@ -451,7 +530,7 @@ export class ConferenciaDiariaService {
           motoristaId: i.motoristaId,
           dia,
           estado,
-          suprimidaPor: i.semMovimento ? SUPRIMIDA_SEM_MOVIMENTO : semCanal,
+          suprimidaPor: i.semMovimento ? SUPRIMIDA_SEM_MOVIMENTO : i.naoConfirmado ? SUPRIMIDA_NAO_CONFIRMADO : semCanal,
           motivo: i.motivo,
           snapshot: {
             modoConfigurado: cfg.modo,
@@ -460,6 +539,7 @@ export class ConferenciaDiariaService {
             deveriaPerguntar: i.deveriaPerguntar,
             semCanal: i.semCanal,
             ...(i.semMovimento ? { semMovimento: true } : {}),
+            ...(i.naoConfirmado ? { naoConfirmado: true } : {}),
             regraEmVigor: regra,
             config: this.configDaRegra(cfg),
             evidencias: i.evidencias,
@@ -472,7 +552,7 @@ export class ConferenciaDiariaService {
         itens.filter((i) => i.deveriaPerguntar && !i.semCanal).length
       } a perguntar, ${itens.filter((i) => i.deveriaPerguntar && i.semCanal).length} sem canal, ${
         itens.filter((i) => i.semMovimento).length
-      } sem movimento.`,
+      } sem movimento, ${itens.filter((i) => i.naoConfirmado).length} com número não confirmado.`,
     );
     return count;
   }
@@ -608,6 +688,7 @@ export class ConferenciaDiariaService {
             receberConferenciaDiaria: true,
             conferenciaDesligadaOrigem: true,
             whatsappInalcancavelEm: true,
+            telefoneErradoEm: true,
           },
         },
       },
@@ -704,6 +785,7 @@ export class ConferenciaDiariaService {
             receberConferenciaDiaria: true,
             conferenciaDesligadaOrigem: true,
             whatsappInalcancavelEm: true,
+            telefoneErradoEm: true,
           },
         },
       },
@@ -748,8 +830,11 @@ export class ConferenciaDiariaService {
     /** "PAINEL" = a empresa desligou; qualquer outra coisa (inclusive nulo, linha antiga) = o motorista. */
     conferenciaDesligadaOrigem?: string | null;
     whatsappInalcancavelEm: Date | null;
+    /** Preenchido = responderam "número errado": o telefone do cadastro não é dele. */
+    telefoneErradoEm?: Date | null;
   }): SemCanal | null {
     if (!m.telefone) return "SEM_TELEFONE";
+    if (m.telefoneErradoEm) return "NUMERO_ERRADO";
     if (!m.aceitaWhatsapp) return "NAO_ACEITA_WHATSAPP";
     if (!m.receberConferenciaDiaria) return m.conferenciaDesligadaOrigem === "PAINEL" ? "DESLIGADA_PAINEL" : "PAROU";
     if (m.whatsappInalcancavelEm) return "INALCANCAVEL";
@@ -798,6 +883,7 @@ export class ConferenciaDiariaService {
             receberConferenciaDiaria: true,
             conferenciaDesligadaOrigem: true,
             whatsappInalcancavelEm: true,
+            telefoneErradoEm: true,
           },
         },
       },
@@ -811,6 +897,8 @@ export class ConferenciaDiariaService {
       throw new ConflictException(
         linha.estado === "SOMBRA"
           ? "A conferência de hoje rodou em modo sombra: nada foi enviado a este motorista e nada será reenviado."
+          : linha.suprimidaPor === SUPRIMIDA_NAO_CONFIRMADO
+            ? "Este número ainda não foi confirmado, então a conferência não perguntou a este motorista. Confirme o número na ficha dele ou use a pergunta de teste."
           : linha.suprimidaPor === SUPRIMIDA_SEM_MOVIMENTO
             ? "Este motorista está sem movimento há mais tempo que a janela de atividade da empresa, então a conferência não o perguntou. Se quiser mesmo assim, use a pergunta de teste na ficha dele."
             : "Hoje a regra não mandou perguntar a este motorista (ou ele está sem canal). Não dá pra reenviar.",
@@ -960,6 +1048,7 @@ export class ConferenciaDiariaService {
         receberConferenciaDiaria: true,
         conferenciaDesligadaOrigem: true,
         whatsappInalcancavelEm: true,
+        telefoneErradoEm: true,
       },
     });
     if (!m) throw new NotFoundException("Motorista não encontrado.");
@@ -1324,7 +1413,11 @@ export class ConferenciaDiariaService {
       where: {
         ...VINCULO_VIVO,
         status: "APROVADO",
-        OR: [{ receberConferenciaDiaria: false }, { whatsappInalcancavelEm: { not: null } }],
+        OR: [
+          { receberConferenciaDiaria: false },
+          { whatsappInalcancavelEm: { not: null } },
+          { telefoneErradoEm: { not: null } },
+        ],
       },
       select: {
         id: true,
@@ -1332,6 +1425,7 @@ export class ConferenciaDiariaService {
         receberConferenciaDiaria: true,
         conferenciaDesligadaOrigem: true,
         whatsappInalcancavelEm: true,
+        telefoneErradoEm: true,
       },
       orderBy: { nome: "asc" },
     });
@@ -1342,6 +1436,8 @@ export class ConferenciaDiariaService {
       /** Quem desligou: nulo enquanto está ligada. Linha antiga (sem origem) conta como do motorista. */
       desligadaPor: m.receberConferenciaDiaria ? null : m.conferenciaDesligadaOrigem === "PAINEL" ? "PAINEL" : "MOTORISTA",
       inalcancavelDesde: m.whatsappInalcancavelEm,
+      /** Responderam "número errado": o número parece não ser dele. */
+      numeroErrado: m.telefoneErradoEm != null,
     }));
   }
 
@@ -1396,6 +1492,147 @@ export class ConferenciaDiariaService {
     return { id, status };
   }
 
+  // ─── Número confirmado ─────────────────────────────────────────────────
+
+  /** Os sinais de cada motorista (a regra que os lê é `numeroConfirmado`, em common). */
+  private async sinaisPorMotorista(ids: string[]): Promise<Map<string, SinaisDoNumero>> {
+    const [motoristas, respondidas] = await Promise.all([
+      this.prisma.motorista.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          appVistoEm: true,
+          telefoneConfirmadoEm: true,
+          telefoneErradoEm: true,
+          identidade: { select: { ultimoLoginEm: true } },
+          whatsappSessao: { select: { id: true } },
+        },
+      }),
+      this.prisma.conferenciaDiaria.groupBy({
+        by: ["motoristaId"],
+        where: { motoristaId: { in: ids }, respondidaEm: { not: null } },
+      }),
+    ]);
+    const respondeu = new Set(respondidas.map((r) => r.motoristaId));
+    return new Map(
+      motoristas.map((m) => [
+        m.id,
+        {
+          appVistoEm: m.appVistoEm,
+          ultimoLoginEm: m.identidade?.ultimoLoginEm ?? null,
+          respondeuAntes: respondeu.has(m.id),
+          sessaoWhatsappVinculada: m.whatsappSessao != null,
+          telefoneConfirmadoEm: m.telefoneConfirmadoEm,
+          telefoneErradoEm: m.telefoneErradoEm,
+        } satisfies SinaisDoNumero,
+      ]),
+    );
+  }
+
+  /** O que a ficha mostra: o número está confirmado? por qual sinal? quem confirmou? Só leitura. */
+  async numeroDoMotorista(motoristaId: string) {
+    const m = await this.prisma.motorista.findFirst({
+      where: { id: motoristaId },
+      select: {
+        id: true,
+        telefone: true,
+        telefoneConfirmadoEm: true,
+        telefoneErradoEm: true,
+        telefoneConfirmadoPor: { select: { id: true, nome: true } },
+      },
+    });
+    if (!m) throw new NotFoundException("Motorista não encontrado.");
+    const sinais = (await this.sinaisPorMotorista([m.id])).get(m.id) ?? {};
+    const confirmadoPor = sinaisDoNumero(sinais);
+    const cfg = await this.prisma.configuracaoConferenciaDiaria.findFirst({ select: { soPerguntarNumeroConfirmado: true } });
+    return {
+      motoristaId: m.id,
+      temTelefone: !!m.telefone,
+      confirmado: confirmadoPor.length > 0,
+      sinais: SINAIS_NUMERO_CONFIRMADO.filter((x) => confirmadoPor.includes(x.sinal)).map((x) => ({ sinal: x.sinal, rotulo: x.rotulo })),
+      telefoneConfirmadoEm: m.telefoneConfirmadoEm?.toISOString() ?? null,
+      telefoneConfirmadoPor: m.telefoneConfirmadoPor,
+      numeroErrado: m.telefoneErradoEm != null,
+      /** A empresa só pergunta a número confirmado? (a ficha explica a consequência do selo) */
+      soPerguntarNumeroConfirmado: cfg?.soPerguntarNumeroConfirmado ?? false,
+    };
+  }
+
+  /**
+   * "Confirmar número": o escritório garante que o telefone do cadastro é do motorista (um dos
+   * sinais de `numeroConfirmado`). Idempotente: quem já está confirmado não muda nem gera auditoria.
+   * Confirmar quem estava com "número errado" é decisão do escritório e vale: limpa a marca e fecha a sugestão.
+   *
+   * `escopo` filtra o que o usuário enxerga (como `MotoristasService.findOne`): id que ele não
+   * enxerga ou que não existe derruba a chamada inteira com 404, sem gravar nada. Motorista sem
+   * telefone não tem o que confirmar e é só contado em `semTelefone`.
+   */
+  async confirmarTelefones(
+    motoristaIds: string[],
+    usuario: Pick<AuthAdminUser, "id">,
+    escopo: EscopoAdmin,
+    agora: Date = new Date(),
+  ): Promise<ResultadoConfirmarTelefones> {
+    const ids = [...new Set(motoristaIds)];
+    const motoristas = await this.prisma.motorista.findMany({
+      where: { id: { in: ids }, ...filtroEscopo(escopo) },
+      select: { id: true, nome: true, telefone: true, telefoneConfirmadoEm: true, telefoneErradoEm: true },
+    });
+    if (motoristas.length !== ids.length) throw new NotFoundException("Motorista não encontrado");
+
+    let confirmados = 0;
+    let jaConfirmados = 0;
+    let semTelefone = 0;
+    for (const m of motoristas) {
+      if (!m.telefone) {
+        semTelefone++;
+        continue;
+      }
+      if (m.telefoneConfirmadoEm && !m.telefoneErradoEm) {
+        jaConfirmados++;
+        continue;
+      }
+      // Condicional: duas confirmações ao mesmo tempo gravam e auditam uma vez só.
+      const { count } = await this.prisma.motorista.updateMany({
+        where: { id: m.id, OR: [{ telefoneConfirmadoEm: null }, { telefoneErradoEm: { not: null } }] },
+        data: { telefoneConfirmadoEm: agora, telefoneConfirmadoPorId: usuario.id, telefoneErradoEm: null },
+      });
+      if (count === 0) {
+        jaConfirmados++;
+        continue;
+      }
+      confirmados++;
+      if (m.telefoneErradoEm) {
+        await this.sugestoes.encerrar(
+          { motoristaId: m.id, tipo: "NUMERO_ERRADO" },
+          "RESOLVIDA_SOZINHA",
+          "O escritório confirmou o número.",
+        );
+      }
+      await this.auditoria.log({
+        usuarioId: usuario.id,
+        entidade: "Motorista",
+        entidadeId: m.id,
+        acao: "CONFERENCIA_TELEFONE_CONFIRMADO",
+        campo: "telefoneConfirmadoEm",
+        valorAntes: m.telefoneConfirmadoEm?.toISOString() ?? null,
+        valorDepois: agora.toISOString(),
+        motivo: "O escritório confirmou que o telefone do cadastro é do motorista.",
+        metadata: { telefone: mascararTelefone(m.telefone), eraNumeroErrado: m.telefoneErradoEm != null, lote: ids.length > 1 },
+      });
+    }
+    // Se ainda dá tempo no dia, quem acabou de ser confirmado volta pra fila de hoje.
+    if (confirmados > 0) {
+      const cfg = await this.prisma.configuracaoConferenciaDiaria.findFirst();
+      if (cfg) {
+        await this.promoverConfirmadosDoDia(cfg, agora).catch((e) =>
+          this.log.warn(`não deu pra promover os confirmados do dia: ${(e as Error).message}`),
+        );
+      }
+    }
+    return { confirmados, jaConfirmados, semTelefone };
+  }
+
   // ─── Cálculo ───────────────────────────────────────────────────────────
 
   private configDaRegra(c: Config): ConfigRegraConferencia {
@@ -1408,6 +1645,7 @@ export class ConferenciaDiariaService {
       intervaloMinimoDias: c.intervaloMinimoDias,
       maxPerguntasPorSemana: c.maxPerguntasPorSemana,
       janelaAtividadeDias: c.janelaAtividadeDias ?? 0,
+      soPerguntarNumeroConfirmado: c.soPerguntarNumeroConfirmado ?? false,
     };
   }
 
@@ -1480,11 +1718,14 @@ export class ConferenciaDiariaService {
         receberConferenciaDiaria: true,
         conferenciaDesligadaOrigem: true,
         whatsappInalcancavelEm: true,
+        telefoneErradoEm: true,
       },
       orderBy: { nome: "asc" },
     });
     if (motoristas.length === 0) return [];
     const ids = motoristas.map((m) => m.id);
+    // Só consulta os sinais quando a empresa ligou a opção: desligada, nada muda (nem o custo).
+    const sinais = cfg.soPerguntarNumeroConfirmado ? await this.sinaisPorMotorista(ids) : null;
 
     const desde = new Date(hojeData.getTime() - JANELA_VIAGENS_DIAS * 86_400_000);
     const [viagens, ultimas, perguntasBrutas, feriados] = await Promise.all([
@@ -1546,17 +1787,22 @@ export class ConferenciaDiariaService {
         temViagemEmAndamento: emAndamento.has(m.id),
         cadastradoEm: hojeYmd(m.criadoEm),
         perguntasAnteriores: perguntasPor.get(m.id) ?? [],
+        // Quem não tem canal (sem telefone, "número errado", parou…) segue na lista "sem canal":
+        // confirmar o número não resolveria nada, então a regra do número confirmado não o barra.
+        ...(sinais && !this.semCanalDe(m) ? { numeroConfirmado: numeroConfirmado(sinais.get(m.id) ?? {}) } : {}),
       };
       const r = avaliarConferenciaDiaria(regra, entrada, feriados, agora);
       const semMovimento = r.semMovimento === true;
+      const naoConfirmado = r.naoConfirmado === true;
       return {
         motoristaId: m.id,
         nome: m.nome,
         ...r,
         semMovimento,
-        // Quem foi poupado pela atividade não é "sem canal": é outra lista, sem mensagem.
-        semCanal: semMovimento ? null : this.semCanalDe(m),
-        ...(semMovimento ? { telefoneMascarado: m.telefone ? mascararTelefone(m.telefone) : null } : {}),
+        naoConfirmado,
+        // Quem foi poupado pela atividade ou pelo número não confirmado não é "sem canal": é outra lista, sem mensagem.
+        semCanal: semMovimento || naoConfirmado ? null : this.semCanalDe(m),
+        ...(semMovimento || naoConfirmado ? { telefoneMascarado: m.telefone ? mascararTelefone(m.telefone) : null } : {}),
       };
     });
   }

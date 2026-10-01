@@ -1,9 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useConfirmarTelefones } from "@/components/numero-confirmado";
+import { usePermissoes } from "@/lib/permissoes";
 
-export type SemCanal = "SEM_TELEFONE" | "NAO_ACEITA_WHATSAPP" | "PAROU" | "DESLIGADA_PAINEL" | "INALCANCAVEL";
+export type SemCanal =
+  | "SEM_TELEFONE"
+  | "NAO_ACEITA_WHATSAPP"
+  | "PAROU"
+  | "DESLIGADA_PAINEL"
+  | "INALCANCAVEL"
+  | "NUMERO_ERRADO";
 
 export type ItemConferencia = {
   motoristaId: string;
@@ -18,6 +28,8 @@ export type ItemConferencia = {
   semCanal?: SemCanal | null;
   /** Barrado pela regra de atividade: não recebe mensagem, o escritório decide. */
   semMovimento?: boolean;
+  /** Pela regra seria perguntado, mas o número não está confirmado: não recebe mensagem, o escritório confirma antes. */
+  naoConfirmado?: boolean;
   telefoneMascarado?: string | null;
   evidencias: {
     ultimoDiaComViagem: string | null;
@@ -47,6 +59,7 @@ const MOTIVO_SEM_CANAL: Record<SemCanal, string> = {
   PAROU: "pediu pra parar de receber a pergunta",
   DESLIGADA_PAINEL: "a conferência está desligada pela empresa",
   INALCANCAVEL: "o WhatsApp dele parece não entregar",
+  NUMERO_ERRADO: "o número parece não ser dele",
 };
 
 const RESPOSTA: Record<string, string> = {
@@ -82,10 +95,21 @@ function situacao(i: ItemConferencia): { texto: string; tom: "neutro" | "ok" | "
  * WhatsApp: a empresa precisa contatar por outro meio.
  */
 export function ListaConferencia({ dados }: { dados: RespostaConferencia }) {
+  const { temPermissao } = usePermissoes();
+  const podeConfirmar = temPermissao("conferencia-diaria.decidir");
+  // Confirmados agora: somem do grupo na hora (a simulação não recarrega; a lista do dia recarrega sozinha).
+  const [confirmadosAgora, setConfirmadosAgora] = useState<Set<string>>(new Set());
+  const [confirmandoTodos, setConfirmandoTodos] = useState(false);
+  const confirmar = useConfirmarTelefones((_r, ids) => {
+    setConfirmadosAgora((antes) => new Set([...antes, ...ids]));
+    setConfirmandoTodos(false);
+  });
+
   const semMovimento = dados.itens.filter((i) => i.semMovimento);
-  const semCanal = dados.itens.filter((i) => !i.semMovimento && i.deveriaPerguntar && i.semCanal);
-  const perguntados = dados.itens.filter((i) => !i.semMovimento && i.deveriaPerguntar && !i.semCanal);
-  const poupados = dados.itens.filter((i) => !i.semMovimento && !i.deveriaPerguntar);
+  const naoConfirmados = dados.itens.filter((i) => i.naoConfirmado && !i.semMovimento && !confirmadosAgora.has(i.motoristaId));
+  const semCanal = dados.itens.filter((i) => !i.semMovimento && !i.naoConfirmado && i.deveriaPerguntar && i.semCanal);
+  const perguntados = dados.itens.filter((i) => !i.semMovimento && !i.naoConfirmado && i.deveriaPerguntar && !i.semCanal);
+  const poupados = dados.itens.filter((i) => !i.semMovimento && !i.naoConfirmado && !i.deveriaPerguntar);
   const janela = dados.janelaAtividadeDias ?? 0;
   const gravado = dados.itens.some((i) => i.estado);
   const jaSaiu = dados.itens.some((i) => ["ENVIADA", "RESPONDIDA", "EXPIRADA"].includes(i.estado ?? ""));
@@ -96,7 +120,8 @@ export function ListaConferencia({ dados }: { dados: RespostaConferencia }) {
         Dia {dataBR(dados.dia)}: {dados.itens.length} parceiro(s) avaliado(s),{" "}
         {perguntados.length} {jaSaiu ? "perguntado(s)" : "seriam perguntados"}
         {semCanal.length > 0 ? ` e ${semCanal.length} sem canal de WhatsApp` : ""}
-        {semMovimento.length > 0 ? `${semCanal.length > 0 ? "," : " e"} ${semMovimento.length} sem movimento` : ""}.
+        {semMovimento.length > 0 ? `${semCanal.length > 0 ? "," : " e"} ${semMovimento.length} sem movimento` : ""}
+        {naoConfirmados.length > 0 ? ` e ${naoConfirmados.length} com número não confirmado` : ""}.
       </p>
 
       {perguntados.length === 0 ? (
@@ -148,6 +173,73 @@ export function ListaConferencia({ dados }: { dados: RespostaConferencia }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {naoConfirmados.length > 0 && (
+        <div className="space-y-2" data-testid="conferencia-nao-confirmado">
+          <h3 className="text-sm font-semibold">
+            Número não confirmado — o escritório confirma antes de perguntar (não recebem mensagem)
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Estes parceiros ainda não usaram o app nem responderam no WhatsApp, então ninguém garantiu que o telefone é
+            deles. Confirmando, eles passam a receber a pergunta.
+          </p>
+          <ul className="divide-y rounded-md border border-slate-300 bg-slate-50/60">
+            {naoConfirmados.map((i) => (
+              <li key={i.motoristaId} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium">{i.nome}</p>
+                  <p className="text-sm text-muted-foreground">{i.telefoneMascarado ?? "sem telefone"}</p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Link
+                    href={`/motoristas/${i.motoristaId}`}
+                    className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-100"
+                  >
+                    Abrir a ficha
+                  </Link>
+                  {podeConfirmar && (
+                    <Button
+                      variant="success"
+                      size="sm"
+                      disabled={confirmar.isPending}
+                      onClick={() => confirmar.mutate([i.motoristaId])}
+                      data-testid="confirmar-numero-linha"
+                    >
+                      Confirmar número
+                    </Button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {podeConfirmar &&
+            (confirmandoTodos ? (
+              <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900" role="alert" data-testid="confirmar-todos-confirmacao">
+                <p className="text-sm font-medium">
+                  Confirmar {naoConfirmados.length} {naoConfirmados.length === 1 ? "número" : "números"} desta lista.
+                </p>
+                <p className="text-sm">Você garante que estes telefones são dos motoristas.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="success"
+                    disabled={confirmar.isPending}
+                    onClick={() => confirmar.mutate(naoConfirmados.map((i) => i.motoristaId))}
+                    data-testid="confirmar-todos"
+                  >
+                    {confirmar.isPending ? "Confirmando…" : "Confirmar todos"}
+                  </Button>
+                  <Button variant="outline" disabled={confirmar.isPending} onClick={() => setConfirmandoTodos(false)}>
+                    Voltar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button variant="outline" onClick={() => setConfirmandoTodos(true)} data-testid="confirmar-todos-abrir">
+                Confirmar os {naoConfirmados.length} números desta lista
+              </Button>
+            ))}
         </div>
       )}
 

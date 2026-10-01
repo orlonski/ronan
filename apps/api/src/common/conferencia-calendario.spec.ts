@@ -413,3 +413,17 @@ describe("SEM_MOVIMENTO (regra de atividade) não é pergunta nem falha de canal
     expect(monta({ linhas: [l] }).totais.semCanal).toBe(0);
   });
 });
+
+describe("NAO_CONFIRMADO (número não confirmado) não é pergunta nem falha de canal", () => {
+  it("não aparece no calendário nem nos totais, mesmo com snapshot dizendo deveriaPerguntar", () => {
+    const l = linha({ estado: "SUPRIMIDA", suprimidaPor: "NAO_CONFIRMADO", enviadaEm: null });
+    const c = monta({ linhas: [l] });
+    expect(dia(c, "2026-09-25").pergunta).toBeUndefined();
+    expect(c.totais).toEqual({ diasComViagem: 0, perguntados: 0, respondidos: 0, retroativos: 0, semResposta: 0, semCanal: 0 });
+  });
+
+  it("canal de verdade (NUMERO_ERRADO) continua sendo 'sem canal'", () => {
+    const l = linha({ estado: "SUPRIMIDA", suprimidaPor: "NUMERO_ERRADO", enviadaEm: null });
+    expect(monta({ linhas: [l] }).totais.semCanal).toBe(1);
+  });
+});

@@ -74,6 +74,8 @@ function conta(l: LinhaParaCalendario): boolean {
   if (l.estado === "SUPRIMIDA") {
     // SEM_MOVIMENTO não é pergunta nem falha de canal: a regra de atividade poupou o motorista.
     if (l.suprimidaPor === "SEM_MOVIMENTO") return false;
+    // NAO_CONFIRMADO idem: o número não foi confirmado, ninguém recebeu nada.
+    if (l.suprimidaPor === "NAO_CONFIRMADO") return false;
     const snap = l.snapshot as { deveriaPerguntar?: boolean } | null;
     return snap?.deveriaPerguntar === true && l.suprimidaPor != null;
   }

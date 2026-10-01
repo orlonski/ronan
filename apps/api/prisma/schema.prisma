@@ -205,6 +205,10 @@ enum AcaoAuditoria {
   CONFERENCIA_PERGUNTA_REENVIADA
   /// Alguém do painel mandou a pergunta de TESTE a um motorista, sem depender do job.
   CONFERENCIA_PERGUNTA_TESTE
+  /// Alguém do painel confirmou que o telefone do cadastro é mesmo do motorista.
+  CONFERENCIA_TELEFONE_CONFIRMADO
+  /// Alguém respondeu "número errado" à pergunta da conferência: o telefone do cadastro não é do motorista.
+  CONFERENCIA_NUMERO_ERRADO
   MOTORISTA_AJUSTOU_KM
   MOTORISTA_JUSTIFICOU_KM
   MOTORISTA_INFORMOU_PEDAGIO
@@ -705,6 +709,7 @@ model User {
   envios                      EnvioFechamento[]
   auditorias                  AuditLog[]
   conferenciasDesligadas      Motorista[]                        @relation("MotoristaConferenciaDesligadaPor")
+  telefonesConfirmados        Motorista[]                        @relation("MotoristaTelefoneConfirmadoPor")
   resgatesResolvidos          LancamentoResgatado[]
   layoutsEnvio                LayoutEnvio[]
   configsTracking             ConfiguracaoTracking[]
@@ -1472,6 +1477,13 @@ model Motorista {
   conferenciaDesligadaPorId  String?
   conferenciaDesligadaPor    User?                @relation("MotoristaConferenciaDesligadaPor", fields: [conferenciaDesligadaPorId], references: [id], onDelete: SetNull)
   conferenciaDesligadaMotivo String?
+  /// O escritório garantiu que este telefone é do motorista (um dos sinais de "número confirmado"
+  /// da conferência diária). Zerado quando o telefone é trocado ou respondem "número errado".
+  telefoneConfirmadoEm       DateTime?
+  telefoneConfirmadoPorId    String?
+  telefoneConfirmadoPor      User?                @relation("MotoristaTelefoneConfirmadoPor", fields: [telefoneConfirmadoPorId], references: [id], onDelete: SetNull)
+  /// Alguém respondeu à pergunta da conferência que o número não é do motorista. A conferência para de perguntar até o telefone ser corrigido.
+  telefoneErradoEm           DateTime?
   conferenciasDiarias        ConferenciaDiaria[]
   sugestoesGestor            SugestaoGestor[]
   /// Alcance do WhatsApp DESTE número (vale pro número, não pra empresa). Só a
@@ -4900,6 +4912,7 @@ enum TipoSugestaoGestor {
   RESPOSTA_AMBIGUA
   MOTORISTA_PAROU_WHATSAPP
   WHATSAPP_INALCANCAVEL
+  NUMERO_ERRADO
 }
 
 enum StatusSugestaoGestor {
@@ -4970,6 +4983,8 @@ model ConfiguracaoConferenciaDiaria {
   lembreteHoraMax                   Int                        @default(21)
   /// Teto de reenvios/testes por pergunta por dia (vale pro reenvio e pra pergunta de teste do painel).
   maxReenviosPorPergunta            Int                        @default(5)
+  /// Só pergunta a quem tem o número confirmado (já usou o app, já respondeu antes ou foi confirmado pelo escritório). false = como sempre foi.
+  soPerguntarNumeroConfirmado       Boolean                    @default(false)
   alteradoEm                        DateTime                   @updatedAt
   alteradoPor                       User?                      @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId                     String?
@@ -4993,7 +5008,8 @@ model ConferenciaDiaria {
   snapshot          Json
   criadoEm          DateTime                @default(now())
   /// Por que o motorista NÃO pôde ser perguntado apesar de a regra dizer que sim:
-  /// PAROU | INALCANCAVEL | SEM_TELEFONE | NAO_ACEITA_WHATSAPP. É o "sem canal" da lista.
+  /// PAROU | INALCANCAVEL | SEM_TELEFONE | NAO_ACEITA_WHATSAPP | DESLIGADA_PAINEL | NUMERO_ERRADO. É o "sem canal" da lista.
+  /// SEM_MOVIMENTO e NAO_CONFIRMADO moram aqui mas NÃO são canal: são outras listas, sem mensagem.
   suprimidaPor      String?
   /// `wamid` da pergunta (e do lembrete): é como o toque no botão se confirma.
   wamid             String?

@@ -19,6 +19,7 @@ import { RegimeCard, type RegimeDaPessoa } from "./regime-card";
 import { AcessoAppCard } from "./acesso-app-card";
 import { WhatsappSuspeitoCard } from "./whatsapp-suspeito-card";
 import { ConferenciaCalendarioMotorista } from "@/components/conferencia-calendario-motorista";
+import { NumeroConfirmadoCard } from "@/components/numero-confirmado";
 import { usePermissoes } from "@/lib/permissoes";
 
 type ResumoVersoes = {
@@ -196,6 +197,7 @@ export default function FichaMotoristaPage({
             inalcancavelEm={m.whatsappInalcancavelEm}
             conferencia={m}
           />
+          {verConferencia && <NumeroConfirmadoCard motoristaId={id} />}
           {verConferencia && <ConferenciaCalendarioMotorista motoristaId={id} />}
           <RegimeCard regime={m.regime ?? null} motoristaId={id} />
           <AcessoAppCard motoristaId={id} conferencia={m} />

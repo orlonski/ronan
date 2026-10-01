@@ -131,13 +131,65 @@ export const FRASES_VOLTAR: readonly string[] = [
 
 const INDICE_VOLTAR = new Set(FRASES_VOLTAR);
 
-/** Intenção lida de um texto livre: uma opção da pergunta ou o pedido de voltar. */
-export type IntencaoConferencia = OpcaoConferenciaDiaria | "VOLTAR";
+/**
+ * "Esse número não é do motorista": quem recebeu a pergunta avisa que é a pessoa errada.
+ * Mesma regra de "parar"/"voltar": a mensagem INTEIRA, normalizada, tem que ser uma destas
+ * frases — nunca "contém" nem similaridade. "não sou eu que dirijo hoje" ou "esse não é o meu
+ * número de conta" ficam de fora (conversa normal). Tabela de DADOS: pra aceitar uma variação
+ * nova, acrescente a frase aqui (já normalizada: minúscula, sem acento, sem pontuação).
+ */
+export const FRASES_NUMERO_ERRADO: readonly string[] = [
+  "numero errado",
+  "numero incorreto",
+  "este numero esta errado",
+  "esse numero esta errado",
+  "esse numero ta errado",
+  "numero errado aqui",
+  "engano",
+  "foi engano",
+  "e engano",
+  "deve ser engano",
+  "acho que e engano",
+  "mensagem enviada por engano",
+  "voce errou o numero",
+  "voces erraram o numero",
+  "errou o numero",
+  "erraram o numero",
+  "nao sou eu",
+  "nao sou ele",
+  "nao sou essa pessoa",
+  "nao sou a pessoa",
+  "nao sou a pessoa certa",
+  "nao sou motorista",
+  "eu nao sou motorista",
+  "nao conheco",
+  "nao conheco essa pessoa",
+  "nao conheco ninguem com esse nome",
+  "nao conheco o motorista",
+  "esse nao e meu numero",
+  "esse nao e o meu numero",
+  "este nao e meu numero",
+  "este nao e o meu numero",
+  "esse numero nao e dele",
+  "esse numero nao e do motorista",
+  "numero trocado",
+];
+
+const INDICE_NUMERO_ERRADO = new Set(FRASES_NUMERO_ERRADO.map(normalizarResposta));
+
+/** O texto avisa que o número não é do motorista? Correspondência exata (normalizada), nunca vaga. */
+export function ehNumeroErrado(texto: string | null | undefined): boolean {
+  return !!texto && INDICE_NUMERO_ERRADO.has(normalizarResposta(texto));
+}
+
+/** Intenção lida de um texto livre: uma opção da pergunta, o pedido de voltar ou "número errado". */
+export type IntencaoConferencia = OpcaoConferenciaDiaria | "VOLTAR" | "NUMERO_ERRADO";
 
 export function interpretarIntencaoConferencia(texto: string | null | undefined): IntencaoConferencia {
   if (!texto) return "AMBIGUA";
   const n = normalizarResposta(texto);
   if (INDICE_VOLTAR.has(n)) return "VOLTAR";
+  if (INDICE_NUMERO_ERRADO.has(n)) return "NUMERO_ERRADO";
   return INDICE.get(n) ?? "AMBIGUA";
 }
 
@@ -175,6 +227,8 @@ export const RESPOSTA_NAO_TIVE = "Anotado, obrigado por avisar!";
 export const RESPOSTA_TIVE_NAO_LANCEI =
   "Abra o app e lance a viagem — viagem que não é lançada não entra no seu acerto.";
 export const RESPOSTA_SAI_DA_EMPRESA = "Anotado. Seu gestor vai confirmar.";
+/** Pra quem recebeu a pergunta no número errado. */
+export const RESPOSTA_NUMERO_ERRADO = "Desculpe o engano! Vamos avisar a empresa para corrigir o cadastro.";
 /** SEED (texto padrão), não regra: o que ele lê depois de pedir pra voltar. */
 export const RESPOSTA_VOLTAR =
   "Pronto, voltamos a te perguntar quando você esquecer de lançar uma viagem. Se quiser parar de novo, é só tocar em Parar perguntas.";

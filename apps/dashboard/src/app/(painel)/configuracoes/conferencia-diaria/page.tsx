@@ -488,6 +488,16 @@ function Conteudo() {
               </p>
             </>
           )}
+          <Field
+            label="Só perguntar a quem tem o número confirmado"
+            help="Evita mandar a pergunta pro telefone errado de alguém que não é motorista. Conta como confirmado quem já usou o app, já respondeu antes ou foi confirmado pelo escritório. Os outros ficam numa lista pra você confirmar o número antes de perguntar."
+          >
+            <Toggle
+              value={form.soPerguntarNumeroConfirmado ?? false}
+              onChange={(v) => set("soPerguntarNumeroConfirmado", v)}
+              disabled={!podeEditar}
+            />
+          </Field>
         </Card>
 
         {podeEditar && (

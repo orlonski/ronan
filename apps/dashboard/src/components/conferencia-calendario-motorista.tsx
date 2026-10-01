@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
+import { useNumeroDoMotorista } from "@/components/numero-confirmado";
 import { cn } from "@/lib/utils";
 
 const TZ = "America/Sao_Paulo";
@@ -101,6 +102,7 @@ const SEM_CANAL: Record<string, string> = {
   PAROU: "pediu pra parar de receber a pergunta",
   DESLIGADA_PAINEL: "a conferência está desligada pela empresa",
   INALCANCAVEL: "o WhatsApp parece não entregar",
+  NUMERO_ERRADO: "o número parece não ser dele",
 };
 
 const LANCOU: Situacao = { chave: "lancou", tom: "verde", Icone: Check, curto: "Lançou", longo: "Lançou viagem" };
@@ -427,7 +429,10 @@ function EnviarPerguntaDeTeste({
   const [confirmando, setConfirmando] = useState(false);
   const ficha = useApiQuery<FichaParaTeste>(`/admin/motoristas/${motoristaId}`, { staleTime: 30_000 });
   const f = ficha.data;
-  const motivo = f ? motivoSemCanal(f) : null;
+  const numero = useNumeroDoMotorista(motoristaId);
+  const motivo = f
+    ? (motivoSemCanal(f) ?? (numero.data?.numeroErrado ? "O número deste motorista parece não ser dele (responderam “número errado”)." : null))
+    : null;
   const envio = useMutation({
     mutationFn: () =>
       fetchApi<ResultadoPerguntaDeTeste>(`/admin/conferencia-diaria/motoristas/${motoristaId}/pergunta-de-teste`, {
@@ -464,6 +469,11 @@ function EnviarPerguntaDeTeste({
           {dia ? `, perguntando sobre ${diaLongo(dia)}` : ""}.
         </p>
         <p className="mt-1 text-sm">Use só com motorista de teste seu ou com quem já combinou.</p>
+        {numero.data && !numero.data.confirmado && (
+          <p className="mt-1 text-sm font-medium" data-testid="aviso-numero-nao-confirmado">
+            Este número ainda não foi confirmado. Se o telefone estiver errado, a mensagem cai com um desconhecido.
+          </p>
+        )}
         <div className="mt-2 flex flex-wrap gap-2">
           <Button variant="success" disabled={envio.isPending} onClick={() => envio.mutate()}>
             {envio.isPending ? "Enviando…" : "Enviar agora"}

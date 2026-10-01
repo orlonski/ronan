@@ -48,6 +48,12 @@ export type ConfigRegraConferencia = {
    * sem viagem cai nesse mesmo caso.
    */
   janelaAtividadeDias?: number;
+  /**
+   * Proteção do número comercial compartilhado. Ausente ou false = pergunta a todos (como sempre
+   * foi). Ligado: quem não tem NENHUM sinal de número confirmado (`numeroConfirmado`) não recebe
+   * a pergunta e vira `naoConfirmado`, pro escritório confirmar o telefone antes.
+   */
+  soPerguntarNumeroConfirmado?: boolean;
 };
 
 export type MotoristaParaConferencia = {
@@ -60,6 +66,11 @@ export type MotoristaParaConferencia = {
   cadastradoEm?: Ymd | null;
   /** Dias (Ymd) em que ele JÁ FOI perguntado (ou seria, em sombra). */
   perguntasAnteriores: Ymd[];
+  /**
+   * Resultado de `numeroConfirmado` pra este motorista. Ausente = não se sabe, e a regra não barra
+   * ninguém por isso (chamadores que não conhecem o campo se comportam como sempre).
+   */
+  numeroConfirmado?: boolean;
 };
 
 export type EvidenciasConferencia = {
@@ -82,9 +93,61 @@ export type ResultadoConferencia = {
   deveriaPerguntar: boolean;
   /** Barrado pela regra de atividade: não recebe mensagem e vai pra lista do escritório. */
   semMovimento?: boolean;
+  /** Pela regra mandaria perguntar, mas o número não está confirmado e a empresa só pergunta a número confirmado. */
+  naoConfirmado?: boolean;
   motivo: string;
   evidencias: EvidenciasConferencia;
 };
+
+/**
+ * ─── Número CONFIRMADO ──────────────────────────────────────────────────────
+ *
+ * O telefone do motorista é digitado pela empresa e pode estar errado; a pergunta cairia no
+ * WhatsApp de um desconhecido, que pode bloquear/denunciar e derrubar a qualidade do número
+ * comercial (compartilhado com o código de acesso de todas as empresas). Um número é
+ * CONFIRMADO quando há PELO MENOS UM destes sinais. A lista é dado (não `if` espalhado): para
+ * acrescentar ou tirar um sinal, mexa só aqui.
+ */
+export type SinaisDoNumero = {
+  /** `Motorista.appVistoEm`: o app dele já reportou versão (abriu o app). */
+  appVistoEm?: Date | string | null;
+  /** `MotoristaIdentidade.ultimoLoginEm`: a pessoa entrou no app (o número passou por confirmação de código). */
+  ultimoLoginEm?: Date | string | null;
+  /** Já existe `ConferenciaDiaria.respondidaEm` deste motorista (respondeu antes no WhatsApp). */
+  respondeuAntes?: boolean;
+  /** Existe `WhatsappSessao` vinculada a este motorista (ele mesmo vinculou o WhatsApp). */
+  sessaoWhatsappVinculada?: boolean;
+  /** `Motorista.telefoneConfirmadoEm`: o escritório garantiu que o telefone é dele. */
+  telefoneConfirmadoEm?: Date | string | null;
+  /** `Motorista.telefoneErradoEm`: responderam "número errado". Vence qualquer sinal acima. */
+  telefoneErradoEm?: Date | string | null;
+};
+
+export type SinalNumero = "APP_VISTO" | "LOGIN_NO_APP" | "RESPONDEU_ANTES" | "SESSAO_WHATSAPP" | "CONFIRMADO_PELO_ESCRITORIO";
+
+export const SINAIS_NUMERO_CONFIRMADO: readonly {
+  sinal: SinalNumero;
+  /** Como a ficha explica o sinal. */
+  rotulo: string;
+  vale: (s: SinaisDoNumero) => boolean;
+}[] = [
+  { sinal: "APP_VISTO", rotulo: "já usou o app", vale: (s) => s.appVistoEm != null },
+  { sinal: "LOGIN_NO_APP", rotulo: "já entrou no app", vale: (s) => s.ultimoLoginEm != null },
+  { sinal: "RESPONDEU_ANTES", rotulo: "já respondeu no WhatsApp", vale: (s) => s.respondeuAntes === true },
+  { sinal: "SESSAO_WHATSAPP", rotulo: "vinculou o WhatsApp", vale: (s) => s.sessaoWhatsappVinculada === true },
+  { sinal: "CONFIRMADO_PELO_ESCRITORIO", rotulo: "confirmado pelo escritório", vale: (s) => s.telefoneConfirmadoEm != null },
+];
+
+/** Quais sinais confirmam este número. "Número errado" anula todos: quem recebeu disse que não é dele. */
+export function sinaisDoNumero(s: SinaisDoNumero): SinalNumero[] {
+  if (s.telefoneErradoEm != null) return [];
+  return SINAIS_NUMERO_CONFIRMADO.filter((x) => x.vale(s)).map((x) => x.sinal);
+}
+
+/** O número tem pelo menos um sinal de que é mesmo do motorista? */
+export function numeroConfirmado(s: SinaisDoNumero): boolean {
+  return sinaisDoNumero(s).length > 0;
+}
 
 /** Até onde o cálculo olha pra trás procurando dias esperados. */
 const LIMITE_VOLTA_DIAS = 60;
@@ -233,6 +296,15 @@ export function avaliarConferenciaDiaria(
     return nao(`Já foi perguntado ${perguntasNaSemana} vez(es) nos últimos 7 dias (máximo ${cfg.maxPerguntasPorSemana}).`);
   }
 
+  if (cfg.soPerguntarNumeroConfirmado && m.numeroConfirmado === false) {
+    return {
+      deveriaPerguntar: false,
+      naoConfirmado: true,
+      motivo: "O número ainda não foi confirmado (nunca usou o app, não respondeu antes e o escritório não confirmou), então não recebe a pergunta.",
+      evidencias,
+    };
+  }
+
   const ultimo = ultimoDiaComViagem ? `última viagem em ${dataBR(ultimoDiaComViagem)}` : "nunca lançou viagem";
   const periodo =
     n === 1
@@ -294,6 +366,7 @@ export function avaliarLembreteNoApp(
       maxPerguntasPorSemana: 7,
       // O card no app não é mensagem de WhatsApp: a regra de atividade protege o número, não vale aqui.
       janelaAtividadeDias: 0,
+      soPerguntarNumeroConfirmado: false,
     },
     { ...m, perguntasAnteriores: [] },
     feriadosNacionais,

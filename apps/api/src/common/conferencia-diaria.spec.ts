@@ -10,6 +10,9 @@ import {
 import {
   avaliarConferenciaDiaria,
   avaliarLembreteNoApp,
+  numeroConfirmado,
+  sinaisDoNumero,
+  SINAIS_NUMERO_CONFIRMADO,
   type ConfigLembreteApp,
   diasEsperadosAntesDeHoje,
   hojeYmd,
@@ -568,5 +571,121 @@ describe("limites de envio da conferência (tolerância, janela do lembrete, ree
     expect(!igual.success && igual.error.issues[0]!.message).toMatch(/depois da hora inicial/);
     expect(ok({ lembreteHoraMin: 18, lembreteHoraMax: 9 }).success).toBe(false);
     expect(ok({ lembreteHoraMin: 9, lembreteHoraMax: 18 }).success).toBe(true);
+  });
+});
+
+describe("número confirmado", () => {
+  const D = new Date("2026-09-20T10:00:00Z");
+
+  it("sem nenhum sinal, não está confirmado", () => {
+    expect(numeroConfirmado({})).toBe(false);
+    expect(numeroConfirmado({ appVistoEm: null, ultimoLoginEm: null, respondeuAntes: false, sessaoWhatsappVinculada: false, telefoneConfirmadoEm: null })).toBe(false);
+  });
+
+  it.each([
+    ["app visto", { appVistoEm: D }, "APP_VISTO"],
+    ["login na identidade", { ultimoLoginEm: D }, "LOGIN_NO_APP"],
+    ["respondeu antes no WhatsApp", { respondeuAntes: true }, "RESPONDEU_ANTES"],
+    ["sessão de WhatsApp vinculada", { sessaoWhatsappVinculada: true }, "SESSAO_WHATSAPP"],
+    ["confirmado pelo escritório", { telefoneConfirmadoEm: D }, "CONFIRMADO_PELO_ESCRITORIO"],
+  ] as const)("um sinal basta: %s", (_n, sinais, esperado) => {
+    expect(numeroConfirmado(sinais)).toBe(true);
+    expect(sinaisDoNumero(sinais)).toEqual([esperado]);
+  });
+
+  it("aceita data em texto (vinda de JSON) e vários sinais juntos", () => {
+    expect(sinaisDoNumero({ appVistoEm: "2026-09-20T10:00:00Z", respondeuAntes: true })).toEqual(["APP_VISTO", "RESPONDEU_ANTES"]);
+  });
+
+  it("'número errado' anula todos os sinais", () => {
+    expect(numeroConfirmado({ appVistoEm: D, respondeuAntes: true, telefoneConfirmadoEm: D, telefoneErradoEm: D })).toBe(false);
+  });
+
+  it("a lista de sinais é dado: um sinal por chave, todos com rótulo", () => {
+    expect(new Set(SINAIS_NUMERO_CONFIRMADO.map((x) => x.sinal)).size).toBe(SINAIS_NUMERO_CONFIRMADO.length);
+    expect(SINAIS_NUMERO_CONFIRMADO.every((x) => x.rotulo.length > 0)).toBe(true);
+  });
+});
+
+describe("avaliarConferenciaDiaria com a opção 'só perguntar número confirmado'", () => {
+  const SEM_VIAGEM = mot({ diasComViagem: ["2026-09-20"] }); // segunda 28: sexta 25 sem viagem => perguntaria
+
+  it("desligada (ou ausente): idêntico a hoje, mesmo com numeroConfirmado=false", () => {
+    for (const c of [cfg(), cfg({ soPerguntarNumeroConfirmado: false })]) {
+      const r = avaliarConferenciaDiaria(c, { ...SEM_VIAGEM, numeroConfirmado: false }, SEM_FERIADO, SEG_MANHA);
+      expect(r.deveriaPerguntar).toBe(true);
+      expect(r.naoConfirmado).toBeUndefined();
+    }
+  });
+
+  it("ligada e SEM sinal: não pergunta e vira naoConfirmado, com motivo legível", () => {
+    const r = avaliarConferenciaDiaria(cfg({ soPerguntarNumeroConfirmado: true }), { ...SEM_VIAGEM, numeroConfirmado: false }, SEM_FERIADO, SEG_MANHA);
+    expect(r).toMatchObject({ deveriaPerguntar: false, naoConfirmado: true });
+    expect(r.semMovimento).toBeUndefined();
+    expect(r.motivo).toMatch(/número ainda não foi confirmado/);
+  });
+
+  it("ligada e COM sinal: pergunta normalmente", () => {
+    const r = avaliarConferenciaDiaria(cfg({ soPerguntarNumeroConfirmado: true }), { ...SEM_VIAGEM, numeroConfirmado: true }, SEM_FERIADO, SEG_MANHA);
+    expect(r.deveriaPerguntar).toBe(true);
+    expect(r.naoConfirmado).toBeUndefined();
+  });
+
+  it("ligada, mas o chamador não informou os sinais: não barra ninguém", () => {
+    const r = avaliarConferenciaDiaria(cfg({ soPerguntarNumeroConfirmado: true }), SEM_VIAGEM, SEM_FERIADO, SEG_MANHA);
+    expect(r.deveriaPerguntar).toBe(true);
+  });
+
+  it("só marca naoConfirmado quem a regra mandaria perguntar (quem lançou viagem não entra na lista)", () => {
+    const r = avaliarConferenciaDiaria(
+      cfg({ soPerguntarNumeroConfirmado: true }),
+      mot({ diasComViagem: ["2026-09-25"], numeroConfirmado: false }),
+      SEM_FERIADO,
+      SEG_MANHA,
+    );
+    expect(r).toMatchObject({ deveriaPerguntar: false });
+    expect(r.naoConfirmado).toBeUndefined();
+  });
+
+  it("sem movimento tem prioridade (é outra lista)", () => {
+    const r = avaliarConferenciaDiaria(
+      cfg({ soPerguntarNumeroConfirmado: true, janelaAtividadeDias: 30 }),
+      mot({ diasComViagem: ["2026-06-01"], numeroConfirmado: false }),
+      SEM_FERIADO,
+      SEG_MANHA,
+    );
+    expect(r.semMovimento).toBe(true);
+    expect(r.naoConfirmado).toBeUndefined();
+  });
+
+  it("o lembrete DENTRO do app não depende do número confirmado", () => {
+    const l = avaliarLembreteNoApp(
+      cfg({ soPerguntarNumeroConfirmado: true }),
+      { ativo: true, lembreteNoApp: true, lembreteParaQuem: "TODOS_QUE_ATRASARAM", diasParaLembreteNoApp: 1 },
+      { ...SEM_VIAGEM, numeroConfirmado: false, receberConferenciaDiaria: true },
+      SEM_FERIADO,
+      SEG_MANHA,
+    );
+    expect(l).not.toBeNull();
+  });
+});
+
+describe("descreverRegraConferencia e o número confirmado", () => {
+  const base = {
+    horaEnvio: 8, diasDoJob: [1, 2, 3, 4, 5], regra: "SEM_VIAGEM_NO_DIA_ANTERIOR" as const, diasSemViagem: 2,
+    diasConsiderados: [1, 2, 3, 4, 5], ignorarFeriados: true, incluirQueNuncaLancou: true,
+    intervaloMinimoDias: 3, maxPerguntasPorSemana: 3,
+  };
+  const FRASE = "Só pergunta a quem tem o número confirmado: já usou o app, já respondeu antes ou foi confirmado pelo escritório.";
+  it("ligada: diz a frase", () => {
+    expect(descreverRegraConferencia({ ...base, soPerguntarNumeroConfirmado: true })).toContain(FRASE);
+  });
+  it("desligada ou ausente: texto igual ao de antes", () => {
+    expect(descreverRegraConferencia(base)).not.toContain("número confirmado");
+    expect(descreverRegraConferencia({ ...base, soPerguntarNumeroConfirmado: false })).toBe(descreverRegraConferencia(base));
+  });
+  it("o schema aceita o campo e recusa lixo", () => {
+    expect(AtualizarConfigConferenciaDiariaSchema.safeParse({ soPerguntarNumeroConfirmado: true }).success).toBe(true);
+    expect(AtualizarConfigConferenciaDiariaSchema.safeParse({ soPerguntarNumeroConfirmado: "sim" }).success).toBe(false);
   });
 });

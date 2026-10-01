@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
   AtualizarConfigConferenciaDiariaSchema,
   CalendarioConferenciaQuerySchema,
+  ConfirmarTelefonesSchema,
   DecidirSugestaoGestorSchema,
   DefinirRecebimentoConferenciaSchema,
   PerguntaDeTesteSchema,
@@ -10,6 +11,7 @@ import {
 import type {
   AtualizarConfigConferenciaDiaria,
   CalendarioConferenciaQuery,
+  ConfirmarTelefones,
   DecidirSugestaoGestor,
   DefinirRecebimentoConferencia,
   PerguntaDeTeste,
@@ -102,6 +104,40 @@ export class ConferenciaDiariaController {
     // "Dados técnicos" (wamid, trilha…) só pra quem também pode decidir.
     const tecnico = user.permissoes.includes("conferencia-diaria.decidir");
     return this.service.calendarioDoMotorista(id, query.mes, undefined, tecnico);
+  }
+
+  /**
+   * O número do motorista está confirmado? (selo da ficha): por qual sinal, quem confirmou, se
+   * responderam "número errado". Só leitura. Fora do escopo = 404.
+   */
+  @RequerPermissao("conferencia-diaria.ver")
+  @Get("motoristas/:id/numero")
+  async numero(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    await this.motoristas.findOne(id, user.escopo);
+    return this.service.numeroDoMotorista(id);
+  }
+
+  /** "Confirmar número": o escritório garante que o telefone do cadastro é do motorista. Idempotente. Fora do escopo = 404. */
+  @RequerPermissao("conferencia-diaria.decidir")
+  @HttpCode(200)
+  @Post("motoristas/:id/confirmar-telefone")
+  async confirmarTelefone(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.confirmarTelefones([id], user, user.escopo);
+  }
+
+  /**
+   * "Confirmar os N números desta lista": o mesmo, em lote (no máximo
+   * `LIMITE_CONFIRMAR_TELEFONES_POR_CHAMADA` por chamada). Um motorista fora do escopo derruba a
+   * chamada inteira com 404, sem confirmar ninguém.
+   */
+  @RequerPermissao("conferencia-diaria.decidir")
+  @HttpCode(200)
+  @Post("confirmar-telefones")
+  async confirmarTelefones(
+    @Body(new ZodValidationPipe(ConfirmarTelefonesSchema)) body: ConfirmarTelefones,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.confirmarTelefones(body.motoristaIds, user, user.escopo);
   }
 
   /**

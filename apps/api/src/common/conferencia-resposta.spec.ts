@@ -6,7 +6,9 @@ import {
   payloadConferencia,
 } from "@ronan/shared-types";
 import {
+  FRASES_NUMERO_ERRADO,
   FRASES_VOLTAR,
+  ehNumeroErrado,
   deveSuprimirResumo,
   diaTextoConferencia,
   ehPedidoDeVoltar,
@@ -228,5 +230,55 @@ describe("sufixo do telefone", () => {
   it("os 8 últimos dígitos, em qualquer formato", () => {
     expect(sufixoTelefone("+55 (42) 99108-8125")).toBe("91088125");
     expect(sufixoTelefone("42991088125")).toBe(sufixoTelefone("554291088125"));
+  });
+});
+
+describe("\"número errado\" (texto livre, correspondência exata)", () => {
+  it.each([
+    "Número errado",
+    "NUMERO ERRADO!",
+    "engano",
+    "Foi engano.",
+    "não sou eu",
+    "Não sou eu!!",
+    "não conheço",
+    "não sou motorista",
+    "Não sou essa pessoa",
+    "esse não é meu número",
+    "Esse não é o meu número.",
+    "numero trocado",
+  ])("%s é número errado", (t) => {
+    expect(ehNumeroErrado(t)).toBe(true);
+    expect(interpretarIntencaoConferencia(t)).toBe("NUMERO_ERRADO");
+  });
+
+  it.each([
+    "não sou eu que dirijo hoje",
+    "engano meu, esqueci de lançar",
+    "esse número é meu sim",
+    "não conheço essa rota",
+    "numero",
+    "errado",
+    "não",
+    "sim",
+    "1",
+    "parar",
+    "voltar",
+    "",
+  ])("%s NÃO é número errado (nunca por semelhança)", (t) => {
+    expect(ehNumeroErrado(t)).toBe(false);
+    expect(interpretarIntencaoConferencia(t)).not.toBe("NUMERO_ERRADO");
+  });
+
+  it("texto vazio/nulo não é", () => {
+    expect(ehNumeroErrado(null)).toBe(false);
+    expect(ehNumeroErrado(undefined)).toBe(false);
+  });
+
+  it("não conflita com os botões, com 'parar' nem com 'voltar'", () => {
+    for (const f of FRASES_NUMERO_ERRADO) {
+      expect(interpretarRespostaConferencia(f), f).toBe("AMBIGUA");
+      expect(ehPedidoDeVoltar(f), f).toBe(false);
+    }
   });
 });

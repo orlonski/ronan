@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -25,6 +26,8 @@ export type SemCanalItem = {
   nome: string;
   parou: boolean;
   inalcancavelDesde: string | null;
+  /** Responderam "número errado" à pergunta. */
+  numeroErrado?: boolean;
 };
 
 const PATH_SUGESTOES = "/admin/conferencia-diaria/sugestoes";
@@ -36,6 +39,7 @@ const TIPO_TITULO: Record<string, string> = {
   RESPOSTA_AMBIGUA: "Resposta que o sistema não entendeu",
   MOTORISTA_PAROU_WHATSAPP: "Pediu pra parar de receber a pergunta",
   WHATSAPP_INALCANCAVEL: "O WhatsApp parece não chegar",
+  NUMERO_ERRADO: "O número parece não ser dele",
 };
 
 function dataBR(iso: string) {
@@ -144,6 +148,11 @@ export function FilaDoGestor() {
                     )
                   ) : (
                     <>
+                      {s.tipo === "NUMERO_ERRADO" && s.motorista && (
+                        <Button asChild variant="default">
+                          <Link href={`/motoristas/${s.motorista.id}`}>Abrir a ficha</Link>
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         onClick={() => decidir.mutate({ id: s.id, acao: "recusar" })}
@@ -209,6 +218,7 @@ export function SaiuDaConferencia() {
                 {[
                   i.parou ? "Pediu pra parar de receber a pergunta" : null,
                   i.inalcancavelDesde ? `WhatsApp sem entrega desde ${dataBR(i.inalcancavelDesde)}` : null,
+                  i.numeroErrado ? "O número parece não ser dele" : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}

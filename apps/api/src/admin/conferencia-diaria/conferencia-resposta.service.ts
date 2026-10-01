@@ -10,10 +10,12 @@ import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { comConta, comoSistema } from "../../common/conta/conta-context";
 import {
   RESPOSTA_NAO_TIVE,
+  RESPOSTA_NUMERO_ERRADO,
   RESPOSTA_SAI_DA_EMPRESA,
   RESPOSTA_TIVE_NAO_LANCEI,
   RESPOSTA_VOLTAR,
   RESPOSTA_VOLTAR_EMPRESA_DESLIGOU,
+  ehNumeroErrado,
   ehPedidoDeVoltar,
   interpretarRespostaConferencia,
   normalizarResposta,
@@ -42,7 +44,7 @@ export type MensagemRecebida = {
 
 export type ResultadoTratamento =
   | { tratada: true; opcao: OpcaoConferenciaDiaria; origem: "BOTAO" | "TEXTO" }
-  | { tratada: true; opcao: "VOLTAR"; origem: "TEXTO" }
+  | { tratada: true; opcao: "VOLTAR" | "NUMERO_ERRADO"; origem: "TEXTO" }
   | { tratada: false; motivo: string };
 
 /** Depois disto, um texto "sim"/"1" já não é lido como resposta ao toque recente. */
@@ -116,6 +118,11 @@ export class ConferenciaRespostaService {
     // "nosso" se o remetente é um motorista nosso; senão segue pro atendimento normal.
     if (ehPedidoDeVoltar(textoDaMensagem(msg))) {
       const r = await this.tratarVoltar(msg, from);
+      if (r) return r;
+    }
+    // "número errado": só é "nosso" se há pergunta pendente pra este telefone; senão segue pro atendimento.
+    if (ehNumeroErrado(textoDaMensagem(msg))) {
+      const r = await this.tratarNumeroErrado(msg, from);
       if (r) return r;
     }
     return this.tratarTexto(msg, from);
@@ -256,6 +263,88 @@ export class ConferenciaRespostaService {
 
     await this.aplicar(conf, opcao, from, texto, { ...base, criterio: "texto livre: última pergunta ENVIADA do telefone" });
     return { tratada: true, opcao, origem: "TEXTO" };
+  }
+
+  // ─── "Número errado" ─────────────────────────────────────────────────────
+
+  /**
+   * Quem recebeu a pergunta responde que o número não é do motorista ("número errado", "engano",
+   * "não sou eu"…, correspondência exata). Só vale com uma pergunta ENVIADA pra este telefone — sem
+   * ela devolve `null` e a mensagem segue pro atendimento normal.
+   *
+   * Efeito (tudo dentro da conta da pergunta): marca `telefoneErradoEm` no motorista da pergunta
+   * (a conferência para de perguntar a ele: vira "sem canal" com motivo NUMERO_ERRADO), limpa a
+   * confirmação do escritório, abre a SUGESTÃO NUMERO_ERRADO pro gestor corrigir o telefone, registra
+   * na trilha e na auditoria e pede desculpas a quem escreveu. Não mexe no telefone nem em mais nada
+   * do cadastro, e a linha da pergunta NÃO vira "respondida": o que essa pessoa disse não confirma
+   * número nenhum (se contasse como resposta, o número corrigido nasceria "confirmado").
+   * Idempotente: a mesma mensagem entregue duas vezes marca, avisa e responde uma vez só.
+   */
+  private async tratarNumeroErrado(msg: MensagemRecebida, from: string): Promise<ResultadoTratamento | null> {
+    const conf = await comoSistema(() =>
+      this.prisma.conferenciaDiaria.findFirst({
+        where: { estado: "ENVIADA", motorista: { telefone: { in: telefonesParaBusca(from) } } },
+        orderBy: { enviadaEm: "desc" },
+        select: {
+          id: true,
+          contaId: true,
+          estado: true,
+          wamid: true,
+          dia: true,
+          motorista: { select: { id: true, nome: true, telefone: true, cpf: true, identidadeId: true } },
+        },
+      }),
+    );
+    if (!conf) return null;
+    const texto = textoDaMensagem(msg);
+    await this.trilha(conf, "TOQUE", {
+      opcao: "NUMERO_ERRADO",
+      origem: "TEXTO",
+      contextId: msg.context?.id ?? null,
+      wamidLinha: conf.wamid,
+      estadoAntes: conf.estado,
+      mensagemId: msg.id ?? null,
+      texto: texto?.slice(0, 100) ?? null,
+    });
+    await comConta(conf.contaId, async () => {
+      const m = conf.motorista;
+      const { count } = await this.prisma.motorista.updateMany({
+        where: { id: m.id, telefoneErradoEm: null },
+        data: { telefoneErradoEm: new Date(), telefoneConfirmadoEm: null, telefoneConfirmadoPorId: null },
+      });
+      if (count === 0) return; // outra entrega da mesma mensagem já tratou
+      await this.trilha(conf, "IGNORADO", {
+        opcao: "NUMERO_ERRADO",
+        motivo: "motorista marcado como número errado; a conferência não pergunta mais a ele",
+      });
+      await this.auditoria.log({
+        usuarioId: null,
+        entidade: "Motorista",
+        entidadeId: m.id,
+        acao: "CONFERENCIA_NUMERO_ERRADO",
+        campo: "telefoneErradoEm",
+        valorAntes: null,
+        valorDepois: true,
+        motivo: "Quem recebeu a pergunta da conferência respondeu que o número não é do motorista.",
+        metadata: { conferenciaId: conf.id, mensagemId: msg.id ?? null, origem: "whatsapp" },
+      });
+      const r = await this.sugestoes.abrir({
+        tipo: "NUMERO_ERRADO",
+        motoristaId: m.id,
+        conferenciaId: conf.id,
+        resumo: `Responderam que este número não é do motorista ${m.nome}. Corrija o telefone no cadastro.`,
+        evidencia: { origem: "conferencia-diaria", conferenciaId: conf.id },
+      });
+      if (r.criada) {
+        await this.sugestoes.notificar(
+          "Número do motorista parece errado",
+          `Responderam que o número de ${m.nome} não é dele. Corrija o telefone no cadastro.`,
+          { motoristaId: m.id },
+        );
+      }
+      await this.responder(from, RESPOSTA_NUMERO_ERRADO);
+    });
+    return { tratada: true, opcao: "NUMERO_ERRADO", origem: "TEXTO" };
   }
 
   // ─── "Voltar" ────────────────────────────────────────────────────────────
@@ -642,6 +731,27 @@ export class ConferenciaRespostaService {
         if (doNumero.length === 0) return false;
         if (doNumero.some((m) => !m.receberConferenciaDiaria)) return true;
         return this.religadoRecentemente(doNumero.map((m) => m.id));
+      }
+      // "número errado": é nosso só enquanto há pergunta ENVIADA pra este telefone (é a que o webhook trata).
+      if (!vazio && ehNumeroErrado(texto)) {
+        const pendente = await comoSistema(() =>
+          this.prisma.conferenciaDiaria.findFirst({
+            where: { estado: "ENVIADA", motorista: { telefone: { in: telefones } } },
+            select: { id: true },
+          }),
+        );
+        if (pendente) return true;
+        // Já tratada agora há pouco (a outra entrega chegou primeiro)? Também é nossa.
+        const marcado = await comoSistema(() =>
+          this.prisma.motorista.findFirst({
+            where: {
+              telefone: { in: telefones },
+              telefoneErradoEm: { gte: new Date(agora - JANELA_TOQUE_MIN * 60_000) },
+            },
+            select: { id: true },
+          }),
+        );
+        return !!marcado;
       }
       const opcao = vazio ? "AMBIGUA" : interpretarRespostaConferencia(texto);
       const ehRotulo = !vazio && ROTULOS_NORMALIZADOS.has(normalizarResposta(texto!));

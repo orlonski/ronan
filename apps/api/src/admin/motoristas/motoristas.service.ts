@@ -791,6 +791,15 @@ export class MotoristasService {
     const jaEra = pagoComoParceiro ? await this.registradoPagoPorProducao(atual.cpf, atual) : null;
     if (!jaEra) this.exigirMotivoDoRegistrado(pagoComoParceiro, motivoPagamentoRegistrado);
     const updateData: Record<string, unknown> = { ...rest };
+    // Telefone DIFERENTE do que estava: o que se sabia do número antigo (confirmado pelo escritório,
+    // "número errado" respondido) não vale pro novo. Zera junto, na mesma gravação.
+    const telefoneMudou =
+      rest.telefone !== undefined && soDigitos(rest.telefone ?? "") !== soDigitos(atual.telefone ?? "");
+    if (telefoneMudou) {
+      updateData.telefoneErradoEm = null;
+      updateData.telefoneConfirmadoEm = null;
+      updateData.telefoneConfirmadoPorId = null;
+    }
     // Senha nova definida pelo admin vale em todas as empresas do motorista —
     // ele tem uma senha só. Vai por propagarSenha depois da transação; o
     // updateData não recebe senhaHash pra não gravar duas vezes.
@@ -840,6 +849,19 @@ export class MotoristasService {
 
       return tx.motorista.update({ where: { id }, data: updateData, select: SAFE_SELECT });
     });
+
+    if (telefoneMudou && atual.telefoneErradoEm) {
+      // O gestor fez o que a sugestão pedia: ela se fecha sozinha.
+      await this.prisma.sugestaoGestor.updateMany({
+        where: { motoristaId: id, tipo: "NUMERO_ERRADO", status: "ABERTA" },
+        data: {
+          status: "RESOLVIDA_SOZINHA",
+          chaveViva: null,
+          decididaEm: new Date(),
+          motivoDecisao: "O telefone foi corrigido no cadastro.",
+        },
+      });
+    }
 
     if (cpfParaSenha && novaSenha) {
       await AuthService.propagarSenha(

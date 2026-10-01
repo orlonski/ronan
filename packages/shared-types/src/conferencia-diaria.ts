@@ -76,6 +76,7 @@ export const TipoSugestaoGestor = z.enum([
   "RESPOSTA_AMBIGUA",
   "MOTORISTA_PAROU_WHATSAPP",
   "WHATSAPP_INALCANCAVEL",
+  "NUMERO_ERRADO",
 ]);
 export type TipoSugestaoGestor = z.infer<typeof TipoSugestaoGestor>;
 
@@ -93,6 +94,21 @@ export const DecidirSugestaoGestorSchema = z.object({
   motivo: z.string().trim().max(500).optional(),
 });
 export type DecidirSugestaoGestor = z.infer<typeof DecidirSugestaoGestorSchema>;
+
+/**
+ * Limite TÉCNICO (não é regra de negócio) de motoristas por chamada de "Confirmar todos":
+ * protege o servidor de um corpo gigante. A lista do dia de uma empresa grande cabe folgada.
+ */
+export const LIMITE_CONFIRMAR_TELEFONES_POR_CHAMADA = 500;
+
+/** "Confirmar os N números desta lista": os motoristas que o escritório garante serem donos do telefone. */
+export const ConfirmarTelefonesSchema = z.object({
+  motoristaIds: z.array(z.string().uuid()).min(1, "Escolha pelo menos um motorista.").max(LIMITE_CONFIRMAR_TELEFONES_POR_CHAMADA),
+});
+export type ConfirmarTelefones = z.infer<typeof ConfirmarTelefonesSchema>;
+
+/** Resposta de confirmar telefone(s): quantos foram confirmados agora e quantos já estavam. */
+export type ResultadoConfirmarTelefones = { confirmados: number; jaConfirmados: number; semTelefone: number };
 
 /** Mínimo de caracteres do motivo pra religar quem o PRÓPRIO motorista desligou. */
 export const MOTIVO_RELIGAR_MIN = 5;
@@ -226,6 +242,7 @@ export const AtualizarConfigConferenciaDiariaSchema = z
       .int("Informe uma hora inteira.")
       .min(1, "A hora final do lembrete vai de 1 a 24.")
       .max(LEMBRETE_HORA_VALIDACAO_MAX, "A hora final do lembrete vai de 1 a 24."),
+    soPerguntarNumeroConfirmado: z.boolean(),
     maxReenviosPorPergunta: z
       .number({ invalid_type_error: "Informe um número de reenvios." })
       .int("Informe um número inteiro de reenvios.")
@@ -282,6 +299,7 @@ export const ConfigConferenciaDiaria = z.object({
   lembreteHoraMin: z.number(),
   lembreteHoraMax: z.number(),
   maxReenviosPorPergunta: z.number(),
+  soPerguntarNumeroConfirmado: z.boolean(),
 });
 export type ConfigConferenciaDiaria = z.infer<typeof ConfigConferenciaDiaria>;
 
@@ -308,6 +326,8 @@ export function descreverRegraConferencia(cfg: {
   diasParaLembreteNoApp?: number;
   /** Ausente ou 0 = todos são perguntados, por mais parados que estejam. */
   janelaAtividadeDias?: number;
+  /** Ausente ou false = pergunta a todos, com o número confirmado ou não. */
+  soPerguntarNumeroConfirmado?: boolean;
   /** Ausentes = padrão inicial (não entram no texto). Só o que difere do padrão é dito. */
   reenviar?: boolean;
   horasToleranciaEnvio?: number;
@@ -331,6 +351,9 @@ export function descreverRegraConferencia(cfg: {
     janela > 0
       ? ` Só recebe a pergunta quem lançou viagem nos últimos ${janela} dias; quem está parado há mais tempo não recebe mensagem e aparece numa lista para o escritório decidir.`
       : "";
+  const confirmado = cfg.soPerguntarNumeroConfirmado
+    ? " Só pergunta a quem tem o número confirmado: já usou o app, já respondeu antes ou foi confirmado pelo escritório."
+    : "";
   const tol = cfg.horasToleranciaEnvio ?? PADRAO_HORAS_TOLERANCIA_ENVIO;
   const tolerancia =
     tol !== PADRAO_HORAS_TOLERANCIA_ENVIO
@@ -344,7 +367,7 @@ export function descreverRegraConferencia(cfg: {
     cfg.reenviar && (hMin !== PADRAO_LEMBRETE_HORA_MIN || hMax !== PADRAO_LEMBRETE_HORA_MAX)
       ? ` Lembrete só entre ${hMin}h e ${hMax}h.`
       : "";
-  const base = `${quando}, o sistema pergunta ao motorista que ${alvo}. O dia de hoje nunca conta. ${nunca}${atividade} ${freq}${tolerancia}${janelaLembrete}`;
+  const base = `${quando}, o sistema pergunta ao motorista que ${alvo}. O dia de hoje nunca conta. ${nunca}${atividade}${confirmado} ${freq}${tolerancia}${janelaLembrete}`;
   if (!cfg.lembreteNoApp) return base;
   const n = Math.max(1, cfg.diasParaLembreteNoApp ?? 3);
   const quem =
