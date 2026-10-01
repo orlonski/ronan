@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "../prisma/prisma.module";
 import { AdminInboxModule } from "../admin/inbox/inbox.module";
+import { PushModule } from "../push/push.module";
 import { LancamentosResgatadosModule } from "../lancamentos-resgatados/lancamentos-resgatados.module";
 import { PontoAdminController } from "./ponto-admin.controller";
 import { PontoAdminService } from "./ponto-admin.service";
@@ -15,7 +16,7 @@ import { PontoService } from "./ponto.service";
  * trava que impede a mesma pessoa estar nos dois.
  */
 @Module({
-  imports: [PrismaModule, LancamentosResgatadosModule, AdminInboxModule],
+  imports: [PrismaModule, LancamentosResgatadosModule, AdminInboxModule, PushModule],
   controllers: [PontoAdminController, PontoMotoristaController],
   providers: [PontoService, PontoAdminService],
   exports: [PontoService, PontoAdminService],

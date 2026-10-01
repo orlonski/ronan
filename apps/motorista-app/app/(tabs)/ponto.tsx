@@ -129,11 +129,15 @@ export default function PontoTab() {
   const batidas = [
     ...(data?.marcacoes ?? []).map((m) => ({
       chave: m.clientId,
+      marcacaoId: m.id as string | null,
       hora: horaBR(m.marcadoEm),
       estado: "enviada" as const,
     })),
     ...doDia.map((i) => ({
       chave: i.payload.clientId,
+      // Ainda não subiu: não tem número de registro, e não há o que pedir pra
+      // não contar — o servidor nem sabe que ela existe.
+      marcacaoId: null,
       hora: horaBR(i.payload.marcadoEm),
       estado: i.status === "error" ? ("erro" as const) : ("fila" as const),
     })),
@@ -158,7 +162,18 @@ export default function PontoTab() {
             : null,
       tipo: c.tipo,
       status: c.status,
+      decisaoMotivo: c.decisaoMotivo ?? null,
     }));
+  /**
+   * Batidas que já têm pedido de "não contar" em aberto ou aceito. Essas não
+   * abrem o pedido de novo (o servidor recusaria), e a aceita aparece riscada:
+   * ela continua existindo — ninguém apaga batida —, só não entra na conta.
+   */
+  const naoContar = new Map(
+    (data?.correcoes ?? [])
+      .filter((c) => c.tipo === "DESCONSIDERACAO" && c.marcacaoId && c.status !== "RECUSADA")
+      .map((c) => [c.marcacaoId!, c.status]),
+  );
   const linhas = [
     ...batidas.map((b) => ({ ...b, pedido: null })),
     ...pedidos.map((p) => ({ chave: p.chave, hora: p.hora ?? "", estado: "pedido" as const, pedido: p })),
@@ -418,11 +433,29 @@ export default function PontoTab() {
           <View className="gap-2">
             {linhas.map((b) =>
               b.pedido ? (
-                <LinhaPedido key={b.chave} hora={b.pedido.hora} tipo={b.pedido.tipo} status={b.pedido.status} />
+                <LinhaPedido
+                  key={b.chave}
+                  hora={b.pedido.hora}
+                  tipo={b.pedido.tipo}
+                  status={b.pedido.status}
+                  decisaoMotivo={b.pedido.decisaoMotivo}
+                />
               ) : (
-              <View
+              <Pressable
                 key={b.chave}
-                className={`flex-row items-center justify-between rounded-2xl border-2 px-4 py-3 ${
+                accessibilityRole={b.marcacaoId && !naoContar.has(b.marcacaoId) ? "button" : undefined}
+                accessibilityHint={
+                  b.marcacaoId && !naoContar.has(b.marcacaoId)
+                    ? "Abre o pedido para essa batida não contar"
+                    : undefined
+                }
+                disabled={!b.marcacaoId || naoContar.has(b.marcacaoId)}
+                onPress={() =>
+                  router.push(
+                    `/corrigir-ponto?dia=${dia}&marcacaoId=${b.marcacaoId}&hora=${encodeURIComponent(b.hora)}`,
+                  )
+                }
+                className={`flex-row items-center justify-between rounded-2xl border-2 px-4 py-3 active:opacity-75 ${
                   b.estado === "enviada"
                     ? "border-success/40 bg-success/5"
                     : b.estado === "erro"
@@ -430,18 +463,37 @@ export default function PontoTab() {
                       : "border-warning/60 bg-warning/10"
                 }`}
               >
-                <Text className="text-2xl font-bold text-foreground">{b.hora}</Text>
-                {b.estado === "enviada" ? (
+                <Text
+                  className={`text-2xl font-bold ${
+                    b.marcacaoId && naoContar.get(b.marcacaoId) === "APROVADA"
+                      ? "text-muted-foreground line-through"
+                      : "text-foreground"
+                  }`}
+                >
+                  {b.hora}
+                </Text>
+                {b.marcacaoId && naoContar.get(b.marcacaoId) === "APROVADA" ? (
+                  <Text className="text-sm text-muted-foreground">não conta</Text>
+                ) : b.estado === "enviada" ? (
                   <Check size={22} color={COR_OK} strokeWidth={3} />
                 ) : b.estado === "erro" ? (
                   <TriangleAlert size={22} color={COR_ERRO} />
                 ) : (
                   <CloudOff size={22} color={COR_AVISO} />
                 )}
-              </View>
+              </Pressable>
               ),
             )}
           </View>
+        )}
+
+        {/* A batida não se apaga — nem por ele, nem pelo escritório. O que
+            existe é pedir que ela não conte, e isso precisa ser achável por
+            quem bateu sem querer e procura um "excluir". */}
+        {batidas.some((b) => b.marcacaoId && !naoContar.has(b.marcacaoId)) && (
+          <Text className="text-sm text-muted-foreground">
+            Bateu sem querer? Toque na batida para pedir que ela não conte.
+          </Text>
         )}
 
         {/* Mesmo corpo do cartão do espelho, de propósito. Isto aqui era um
@@ -582,10 +634,12 @@ function LinhaPedido({
   hora,
   tipo,
   status,
+  decisaoMotivo,
 }: {
   hora: string | null;
   tipo: "INCLUSAO" | "DESCONSIDERACAO" | "ANOTACAO";
   status: "PENDENTE" | "APROVADA" | "RECUSADA";
+  decisaoMotivo: string | null;
 }) {
   const oQue =
     tipo === "INCLUSAO"
@@ -618,6 +672,11 @@ function LinhaPedido({
       <View className="flex-1">
         <Text className="text-sm font-semibold text-foreground">{oQue}</Text>
         <Text className="text-xs text-muted-foreground">{situacao}</Text>
+        {/* Recusa sem o porquê é negar sem resposta: o motivo é obrigatório
+            no painel justamente pra chegar até aqui. */}
+        {status === "RECUSADA" && decisaoMotivo ? (
+          <Text className="mt-1 text-sm text-foreground">“{decisaoMotivo}”</Text>
+        ) : null}
       </View>
       {status === "PENDENTE" ? (
         <Clock size={22} color={COR_AVISO} />

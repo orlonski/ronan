@@ -69,7 +69,7 @@ function servicoAdmin(localizacao: unknown) {
       logs.push(e);
     },
   };
-  return { s: new PontoAdminService(prisma as never, auditoria as never, SEM_ACESSO_APP), logs };
+  return { s: new PontoAdminService(prisma as never, auditoria as never, SEM_ACESSO_APP, {} as never), logs };
 }
 
 describe("consultar a coordenada deixa rastro", () => {
@@ -108,7 +108,7 @@ describe("consultar a coordenada deixa rastro", () => {
       log: async () => {
         throw new Error("banco fora");
       },
-    } as never, SEM_ACESSO_APP);
+    } as never, SEM_ACESSO_APP, {} as never);
     await expect(s.localizacaoDaMarcacao("m1", "u1")).resolves.toBeTruthy();
   });
 });

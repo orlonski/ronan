@@ -46,6 +46,7 @@ import {
 import { carregarVinculoRegistrado } from "@/lib/vinculo-registrado";
 import { carregarAcessosApp } from "@/lib/acessos-app";
 import { api } from "@/lib/api";
+import { hojeISO } from "@/lib/datetime";
 import { AtualizacaoObrigatoria } from "@/components/atualizacao-obrigatoria";
 import {
   checarVersaoApp,
@@ -450,6 +451,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             void queryClient.invalidateQueries({ queryKey: ["chat"] });
             return;
           }
+          // Decisão do escritório sobre o ponto: a lista de hoje e o espelho
+          // mudam de situação na hora, com o app aberto.
+          if (kind === "ponto-correcao") {
+            void queryClient.invalidateQueries({ queryKey: ["ponto-hoje"] });
+            void queryClient.invalidateQueries({ queryKey: ["ponto-espelho"] });
+            return;
+          }
           void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
         });
 
@@ -515,6 +523,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             router.push("/documentos-da-obra");
           } else if (kind === "mensagem-admin") {
             router.push("/notificacoes");
+          } else if (kind === "ponto-correcao") {
+            // O escritório decidiu (ou lançou) uma correção do ponto. Do dia de
+            // hoje, a situação está na aba Ponto; de outro dia, no espelho.
+            void queryClient.invalidateQueries({ queryKey: ["ponto-hoje"] });
+            void queryClient.invalidateQueries({ queryKey: ["ponto-espelho"] });
+            router.push(data.dia === hojeISO() ? "/ponto" : "/meu-espelho");
           } else if (kind === "problema-veiculo-decidido") {
             // O escritório decidiu o aviso dele: abre a lista com a situação.
             void queryClient.invalidateQueries({ queryKey: ["meus-problemas"] });

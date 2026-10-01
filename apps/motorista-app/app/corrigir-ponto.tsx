@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react-native";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { showAlert } from "@/lib/alert";
 import { DateField } from "@/components/ui/date-field";
 import { HoraField } from "@/components/ui/hora-field";
@@ -27,6 +27,18 @@ const MESES = [
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
 ];
 
+/**
+ * Motivos de "não contar esta batida". Fixos, e não do catálogo da empresa:
+ * o catálogo é escrito pra quem ESQUECEU de bater ("Estava sem o celular",
+ * "Atestado") e não serve pra quem bateu a mais. O texto escolhido vai como
+ * motivo escrito, então o escritório lê português, não código.
+ */
+const MOTIVOS_NAO_CONTAR = [
+  { codigo: "BATEU_SEM_QUERER", descricao: "Bati sem querer" },
+  { codigo: "BATEU_DUAS_VEZES", descricao: "Bati duas vezes seguidas" },
+  { codigo: "OUTRO", descricao: "Outro motivo" },
+];
+
 function nomeDoMes(ymd: string): string {
   const m = Number(ymd.split("-")[1]);
   return MESES[(m || 1) - 1] ?? "";
@@ -39,7 +51,18 @@ function CorrigirPontoScreenTela() {
   // Chegando pelo toque num dia do espelho, a data já vem escolhida — é o
   // caminho natural ("esse dia aqui está errado") e evita ela procurar a
   // data de novo no calendário.
-  const { dia: diaParam } = useLocalSearchParams<{ dia?: string }>();
+  const {
+    dia: diaParam,
+    marcacaoId: marcacaoParam,
+    hora: horaParam,
+  } = useLocalSearchParams<{ dia?: string; marcacaoId?: string; hora?: string }>();
+  /**
+   * Chegando pelo toque numa batida, o pedido é de NÃO CONTAR aquela batida.
+   * Não existe "excluir": a batida é do registro e fica lá pra sempre; o que
+   * muda a conta é a correção, decidida pelo escritório.
+   */
+  const marcacaoId = typeof marcacaoParam === "string" && marcacaoParam ? marcacaoParam : null;
+  const naoContar = marcacaoId != null;
   const [dia, setDia] = useState(
     typeof diaParam === "string" && /^\d{4}-\d{2}-\d{2}$/.test(diaParam) ? diaParam : hojeISO(),
   );
@@ -51,7 +74,7 @@ function CorrigirPontoScreenTela() {
   const scroll = useRef<ScrollView>(null);
   const yDoTexto = useRef(0);
 
-  const motivos = catalogo?.motivos ?? [];
+  const motivos = naoContar ? MOTIVOS_NAO_CONTAR : (catalogo?.motivos ?? []);
   const escolhido = motivos.find((m) => m.codigo === motivoCodigo);
 
   /**
@@ -67,7 +90,7 @@ function CorrigirPontoScreenTela() {
   const exigeTexto = motivoCodigo === "OUTRO";
   const podeEnviar =
     /^\d{4}-\d{2}-\d{2}$/.test(dia) &&
-    instante.length > 0 &&
+    (naoContar || instante.length > 0) &&
     motivoCodigo.length > 0 &&
     (!exigeTexto || motivo.trim().length >= 3);
 
@@ -76,8 +99,9 @@ function CorrigirPontoScreenTela() {
     try {
       await api.post("/m/ponto/correcoes", {
         dia,
-        tipo: "INCLUSAO",
-        instantePretendido: instante,
+        ...(naoContar
+          ? { tipo: "DESCONSIDERACAO", marcacaoId }
+          : { tipo: "INCLUSAO", instantePretendido: instante }),
         motivoCodigo,
         // O servidor exige motivo escrito (mesma doutrina da alteração de
         // km). Quando ela não digitou nada, o que vai é a descrição que ela
@@ -98,10 +122,15 @@ function CorrigirPontoScreenTela() {
             : `O escritório vai analisar. Você acompanha em "Meu espelho", no mês de ${nomeDoMes(dia)} — o dia ${dia.slice(-2)} já aparece marcado como pedido.`,
       });
       router.back();
-    } catch {
+    } catch (e) {
+      // 4xx é o servidor explicando (ex.: "você já pediu pra não contar essa
+      // batida"); dizer "sem internet" nesse caso seria mentir.
       void showAlert({
         title: "Não consegui enviar",
-        message: "Precisa de internet pra isso. Tente de novo quando tiver sinal.",
+        message:
+          e instanceof ApiError && e.status >= 400 && e.status < 500
+            ? e.message
+            : "Precisa de internet pra isso. Tente de novo quando tiver sinal.",
       });
     } finally {
       setEnviando(false);
@@ -112,7 +141,9 @@ function CorrigirPontoScreenTela() {
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <View className="bg-brand px-5 pb-6 pt-14">
         <View className="flex-row items-start justify-between">
-          <Text className="flex-1 text-2xl font-bold text-white">Pedir correção</Text>
+          <Text className="flex-1 text-2xl font-bold text-white">
+            {naoContar ? "Não contar uma batida" : "Pedir correção"}
+          </Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Fechar"
@@ -134,16 +165,33 @@ function CorrigirPontoScreenTela() {
         contentContainerClassName="p-4 gap-4"
         keyboardShouldPersistTaps="handled"
       >
+        {naoContar ? (
+          <>
+            <View className="items-center rounded-2xl border-2 border-border bg-card px-4 py-4">
+              <Text className="text-sm text-muted-foreground">
+                Batida de {Number(dia.slice(-2))} de {nomeDoMes(dia)}
+              </Text>
+              <Text className="text-4xl font-bold text-foreground">{horaParam ?? "—"}</Text>
+            </View>
+            <Text className="text-base text-foreground">
+              Ninguém apaga uma batida — nem você, nem a empresa. O que você pede é que ela não
+              entre na conta das suas horas. Quem decide é o escritório.
+            </Text>
+          </>
+        ) : (
         <Text className="text-base text-foreground">
           Esqueceu de bater, ou bateu na hora errada? Diga o dia e a hora que deveria ter sido
           registrada. Quem decide é o escritório.
         </Text>
+        )}
 
         {/* ⚠️ Picker nativo, nunca campo de texto. Eu tinha deixado o motorista
             DIGITAR "AAAA-MM-DD" e "07:30" — pedir formato de máquina a quem
             tem dificuldade de leitura é garantir erro de digitação numa tela
             que existe pra corrigir erro. Os dois componentes já existiam no
             app; foi preguiça minha. */}
+        {!naoContar && (
+          <>
         <View className="gap-1">
           <Text className="text-base font-semibold text-foreground">Que dia</Text>
           <DateField value={dia} onChange={setDia} />
@@ -153,6 +201,8 @@ function CorrigirPontoScreenTela() {
           <Text className="text-base font-semibold text-foreground">Que horas</Text>
           <HoraField value={instante} data={dia} onChange={setInstante} />
         </View>
+          </>
+        )}
 
         <View className="gap-2">
           <Text className="text-base font-semibold text-foreground">O que aconteceu</Text>

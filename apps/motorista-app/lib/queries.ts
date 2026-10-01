@@ -815,6 +815,8 @@ export type PontoHoje = {
     instantePretendido: string | null;
     marcacaoId: string | null;
     pedidoPor: "FUNCIONARIO" | "GESTOR";
+    /** Por que o escritório recusou (ou o que escreveu ao decidir). */
+    decisaoMotivo?: string | null;
   }[];
 };
 

@@ -253,6 +253,7 @@ export class PontoService {
           instantePretendido: true,
           marcacaoId: true,
           pedidoPor: true,
+          decisaoMotivo: true,
         },
       }),
     ]);
@@ -280,6 +281,7 @@ export class PontoService {
         instantePretendido: c.instantePretendido?.toISOString() ?? null,
         marcacaoId: c.marcacaoId,
         pedidoPor: c.pedidoPor,
+        decisaoMotivo: c.decisaoMotivo,
       })),
     };
   }
@@ -363,6 +365,36 @@ export class PontoService {
       if (ja) return ja;
     }
 
+    /**
+     * "Não contar esta batida" só vale pra batida DELE e DAQUELE dia. Sem isto,
+     * um id qualquer passava — e o escritório veria um pedido apontando pra
+     * batida de outra pessoa (ou de outro dia) sem ter como perceber.
+     */
+    if (dados.tipo === "DESCONSIDERACAO" && dados.marcacaoId) {
+      const m = await this.prisma.marcacao.findFirst({
+        where: { id: dados.marcacaoId, funcionarioId: user.funcionarioId },
+        select: { dia: true },
+      });
+      if (!m || m.dia !== dados.dia) {
+        throw new BadRequestException("Essa batida não é sua ou não é desse dia.");
+      }
+      const aberto = await this.prisma.correcaoPonto.findFirst({
+        where: {
+          marcacaoId: dados.marcacaoId,
+          tipo: "DESCONSIDERACAO",
+          status: { in: ["PENDENTE", "APROVADA"] },
+        },
+        select: { status: true },
+      });
+      if (aberto) {
+        throw new BadRequestException(
+          aberto.status === "PENDENTE"
+            ? "Você já pediu pra não contar essa batida. O escritório ainda vai decidir."
+            : "Essa batida já não conta mais.",
+        );
+      }
+    }
+
     const criada = await this.prisma.correcaoPonto.create({
       data: {
         funcionarioId: user.funcionarioId,
@@ -378,7 +410,13 @@ export class PontoService {
         clientId: dados.clientId ?? null,
       },
     });
-    await this.avisarEscritorio(user, criada);
+    const marcacao = criada.marcacaoId
+      ? await this.prisma.marcacao.findFirst({ where: { id: criada.marcacaoId }, select: { marcadoEm: true } })
+      : null;
+    await this.avisarEscritorio(user, {
+      ...criada,
+      horaMarcacao: marcacao ? horaSP(marcacao.marcadoEm) : undefined,
+    });
     return criada;
   }
 
@@ -392,18 +430,16 @@ export class PontoService {
    */
   private async avisarEscritorio(
     user: AuthFuncionario,
-    c: { id: string; dia: string; tipo: string; instantePretendido: Date | null },
+    c: { id: string; dia: string; tipo: string; instantePretendido: Date | null; horaMarcacao?: string },
   ) {
     try {
       const [, m, d] = c.dia.split("-");
-      const hora = c.instantePretendido
-        ? new Date(c.instantePretendido.getTime() - 3 * 3_600_000).toISOString().slice(11, 16)
-        : null;
+      const hora = c.instantePretendido ? horaSP(c.instantePretendido) : null;
       const oQue =
         c.tipo === "INCLUSAO"
           ? `incluir ${hora ?? "uma batida"}`
           : c.tipo === "DESCONSIDERACAO"
-            ? "desconsiderar uma batida"
+            ? `não contar a batida das ${c.horaMarcacao ?? "?"}`
             : "anotar o dia";
       await this.inbox.disparar({
         tipo: "correcao-ponto",
@@ -553,3 +589,8 @@ export class PontoService {
  * cinco deploys.
  */
 export const REP_VERSAO = "1.0";
+
+/** HH:MM em São Paulo (sem horário de verão desde 2019). */
+function horaSP(d: Date): string {
+  return new Date(d.getTime() - 3 * 3_600_000).toISOString().slice(11, 16);
+}

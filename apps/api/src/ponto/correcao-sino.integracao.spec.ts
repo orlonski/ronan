@@ -1,10 +1,11 @@
 import "reflect-metadata";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import type { PrismaService } from "../prisma/prisma.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
 import type { AuthFuncionario } from "../auth/types";
 import { PontoService } from "./ponto.service";
+import { PontoAdminService } from "./ponto-admin.service";
 
 /**
  * Integração com Prisma REAL (banco descartável). O pedido de correção feito
@@ -25,6 +26,10 @@ describe.skipIf(!URL_TESTE)("correção de ponto → Hoje + sininho — Prisma r
   let decide: string;
   let soVe: string;
   let user: AuthFuncionario;
+  let outro: AuthFuncionario;
+  let admin: PontoAdminService;
+  let identidadeId: string;
+  const push = { enviarParaIdentidade: vi.fn(async () => ({ enviado: true })) };
 
   const naConta = <T>(fn: () => Promise<T>) => comConta(contaId, fn);
 
@@ -34,7 +39,13 @@ describe.skipIf(!URL_TESTE)("correção de ponto → Hoje + sininho — Prisma r
     prisma = new Real();
     await prisma.$connect();
     inbox = new AdminInboxService(prisma);
-    ponto = new PontoService(prisma, {} as never, inbox);
+    ponto = new PontoService(prisma, { marcarQueSubiu: async () => {}, subir: async () => {} } as never, inbox);
+    admin = new PontoAdminService(prisma, { log: async () => {} } as never, {} as never, push as never);
+    identidadeId = (
+      await comoSistema(() =>
+        prisma.motoristaIdentidade.create({ data: { cpf: `9${Date.now()}`.slice(0, 11), nome: "Joana", senhaHash: "x" } }),
+      )
+    ).id;
 
     contaId = (await comoSistema(() => prisma.conta.create({ data: { nome: "ponto", slug: `ponto-${SUF}` } }))).id;
     await naConta(async () => {
@@ -53,8 +64,20 @@ describe.skipIf(!URL_TESTE)("correção de ponto → Hoje + sininho — Prisma r
         })
       ).id;
       const f = await prisma.funcionario.create({
-        data: { nome: "Joana Teste", cpf: "52998224725", admitidoEm: new Date("2026-01-01") },
+        data: { nome: "Joana Teste", cpf: "52998224725", admitidoEm: new Date("2026-01-01"), identidadeId },
       });
+      const g = await prisma.funcionario.create({
+        data: { nome: "Outro", cpf: "11144477735", admitidoEm: new Date("2026-01-01") },
+      });
+      outro = {
+        kind: "FUNCIONARIO",
+        id: "identidade-outro",
+        nome: g.nome,
+        cpf: g.cpf,
+        funcionarioId: g.id,
+        contaId,
+        contaSomenteLeitura: false,
+      };
       user = {
         kind: "FUNCIONARIO",
         id: "identidade-fake",
@@ -130,6 +153,62 @@ describe.skipIf(!URL_TESTE)("correção de ponto → Hoje + sininho — Prisma r
     expect(await naConta(() => inbox.contarNaoLidasPorTipo(decide))).toEqual({
       "correcao-ponto": 1,
       "problema-veiculo": 1,
+    });
+  });
+
+  it("não contar: só batida dela, do dia, e um pedido por batida", async () => {
+    const bateu = (u: AuthFuncionario, clientId: string) =>
+      naConta(() =>
+        ponto.registrar(u, { clientId, dia: DIA, marcadoEm: "2026-10-01T11:00:00.000Z" } as never, {}),
+      );
+    const minha = (await bateu(user, `m1-${SUF}`)) as { id: string };
+    const dele = (await bateu(outro, `m2-${SUF}`)) as { id: string };
+    const pedir = (marcacaoId: string, dia = DIA) =>
+      naConta(() =>
+        ponto.pedirCorrecao(user, {
+          dia,
+          tipo: "DESCONSIDERACAO",
+          marcacaoId,
+          motivoCodigo: "BATEU_SEM_QUERER",
+          motivo: "Bati sem querer",
+        }),
+      );
+
+    await expect(pedir(dele.id)).rejects.toThrow("não é sua");
+    await expect(pedir(minha.id, "2026-10-02")).rejects.toThrow("não é desse dia");
+    const pedido = await pedir(minha.id);
+    await expect(pedir(minha.id)).rejects.toThrow("já pediu");
+
+    const aviso = (await naConta(() => inbox.listar(decide, { tipos: ["correcao-ponto"] }))).itens[0];
+    expect(aviso?.corpo).toBe("Dia 01/10: não contar a batida das 08:00.");
+
+    // O escritório aceita → push pra pessoa, e a batida não abre pedido de novo.
+    await naConta(() => admin.decidirCorrecao(pedido.id, "APROVADA", decide));
+    expect(push.enviarParaIdentidade).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        identidadeId,
+        titulo: "Seu pedido de correção foi aceito",
+        dados: expect.objectContaining({ kind: "ponto-correcao", dia: DIA }),
+      }),
+    );
+    await expect(pedir(minha.id)).rejects.toThrow("já não conta");
+
+    // A lista do escritório diz QUAL batida.
+    const lista = await naConta(() => admin.listarCorrecoes());
+    expect(lista.find((c) => c.id === pedido.id)?.marcacaoEm).toBe("2026-10-01T11:00:00.000Z");
+  });
+
+  it("recusa leva o motivo no push e no Hoje", async () => {
+    const hoje = await naConta(() => ponto.hoje(user, DIA));
+    const inclusao = hoje.correcoes.find((c) => c.tipo === "INCLUSAO")!;
+    await naConta(() => admin.decidirCorrecao(inclusao.id, "RECUSADA", decide, "Você estava de folga"));
+    expect(push.enviarParaIdentidade).toHaveBeenLastCalledWith(
+      expect.objectContaining({ corpo: "Dia 01/10: Você estava de folga" }),
+    );
+    const depois = await naConta(() => ponto.hoje(user, DIA));
+    expect(depois.correcoes.find((c) => c.id === inclusao.id)).toMatchObject({
+      status: "RECUSADA",
+      decisaoMotivo: "Você estava de folga",
     });
   });
 });

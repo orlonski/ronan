@@ -24,6 +24,8 @@ type Correcao = {
   tipo: "INCLUSAO" | "DESCONSIDERACAO" | "ANOTACAO";
   motivo: string;
   motivoCodigo: string;
+  /** Quando foi a batida que o pedido manda não contar (DESCONSIDERACAO). */
+  marcacaoEm?: string | null;
   status: "PENDENTE" | "APROVADA" | "RECUSADA";
   pedidoPor: "FUNCIONARIO" | "GESTOR";
   instantePretendido: string | null;
@@ -137,8 +139,8 @@ function Conteudo() {
                 </Link>
                 <span className="text-sm text-muted-foreground">
                   {diaBr(c.dia)} · {ROTULO_TIPO[c.tipo]}
-                  {c.instantePretendido
-                    ? ` · ${new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(c.instantePretendido))}`
+                  {c.instantePretendido ?? c.marcacaoEm
+                    ? ` · ${new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date((c.instantePretendido ?? c.marcacaoEm)!))}`
                     : ""}
                 </span>
                 <span className="rounded bg-muted px-2 py-0.5 text-xs">

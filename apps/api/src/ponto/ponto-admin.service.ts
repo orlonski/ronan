@@ -1,3 +1,4 @@
+import { PushService } from "../push/push.service";
 import {
   BadRequestException,
   ConflictException,
@@ -54,6 +55,7 @@ export class PontoAdminService {
     private readonly prisma: PrismaService,
     private readonly auditoria: AuditoriaService,
     private readonly acessoApp: AcessoAppService,
+    private readonly push: PushService,
   ) {}
 
   // ─────────────────────────── primeiro acesso ───────────────────────────
@@ -1005,13 +1007,22 @@ export class PontoAdminService {
 
   // ─────────────────────────── correções ───────────────────────────
 
-  listarCorrecoes(status?: "PENDENTE" | "APROVADA" | "RECUSADA") {
-    return this.prisma.correcaoPonto.findMany({
+  async listarCorrecoes(status?: "PENDENTE" | "APROVADA" | "RECUSADA") {
+    const correcoes = await this.prisma.correcaoPonto.findMany({
       where: status ? { status } : {},
       orderBy: [{ status: "asc" }, { criadoEm: "desc" }],
       include: { funcionario: { select: { id: true, nome: true, cargo: true } } },
       take: 300,
     });
+    // "Desconsiderar batida" sem dizer QUAL batida obriga o escritório a abrir
+    // o espelho pra decidir. Não há relação no schema (marcacaoId é solto), daí
+    // a segunda leitura.
+    const ids = correcoes.map((c) => c.marcacaoId).filter((id): id is string => !!id);
+    const marcacoes = ids.length
+      ? await this.prisma.marcacao.findMany({ where: { id: { in: ids } }, select: { id: true, marcadoEm: true } })
+      : [];
+    const quando = new Map(marcacoes.map((m) => [m.id, m.marcadoEm.toISOString()]));
+    return correcoes.map((c) => ({ ...c, marcacaoEm: c.marcacaoId ? quando.get(c.marcacaoId) ?? null : null }));
   }
 
   /**
@@ -1037,7 +1048,7 @@ export class PontoAdminService {
     }
     await this.exigirCompetenciaAberta(dados.dia);
 
-    return this.prisma.correcaoPonto.create({
+    const lancada = await this.prisma.correcaoPonto.create({
       data: {
         funcionarioId: dados.funcionarioId,
         dia: dados.dia,
@@ -1053,6 +1064,14 @@ export class PontoAdminService {
         decididoEm: new Date(),
       },
     });
+    // A ciência pendente só vira ciência se ele souber que existe.
+    await this.avisarFuncionario(dados.funcionarioId, {
+      titulo: "O escritório corrigiu seu ponto",
+      corpo: `Dia ${diaCurto(dados.dia)}: ${dados.motivo}. Confira e dê ciência no app.`,
+      dia: dados.dia,
+      correcaoId: lancada.id,
+    });
+    return lancada;
   }
 
   async decidirCorrecao(
@@ -1073,7 +1092,7 @@ export class PontoAdminService {
     }
     await this.exigirCompetenciaAberta(c.dia);
 
-    return this.prisma.correcaoPonto.update({
+    const decidida = await this.prisma.correcaoPonto.update({
       where: { id },
       data: {
         status: decisao,
@@ -1082,6 +1101,47 @@ export class PontoAdminService {
         decisaoMotivo: motivoDecisao ?? null,
       },
     });
+    await this.avisarFuncionario(decidida.funcionarioId, {
+      titulo: decisao === "APROVADA" ? "Seu pedido de correção foi aceito" : "Seu pedido de correção não foi aceito",
+      corpo:
+        decisao === "APROVADA"
+          ? `O escritório aceitou a correção do dia ${diaCurto(c.dia)}.`
+          : `Dia ${diaCurto(c.dia)}: ${motivoDecisao?.trim() ?? ""}`,
+      dia: c.dia,
+      correcaoId: id,
+    });
+    return decidida;
+  }
+
+  /**
+   * Push pro aparelho de quem bate o ponto.
+   *
+   * Vai pela PESSOA (`MotoristaIdentidade`), não pelo vínculo de motorista:
+   * funcionário que só é registrado não tem `Motorista`, e é o token da
+   * identidade que o app grava pra qualquer login. Sem token, nada a fazer —
+   * a decisão já aparece no "Hoje" e no espelho quando ele abrir o app.
+   *
+   * Best-effort: a decisão já está gravada; push falhar não desfaz nada.
+   */
+  private async avisarFuncionario(
+    funcionarioId: string,
+    a: { titulo: string; corpo: string; dia: string; correcaoId: string },
+  ) {
+    try {
+      const f = await this.prisma.funcionario.findFirst({
+        where: { id: funcionarioId },
+        select: { identidadeId: true },
+      });
+      if (!f?.identidadeId) return;
+      await this.push.enviarParaIdentidade({
+        identidadeId: f.identidadeId,
+        titulo: a.titulo,
+        corpo: a.corpo,
+        dados: { kind: "ponto-correcao", dia: a.dia, correcaoId: a.correcaoId },
+      });
+    } catch (e) {
+      this.log.warn(`Push da correção ${a.correcaoId} não saiu: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /**
@@ -1268,4 +1328,10 @@ export function hashEspelho(dias: ApuracaoDia[]): string {
     .map((d) => `${d.dia}|${d.minutosPrevistos}|${d.minutosConsiderados}|${d.pares.map((p) => `${p.entrada.toISOString()}-${p.saida?.toISOString() ?? ""}`).join(",")}`)
     .join("\n");
   return createHash("sha256").update(canonico).digest("hex");
+}
+
+/** "2026-10-01" → "01/10". */
+function diaCurto(dia: string): string {
+  const [, m, d] = dia.split("-");
+  return `${d}/${m}`;
 }
