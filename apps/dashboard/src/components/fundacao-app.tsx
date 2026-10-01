@@ -1,5 +1,6 @@
 "use client";
 import { useEffect } from "react";
+import { useFocoVisivelNoCelular } from "@/lib/teclado";
 
 /**
  * Comportamentos de "app" que não cabem em CSS. Não renderiza nada.
@@ -32,6 +33,7 @@ function recarregarUmaVez() {
 }
 
 export function FundacaoApp() {
+  useFocoVisivelNoCelular();
   useEffect(() => {
     const aoErrar = (e: ErrorEvent) => {
       if (ERRO_DE_CHUNK.test(`${e.error?.name ?? ""} ${e.message ?? ""}`)) recarregarUmaVez();

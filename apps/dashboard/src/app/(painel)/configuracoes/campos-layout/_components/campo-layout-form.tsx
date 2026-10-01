@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
 
 export type Campo = {
   id: string;
@@ -188,12 +189,12 @@ export function CampoLayoutForm({ initial }: Props) {
 
         {erro && <p className="text-sm text-destructive">{erro}</p>}
 
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href="/configuracoes/campos-layout" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );

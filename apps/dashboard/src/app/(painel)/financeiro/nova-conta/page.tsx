@@ -7,6 +7,7 @@ import { TIPO_FORNECEDOR_LABEL } from "@ronan/shared-types";
 import { RequerTela } from "@/components/requer-tela";
 import { FormPageHeader } from "@/components/form-page-header";
 import { Button } from "@/components/ui/button";
+import { BarraDeAcao } from "@/components/barra-de-acao";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -175,7 +176,7 @@ function Conteudo() {
 
           {erro && <p className="text-sm text-destructive">{erro}</p>}
 
-          <div className="flex justify-end gap-2 pt-2">
+          <BarraDeAcao>
             <Link href="/financeiro">
               <Button type="button" variant="outline">
                 Cancelar
@@ -184,7 +185,7 @@ function Conteudo() {
             <Button type="submit" disabled={salvando}>
               Lançar
             </Button>
-          </div>
+          </BarraDeAcao>
         </form>
       </Card>
     </div>

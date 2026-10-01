@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, ChevronsUpDown, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { CAMPO } from "@/lib/campos";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +121,7 @@ export function Combobox({
             <div className="relative">
               <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                {...CAMPO.busca}
                 autoFocus
                 value={busca}
                 onChange={(e) => {

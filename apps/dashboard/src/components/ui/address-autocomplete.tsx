@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Crosshair, MapPin, Search } from "lucide-react";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { Input } from "./input";
+import { CAMPO } from "@/lib/campos";
 
 type ReversoRes = {
   logradouro?: string;
@@ -177,6 +178,7 @@ export function AddressAutocomplete({
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
+          {...CAMPO.busca}
           value={value}
           onChange={(e) => {
             onChange(e.target.value);

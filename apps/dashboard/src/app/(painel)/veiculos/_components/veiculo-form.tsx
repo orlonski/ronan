@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
+import { CAMPO } from "@/lib/campos";
 
 export type Veiculo = {
   id: string;
@@ -65,7 +67,7 @@ export function VeiculoForm({ initial }: Props) {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="veiculofor-placa">Placa</Label>
-            <Input id="veiculofor-placa"
+            <Input {...CAMPO.placa} id="veiculofor-placa"
               required
               autoFocus={!placaTravada}
               disabled={placaTravada}
@@ -107,12 +109,12 @@ export function VeiculoForm({ initial }: Props) {
             transportadora do motorista; esta entra quando ele não tiver uma.
           </p>
         </div>
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href="/veiculos" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );

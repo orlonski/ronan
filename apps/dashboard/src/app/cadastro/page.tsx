@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CAMPO } from "@/lib/campos";
 import type { TermoPublico } from "@ronan/shared-types";
 import { apiBaseUrl } from "@/lib/client-api";
 import { MovatruckLogo } from "@/components/movatruck-logo";
@@ -175,6 +176,7 @@ export default function CadastroPage() {
             <div className="space-y-2">
               <Label htmlFor="empresa">Nome da sua transportadora</Label>
               <Input
+                {...CAMPO.organizacao}
                 id="empresa"
                 required
                 autoFocus
@@ -185,6 +187,7 @@ export default function CadastroPage() {
             <div className="space-y-2">
               <Label htmlFor="adminNome">Seu nome</Label>
               <Input
+                {...CAMPO.nome}
                 id="adminNome"
                 required
                 autoComplete="name"
@@ -195,6 +198,7 @@ export default function CadastroPage() {
             <div className="space-y-2">
               <Label htmlFor="telefone">Seu WhatsApp</Label>
               <Input
+                {...CAMPO.telefone}
                 id="telefone"
                 required
                 inputMode="numeric"
@@ -215,6 +219,7 @@ export default function CadastroPage() {
             <div className="space-y-2">
               <Label htmlFor="adminEmail">Seu e-mail</Label>
               <Input
+                {...CAMPO.email}
                 id="adminEmail"
                 type="email"
                 required
@@ -227,6 +232,7 @@ export default function CadastroPage() {
             <div className="space-y-2">
               <Label htmlFor="adminSenha">Crie uma senha</Label>
               <Input
+                {...CAMPO.senhaNova}
                 id="adminSenha"
                 type="password"
                 required
@@ -310,6 +316,7 @@ export default function CadastroPage() {
             <div className="space-y-2">
               <Label htmlFor="codigo">Código</Label>
               <Input
+                {...CAMPO.codigoUnico}
                 id="codigo"
                 required
                 autoFocus

@@ -17,6 +17,7 @@ import { Select } from "@/components/ui/select";
 import { useCreateResource, useResourceOptions, useUpdateResource } from "@/lib/client-api";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
 import { hojeSP } from "@/lib/datetime-br";
 
 type Empresa = { id: string; nome: string };
@@ -291,12 +292,12 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
 
         {erro && <p className="text-sm text-destructive">{erro}</p>}
 
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href="/tabelas-preco" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );

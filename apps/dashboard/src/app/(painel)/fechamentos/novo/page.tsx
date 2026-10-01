@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeft, FileSpreadsheet, Sparkles, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BarraDeAcao } from "@/components/barra-de-acao";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -91,7 +92,7 @@ export default function NovoFechamentoPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
             <div className="space-y-2">
               <Label htmlFor="page-periodo-de">Período de</Label>
               <Input id="page-periodo-de"
@@ -160,7 +161,7 @@ export default function NovoFechamentoPage() {
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <div className="flex justify-end gap-2">
+          <BarraDeAcao semTopo>
             <Link href="/fechamentos">
               <Button type="button" variant="outline">Cancelar</Button>
             </Link>
@@ -168,7 +169,7 @@ export default function NovoFechamentoPage() {
               <FileSpreadsheet className="h-4 w-4" />
               {upload.isPending ? "Enviando e processando..." : "Subir e processar"}
             </Button>
-          </div>
+          </BarraDeAcao>
         </Card>
       </form>
     </div>

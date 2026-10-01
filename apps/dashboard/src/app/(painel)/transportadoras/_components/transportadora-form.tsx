@@ -11,6 +11,8 @@ import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 import { documentoDigits, maskDocumento } from "@ronan/shared-types";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
+import { CAMPO } from "@/lib/campos";
 
 export type Transportadora = {
   id: string;
@@ -67,7 +69,7 @@ export function TransportadoraForm({ initial }: Props) {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="transporta-nome">Nome</Label>
-          <Input id="transporta-nome"
+          <Input {...CAMPO.nomeLivre} id="transporta-nome"
             required
             autoFocus
             value={form.nome}
@@ -78,7 +80,7 @@ export function TransportadoraForm({ initial }: Props) {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="transporta-cnpj-ou-cpf">CNPJ ou CPF</Label>
-            <Input id="transporta-cnpj-ou-cpf"
+            <Input {...CAMPO.cnpj} id="transporta-cnpj-ou-cpf"
               value={form.cnpj}
               inputMode="numeric"
               maxLength={18}
@@ -94,19 +96,19 @@ export function TransportadoraForm({ initial }: Props) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="transporta-contato">Contato</Label>
-            <Input id="transporta-contato"
+            <Input {...CAMPO.nomeLivre} id="transporta-contato"
               value={form.contato}
               onChange={(e) => setForm({ ...form, contato: e.target.value })}
               placeholder="Quem responde pela frota"
             />
           </div>
         </div>
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href="/transportadoras" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );

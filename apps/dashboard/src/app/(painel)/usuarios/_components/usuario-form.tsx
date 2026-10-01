@@ -17,6 +17,8 @@ import { useApiQuery, useCreateResource, useUpdateResource } from "@/lib/client-
 import { usePermissoes } from "@/lib/permissoes";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
+import { CAMPO } from "@/lib/campos";
 
 type Papel = { id: string; nome: string; permissoes: string[] };
 type PermissaoRow = { chave: string; titulo: string; escopavel?: boolean };
@@ -163,7 +165,7 @@ export function UsuarioForm({ initial }: Props) {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="usuariofor-nome">Nome</Label>
-          <Input id="usuariofor-nome"
+          <Input {...CAMPO.nomeLivre} id="usuariofor-nome"
             required
             autoFocus
             value={form.nome}
@@ -172,7 +174,7 @@ export function UsuarioForm({ initial }: Props) {
         </div>
         <div className="space-y-2">
           <Label htmlFor="usuariofor-email">Email</Label>
-          <Input id="usuariofor-email"
+          <Input {...CAMPO.emailTerceiro} id="usuariofor-email"
             type="email"
             required
             disabled={!!initial}
@@ -182,7 +184,7 @@ export function UsuarioForm({ initial }: Props) {
         </div>
         <div className="space-y-2">
           <Label>{initial ? "Nova senha (opcional)" : "Senha"}</Label>
-          <Input
+          <Input {...CAMPO.senhaNova}
             type="password"
             minLength={initial ? 0 : 8}
             required={!initial}
@@ -312,7 +314,7 @@ export function UsuarioForm({ initial }: Props) {
 
         <div className="space-y-3 rounded-md border p-4">
           <Label htmlFor="usuariofor-resumo-diario-no-whatsapp">Resumo diário no WhatsApp</Label>
-          <Input id="usuariofor-resumo-diario-no-whatsapp"
+          <Input {...CAMPO.telefoneTerceiro} id="usuariofor-resumo-diario-no-whatsapp"
             type="tel"
             placeholder="ex: (41) 99999-9999"
             value={form.whatsappResumo}
@@ -360,12 +362,12 @@ export function UsuarioForm({ initial }: Props) {
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href="/usuarios" sujo={sujo} />
           <Button type="submit" disabled={saving || escopoIncompleto}>
             Salvar
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );

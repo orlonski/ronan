@@ -17,6 +17,7 @@ import {
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
 
 export type Modalidade = {
   id: string;
@@ -250,12 +251,12 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href="/modalidades" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );

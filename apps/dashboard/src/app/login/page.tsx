@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CAMPO } from "@/lib/campos";
 import { MovatruckLogo } from "@/components/movatruck-logo";
 
 /**
@@ -75,6 +76,7 @@ function LoginForm() {
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
         <Input
+          {...CAMPO.email}
           id="email"
           type="email"
           autoComplete="email"
@@ -104,6 +106,7 @@ function LoginForm() {
           </p>
         )}
         <Input
+          {...CAMPO.senhaAtual}
           id="senha"
           type="password"
           autoComplete="current-password"

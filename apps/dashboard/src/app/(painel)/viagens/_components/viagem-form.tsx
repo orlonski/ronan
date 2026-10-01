@@ -21,6 +21,7 @@ import { numeroInvalido, numeroOuNull } from "@/lib/numero";
 import { AvisoNumero } from "@/components/aviso-numero";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
 
 type Material = { id: string; nome: string };
 type Motorista = { id: string; nome: string };
@@ -610,12 +611,12 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
           </div>
         </details>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href={`/viagens/${initial.id}`} sujo={sujo} />
           <Button type="submit" disabled={saving}>
             {saving ? "Salvando…" : "Salvar"}
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );

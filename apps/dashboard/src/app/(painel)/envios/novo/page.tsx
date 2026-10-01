@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Download, FileSpreadsheet, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BarraDeAcao } from "@/components/barra-de-acao";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -199,7 +200,7 @@ export default function NovoEnvioPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
             <div className="space-y-2">
               <Label htmlFor="page-periodo-de">Período de</Label>
               <Input id="page-periodo-de"
@@ -269,7 +270,7 @@ export default function NovoEnvioPage() {
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <div className="flex justify-end gap-2">
+          <BarraDeAcao semTopo>
             <Link href="/envios">
               <Button type="button" variant="outline">
                 Cancelar
@@ -279,7 +280,7 @@ export default function NovoEnvioPage() {
               <FileSpreadsheet className="h-4 w-4" />
               {criar.isPending ? "Gerando..." : "Gerar e baixar XLSX"}
             </Button>
-          </div>
+          </BarraDeAcao>
         </Card>
       </form>
     </div>

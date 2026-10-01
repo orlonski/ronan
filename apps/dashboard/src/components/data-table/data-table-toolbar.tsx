@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { CAMPO } from "@/lib/campos";
 import { temFiltroDoUsuario, type DataTableState } from "@/hooks/use-data-table-state";
 
 /**
@@ -67,6 +68,7 @@ export function DataTableToolbar({
           <div className="relative w-full sm:max-w-xs max-md:min-w-0 max-md:flex-1">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              {...CAMPO.busca}
               value={state.qInput}
               onChange={(e) => state.setQ(e.target.value)}
               placeholder={searchPlaceholder}

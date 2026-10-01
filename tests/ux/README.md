@@ -102,6 +102,55 @@ abrir fica lembrado por tela (`ronan.sobre-a-tela-celular.<rota>`); "Entendi" (a
 - `python3 tests/ux/comparar-dialogos.py desktop` prova MacBook/ultra idênticos entre `antes` e `depois`; `... lado <pasta>` gera as imagens antes|depois do celular.
 - O stack fixa o relógio da API no dia do seed **mas ele segue andando**: o número de alertas da Torre (e por isso `textosMenor14` dela no celular) depende de há quanto tempo o stack subiu. Rode `pnpm ux` logo depois de `pnpm ux:stack subir`.
 
+## Formulários como app no celular (Leva 1, fatia 6)
+
+Tudo abaixo vale SÓ abaixo de 768px (`max-md:`); de 768px pra cima o formulário é o mesmo de antes (as capturas de 1440 e 3440
+ficaram idênticas, pixel a pixel). Teste: `formularios.dashboard.spec.ts` (roda no `pnpm ux`, nos 4 viewports).
+
+**Barra de ação fixa** — `components/barra-de-acao.tsx`. Troque a `<div className="flex justify-end gap-2 pt-2">` do rodapé do
+formulário de PÁGINA por `<BarraDeAcao>` (`semTopo` quando a div antiga não tinha o `pt-2`). Os filhos seguem sendo o `<BotaoCancelar>`
+(com o `sujo`) e o `<Button type="submit">` com o `disabled` de sempre. No celular: fixa no rodapé (acima do gesto do iPhone), fundo sólido,
+linha em cima, botões de 48px (Salvar com o dobro da largura do Cancelar) e um espaçador do mesmo tamanho no fluxo, pro último campo nunca
+ficar por baixo. **Some com o teclado aberto** (mesmo critério da barra de navegação, `useTecladoAberto`): no iOS o teclado não redimensiona
+a janela e a barra ficaria atrás dele; no Android ela comeria ~60px de uma área que já é pequena. Enter no campo envia o formulário, e ao fechar
+o teclado a barra volta. Em janela/folha NÃO use: lá o rodapé fixo já é o `RODAPE_FOLHA`. Formulários de configuração com um "Salvar" só
+(`configuracoes/*`) não usam: não têm Cancelar e o botão não é alinhado à direita.
+
+**Teclado certo por campo** — `lib/campos.ts`. Só atributos HTML; espalhe no `<Input {...CAMPO.cpf} ... />` (o que vier escrito depois vence):
+
+| campo | preset | o que faz |
+|---|---|---|
+| CPF / CNPJ / CPF-ou-CNPJ / CEP / odômetro | `cpf` `cnpj` `cep` `numerico` | `inputMode="numeric"`, sem corretor |
+| litros, R$, valores | `decimal` | `inputMode="decimal"` |
+| telefone | `telefone` (a própria pessoa) / `telefoneTerceiro` | `type="tel"` `inputMode="tel"` |
+| e-mail | `email` / `emailTerceiro` | `type="email"` `inputMode="email"` `autoCapitalize="none"` `autoCorrect="off"` |
+| placa | `placa` | `autoCapitalize="characters"` `autoCorrect="off"` `spellCheck={false}` |
+| nome | `nome` (a própria pessoa) / `nomeLivre` (motorista, usuário, empresa, local, contato) | `autoCapitalize="words"` |
+| busca | `busca` | `inputMode="search"` `enterKeyHint="search"` |
+| senha | `senhaAtual` (login) / `senhaNova` (cadastro, trocar) | `autoComplete="current-password"` / `"new-password"` |
+| código SMS/WhatsApp | `codigoUnico` | `autoComplete="one-time-code"` |
+
+**Dados do próprio usuário x de terceiros:** `autoComplete="tel"`/`"email"`/`"name"`/`"street-address"` só onde a pessoa digita os DELA (login, cadastro da
+conta). Nos formulários onde o escritório cadastra OUTRA pessoa/empresa/local (motorista, usuário, cliente, local) o preset de "terceiro" usa
+`autoComplete="off"`: senão o iOS/Chrome oferece o telefone, o e-mail ou a casa de quem está logado dentro do cadastro do motorista.
+Campo novo: use o preset; se faltar um, acrescente em `lib/campos.ts` em vez de escrever os atributos soltos.
+
+**Foco no iOS** — `useFocoVisivelNoCelular` (`lib/teclado.ts`, montado uma vez no `FundacaoApp`). O iOS não redimensiona a janela quando o teclado
+sobe; este efeito leva o campo focado pro MEIO da área visível (`visualViewport`), 300ms depois (o teclado leva isso pra subir). Só em tela
+estreita E de toque; ignora janelas/folhas (que têm o próprio ajuste, `useTecladoDaFolha`); não mexe em campo que já está a menos de 48px do
+centro; checkbox/radio/botão não contam. Não briga com a validação guiada nem com `autoFocus`: o `Input` já ignora `autoFocus` em ponteiro `coarse`
+(os 17 usos de `autoFocus` do painel são todos `<Input>`, nenhum precisou mudar).
+
+**Checkbox/radio** — regra genérica no fim do `globals.css` (`@media (max-width: 767.98px)`): o desenho tem no mínimo 20px e o `<label>` que o
+embrulha (`label:has(input[type=checkbox|radio])`) ganha 44px de altura; clicar no texto marca (já marcava). `<input type="checkbox">` sem `<label>` em
+volta não ganha alvo: embrulhe num `<label>` (foi feito no cartão de motorista).
+
+**Grades de campos** — par de campos lado a lado sem breakpoint (`grid-cols-2`) vira `max-md:grid-cols-1` (períodos de envios/fechamentos,
+formatos do layout de envio). Grades de fotos, KPIs e lista de checkboxes de divergência seguem como estavam.
+
+`UX_CAPTURAS=<pasta> pnpm exec playwright test formularios-capturas --project=mobile --project=mac1440` grava topo/meio/fim/teclado dos 10
+formulários (e do login) em 390px e topo/fim em 1440 e 3440, mais `medidas-<projeto>.json`; use antes e depois de uma mudança e compare.
+
 ## Detalhes
 
 - Login: `admin@modelo.test` / `uxmedidas123` (`/whatsapp` abre com `super@movatruck.test`, tela só da plataforma; `operador@modelo.test` tem papel restrito).

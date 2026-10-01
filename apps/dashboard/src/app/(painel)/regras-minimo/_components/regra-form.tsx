@@ -15,6 +15,7 @@ import {
 } from "@/lib/client-api";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
 
 type Empresa = { id: string; nome: string };
 type Material = { id: string; nome: string };
@@ -211,12 +212,12 @@ export function RegraForm({ initial }: Props) {
 
         {erro && <p className="text-sm text-destructive">{erro}</p>}
 
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href="/regras-minimo" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );

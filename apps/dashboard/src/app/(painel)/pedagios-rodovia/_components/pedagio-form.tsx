@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
 
 const PontoMap = dynamic(
   () => import("@/components/ponto-map").then((m) => m.PontoMap),
@@ -209,12 +210,12 @@ export function PedagioForm({ initial }: Props) {
         )}
       </div>
 
-      <div className="flex justify-end gap-2">
+      <BarraDeAcao semTopo>
         <BotaoCancelar href="/pedagios-rodovia" sujo={sujo} />
         <Button type="submit" disabled={saving}>
           Salvar
         </Button>
-      </div>
+      </BarraDeAcao>
     </form>
   );
 }

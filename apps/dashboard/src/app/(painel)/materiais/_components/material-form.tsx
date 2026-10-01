@@ -12,6 +12,7 @@ import { StatusToggle } from "@/components/status-toggle";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
 
 export type Material = {
   id: string;
@@ -207,12 +208,12 @@ export function MaterialForm({ initial }: Props) {
             Desligado (padrão): a pergunta nem aparece.
           </p>
         </div>
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href="/materiais" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );

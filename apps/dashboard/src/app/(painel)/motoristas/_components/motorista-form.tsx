@@ -32,6 +32,8 @@ import { useCreateResource, useUpdateResource, useAuthToken, fetchApi } from "@/
 import { AcessosDoApp } from "./acessos-do-app";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
+import { CAMPO } from "@/lib/campos";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type DocumentoResumo = { tipo: TipoDocumentoMotorista; validade: string | null };
@@ -444,7 +446,7 @@ export function MotoristaForm({ initial }: Props) {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="mot-nome">Nome</Label>
-            <Input
+            <Input {...CAMPO.nomeLivre}
               id="mot-nome"
               required
               autoFocus
@@ -454,7 +456,7 @@ export function MotoristaForm({ initial }: Props) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="mot-cpf">CPF (login)</Label>
-            <Input
+            <Input {...CAMPO.cpf}
               id="mot-cpf"
               required
               inputMode="numeric"
@@ -485,7 +487,7 @@ export function MotoristaForm({ initial }: Props) {
           ) : (
             <div className="space-y-2">
               <Label>{initial ? "Nova senha (opcional)" : "Senha"}</Label>
-              <Input
+              <Input {...CAMPO.senhaNova}
                 type="password"
                 minLength={initial ? 0 : 6}
                 required={!initial}
@@ -502,7 +504,7 @@ export function MotoristaForm({ initial }: Props) {
           )}
           <div className="space-y-2">
             <Label htmlFor="mot-telefone">Telefone</Label>
-            <Input
+            <Input {...CAMPO.telefoneTerceiro}
               id="mot-telefone"
               inputMode="tel"
               placeholder="(00) 00000-0000"
@@ -512,7 +514,7 @@ export function MotoristaForm({ initial }: Props) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="mot-email">Email</Label>
-            <Input
+            <Input {...CAMPO.emailTerceiro}
               id="mot-email"
               type="email"
               placeholder="motorista@email.com"
@@ -631,7 +633,7 @@ export function MotoristaForm({ initial }: Props) {
 
           <div className="space-y-2">
             <Label htmlFor="chave-pix">Chave PIX</Label>
-            <Input
+            <Input {...CAMPO.semCorretor}
               id="chave-pix"
               placeholder="CPF, telefone, e-mail ou chave aleatória"
               value={form.chavePix}
@@ -665,7 +667,7 @@ export function MotoristaForm({ initial }: Props) {
                     className="flex items-start gap-2 rounded-md border bg-background p-2"
                   >
                     <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
-                      <Input
+                      <Input {...CAMPO.placa}
                         placeholder="ABC1D23"
                         value={p.placa}
                         maxLength={8}
@@ -740,12 +742,12 @@ export function MotoristaForm({ initial }: Props) {
         </p>
       )}
 
-      <div className="flex justify-end gap-2">
+      <BarraDeAcao semTopo>
         <BotaoCancelar href="/motoristas" sujo={sujo} />
         <Button type="submit" disabled={saving}>
           {!initial && usaOApp ? "Enviar convite" : "Salvar"}
         </Button>
-      </div>
+      </BarraDeAcao>
     </form>
   );
 }

@@ -669,12 +669,15 @@ export default function MotoristasPage() {
             <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
               <div className="flex items-center gap-3">
                 {podeLote && (
-                  <input
-                    type="checkbox"
-                    aria-label={`Marcar ${m.nome}`}
-                    checked={marcados.has(m.id)}
-                    onChange={() => alternar(m.id)}
-                  />
+                  // label em volta: no celular o alvo de toque sobe pra 44px (regra genérica do globals.css)
+                  <label className="flex items-center max-md:min-w-11 max-md:justify-center">
+                    <input
+                      type="checkbox"
+                      aria-label={`Marcar ${m.nome}`}
+                      checked={marcados.has(m.id)}
+                      onChange={() => alternar(m.id)}
+                    />
+                  </label>
                 )}
                 <DocumentosBadge
                   motoristaId={m.id}

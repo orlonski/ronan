@@ -12,6 +12,7 @@ import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 import { documentoDigits, maskDocumento } from "@ronan/shared-types";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
 import {
   CamposFiscais,
   fiscalDe,
@@ -24,6 +25,7 @@ import {
   enderecoParaEnvio,
   temEndereco,
 } from "@/components/endereco-cadastro";
+import { CAMPO } from "@/lib/campos";
 
 type Papel = "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
 export type Empresa = {
@@ -112,7 +114,7 @@ export function EmpresaForm({ initial }: Props) {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="empresafor-nome">Nome</Label>
-          <Input id="empresafor-nome"
+          <Input {...CAMPO.nomeLivre} id="empresafor-nome"
             required
             autoFocus
             value={form.nome}
@@ -122,7 +124,7 @@ export function EmpresaForm({ initial }: Props) {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="empresafor-cnpj-ou-cpf">CNPJ ou CPF</Label>
-            <Input id="empresafor-cnpj-ou-cpf"
+            <Input {...CAMPO.cnpj} id="empresafor-cnpj-ou-cpf"
               value={form.cnpj}
               inputMode="numeric"
               maxLength={18}
@@ -150,7 +152,7 @@ export function EmpresaForm({ initial }: Props) {
         </div>
         <div className="space-y-2">
           <Label htmlFor="empresafor-contato">Contato</Label>
-          <Input id="empresafor-contato"
+          <Input {...CAMPO.nomeLivre} id="empresafor-contato"
             value={form.contato}
             onChange={(e) => setForm({ ...form, contato: e.target.value })}
           />
@@ -183,12 +185,12 @@ export function EmpresaForm({ initial }: Props) {
           </div>
         </details>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href="/empresas" sujo={sujo} />
           <Button type="submit" disabled={saving || documentoIncompleto}>
             Salvar
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );

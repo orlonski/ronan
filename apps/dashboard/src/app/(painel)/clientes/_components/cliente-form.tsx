@@ -28,6 +28,8 @@ import {
 } from "@/components/endereco-cadastro";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
+import { CAMPO } from "@/lib/campos";
 
 type Empresa = { id: string; nome: string };
 export type Cliente = {
@@ -119,7 +121,7 @@ export function ClienteForm({ initial, empresaIdInicial, voltarPara = "/clientes
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="clientefor-nome">Nome</Label>
-          <Input id="clientefor-nome"
+          <Input {...CAMPO.nomeLivre} id="clientefor-nome"
             required
             autoFocus
             value={form.nome}
@@ -180,12 +182,12 @@ export function ClienteForm({ initial, empresaIdInicial, voltarPara = "/clientes
           </div>
         </details>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href={voltarPara} sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );

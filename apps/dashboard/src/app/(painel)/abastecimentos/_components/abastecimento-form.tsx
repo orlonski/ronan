@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { BarraDeAcao } from "@/components/barra-de-acao";
+import { CAMPO } from "@/lib/campos";
 
 type Empresa = { id: string; nome: string };
 
@@ -212,7 +214,7 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="abastecime-litros">Litros</Label>
-            <Input id="abastecime-litros"
+            <Input {...CAMPO.decimal} id="abastecime-litros"
               required
               inputMode="decimal"
               value={form.litros}
@@ -221,7 +223,7 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
           </div>
           <div className="space-y-2">
             <Label htmlFor="abastecime-valor-total-r">Valor total (R$)</Label>
-            <Input id="abastecime-valor-total-r"
+            <Input {...CAMPO.decimal} id="abastecime-valor-total-r"
               inputMode="decimal"
               placeholder={form.emComboio ? "Em comboio — opcional" : "0,00"}
               value={form.valorTotal}
@@ -230,7 +232,7 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
           </div>
           <div className="space-y-2">
             <Label htmlFor="abastecime-odometro">Odômetro</Label>
-            <Input id="abastecime-odometro"
+            <Input {...CAMPO.numerico} id="abastecime-odometro"
               required
               inputMode="numeric"
               value={form.odometro}
@@ -242,7 +244,7 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="abastecime-posto">Posto</Label>
-            <Input id="abastecime-posto"
+            <Input {...CAMPO.nomeLivre} id="abastecime-posto"
               maxLength={120}
               value={form.postoNome}
               onChange={(e) => setForm({ ...form, postoNome: e.target.value })}
@@ -286,12 +288,12 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
           />
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <BarraDeAcao>
           <BotaoCancelar href={`/abastecimentos/${initial.id}`} sujo={sujo} />
           <Button type="submit" disabled={saving}>
             {saving ? "Salvando…" : "Salvar"}
           </Button>
-        </div>
+        </BarraDeAcao>
       </form>
     </Card>
   );
