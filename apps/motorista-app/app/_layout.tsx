@@ -122,6 +122,145 @@ setQueryClientGlobal(queryClient);
 void pruneRotaCache();
 void pruneKmReferenciaExpired();
 
+
+// ═══════════════════ TOQUE NO PUSH ═══════════════════
+//
+// ⚠️ O toque pode chegar antes da navegação existir: com o app FECHADO, ele
+// abre pelo toque e o `router.push` rodaria antes do Stack montar (erro) ou
+// seria atropelado pelo redirect do AuthGate (o motorista caía na home e o
+// aviso se perdia). Por isso todo toque entra numa fila de UM item, e quem a
+// esvazia é o AuthGate, só quando ele já está mostrando as telas.
+
+type ToqueNoAviso = {
+  notification: { request: { identifier: string; content: { data?: Record<string, unknown> | null } } };
+};
+
+/** Toques já tratados — o mesmo pode vir pelo listener E pelo "último toque". */
+const toquesTratados = new Set<string>();
+let toquePendente: ToqueNoAviso | null = null;
+let acordarAuthGate: (() => void) | null = null;
+
+function enfileirarToque(resp: ToqueNoAviso): void {
+  const id = resp.notification.request.identifier;
+  if (toquesTratados.has(id)) return;
+  toquesTratados.add(id);
+  toquePendente = resp;
+  // Sem limpar, o SO devolve o mesmo "último toque" na próxima montagem e o
+  // aviso reabriria sozinho.
+  void import("expo-notifications")
+    .then((N) => N.clearLastNotificationResponseAsync())
+    .catch(() => {});
+  acordarAuthGate?.();
+}
+
+function tratarToque(resp: ToqueNoAviso): void {
+  const data = resp.notification.request.content.data ?? {};
+  void (async () => {
+    // Aviso de OUTRA empresa: entra nela antes de abrir a tela — e
+    // antes de marcar lida, que é pela sessão do cadastro do aviso.
+    const paraCadastro = typeof data.paraCadastro === "string" ? data.paraCadastro : null;
+    const troca = await entrarNaEmpresaDoAviso(queryClient, paraCadastro).catch(
+      () => ({ r: "mesma" }) as const,
+    );
+    if (troca.r === "viagem-aberta") {
+      void showAlert({
+        title: `Esse aviso é da ${troca.contaNome}`,
+        message:
+          "Você está com uma viagem em andamento aqui. Termine a viagem e troque de empresa no topo da tela inicial pra ver o aviso.",
+      });
+      return;
+    }
+    if (troca.r === "falhou") {
+      void showAlert({
+        title: `Esse aviso é da ${troca.contaNome}`,
+        message: "Não deu pra trocar de empresa agora. Veja sua internet e tente pelo topo da tela inicial.",
+      });
+      return;
+    }
+    if (troca.r === "trocou") {
+      void showAlert({
+        title: `Agora você está na ${troca.contaNome}`,
+        message: "Esse aviso é dessa empresa. Pra voltar, troque no topo da tela inicial.",
+      });
+    }
+    abrirAviso(data);
+  })();
+}
+
+function abrirAviso(data: Record<string, unknown>) {
+  const kind = data.kind;
+  const notificacaoId = typeof data.notificacaoId === "string" ? data.notificacaoId : null;
+
+  // Fire-and-forget: marca lida quando user toca na push do sistema.
+  if (notificacaoId) {
+    void (async () => {
+      try {
+        const { api } = await import("@/lib/api");
+        await api.marcarNotificacaoLida(notificacaoId);
+        void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
+      } catch {
+        /* offline / já lida — ignora */
+      }
+    })();
+  }
+
+  if (kind === "chat-mensagem") {
+    // Mensagem de chat (ou aviso da operação): abre a conversa direto.
+    // Sem conversaId cai na lista — nunca deixa o toque sem resposta.
+    const conversaId =
+      typeof data.conversaId === "string" ? data.conversaId : null;
+    router.push(conversaId ? `/chat/${conversaId}` : "/conversas");
+  } else if (kind === "auto-finalizar") {
+    router.push("/viagem-andamento");
+  } else if (kind === "iniciar-tracking") {
+    router.push("/");
+  } else if (
+    kind === "viagem-divergente" ||
+    kind === "viagem-conferida" ||
+    kind === "viagem-editada"
+  ) {
+    const viagemId = typeof data.viagemId === "string" ? data.viagemId : null;
+    if (viagemId) {
+      router.push(`/viagens/${viagemId}`);
+    } else {
+      router.push("/notificacoes");
+    }
+  } else if (kind === "aguardando-peso") {
+    // Aviso de viagem sem peso: abre a viagem específica pra completar,
+    // ou a lista quando é o resumo do fim do dia (sem viagemId).
+    const viagemId = typeof data.viagemId === "string" ? data.viagemId : null;
+    if (viagemId) {
+      router.push(`/completar-peso?viagemId=${viagemId}`);
+    } else {
+      router.push("/aguardando-peso");
+    }
+  } else if (kind === "abastecimento-editado") {
+    // Não temos tela de detalhe de abastecimento no app motorista —
+    // abre a central pra ver a notificação completa com o diff.
+    router.push("/notificacoes");
+  } else if (kind === "documento-recusado") {
+    // ⚠️ Vai direto pra tela do documento, não pra central. O aviso
+    // diz "precisa mandar de novo": mandar ele procurar onde resolver
+    // é pedir um passo a mais de quem já está travado — e foi
+    // exatamente o defeito dos convites, que chegavam por push e não
+    // tinham porta (ver `perfil.tsx`).
+    void queryClient.invalidateQueries({ queryKey: ["documentos-obra"] });
+    router.push("/documentos-da-obra");
+  } else if (kind === "mensagem-admin") {
+    router.push("/notificacoes");
+  } else if (kind === "ponto-correcao") {
+    // O escritório decidiu (ou lançou) uma correção do ponto. Do dia de
+    // hoje, a situação está na aba Ponto; de outro dia, no espelho.
+    void queryClient.invalidateQueries({ queryKey: ["ponto-hoje"] });
+    void queryClient.invalidateQueries({ queryKey: ["ponto-espelho"] });
+    router.push(data.dia === hojeISO() ? "/ponto" : "/meu-espelho");
+  } else if (kind === "problema-veiculo-decidido") {
+    // O escritório decidiu o aviso dele: abre a lista com a situação.
+    void queryClient.invalidateQueries({ queryKey: ["meus-problemas"] });
+    router.push("/meus-avisos");
+  }
+}
+
 function AuthGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(getAuthState() !== null);
   const [, setVersion] = useState(0);
@@ -143,6 +282,25 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // sessões por empresa também tem lista vazia e roda pelo token legado — por
   // isso a condição exige a identidade, que só existe nesta versão pra frente.
   const semEmpresa = temIdentidadeSync() === true && sessoesSync().length === 0;
+
+  // Fila do toque no push (ver `enfileirarToque`): só esvazia com as telas à
+  // mostra — logado, sem tela de escolha de empresa nem de análise na frente.
+  const [, setToqueVersao] = useState(0);
+  useEffect(() => {
+    acordarAuthGate = () => setToqueVersao((v) => v + 1);
+    return () => {
+      acordarAuthGate = null;
+    };
+  }, []);
+  const telasAMostra = ready && loggedIn && !onAuthScreen && !escolhendoEmpresa && !pendenteAprovacao;
+  useEffect(() => {
+    if (!telasAMostra || !toquePendente) return;
+    const t = toquePendente;
+    toquePendente = null;
+    // Um tique pro Stack terminar de montar a rota inicial antes do push.
+    const h = setTimeout(() => tratarToque(t), 150);
+    return () => clearTimeout(h);
+  });
 
   // Boot: lê tokens + status do SecureStore uma vez e atualiza os stores.
   useEffect(() => {
@@ -463,112 +621,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         });
 
         sub = Notifications.addNotificationResponseReceivedListener((resp) => {
-          const data = resp.notification.request.content.data ?? {};
-          void (async () => {
-            // Aviso de OUTRA empresa: entra nela antes de abrir a tela — e
-            // antes de marcar lida, que é pela sessão do cadastro do aviso.
-            const paraCadastro = typeof data.paraCadastro === "string" ? data.paraCadastro : null;
-            const troca = await entrarNaEmpresaDoAviso(queryClient, paraCadastro).catch(
-              () => ({ r: "mesma" }) as const,
-            );
-            if (troca.r === "viagem-aberta") {
-              void showAlert({
-                title: `Esse aviso é da ${troca.contaNome}`,
-                message:
-                  "Você está com uma viagem em andamento aqui. Termine a viagem e troque de empresa no topo da tela inicial pra ver o aviso.",
-              });
-              return;
-            }
-            if (troca.r === "falhou") {
-              void showAlert({
-                title: `Esse aviso é da ${troca.contaNome}`,
-                message: "Não deu pra trocar de empresa agora. Veja sua internet e tente pelo topo da tela inicial.",
-              });
-              return;
-            }
-            if (troca.r === "trocou") {
-              void showAlert({
-                title: `Agora você está na ${troca.contaNome}`,
-                message: "Esse aviso é dessa empresa. Pra voltar, troque no topo da tela inicial.",
-              });
-            }
-            abrirAviso(data);
-          })();
+          enfileirarToque(resp);
         });
 
-        function abrirAviso(data: Record<string, unknown>) {
-          const kind = data.kind;
-          const notificacaoId = typeof data.notificacaoId === "string" ? data.notificacaoId : null;
-
-          // Fire-and-forget: marca lida quando user toca na push do sistema.
-          if (notificacaoId) {
-            void (async () => {
-              try {
-                const { api } = await import("@/lib/api");
-                await api.marcarNotificacaoLida(notificacaoId);
-                void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
-              } catch {
-                /* offline / já lida — ignora */
-              }
-            })();
-          }
-
-          if (kind === "chat-mensagem") {
-            // Mensagem de chat (ou aviso da operação): abre a conversa direto.
-            // Sem conversaId cai na lista — nunca deixa o toque sem resposta.
-            const conversaId =
-              typeof data.conversaId === "string" ? data.conversaId : null;
-            router.push(conversaId ? `/chat/${conversaId}` : "/conversas");
-          } else if (kind === "auto-finalizar") {
-            router.push("/viagem-andamento");
-          } else if (kind === "iniciar-tracking") {
-            router.push("/");
-          } else if (
-            kind === "viagem-divergente" ||
-            kind === "viagem-conferida" ||
-            kind === "viagem-editada"
-          ) {
-            const viagemId = typeof data.viagemId === "string" ? data.viagemId : null;
-            if (viagemId) {
-              router.push(`/viagens/${viagemId}`);
-            } else {
-              router.push("/notificacoes");
-            }
-          } else if (kind === "aguardando-peso") {
-            // Aviso de viagem sem peso: abre a viagem específica pra completar,
-            // ou a lista quando é o resumo do fim do dia (sem viagemId).
-            const viagemId = typeof data.viagemId === "string" ? data.viagemId : null;
-            if (viagemId) {
-              router.push(`/completar-peso?viagemId=${viagemId}`);
-            } else {
-              router.push("/aguardando-peso");
-            }
-          } else if (kind === "abastecimento-editado") {
-            // Não temos tela de detalhe de abastecimento no app motorista —
-            // abre a central pra ver a notificação completa com o diff.
-            router.push("/notificacoes");
-          } else if (kind === "documento-recusado") {
-            // ⚠️ Vai direto pra tela do documento, não pra central. O aviso
-            // diz "precisa mandar de novo": mandar ele procurar onde resolver
-            // é pedir um passo a mais de quem já está travado — e foi
-            // exatamente o defeito dos convites, que chegavam por push e não
-            // tinham porta (ver `perfil.tsx`).
-            void queryClient.invalidateQueries({ queryKey: ["documentos-obra"] });
-            router.push("/documentos-da-obra");
-          } else if (kind === "mensagem-admin") {
-            router.push("/notificacoes");
-          } else if (kind === "ponto-correcao") {
-            // O escritório decidiu (ou lançou) uma correção do ponto. Do dia de
-            // hoje, a situação está na aba Ponto; de outro dia, no espelho.
-            void queryClient.invalidateQueries({ queryKey: ["ponto-hoje"] });
-            void queryClient.invalidateQueries({ queryKey: ["ponto-espelho"] });
-            router.push(data.dia === hojeISO() ? "/ponto" : "/meu-espelho");
-          } else if (kind === "problema-veiculo-decidido") {
-            // O escritório decidiu o aviso dele: abre a lista com a situação.
-            void queryClient.invalidateQueries({ queryKey: ["meus-problemas"] });
-            router.push("/meus-avisos");
-          }
-        }
+        // App ABERTO DO ZERO pelo toque: o listener acima pode nascer depois
+        // do toque e não ver nada. O último toque fica guardado pelo SO — é
+        // daqui que ele sai. A fila deduplica se o listener também viu.
+        const ultimo = await Notifications.getLastNotificationResponseAsync().catch(() => null);
+        if (ultimo && alive) enfileirarToque(ultimo);
       } catch {
         /* expo-notifications/task-manager indisponivel — ok em dev */
       }
