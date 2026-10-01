@@ -5,12 +5,14 @@ import type {
   CriarTituloPagarInput,
   DarBaixaInput,
   GerarFaturaInput,
+  PreviaFaturaQuery,
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
+import { estadiasCobraveis } from "../../common/estadia-fatura";
 import {
   apurarTitulo,
   gerarParcelas,
@@ -50,29 +52,7 @@ export class FinanceiroService {
     const inicio = diaUtc(input.periodoInicio);
     const fim = diaUtc(input.periodoFim);
 
-    const viagens = await this.prisma.viagem.findMany({
-      where: {
-        cliente: { empresaId: empresa.id },
-        data: { gte: inicio, lte: fim },
-        status: { notIn: STATUS_FORA_FECHAMENTO },
-        // Só o que tem valor: viagem sem preço cadastrado entraria como R$ 0,00
-        // na fatura, e zero numa cobrança parece conferido e aceito.
-        valor: { isNot: null },
-        // Não refatura o que já está em fatura viva.
-        faturaLinhas: { none: { fatura: { status: { not: "CANCELADA" } } } },
-      },
-      select: {
-        id: true,
-        data: true,
-        ticket: true,
-        cliente: { select: { nome: true } },
-        material: { select: { nome: true } },
-        valor: {
-          select: { quantidade: true, precoUnitario: true, valorTotal: true, base: true },
-        },
-      },
-      orderBy: { data: "asc" },
-    });
+    const viagens = await this.viagensFaturaveis(empresa.id, inicio, fim);
 
     if (viagens.length === 0) {
       throw new BadRequestException(
@@ -81,10 +61,17 @@ export class FinanceiroService {
       );
     }
 
-    const bruto = viagens.reduce(
-      (acc, v) => acc.add(new Prisma.Decimal(v.valor!.valorTotal)),
-      new Prisma.Decimal(0),
-    );
+    // Estadia: só as que a prévia ofereceu E quem fatura deixou marcadas, e
+    // recalculadas aqui — o valor que vale é o do servidor, não o da tela.
+    const pedidas = new Set(input.estadias);
+    const estadias = pedidas.size
+      ? (await this.estadiasDe(viagens.map((v) => v.id))).filter((e) => pedidas.has(e.eventoId))
+      : [];
+    const viagemPorId = new Map(viagens.map((v) => [v.id, v]));
+
+    const bruto = viagens
+      .reduce((acc, v) => acc.add(new Prisma.Decimal(v.valor!.valorTotal)), new Prisma.Decimal(0))
+      .add(estadias.reduce((acc, e) => acc.add(e.valor), new Prisma.Decimal(0)));
 
     const prazo = input.prazoDias ?? empresa.prazoPagamentoDias ?? null;
     const parcelas = gerarParcelas({
@@ -133,6 +120,31 @@ export class FinanceiroService {
         })),
       });
 
+      if (estadias.length > 0) {
+        await tx.faturaLinha.createMany({
+          data: estadias.map((e) => {
+            const v = viagemPorId.get(e.viagemId);
+            return {
+              faturaId: criada.id,
+              viagemId: e.viagemId,
+              eventoViagemId: e.eventoId,
+              descricao: [
+                "Estadia",
+                v?.data ? v.data.toISOString().slice(0, 10).split("-").reverse().join("/") : null,
+                v?.ticket ? `ticket ${v.ticket}` : null,
+                e.tipoNome,
+                `${e.horasCobradas}h`,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+              quantidade: e.horasCobradas,
+              precoUnitario: e.valorHora,
+              valor: e.valor,
+            };
+          }),
+        });
+      }
+
       await tx.tituloReceber.createMany({
         data: parcelas.map((p) => ({
           faturaId: criada.id,
@@ -157,6 +169,96 @@ export class FinanceiroService {
     });
 
     return this.detalheFatura(fatura.id);
+  }
+
+  /**
+   * As viagens que entram numa fatura. Uma regra só pra prévia e pra geração —
+   * se as duas divergissem, a tela mostraria um total e a fatura sairia com
+   * outro.
+   */
+  private viagensFaturaveis(empresaId: string, inicio: Date, fim: Date) {
+    return this.prisma.viagem.findMany({
+      where: {
+        cliente: { empresaId },
+        data: { gte: inicio, lte: fim },
+        status: { notIn: STATUS_FORA_FECHAMENTO },
+        // Só o que tem valor: viagem sem preço cadastrado entraria como R$ 0,00
+        // na fatura, e zero numa cobrança parece conferido e aceito.
+        valor: { isNot: null },
+        // Não refatura o que já está em fatura viva.
+        faturaLinhas: { none: { fatura: { status: { not: "CANCELADA" } }, eventoViagemId: null } },
+      },
+      select: {
+        id: true,
+        data: true,
+        ticket: true,
+        cliente: { select: { nome: true } },
+        material: { select: { nome: true } },
+        valor: {
+          select: { quantidade: true, precoUnitario: true, valorTotal: true, base: true },
+        },
+      },
+      orderBy: { data: "asc" },
+    });
+  }
+
+  /** Estadias encerradas e ainda não faturadas destas viagens (common/estadia-fatura.ts). */
+  private async estadiasDe(viagemIds: string[]) {
+    if (viagemIds.length === 0) return [];
+    const eventos = await this.prisma.eventoViagem.findMany({
+      where: { viagemId: { in: viagemIds }, tipoEvento: { geraCobranca: true } },
+      select: {
+        id: true,
+        viagemId: true,
+        iniciouEm: true,
+        terminouEm: true,
+        tipoEvento: { select: { nome: true, geraCobranca: true, valorHora: true } },
+        local: { select: { nome: true } },
+        faturaLinhas: { where: { fatura: { status: { not: "CANCELADA" } } }, select: { id: true } },
+      },
+    });
+    return estadiasCobraveis(
+      eventos.map((e) => ({
+        id: e.id,
+        viagemId: e.viagemId,
+        tipoNome: e.local?.nome ? `${e.tipoEvento.nome} (${e.local.nome})` : e.tipoEvento.nome,
+        geraCobranca: e.tipoEvento.geraCobranca,
+        valorHora: e.tipoEvento.valorHora,
+        iniciouEm: e.iniciouEm,
+        terminouEm: e.terminouEm,
+        jaFaturado: e.faturaLinhas.length > 0,
+      })),
+    );
+  }
+
+  /** O que entraria na fatura, sem gravar: viagens, total, o que ficou sem preço e as estadias. */
+  async previaFatura(q: PreviaFaturaQuery) {
+    const inicio = diaUtc(q.periodoInicio);
+    const fim = diaUtc(q.periodoFim);
+    const [viagens, semPreco] = await Promise.all([
+      this.viagensFaturaveis(q.empresaId, inicio, fim),
+      this.prisma.viagem.count({
+        where: {
+          cliente: { empresaId: q.empresaId },
+          data: { gte: inicio, lte: fim },
+          status: { notIn: STATUS_FORA_FECHAMENTO },
+          valor: { is: null },
+        },
+      }),
+    ]);
+    const estadias = await this.estadiasDe(viagens.map((v) => v.id));
+    const viagemPorId = new Map(viagens.map((v) => [v.id, v]));
+    return {
+      viagens: viagens.length,
+      valorViagens: viagens
+        .reduce((acc, v) => acc.add(new Prisma.Decimal(v.valor!.valorTotal)), new Prisma.Decimal(0))
+        .toFixed(2),
+      semPreco,
+      estadias: estadias.map((e) => {
+        const v = viagemPorId.get(e.viagemId);
+        return { ...e, data: v?.data ?? null, ticket: v?.ticket ?? null };
+      }),
+    };
   }
 
   listFaturas(params: PaginationQuery & { empresaId?: string; status?: string }) {

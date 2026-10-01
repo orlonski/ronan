@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, Plus, Undo2, Wallet } from "lucide-react";
 import {
@@ -342,6 +343,15 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
         >
           {soVencidos ? "Mostrando só vencidos" : "Ver só vencidos"}
         </Button>
+        {tipo === "receber" && (
+          <Permitido chave="financeiro.faturar">
+            <Link href={"/financeiro/nova-fatura" as Route}>
+              <Button size="sm" variant="outline">
+                <Plus className="h-3.5 w-3.5" /> Gerar fatura
+              </Button>
+            </Link>
+          </Permitido>
+        )}
         {tipo === "pagar" && (
           <Permitido chave="financeiro.faturar">
             <Link href="/financeiro/nova-conta">

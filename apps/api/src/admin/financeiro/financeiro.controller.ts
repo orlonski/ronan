@@ -7,6 +7,7 @@ import {
   CriarTituloPagarInput,
   DarBaixaInput,
   GerarFaturaInput,
+  PreviaFaturaQuery,
   STATUS_FATURA,
   STATUS_TITULO,
 } from "@ronan/shared-types";
@@ -54,6 +55,13 @@ export class FinanceiroController {
   @Get("faturas")
   listFaturas(@Query(new ZodValidationPipe(ListFaturas)) q: z.infer<typeof ListFaturas>) {
     return this.service.listFaturas(q);
+  }
+
+  /** O que entraria na fatura (viagens, total, estadias). Antes de `faturas/:id`, senão "previa" vira id. */
+  @RequerPermissao("financeiro.faturar")
+  @Get("faturas/previa")
+  previaFatura(@Query(new ZodValidationPipe(PreviaFaturaQuery)) q: PreviaFaturaQuery) {
+    return this.service.previaFatura(q);
   }
 
   @RequerPermissao("financeiro.ver")

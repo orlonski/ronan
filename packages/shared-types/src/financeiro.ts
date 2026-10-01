@@ -82,12 +82,26 @@ export const GerarFaturaInput = z
     /** Sobrescreve o prazo cadastrado na empresa, quando for o caso. */
     prazoDias: z.number().int().min(0).max(365).nullish(),
     observacao: z.string().trim().max(500).nullish(),
+    /**
+     * Estadias (paradas com valor/hora) que entram como linha da fatura. A
+     * prévia sugere todas as encerradas; quem fatura desmarca o que não cobra.
+     */
+    estadias: z.array(z.string().min(1).max(64)).max(500).default([]),
   })
   .refine((d) => d.periodoFim >= d.periodoInicio, {
     message: "O fim do período não pode ser antes do início.",
     path: ["periodoFim"],
   });
 export type GerarFaturaInput = z.infer<typeof GerarFaturaInput>;
+
+/** O que entraria numa fatura: mesma regra do gerar, sem gravar nada. */
+export const PreviaFaturaQuery = z
+  .object({ empresaId: z.string().uuid(), periodoInicio: DATA, periodoFim: DATA })
+  .refine((d) => d.periodoFim >= d.periodoInicio, {
+    message: "O fim do período não pode ser antes do início.",
+    path: ["periodoFim"],
+  });
+export type PreviaFaturaQuery = z.infer<typeof PreviaFaturaQuery>;
 
 export const AtualizarFaturaInput = z.object({
   status: StatusFaturaSchema.optional(),
