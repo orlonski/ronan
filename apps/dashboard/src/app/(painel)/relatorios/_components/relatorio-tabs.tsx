@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
-import { Fuel, Gauge, Timer, Truck } from "lucide-react";
+import { Fuel, Gauge, Hourglass, Timer, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,6 +21,7 @@ const ABAS = [
   { href: "/relatorios/abastecimentos", label: "Abastecimentos", icon: Fuel },
   { href: "/relatorios/consumo", label: "Consumo", icon: Gauge },
   { href: "/relatorios/conferencia", label: "Conferência", icon: Timer },
+  { href: "/relatorios/ciclo", label: "Ciclo da carga", icon: Hourglass },
 ] as const;
 
 export function RelatorioTabs({ de, ate }: { de?: string; ate?: string }) {

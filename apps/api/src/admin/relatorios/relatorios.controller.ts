@@ -23,6 +23,7 @@ import { RelatoriosAbastecimentosService } from "./relatorios-abastecimentos.ser
 import { RelatoriosAbastecimentosExportService } from "./relatorios-abastecimentos-export.service";
 import { RelatoriosConferenciaService } from "./relatorios-conferencia.service";
 import { RelatoriosLucroService } from "./relatorios-lucro.service";
+import { RelatoriosCicloService } from "./relatorios-ciclo.service";
 import { RelatoriosLucroExportService } from "./relatorios-lucro-export.service";
 import { exigirComercialParaDimensao, podeVerComercial } from "./comercial-relatorio";
 import { exigirComercialParaFiltros } from "../viagens/comercial";
@@ -44,6 +45,7 @@ export class RelatoriosController {
     private readonly conferencia: RelatoriosConferenciaService,
     private readonly lucro: RelatoriosLucroService,
     private readonly exportarLucro: RelatoriosLucroExportService,
+    private readonly ciclo: RelatoriosCicloService,
   ) {}
 
   @EscopoPor("viagem")
@@ -156,6 +158,17 @@ export class RelatoriosController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.conferencia.resumo(query, user.escopo);
+  }
+
+  /** Ciclo da carga: tempo na pedreira, no trajeto e na obra (mediana e p90). */
+  @EscopoPor("viagem")
+  @RequerPermissao("relatorios.ver")
+  @Get("ciclo")
+  resumoCiclo(
+    @Query(new ZodValidationPipe(RelatorioLucroQuery)) query: RelatorioLucroQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.ciclo.resumo(query, user.escopo);
   }
 
   /**

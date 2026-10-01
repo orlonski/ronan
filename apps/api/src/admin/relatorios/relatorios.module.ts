@@ -6,6 +6,7 @@ import { RelatoriosAbastecimentosService } from "./relatorios-abastecimentos.ser
 import { RelatoriosAbastecimentosExportService } from "./relatorios-abastecimentos-export.service";
 import { RelatoriosConferenciaService } from "./relatorios-conferencia.service";
 import { RelatoriosLucroService } from "./relatorios-lucro.service";
+import { RelatoriosCicloService } from "./relatorios-ciclo.service";
 import { RelatoriosLucroExportService } from "./relatorios-lucro-export.service";
 
 @Module({
@@ -17,6 +18,7 @@ import { RelatoriosLucroExportService } from "./relatorios-lucro-export.service"
     RelatoriosAbastecimentosExportService,
     RelatoriosConferenciaService,
     RelatoriosLucroService,
+    RelatoriosCicloService,
     RelatoriosLucroExportService,
   ],
 })

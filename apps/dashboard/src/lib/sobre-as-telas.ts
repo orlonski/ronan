@@ -166,6 +166,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Escolher o período e agrupar a produção do jeito que interessa na hora",
       "Ver o gasto com combustível e quantos quilômetros por litro cada caminhão fez",
       "Ver quanto tempo as viagens estão demorando pra ser conferidas",
+      "Ver em qual pedreira e em qual obra o caminhão fica mais tempo parado (aba Ciclo da carga)",
       "Baixar em Excel ou PDF o que está nas abas Viagens e Abastecimentos",
     ],
     // Era "conferir uma viagem de cada vez → Viagens". Trocado em 23/09/2026:
@@ -184,6 +185,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "/relatorios/abastecimentos",
       "/relatorios/consumo",
       "/relatorios/conferencia",
+      "/relatorios/ciclo",
     ],
   },
 
