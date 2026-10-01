@@ -1,5 +1,6 @@
 import { Prisma, StatusViagem } from "@prisma/client";
 import { aplicarMinimos, resolverRegraMinimo, type RegraMinimoRow } from "../common/viagem-minimos";
+import type { PrevisaoChegada } from "../common/previsao-chegada";
 
 /**
  * A FRONTEIRA entre a viagem interna e o comprovante que o cliente/embarcador
@@ -85,6 +86,11 @@ export type ViagemPublica = {
    */
   rotaGeometriaFonte: "viagem" | "cache" | null;
   fotos: { id: string; rotacao: number }[];
+  /**
+   * Só hora e nome do destino — a posição que entrou na conta NÃO sai (ver
+   * `common/previsao-chegada.ts`). Null fora de viagem em andamento carregada.
+   */
+  chegada: PrevisaoChegada | null;
 };
 
 export type LocalPublico = {
@@ -200,6 +206,7 @@ export function serializarViagemPublica(
     agora: Date;
     /** Geometria do par de locais (RotaCache), usada quando a viagem não tem uma própria. */
     rotaDoPar: string | null;
+    chegada?: PrevisaoChegada | null;
   },
 ): ViagemPublica {
   // Mínimo por faixa: mesma resolução do painel, mas só o RESULTADO sai daqui.
@@ -264,5 +271,6 @@ export function serializarViagemPublica(
         ? ("cache" as const)
         : null,
     fotos: viagem.fotos.map((f) => ({ id: f.id, rotacao: f.rotacao })),
+    chegada: ctx.chegada ?? null,
   };
 }

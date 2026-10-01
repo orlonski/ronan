@@ -24,6 +24,7 @@ import {
   type ViagemPublica,
 } from "./viagem-publica";
 import { comConta, comoSistema, contaIdAtual } from "../common/conta/conta-context";
+import { PrevisaoChegadaService } from "./previsao-chegada.service";
 
 /** Validades oferecidas no painel. 30 dias cobre conferência + fechamento do mês. */
 export const DIAS_VALIDADE = [7, 30, 90] as const;
@@ -42,6 +43,7 @@ export class CompartilhamentoService implements OnModuleInit {
     private readonly auditoria: AuditoriaService,
     private readonly uploads: UploadsService,
     private readonly envio: EnvioWhatsappService,
+    private readonly previsao: PrevisaoChegadaService,
   ) {}
 
   onModuleInit() {
@@ -229,11 +231,15 @@ export class CompartilhamentoService implements OnModuleInit {
       })
       .catch((e: unknown) => this.log.warn(`Falha ao contar visualização: ${(e as Error).message}`));
 
+    const chegada =
+      viagem.status === "EM_ANDAMENTO" ? await this.previsao.paraViagem(link.viagemId, agora) : null;
+
     return serializarViagemPublica(viagem, {
       regras,
       expiraEm: link.expiraEm,
       agora,
       rotaDoPar: rotaDoPar?.geometria ?? null,
+      chegada,
     });
   }
 

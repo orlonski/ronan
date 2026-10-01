@@ -4,6 +4,8 @@ import { EvolutionModule } from "../whatsapp/evolution.module";
 import { CompartilhamentoAdminController } from "./compartilhamento-admin.controller";
 import { CompartilhamentoPublicoController } from "./compartilhamento-publico.controller";
 import { CompartilhamentoService } from "./compartilhamento.service";
+import { PrevisaoChegadaService } from "./previsao-chegada.service";
+import { RoteamentoModule } from "../roteamento/roteamento.module";
 
 /**
  * Link público de comprovante de viagem. Módulo próprio (e não dentro de
@@ -12,8 +14,8 @@ import { CompartilhamentoService } from "./compartilhamento.service";
  * fisicamente colado em quem o consome.
  */
 @Module({
-  imports: [UploadsModule, EvolutionModule],
+  imports: [UploadsModule, EvolutionModule, RoteamentoModule],
   controllers: [CompartilhamentoAdminController, CompartilhamentoPublicoController],
-  providers: [CompartilhamentoService],
+  providers: [CompartilhamentoService, PrevisaoChegadaService],
 })
 export class CompartilhamentoModule {}

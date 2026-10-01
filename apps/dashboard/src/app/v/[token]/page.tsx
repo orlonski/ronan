@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { ArrowDown, MapPin, Package, Scale, Truck, User, type LucideIcon } from "lucide-react";
+import { ArrowDown, Clock, MapPin, Package, Scale, Truck, User, type LucideIcon } from "lucide-react";
 import { AcoesComprovante } from "./_components/acoes-comprovante";
+import { AtualizaSozinho } from "./_components/atualiza-sozinho";
 import { FotosComprovante } from "./_components/fotos-comprovante";
 import { LinkIndisponivel, type CodigoIndisponivel } from "./_components/link-indisponivel";
 import { MapaComprovante } from "./_components/mapa-comprovante";
@@ -37,6 +38,11 @@ type Comprovante = {
   /** "cache" = ilustração do trecho, não o caminho que o motorista registrou. */
   rotaGeometriaFonte: "viagem" | "cache" | null;
   fotos: { id: string; rotacao: number }[];
+  /** Só em viagem em andamento já carregada. Nunca traz a posição do caminhão. */
+  chegada?:
+    | { tipo: "PREVISTA"; destinoNome: string; chegaEm: string; atualizadoEm: string }
+    | { tipo: "CHEGANDO"; destinoNome: string; atualizadoEm: string }
+    | null;
 };
 
 type Resultado = { ok: true; dados: Comprovante } | { ok: false; code: CodigoIndisponivel };
@@ -143,7 +149,11 @@ export default async function ComprovantePage({
         </div>
       </header>
 
+      {d.situacao.rotulo === "Em andamento" && <AtualizaSozinho />}
+
       <div className="space-y-6">
+        {d.chegada && <Chegada chegada={d.chegada} />}
+
         <Card titulo="Trajeto">
           <div className="space-y-3">
             <Ponta rotulo="Origem" local={d.origem} cor="bg-green-600" />
@@ -264,6 +274,59 @@ function Card({
       {children}
     </section>
   );
+}
+
+/**
+ * A previsão de chegada. Só a hora: a posição do caminhão fica no servidor
+ * (mandar o rastro pro cliente é vigiar o motorista). "Por volta das" porque é
+ * previsão — trânsito e obra na estrada mudam tudo.
+ */
+function Chegada({ chegada }: { chegada: NonNullable<Comprovante["chegada"]> }) {
+  const minutos =
+    chegada.tipo === "PREVISTA"
+      ? Math.max(0, Math.round((new Date(chegada.chegaEm).getTime() - Date.now()) / 60_000))
+      : 0;
+  return (
+    <section className="rounded-lg border border-blue-200 bg-blue-50 p-4 print:hidden sm:p-5">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-blue-700 shadow-sm">
+          <Clock className="h-5 w-5" />
+        </span>
+        <div>
+          {chegada.tipo === "PREVISTA" ? (
+            <>
+              <p className="text-sm text-slate-600">Previsão de chegada em {chegada.destinoNome}</p>
+              <p className="text-2xl font-bold text-slate-900">
+                por volta das {horaBR(chegada.chegaEm)}
+              </p>
+              <p className="text-sm text-slate-600">{tempoAte(minutos)}</p>
+            </>
+          ) : (
+            <p className="text-xl font-bold text-slate-900">Chegando em {chegada.destinoNome}</p>
+          )}
+          <p className="mt-1 text-xs text-slate-500">
+            Atualizado às {horaBR(chegada.atualizadoEm)}. É uma previsão: trânsito e paradas podem
+            mudar o horário.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function horaBR(iso: string): string {
+  return new Date(iso)
+    .toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })
+    .replace(":", "h");
+}
+
+function tempoAte(min: number): string {
+  // Arredonda antes de partir em horas: 1h58 vira 2h, não "1h60".
+  const r = Math.max(5, Math.round(min / 5) * 5);
+  if (r < 60) return `daqui a uns ${r} minutos`;
+  const h = Math.floor(r / 60);
+  const m = r % 60;
+  return `daqui a uns ${h}h${m ? String(m).padStart(2, "0") : ""}`;
 }
 
 function Ponta({ rotulo, local, cor }: { rotulo: string; local: Local | null; cor: string }) {
