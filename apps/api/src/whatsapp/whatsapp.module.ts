@@ -2,6 +2,7 @@ import { forwardRef, Module } from "@nestjs/common";
 import { MotoristaModule } from "../motorista/motorista.module";
 import { DashboardModule } from "../admin/dashboard/dashboard.module";
 import { ConferenciaRespostaModule } from "../admin/conferencia-diaria/conferencia-resposta.module";
+import { AdminInboxModule } from "../admin/inbox/inbox.module";
 import { ErrorsModule } from "../errors/errors.module";
 import { UploadsModule } from "../uploads/uploads.module";
 import { AgenteService } from "./agente/agente.service";
@@ -21,6 +22,7 @@ import { WhatsappService } from "./whatsapp.service";
     UploadsModule,
     EvolutionModule,
     ConferenciaRespostaModule,
+    AdminInboxModule,
   ],
   controllers: [WhatsappController, MetaWebhookController],
   providers: [

@@ -33,6 +33,7 @@ const TIPO_LABEL: Record<string, string> = {
   "conta-auto-cadastro": "Empresa nova",
   "lead-novo": "Contato pelo site",
   "lead-precisa-humano": "Lead esperando atendimento",
+  "template-whatsapp": "Template do WhatsApp",
 };
 
 export default function InboxPage() {

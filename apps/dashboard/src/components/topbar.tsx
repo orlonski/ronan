@@ -170,6 +170,8 @@ export function IconeTipo({ tipo }: { tipo: string }) {
     return <ClipboardCheck className={`${cls} text-amber-600`} />;
   if (tipo === "conta-auto-cadastro" || tipo === "lead-novo" || tipo === "lead-precisa-humano")
     return <Building2 className={`${cls} text-emerald-600`} />;
+  if (tipo === "template-whatsapp")
+    return <ClipboardCheck className={`${cls} text-amber-600`} />;
   if (tipo === "nova-viagem")
     return <ClipboardCheck className={`${cls} text-blue-600`} />;
   if (tipo === "resposta-divergencia-pedagio")
@@ -211,6 +213,8 @@ export function rotaParaNotificacao(n: AdminNotificacao): string | null {
   if (n.tipo === "alerta-torre") return "/torre";
   // O aviso se decide na aba "Avisos do motorista" da Manutenção.
   if (n.tipo === "problema-veiculo") return "/frota?aba=avisos";
+  // Estado de template da Meta se confere na tela WhatsApp → Templates na Meta.
+  if (n.tipo === "template-whatsapp") return "/whatsapp";
   // As sugestões da conferência se decidem na aba "Fila do gestor".
   if (n.tipo === "conferencia-diaria") return "/conferencia-diaria?aba=fila";
   if (n.tipo === "nova-viagem" && dados.viagemId) {

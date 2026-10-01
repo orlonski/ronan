@@ -30,7 +30,9 @@ export type TipoNotificacaoAdmin =
   // fallback e apareciam no sininho como slug cru ("conta-auto-cadastro").
   | "conta-auto-cadastro"
   | "lead-novo"
-  | "lead-precisa-humano";
+  | "lead-precisa-humano"
+  // A Meta mudou o estado de um template do WhatsApp (da PLATAFORMA).
+  | "template-whatsapp";
 
 export type AdminNotificacao = {
   id: string;

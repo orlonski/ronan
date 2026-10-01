@@ -56,3 +56,12 @@ O template antigo pode ficar na Meta sem uso. Não apagar antes do passo 6.
 - Parâmetro de uma linha só (`achatarParam`).
 - Sem emoji e sem tom promocional (promoção vira MARKETING).
 - Nome em minúsculas, dígitos e underscore.
+
+## Aviso automático no sino
+
+Quando a Meta responde (webhook `message_template_status_update`), o sistema
+avisa no sino da plataforma (só quem tem `whatsapp.ver` na conta da casa):
+candidato APPROVED ("confira se é UTILITY e avise para trocar o nome"), ou
+REJECTED/FLAGGED/PAUSED/DISABLED com o motivo ("não troque"). Vale só para os
+nomes de `TEMPLATES_CANDIDATOS_WHATSAPP`. Qualquer template reclassificado de
+UTILITY para MARKETING também avisa. O aviso é uma vez por nome+evento.

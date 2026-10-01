@@ -16,12 +16,14 @@ import { ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { Public } from "../auth/decorators/public.decorator";
 import { ChatwootRepasseService } from "./chatwoot-repasse.service";
-import { comoSistema } from "../common/conta/conta-context";
+import { comConta, comoSistema } from "../common/conta/conta-context";
 import { ConferenciaAlcanceService } from "../admin/conferencia-diaria/conferencia-alcance.service";
 import {
   ConferenciaRespostaService,
   type MensagemRecebida,
 } from "../admin/conferencia-diaria/conferencia-resposta.service";
+import { AdminInboxService } from "../admin/inbox/inbox.service";
+import { TEMPLATES_CANDIDATOS_WHATSAPP } from "@ronan/shared-types";
 import { ErrorsService } from "../errors/errors.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { registrarStatusMetaNaConferencia } from "../common/conferencia-trilha";
@@ -44,6 +46,8 @@ import { registrarStatusMetaNaConferencia } from "../common/conferencia-trilha";
 
 /** Status de entrega que a Meta manda, do mais cru ao mais final. */
 const STATUS_CONHECIDOS = new Set(["sent", "delivered", "read", "failed"]);
+
+const EVENTOS_DE_PROBLEMA = new Set(["REJECTED", "FLAGGED", "PAUSED", "DISABLED"]);
 
 type TemplateStatus = {
   event?: string;
@@ -91,6 +95,7 @@ export class MetaWebhookController {
     private readonly chatwoot: ChatwootRepasseService,
     private readonly conferencia: ConferenciaRespostaService,
     private readonly alcance: ConferenciaAlcanceService,
+    private readonly inbox: AdminInboxService,
   ) {}
 
   /**
@@ -249,6 +254,13 @@ export class MetaWebhookController {
 
     if (evento === "APPROVED") {
       this.log.log(`template "${nome}" (${idioma}) APROVADO pela Meta`);
+      if (this.ehCandidato(nome)) {
+        await this.avisarPlataforma(`status:${nome}:APPROVED`, {
+          titulo: `Template aprovado pela Meta: ${nome}`,
+          corpo: `Template novo aprovado pela Meta: ${nome}. Abra WhatsApp → Templates na Meta e confira se a categoria é UTILITY; se for, avise para trocar o nome no código.`,
+          dados: { template: nome, evento: "APPROVED" },
+        });
+      }
       return;
     }
 
@@ -264,6 +276,53 @@ export class MetaWebhookController {
       });
     } catch (e) {
       this.log.warn(`não deu pra registrar o status do template: ${(e as Error).message}`);
+    }
+    if (this.ehCandidato(nome) && EVENTOS_DE_PROBLEMA.has(evento)) {
+      await this.avisarPlataforma(`status:${nome}:${evento}`, {
+        titulo: `Template reprovado pela Meta: ${nome} (${evento})`,
+        corpo: `O template ${nome} ficou ${evento}${v.reason ? ` — motivo: ${v.reason}` : ""} (não troque; o texto precisa de revisão).`,
+        dados: { template: nome, evento },
+      });
+    }
+  }
+
+  /** O nome é de um candidato declarado no shared-types? (a lista não é copiada aqui) */
+  private ehCandidato(nome: string): boolean {
+    return Object.values(TEMPLATES_CANDIDATOS_WHATSAPP).some((t) => t.nome === nome);
+  }
+
+  /**
+   * Avisa no sino da PLATAFORMA. O webhook roda sem conta, e o sino é por
+   * usuário de uma conta: acha a conta `ehPlataforma` e dispara dentro dela,
+   * só pra quem tem `whatsapp.ver` (recurso de plataforma). Idempotente pela
+   * `chave` (a Meta reenvia eventos) e NUNCA lança — a Meta desliga a URL se
+   * o webhook começar a responder erro.
+   */
+  private async avisarPlataforma(
+    chave: string,
+    aviso: { titulo: string; corpo: string; dados: Record<string, string> },
+  ): Promise<void> {
+    try {
+      const casa = await comoSistema(() =>
+        this.prisma.conta.findFirst({ where: { ehPlataforma: true }, select: { id: true } }),
+      );
+      if (!casa) return;
+      await comConta(casa.id, async () => {
+        const jaAvisado = await this.prisma.adminNotificacao.findFirst({
+          where: { tipo: "template-whatsapp", dados: { path: ["chave"], equals: chave } },
+          select: { id: true },
+        });
+        if (jaAvisado) return;
+        await this.inbox.disparar({
+          tipo: "template-whatsapp",
+          titulo: aviso.titulo,
+          corpo: aviso.corpo,
+          dados: { ...aviso.dados, chave },
+          permissao: "whatsapp.ver",
+        });
+      });
+    } catch (e) {
+      this.log.warn(`não deu pra avisar o sino sobre o template: ${(e as Error).message}`);
     }
   }
 
@@ -289,6 +348,11 @@ export class MetaWebhookController {
     } catch (e) {
       this.log.warn(`não deu pra registrar a mudança de categoria: ${(e as Error).message}`);
     }
+    await this.avisarPlataforma(`categoria:${nome}:MARKETING`, {
+      titulo: `Template ${nome} virou MARKETING na Meta`,
+      corpo: `Template ${nome} virou MARKETING na Meta (era ${antes || "?"}). Passa a valer o limite e a cobrança de marketing; confira em WhatsApp → Templates na Meta.`,
+      dados: { template: nome, evento: "MARKETING" },
+    });
   }
 
   /**

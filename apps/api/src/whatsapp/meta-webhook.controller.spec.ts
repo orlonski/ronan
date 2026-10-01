@@ -5,6 +5,7 @@ import type { ConfigService } from "@nestjs/config";
 import type { Request } from "express";
 import { MetaWebhookController } from "./meta-webhook.controller";
 import type { PrismaService } from "../prisma/prisma.service";
+import type { AdminInboxService } from "../admin/inbox/inbox.service";
 import type { ErrorsService } from "../errors/errors.service";
 import type { ChatwootRepasseService } from "./chatwoot-repasse.service";
 import type { ConferenciaAlcanceService } from "../admin/conferencia-diaria/conferencia-alcance.service";
@@ -31,19 +32,25 @@ function controller(
   const confFindFirst = vi.fn(async (_a: unknown) => null as unknown);
   const confUpdateMany = vi.fn(async (_a: unknown) => ({ count: 1 }));
   const confRaw = vi.fn(async (..._a: unknown[]) => 1);
+  const contaFindFirst = vi.fn(async (_a: unknown) => ({ id: "conta-casa" }) as { id: string } | null);
+  const notifFindFirst = vi.fn(async (_a: unknown) => null as unknown);
+  const disparar = vi.fn(async (_i: Record<string, unknown>) => {});
   const c = new MetaWebhookController(
     { get: (k: string) => env[k] } as unknown as ConfigService,
     {
       whatsappMensagem: { updateMany, findFirst },
       conferenciaDiaria: { findFirst: confFindFirst, updateMany: confUpdateMany },
       $executeRaw: confRaw,
+      conta: { findFirst: contaFindFirst },
+      adminNotificacao: { findFirst: notifFindFirst },
     } as unknown as PrismaService,
     { reportar } as unknown as ErrorsService,
     { repassar, configurado: () => true } as unknown as ChatwootRepasseService,
     { tratarMensagem } as unknown as ConferenciaRespostaService,
     { aoEntregar, aoFalhar } as unknown as ConferenciaAlcanceService,
+    { disparar } as unknown as AdminInboxService,
   );
-  return { c, confFindFirst, confUpdateMany, confRaw, updateMany, reportar, repassar, tratarMensagem, aoEntregar, aoFalhar };
+  return { contaFindFirst, notifFindFirst, disparar, c, confFindFirst, confUpdateMany, confRaw, updateMany, reportar, repassar, tratarMensagem, aoEntregar, aoFalhar };
 }
 
 /** Monta o POST como a Meta monta: corpo cru + assinatura hex do HMAC dele. */
@@ -179,6 +186,7 @@ describe("status de entrega", () => {
       { repassar: vi.fn(), configurado: () => false } as unknown as ChatwootRepasseService,
       { tratarMensagem: vi.fn() } as unknown as ConferenciaRespostaService,
       { aoEntregar: vi.fn(), aoFalhar: vi.fn() } as unknown as ConferenciaAlcanceService,
+      { disparar: vi.fn() } as unknown as AdminInboxService,
     );
     const e = evento(STATUS());
     await expect(
@@ -427,5 +435,82 @@ describe("recibo da Meta na conferência + categoria do template", () => {
     reportar.mockClear();
     await enviar(c, evento(cat("MARKETING", "UTILITY")));
     expect(reportar).not.toHaveBeenCalled();
+  });
+});
+
+describe("aviso no sino da plataforma (templates)", () => {
+  const enviar = (c: MetaWebhookController, field: string, value: unknown) => {
+    const e = evento({ entry: [{ changes: [{ field, value }] }] });
+    return c.receber(e.body as never, e.header, { rawBody: e.raw } as Request & { rawBody?: Buffer });
+  };
+  const status = (c: MetaWebhookController, event: string, nome: string, reason?: string) =>
+    enviar(c, "message_template_status_update", { event, message_template_name: nome, message_template_language: "pt_BR", reason });
+  const CAND = "convite_empresa_v2";
+
+  it("aprovação de candidato avisa só quem tem whatsapp.ver", async () => {
+    const { c, disparar, contaFindFirst } = controller();
+    await status(c, "APPROVED", CAND);
+    expect(contaFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { ehPlataforma: true } }));
+    expect(disparar).toHaveBeenCalledOnce();
+    const arg = disparar.mock.calls[0]![0];
+    expect(arg).toMatchObject({ tipo: "template-whatsapp", permissao: "whatsapp.ver" });
+    expect(arg.corpo).toContain(`Template novo aprovado pela Meta: ${CAND}`);
+    expect(arg.corpo).toContain("UTILITY");
+  });
+
+  it("aprovação de template que não é candidato continua só log", async () => {
+    const { c, disparar, reportar } = controller();
+    await status(c, "APPROVED", "aviso_peso");
+    expect(disparar).not.toHaveBeenCalled();
+    expect(reportar).not.toHaveBeenCalled();
+  });
+
+  it("reprovação de candidato avisa com o motivo; de não candidato não avisa", async () => {
+    const { c, disparar } = controller();
+    await status(c, "REJECTED", CAND, "INVALID_FORMAT");
+    expect(disparar).toHaveBeenCalledOnce();
+    const corpo = String(disparar.mock.calls[0]![0].corpo);
+    expect(corpo).toContain("INVALID_FORMAT");
+    expect(corpo).toContain("não troque");
+    await status(c, "PAUSED", "resumo_motorista");
+    expect(disparar).toHaveBeenCalledOnce();
+  });
+
+  it("reclassificação UTILITY -> MARKETING de qualquer template avisa; o inverso não", async () => {
+    const { c, disparar } = controller();
+    const cat = (a: string, b: string) =>
+      enviar(c, "template_category_update", { message_template_name: "conferencia_diaria", previous_category: a, new_category: b });
+    await cat("MARKETING", "UTILITY");
+    expect(disparar).not.toHaveBeenCalled();
+    await cat("UTILITY", "MARKETING");
+    expect(disparar).toHaveBeenCalledOnce();
+    expect(disparar.mock.calls[0]![0].titulo).toBe("Template conferencia_diaria virou MARKETING na Meta");
+  });
+
+  it("evento repetido não duplica o aviso", async () => {
+    const { c, disparar, notifFindFirst } = controller();
+    notifFindFirst.mockResolvedValueOnce({ id: "ja-existe" });
+    await status(c, "APPROVED", CAND);
+    expect(disparar).not.toHaveBeenCalled();
+    expect(notifFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ dados: { path: ["chave"], equals: `status:${CAND}:APPROVED` } }) }),
+    );
+  });
+
+  it("sem conta da plataforma não quebra nem avisa", async () => {
+    const { c, disparar, contaFindFirst } = controller();
+    contaFindFirst.mockResolvedValueOnce(null);
+    await expect(status(c, "APPROVED", CAND)).resolves.toBe("ok");
+    expect(disparar).not.toHaveBeenCalled();
+  });
+
+  it("falha no inbox não derruba o webhook", async () => {
+    const { c, disparar } = controller();
+    disparar.mockRejectedValueOnce(new Error("banco fora"));
+    await expect(status(c, "APPROVED", CAND)).resolves.toBe("ok");
+    disparar.mockRejectedValueOnce(new Error("banco fora"));
+    await expect(
+      enviar(c, "template_category_update", { message_template_name: "x", previous_category: "UTILITY", new_category: "MARKETING" }),
+    ).resolves.toBe("ok");
   });
 });

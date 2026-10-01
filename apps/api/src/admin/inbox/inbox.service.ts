@@ -39,7 +39,9 @@ export type TipoNotificacaoAdmin =
   | "problema-veiculo"
   // Conferência diária de viagens: o sistema tem uma sugestão esperando decisão
   // (motorista disse que saiu, parou de receber, número que não entrega…).
-  | "conferencia-diaria";
+  | "conferencia-diaria"
+  // A Meta mudou o estado/categoria de um template do WhatsApp. Da PLATAFORMA.
+  | "template-whatsapp";
 
 export type DispararNotificacaoInput = {
   tipo: TipoNotificacaoAdmin;
