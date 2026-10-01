@@ -363,9 +363,9 @@ function Conteudo() {
           <p className="max-w-prose text-sm text-muted-foreground">
             O botão &ldquo;Parar perguntas&rdquo; só corta esta pergunta, em todas as empresas em que ele
             trabalha — não desliga código de acesso nem aviso de viagem sem peso. Cada empresa é avisada aqui.
-            A resposta abaixo é o que ele lê depois de tocar.
+            A resposta abaixo é o que ele lê depois de tocar. O motorista pode voltar a receber respondendo VOLTAR no mesmo WhatsApp (o texto padrão já avisa isso).
           </p>
-          <Field label="Mensagem de orientação" help="Use {empresa} pro nome da empresa e {contato} pro contato abaixo. Deixe em branco pra usar o texto padrão.">
+          <Field label="Mensagem de orientação" help="Use {empresa} pro nome da empresa e {contato} pro contato abaixo. Deixe em branco pra usar o texto padrão. Se você escrever um texto próprio, avise nele que o motorista pode responder VOLTAR pra receber de novo.">
             <Textarea
               value={form.mensagemAoParar ?? ""}
               onChange={(e) => set("mensagemAoParar", e.target.value || null)}

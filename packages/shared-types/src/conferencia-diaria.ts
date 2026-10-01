@@ -121,7 +121,7 @@ export type EstadoConferenciaMotorista = {
 
 /** Texto padrão de orientação depois de "Parar perguntas". {empresa} e {contato} são trocados. */
 export const MENSAGEM_AO_PARAR_PADRAO =
-  "Certo, não vamos mais enviar essa pergunta. Só lembrando: viagem que não é lançada no app não entra no seu acerto. Qualquer dúvida, fale com {empresa}{contato}.";
+  "Certo, não vamos mais enviar essa pergunta. Só lembrando: viagem que não é lançada no app não entra no seu acerto. Qualquer dúvida, fale com {empresa}{contato}. Se mudar de ideia, é só responder VOLTAR aqui.";
 
 /** Monta a orientação: `{contato}` vira " (contato)" ou some quando a empresa não informou. */
 export function montarMensagemAoParar(

@@ -6,8 +6,11 @@ import {
   payloadConferencia,
 } from "@ronan/shared-types";
 import {
+  FRASES_VOLTAR,
   deveSuprimirResumo,
   diaTextoConferencia,
+  ehPedidoDeVoltar,
+  interpretarIntencaoConferencia,
   interpretarRespostaConferencia,
   normalizarResposta,
   sufixoTelefone,
@@ -119,7 +122,70 @@ describe("texto da pergunta", () => {
   });
 });
 
+describe("pedido de voltar a receber (VOLTAR)", () => {
+  it.each([
+    "voltar",
+    "VOLTAR",
+    "Voltar!",
+    "  voltar.  ",
+    "quero voltar",
+    "Quero voltar",
+    "retomar",
+    "pode voltar a perguntar",
+    "Pode voltar a perguntar!",
+    "quero receber",
+    "voltar a receber",
+    "Voltar a receber as perguntas",
+    "voltem a perguntar",
+  ])("%s é VOLTAR", (t) => {
+    expect(interpretarIntencaoConferencia(t)).toBe("VOLTAR");
+    expect(ehPedidoDeVoltar(t)).toBe(true);
+  });
+
+  it.each([
+    "voltar amanhã com a carga",
+    "vou voltar pro posto",
+    "não quero voltar",
+    "nao quero receber voltar",
+    "já volto",
+    "vou voltar mais tarde",
+    "quero voltar pra empresa de vocês amanhã",
+    "voltar pro pátio",
+    "volto amanhã",
+    "",
+    "   ",
+    "👍",
+  ])("%j NÃO é VOLTAR", (t) => {
+    expect(interpretarIntencaoConferencia(t)).not.toBe("VOLTAR");
+    expect(ehPedidoDeVoltar(t)).toBe(false);
+  });
+
+  it("vazio/nulo é AMBIGUA", () => {
+    expect(interpretarIntencaoConferencia(null)).toBe("AMBIGUA");
+    expect(interpretarIntencaoConferencia(undefined)).toBe("AMBIGUA");
+  });
+
+  it("as opções da pergunta continuam lidas pelo mesmo interpretador", () => {
+    expect(interpretarIntencaoConferencia("parar perguntas")).toBe("PARAR");
+    expect(interpretarIntencaoConferencia("1")).toBe("NAO_TIVE");
+  });
+
+  it("o interpretador antigo nunca devolve VOLTAR (não é opção da pergunta)", () => {
+    expect(interpretarRespostaConferencia("voltar")).toBe("AMBIGUA");
+  });
+
+  it("a tabela só tem frases já normalizadas e sem colisão com as opções", () => {
+    for (const f of FRASES_VOLTAR) {
+      expect(normalizarResposta(f)).toBe(f);
+      expect(interpretarRespostaConferencia(f)).toBe("AMBIGUA");
+    }
+  });
+});
+
 describe("mensagem ao parar (orientação, por empresa)", () => {
+  it("o texto padrão ensina a voltar", () => {
+    expect(montarMensagemAoParar(null, "Aurora", null)).toContain("responder VOLTAR");
+  });
   it("padrão com o nome da empresa e sem contato", () => {
     const t = montarMensagemAoParar(null, "Transportes Aurora", null);
     expect(t).toContain("fale com Transportes Aurora.");

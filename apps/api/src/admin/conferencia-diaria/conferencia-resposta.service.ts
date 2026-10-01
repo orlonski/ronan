@@ -12,6 +12,9 @@ import {
   RESPOSTA_NAO_TIVE,
   RESPOSTA_SAI_DA_EMPRESA,
   RESPOSTA_TIVE_NAO_LANCEI,
+  RESPOSTA_VOLTAR,
+  RESPOSTA_VOLTAR_EMPRESA_DESLIGOU,
+  ehPedidoDeVoltar,
   interpretarRespostaConferencia,
   normalizarResposta,
   sufixoTelefone,
@@ -39,6 +42,7 @@ export type MensagemRecebida = {
 
 export type ResultadoTratamento =
   | { tratada: true; opcao: OpcaoConferenciaDiaria; origem: "BOTAO" | "TEXTO" }
+  | { tratada: true; opcao: "VOLTAR"; origem: "TEXTO" }
   | { tratada: false; motivo: string };
 
 /** Depois disto, um texto "sim"/"1" já não é lido como resposta ao toque recente. */
@@ -108,6 +112,12 @@ export class ConferenciaRespostaService {
     const payload = msg.button?.payload ?? msg.interactive?.button_reply?.id;
     const lido = lerPayloadConferencia(payload);
     if (lido) return this.tratarToque(msg, from, lido.conferenciaId, lido.opcao);
+    // "voltar" vale a qualquer momento (não depende de pergunta pendente) e só é
+    // "nosso" se o remetente é um motorista nosso; senão segue pro atendimento normal.
+    if (ehPedidoDeVoltar(textoDaMensagem(msg))) {
+      const r = await this.tratarVoltar(msg, from);
+      if (r) return r;
+    }
     return this.tratarTexto(msg, from);
   }
 
@@ -246,6 +256,157 @@ export class ConferenciaRespostaService {
 
     await this.aplicar(conf, opcao, from, texto, { ...base, criterio: "texto livre: última pergunta ENVIADA do telefone" });
     return { tratada: true, opcao, origem: "TEXTO" };
+  }
+
+  // ─── "Voltar" ────────────────────────────────────────────────────────────
+
+  /**
+   * O motorista que tocou em "Parar perguntas" responde VOLTAR e volta a receber.
+   *
+   * - Acha o motorista pelo telefone (com/sem DDI e 9) em TODAS as contas, e amplia
+   *   pelos mesmos critérios do "Parar" (identidade/CPF) pra religar o que o Parar desligou.
+   * - Religa só o que o PRÓPRIO motorista desligou (origem MOTORISTA, ou nula em linha
+   *   antiga). Desligado pelo PAINEL é decisão da empresa: não religa, e ele é avisado
+   *   (sem promessa) de que a empresa precisa liberar.
+   * - Idempotente: o `updateMany` condicionado a `receberConferenciaDiaria=false` é a
+   *   trava — a mesma mensagem entregue duas vezes (ou "voltar" com tudo ligado) não
+   *   repete auditoria, aviso à empresa nem resposta. Com tudo ligado e nada a avisar,
+   *   devolve `null`: não é "nosso", o atendimento normal responde.
+   * - Cada empresa afetada: auditoria `CONFERENCIA_MOTORISTA_RELIGADA` (sem usuário),
+   *   a sugestão aberta de "parou" é encerrada (RESOLVIDA_SOZINHA — não há mais o que
+   *   fazer) e o sino do painel avisa. Não abre sugestão nova: não pede decisão de ninguém,
+   *   e um tipo novo exigiria migration.
+   */
+  private async tratarVoltar(msg: MensagemRecebida, from: string): Promise<ResultadoTratamento | null> {
+    const telefones = telefonesParaBusca(from);
+    const porTelefone = await comoSistema(() =>
+      this.prisma.motorista.findMany({
+        where: { telefone: { in: telefones } },
+        select: { id: true, identidadeId: true, cpf: true },
+      }),
+    );
+    if (porTelefone.length === 0) return null;
+    const identidades = [...new Set(porTelefone.map((m) => m.identidadeId).filter((x): x is string => !!x))];
+    const cpfs = [...new Set(porTelefone.map((m) => m.cpf))];
+    const vinculos = await comoSistema(() =>
+      this.prisma.motorista.findMany({
+        where: {
+          OR: [
+            { id: { in: porTelefone.map((m) => m.id) } },
+            ...(identidades.length ? [{ identidadeId: { in: identidades } }] : []),
+            { cpf: { in: cpfs } },
+          ],
+        },
+        select: {
+          id: true,
+          contaId: true,
+          nome: true,
+          receberConferenciaDiaria: true,
+          conferenciaDesligadaOrigem: true,
+          conta: { select: { nome: true } },
+        },
+      }),
+    );
+
+    const desligados = vinculos.filter((v) => !v.receberConferenciaDiaria);
+    const doMotorista = desligados.filter((v) => v.conferenciaDesligadaOrigem !== "PAINEL");
+    const daEmpresa = desligados.filter((v) => v.conferenciaDesligadaOrigem === "PAINEL");
+    const texto = textoDaMensagem(msg);
+
+    const religados: typeof vinculos = [];
+    for (const v of doMotorista) {
+      const religou = await comConta(v.contaId, async () => {
+        const { count } = await this.prisma.motorista.updateMany({
+          where: {
+            id: v.id,
+            receberConferenciaDiaria: false,
+            OR: [{ conferenciaDesligadaOrigem: null }, { conferenciaDesligadaOrigem: "MOTORISTA" }],
+          },
+          data: {
+            receberConferenciaDiaria: true,
+            conferenciaDesligadaEm: null,
+            conferenciaDesligadaOrigem: null,
+            conferenciaDesligadaPorId: null,
+            conferenciaDesligadaMotivo: null,
+          },
+        });
+        if (count === 0) return false; // outra entrega da mesma mensagem já religou
+        await this.auditoria.log({
+          usuarioId: null,
+          entidade: "Motorista",
+          entidadeId: v.id,
+          acao: "CONFERENCIA_MOTORISTA_RELIGADA",
+          campo: "receberConferenciaDiaria",
+          valorAntes: false,
+          valorDepois: true,
+          motivo: "O motorista pediu pra voltar a receber a conferência, respondendo VOLTAR no WhatsApp.",
+          metadata: { origem: "motorista via WhatsApp", mensagemId: msg.id ?? null },
+        });
+        await this.sugestoes.encerrar(
+          { motoristaId: v.id, tipo: "MOTORISTA_PAROU_WHATSAPP" },
+          "RESOLVIDA_SOZINHA",
+          "O motorista pediu pra voltar a receber a conferência.",
+        );
+        await this.sugestoes.notificar(
+          "Motorista voltou a receber a conferência",
+          `${v.nome} pediu pra voltar a receber a pergunta de viagens no WhatsApp.`,
+          { motoristaId: v.id },
+        );
+        const ultima = await this.prisma.conferenciaDiaria.findFirst({
+          where: { motoristaId: v.id },
+          orderBy: { dia: "desc" },
+          select: { id: true, contaId: true },
+        });
+        if (ultima) {
+          await this.trilha(ultima, "TOQUE", {
+            opcao: "VOLTAR",
+            origem: "TEXTO",
+            texto: texto?.slice(0, 100) ?? null,
+            mensagemId: msg.id ?? null,
+            efeito: "conferência religada pelo motorista",
+          });
+        }
+        return true;
+      });
+      if (religou) religados.push(v);
+    }
+
+    if (religados.length === 0 && daEmpresa.length === 0) {
+      // Nada a religar nem a explicar (já estava tudo ligado, ou outra entrega já tratou):
+      // sem efeito e sem resposta duplicada. Se foi a entrega duplicada, ainda é "nossa".
+      return (await this.religadoRecentemente(vinculos.map((v) => v.id)))
+        ? { tratada: true, opcao: "VOLTAR", origem: "TEXTO" }
+        : null;
+    }
+
+    let resposta: string;
+    if (religados.length > 0) {
+      resposta =
+        daEmpresa.length > 0
+          ? `${RESPOSTA_VOLTAR}\n\nEm ${daEmpresa.map((v) => v.conta.nome).join(", ")} a pergunta foi desligada pela própria empresa, e só ela pode liberar.`
+          : RESPOSTA_VOLTAR;
+    } else {
+      resposta = RESPOSTA_VOLTAR_EMPRESA_DESLIGOU;
+    }
+    await this.responder(from, resposta);
+    return { tratada: true, opcao: "VOLTAR", origem: "TEXTO" };
+  }
+
+  /** Houve religação deste motorista agora há pouco? (a outra entrega da mesma mensagem) */
+  private async religadoRecentemente(motoristaIds: string[]): Promise<boolean> {
+    if (motoristaIds.length === 0) return false;
+    const achou = await comoSistema(() =>
+      this.prisma.auditLog.findFirst({
+        where: {
+          entidade: "Motorista",
+          entidadeId: { in: motoristaIds },
+          acao: "CONFERENCIA_MOTORISTA_RELIGADA",
+          criadoEm: { gte: new Date(Date.now() - JANELA_TOQUE_MIN * 60_000) },
+        },
+        select: { id: true },
+      }),
+    );
+    return !!achou;
   }
 
   // ─── Efeitos ─────────────────────────────────────────────────────────────
@@ -469,6 +630,19 @@ export class ConferenciaRespostaService {
       const agora = Date.now();
       const telefones = telefonesParaBusca(telefone);
       const vazio = !texto?.trim();
+      // "voltar": é nosso se ainda há vínculo desligado deste telefone (o webhook vai
+      // religar ou explicar) ou se acabou de religar (o webhook chegou primeiro).
+      if (!vazio && ehPedidoDeVoltar(texto)) {
+        const doNumero = await comoSistema(() =>
+          this.prisma.motorista.findMany({
+            where: { telefone: { in: telefones } },
+            select: { id: true, receberConferenciaDiaria: true },
+          }),
+        );
+        if (doNumero.length === 0) return false;
+        if (doNumero.some((m) => !m.receberConferenciaDiaria)) return true;
+        return this.religadoRecentemente(doNumero.map((m) => m.id));
+      }
       const opcao = vazio ? "AMBIGUA" : interpretarRespostaConferencia(texto);
       const ehRotulo = !vazio && ROTULOS_NORMALIZADOS.has(normalizarResposta(texto!));
       if (!vazio && opcao === "AMBIGUA" && !ehRotulo) return false;

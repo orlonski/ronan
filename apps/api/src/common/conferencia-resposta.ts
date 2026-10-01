@@ -98,7 +98,55 @@ for (const [opcao, frases] of Object.entries(TABELA)) {
   for (const f of frases) INDICE.set(f, opcao as Exclude<OpcaoConferenciaDiaria, "AMBIGUA">);
 }
 
-/** Texto livre → opção. Vazio (áudio, foto, figurinha) e qualquer outra coisa → AMBIGUA. */
+/**
+ * "Voltar a receber as perguntas" (depois de ter tocado em "Parar perguntas").
+ * Mesma regra da tabela acima: a mensagem INTEIRA, normalizada, tem que ser uma
+ * destas frases — nunca "contém". "voltar amanhã com a carga", "vou voltar pro
+ * posto" e "não quero voltar" NÃO são pedido de voltar (conversa normal com o escritório).
+ * Não é uma opção da pergunta (não grava na linha), por isso fica fora da `TABELA`.
+ */
+export const FRASES_VOLTAR: readonly string[] = [
+  "voltar",
+  "volta",
+  "quero voltar",
+  "pode voltar",
+  "podem voltar",
+  "retomar",
+  "quero retomar",
+  "pode retomar",
+  "voltar a perguntar",
+  "pode voltar a perguntar",
+  "podem voltar a perguntar",
+  "voltar a receber",
+  "quero voltar a receber",
+  "quero receber",
+  "quero receber de novo",
+  "quero receber as perguntas",
+  "voltar a receber as perguntas",
+  "voltar a receber essas perguntas",
+  "pode voltar a enviar",
+  "voltem a perguntar",
+  "voltem a enviar",
+];
+
+const INDICE_VOLTAR = new Set(FRASES_VOLTAR);
+
+/** Intenção lida de um texto livre: uma opção da pergunta ou o pedido de voltar. */
+export type IntencaoConferencia = OpcaoConferenciaDiaria | "VOLTAR";
+
+export function interpretarIntencaoConferencia(texto: string | null | undefined): IntencaoConferencia {
+  if (!texto) return "AMBIGUA";
+  const n = normalizarResposta(texto);
+  if (INDICE_VOLTAR.has(n)) return "VOLTAR";
+  return INDICE.get(n) ?? "AMBIGUA";
+}
+
+/** O texto é o pedido de voltar a receber as perguntas? */
+export function ehPedidoDeVoltar(texto: string | null | undefined): boolean {
+  return interpretarIntencaoConferencia(texto) === "VOLTAR";
+}
+
+/** Texto livre → opção da pergunta. Vazio (áudio, foto, figurinha), "voltar" e qualquer outra coisa → AMBIGUA. */
 export function interpretarRespostaConferencia(texto: string | null | undefined): OpcaoConferenciaDiaria {
   if (!texto) return "AMBIGUA";
   return INDICE.get(normalizarResposta(texto)) ?? "AMBIGUA";
@@ -127,6 +175,12 @@ export const RESPOSTA_NAO_TIVE = "Anotado, obrigado por avisar!";
 export const RESPOSTA_TIVE_NAO_LANCEI =
   "Abra o app e lance a viagem — viagem que não é lançada não entra no seu acerto.";
 export const RESPOSTA_SAI_DA_EMPRESA = "Anotado. Seu gestor vai confirmar.";
+/** SEED (texto padrão), não regra: o que ele lê depois de pedir pra voltar. */
+export const RESPOSTA_VOLTAR =
+  "Pronto, voltamos a te perguntar quando você esquecer de lançar uma viagem. Se quiser parar de novo, é só tocar em Parar perguntas.";
+/** Quando o que desligou foi a empresa (painel): não é decisão dele, e não prometemos nada. */
+export const RESPOSTA_VOLTAR_EMPRESA_DESLIGOU =
+  "Recebemos seu pedido, mas essa pergunta foi desligada pela sua empresa. Fale com ela se quiser voltar a receber.";
 
 /** Os 8 últimos dígitos: como o resto do código casa telefone entre formatos (com/sem DDI e 9). */
 export function sufixoTelefone(telefone: string): string {
