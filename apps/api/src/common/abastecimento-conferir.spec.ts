@@ -158,3 +158,54 @@ describe("distanciaAoSegmentoKm", () => {
     expect(d).toBeLessThan(105);
   });
 });
+
+describe("META", () => {
+  it("trecho bem abaixo da meta do caminhão é sinal", () => {
+    const h = historicoNormal();
+    // 500 km com 230 L = 2,17 km/l; meta 2,8 → 77% (abaixo de 85%).
+    const alvo = ab({ litros: 230 });
+    const s = sinaisDoAbastecimento({ ...base, alvo, historico: [...h, alvo], metaKmL: 2.8 });
+    expect(s.map((x) => x.tipo)).toEqual(["META"]);
+    expect(s[0]!.texto).toContain("a meta do caminhão é 2,80");
+  });
+
+  it("perto da meta não é sinal", () => {
+    const h = historicoNormal();
+    const alvo = ab({ litros: 200 });
+    expect(sinaisDoAbastecimento({ ...base, alvo, historico: [...h, alvo], metaKmL: 2.6 })).toEqual([]);
+  });
+});
+
+describe("PRECO", () => {
+  it("litro 15% acima do normal da frota é sinal", () => {
+    const alvo = ab({ litros: 100, valorTotal: 720 });
+    const s = sinaisDoAbastecimento({ ...base, alvo, historico: [alvo], precoReferencia: 6 });
+    expect(s.map((x) => x.tipo)).toEqual(["PRECO"]);
+    expect(s[0]!.texto).toBe("Litro a R$ 7,20, 20% acima do normal da frota (R$ 6,00).");
+  });
+
+  it("comboio (sem valor) e preço normal não são sinal", () => {
+    const comboio = ab({ litros: 100, valorTotal: null });
+    const normal = ab({ litros: 100, valorTotal: 640 });
+    expect(sinaisDoAbastecimento({ ...base, alvo: comboio, historico: [comboio], precoReferencia: 6 })).toEqual([]);
+    expect(sinaisDoAbastecimento({ ...base, alvo: normal, historico: [normal], precoReferencia: 6 })).toEqual([]);
+  });
+});
+
+describe("INTERVALO", () => {
+  it("abasteceu de novo poucas horas depois, quase sem rodar", () => {
+    seq = 0;
+    const antes = ab({ data: new Date("2026-09-10T10:00:00Z"), odometro: 100000 });
+    const alvo = ab({ data: new Date("2026-09-10T12:30:00Z"), odometro: 100020, litros: 60, tanqueCheio: false });
+    const s = sinaisDoAbastecimento({ ...base, alvo, historico: [antes, alvo] });
+    expect(s.map((x) => x.tipo)).toEqual(["INTERVALO"]);
+    expect(s[0]!.texto).toBe("Abasteceu de novo 3h depois do anterior, com 20 km rodados.");
+  });
+
+  it("ARLA no mesmo dia não conta (tanque próprio)", () => {
+    seq = 0;
+    const antes = ab({ data: new Date("2026-09-10T10:00:00Z"), odometro: 100000 });
+    const arla = ab({ data: new Date("2026-09-10T10:20:00Z"), odometro: 100000, tipo: "ARLA_32", litros: 20 });
+    expect(sinaisDoAbastecimento({ ...base, alvo: arla, historico: [antes, arla] })).toEqual([]);
+  });
+});

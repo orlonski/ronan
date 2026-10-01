@@ -11,6 +11,8 @@ export const CriarVeiculoInput = z.object({
   modelo: z.string().max(80).optional(),
   /// Litros do tanque de diesel. Opcional; serve pra conferir abastecimento.
   capacidadeTanqueLitros: z.number().int().positive().max(5000).nullish(),
+  /// Meta de km/l. Opcional; abastecimento bem abaixo dela aparece pra conferir.
+  metaKmL: z.number().positive().max(50).nullish(),
   /// Frota dona do caminhão. Null = não classificado.
   transportadoraId: z.string().uuid().nullish(),
 });
@@ -21,6 +23,8 @@ export const AtualizarVeiculoInput = z.object({
   ativo: z.boolean().optional(),
   /// Litros do tanque de diesel. Opcional; serve pra conferir abastecimento.
   capacidadeTanqueLitros: z.number().int().positive().max(5000).nullish(),
+  /// Meta de km/l. Opcional; abastecimento bem abaixo dela aparece pra conferir.
+  metaKmL: z.number().positive().max(50).nullish(),
   transportadoraId: z.string().uuid().nullish(),
 });
 export type AtualizarVeiculoInput = z.infer<typeof AtualizarVeiculoInput>;

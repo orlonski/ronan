@@ -19,6 +19,7 @@ export type Veiculo = {
   placa: string;
   modelo: string | null;
   capacidadeTanqueLitros?: number | null;
+  metaKmL?: string | number | null;
   ativo: boolean;
   transportadoraId: string | null;
   transportadora: { id: string; nome: string } | null;
@@ -37,6 +38,7 @@ export function VeiculoForm({ initial }: Props) {
     placa: initial?.placa ?? "",
     modelo: initial?.modelo ?? "",
     tanque: initial?.capacidadeTanqueLitros != null ? String(initial.capacidadeTanqueLitros) : "",
+    meta: initial?.metaKmL != null ? String(initial.metaKmL).replace(".", ",") : "",
     transportadoraId: initial?.transportadoraId ?? undefined,
   });
 
@@ -50,6 +52,7 @@ export function VeiculoForm({ initial }: Props) {
     const body: Record<string, unknown> = {
       modelo: form.modelo || undefined,
       capacidadeTanqueLitros: tanque > 0 ? tanque : null,
+      metaKmL: Number(form.meta.replace(",", ".")) > 0 ? Number(form.meta.replace(",", ".")) : null,
       transportadoraId: form.transportadoraId ?? null,
     };
     if (initial) {
@@ -108,6 +111,19 @@ export function VeiculoForm({ initial }: Props) {
             />
             <p className="text-xs text-muted-foreground">
               Opcional. Abastecimento acima disso aparece marcado pra conferir. Bitanque: some os dois.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="veiculofor-meta">Meta de consumo (km/l)</Label>
+            <Input id="veiculofor-meta"
+              inputMode="decimal"
+              className="w-40"
+              value={form.meta}
+              onChange={(e) => setForm({ ...form, meta: e.target.value })}
+              placeholder="Ex.: 2,6"
+            />
+            <p className="text-xs text-muted-foreground">
+              Opcional. Trecho que fizer bem menos que isso aparece marcado pra conferir.
             </p>
           </div>
         </div>

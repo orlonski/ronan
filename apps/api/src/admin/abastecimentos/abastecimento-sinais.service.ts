@@ -27,6 +27,7 @@ const SELECT_CONFERIR = {
   data: true,
   tipo: true,
   litros: true,
+  valorTotal: true,
   odometro: true,
   tanqueCheio: true,
   emComboio: true,
@@ -42,6 +43,7 @@ type LinhaBanco = {
   data: Date;
   tipo: string;
   litros: { toString(): string } | number;
+  valorTotal: { toString(): string } | number | null;
   odometro: number | null;
   tanqueCheio: boolean;
   emComboio: boolean;
@@ -58,6 +60,7 @@ function paraConferir(a: LinhaBanco): AbastecimentoParaConferir & { veiculoId: s
     data: a.data,
     tipo: a.tipo,
     litros: Number(a.litros),
+    valorTotal: a.valorTotal != null ? Number(a.valorTotal) : null,
     odometro: a.odometro,
     tanqueCheio: a.tanqueCheio,
     emComboio: a.emComboio,
@@ -88,10 +91,10 @@ export class AbastecimentoSinaisService {
     const menor = Math.min(...alvos.map((a) => a.data.getTime()));
     const maior = Math.max(...alvos.map((a) => a.data.getTime()));
 
-    const [veiculos, historico, viagens] = await Promise.all([
+    const [veiculos, historico, viagens, precos] = await Promise.all([
       this.prisma.veiculo.findMany({
         where: { id: { in: veiculoIds } },
-        select: { id: true, capacidadeTanqueLitros: true },
+        select: { id: true, capacidadeTanqueLitros: true, metaKmL: true },
       }),
       this.prisma.abastecimento.findMany({
         where: {
@@ -116,9 +119,38 @@ export class AbastecimentoSinaisService {
           localDescarga: { select: { lat: true, lng: true } },
         },
       }),
+      // Preço "normal": todos os abastecimentos COM valor da frota nos 30 dias
+      // anteriores a cada um (comboio não tem valor e fica de fora sozinho).
+      this.prisma.abastecimento.findMany({
+        where: {
+          data: { gte: new Date(menor - 30 * 86_400_000), lte: new Date(maior) },
+          valorTotal: { not: null },
+        },
+        select: { tipo: true, data: true, litros: true, valorTotal: true },
+      }),
     ]);
+    const precosPorTipo = new Map<string, { t: number; p: number }[]>();
+    for (const x of precos) {
+      const litros = Number(x.litros);
+      if (litros <= 0 || x.valorTotal == null) continue;
+      const lista = precosPorTipo.get(x.tipo) ?? [];
+      lista.push({ t: x.data.getTime(), p: Number(x.valorTotal) / litros });
+      precosPorTipo.set(x.tipo, lista);
+    }
+    /** Mediana do preço/litro do tipo nos 30 dias antes (sem contar o próprio). Precisa de 5 pra valer. */
+    const precoReferencia = (a: AbastecimentoParaConferir): number | null => {
+      const t = a.data.getTime();
+      const vs = (precosPorTipo.get(a.tipo) ?? [])
+        .filter((x) => x.t < t && x.t >= t - 30 * 86_400_000)
+        .map((x) => x.p)
+        .sort((x, y) => x - y);
+      if (vs.length < 5) return null;
+      const meio = Math.floor(vs.length / 2);
+      return vs.length % 2 ? vs[meio]! : (vs[meio - 1]! + vs[meio]!) / 2;
+    };
 
     const capacidade = new Map(veiculos.map((v) => [v.id, v.capacidadeTanqueLitros]));
+    const metas = new Map(veiculos.map((v) => [v.id, v.metaKmL != null ? Number(v.metaKmL) : null]));
 
     const historicoPor = new Map<string, AbastecimentoParaConferir[]>();
     for (const linha of historico) {
@@ -173,6 +205,8 @@ export class AbastecimentoSinaisService {
           capacidadeTanqueLitros: capacidade.get(alvo.veiculoId) ?? null,
           kmPorLitroFrota,
           trajetosDoDia: trajetos.get(`${alvo.veiculoId}|${diaSP(alvo.data)}`) ?? [],
+          metaKmL: metas.get(alvo.veiculoId) ?? null,
+          precoReferencia: precoReferencia(alvo),
         }),
       );
     }

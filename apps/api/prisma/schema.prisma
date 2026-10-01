@@ -2130,6 +2130,9 @@ model Veiculo {
   /// Litros que cabem no tanque de diesel (somando os dois, se bitanque).
   /// Opcional: sem ele o abastecimento não é comparado com o tanque.
   capacidadeTanqueLitros Int?
+  /// Meta de km/l do caminhão. Opcional: abastecimento com consumo bem abaixo
+  /// dela aparece marcado pra conferir.
+  metaKmL                Decimal?        @db.Decimal(5, 2)
   /// Peso do veículo vazio. Obrigatório no MDF-e.
   tara                   Decimal?        @db.Decimal(10, 3)
   renavam                String?

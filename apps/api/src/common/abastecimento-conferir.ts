@@ -14,6 +14,9 @@ import { distanciaKm } from "./geo";
  *              abastecido na conta do caminhão.
  *   LONGE    — lançado na hora, mas longe do trajeto que o caminhão fez naquele
  *              dia (carga → descarga). O caminhão não estava lá.
+ *   META     — o trecho fez bem menos km/l do que a meta do caminhão.
+ *   PRECO    — litro bem mais caro que o normal da frota no mês.
+ *   INTERVALO — abasteceu de novo poucas horas depois, quase sem rodar.
  *
  * ⚠️ SINAL NÃO É ACUSAÇÃO. Motorista é parceiro; o texto diz o que o número
  * mostra ("entraram 480 L pra 300 km") e quem confere decide. Tanque que não
@@ -25,7 +28,7 @@ import { distanciaKm } from "./geo";
  * sempre zero. A referência de onde o caminhão estava é o trajeto das viagens.
  */
 
-export type TipoSinalAbastecimento = "TANQUE" | "CONSUMO" | "LONGE";
+export type TipoSinalAbastecimento = "TANQUE" | "CONSUMO" | "LONGE" | "META" | "PRECO" | "INTERVALO";
 
 export type SinalAbastecimento = {
   tipo: TipoSinalAbastecimento;
@@ -38,6 +41,8 @@ export type AbastecimentoParaConferir = {
   data: Date;
   tipo: string;
   litros: number;
+  /** Valor pago. Null no comboio. */
+  valorTotal?: number | null;
   odometro: number | null;
   tanqueCheio: boolean;
   emComboio: boolean;
@@ -73,6 +78,15 @@ const PRECISAO_MAXIMA_M = 500;
  * lançado no dia seguinte, o GPS é de onde ele estava DEPOIS, e não prova nada.
  */
 const JANELA_LANCAMENTO_MS = 3 * 3600_000;
+
+/** Abaixo de 85% da meta é sinal; entre 85% e 100% é variação de rota e carga. */
+const FATOR_META = 0.85;
+/** Litro 15% mais caro que a mediana da frota no tipo. */
+const FATOR_PRECO = 1.15;
+/** Dois abastecimentos em menos de 6h... */
+const INTERVALO_HORAS = 6;
+/** ...com menos de 50 km rodados entre eles. */
+const INTERVALO_KM = 50;
 
 const ehArla = (tipo: string) => tipo === "ARLA_32";
 
@@ -129,6 +143,10 @@ export function sinaisDoAbastecimento(args: {
   capacidadeTanqueLitros: number | null;
   kmPorLitroFrota: number | null;
   trajetosDoDia: TrajetoDoDia[];
+  /** Meta de km/l do caminhão. Null = sem meta, sem sinal. */
+  metaKmL?: number | null;
+  /** Preço/litro "normal" da frota (mediana do tipo nos últimos 30 dias). */
+  precoReferencia?: number | null;
 }): SinalAbastecimento[] {
   const { alvo } = args;
   const sinais: SinalAbastecimento[] = [];
@@ -162,6 +180,14 @@ export function sinaisDoAbastecimento(args: {
         })),
     );
     const trecho = consumo.trechos.find((t) => t.ateId === alvo.id);
+    // META: o trecho que termina aqui ficou bem abaixo do que o dono espera.
+    const meta = args.metaKmL;
+    if (trecho && meta != null && meta > 0 && trecho.kmPorLitro < meta * FATOR_META) {
+      sinais.push({
+        tipo: "META",
+        texto: `Fez ${fmt(trecho.kmPorLitro, 2)} km/l nesse trecho; a meta do caminhão é ${fmt(meta, 2)}.`,
+      });
+    }
     if (trecho) {
       const outros = consumo.trechos.filter((t) => t !== trecho);
       const regua =
@@ -177,6 +203,36 @@ export function sinaisDoAbastecimento(args: {
               `seriam uns ${fmt(esperado)} L.`,
           });
         }
+      }
+    }
+  }
+
+  // ---- PRECO ---------------------------------------------------------------
+  const ref = args.precoReferencia;
+  if (ref != null && ref > 0 && alvo.valorTotal != null && alvo.valorTotal > 0 && alvo.litros > 0) {
+    const preco = alvo.valorTotal / alvo.litros;
+    if (preco > ref * FATOR_PRECO) {
+      sinais.push({
+        tipo: "PRECO",
+        texto: `Litro a R$ ${fmt(preco, 2)}, ${fmt(((preco / ref) - 1) * 100)}% acima do normal da frota (R$ ${fmt(ref, 2)}).`,
+      });
+    }
+  }
+
+  // ---- INTERVALO -----------------------------------------------------------
+  // O abastecimento anterior do mesmo caminhão (mesmo combustível, ARLA fora).
+  if (!ehArla(alvo.tipo)) {
+    const anterior = args.historico
+      .filter((a) => a.id !== alvo.id && !ehArla(a.tipo) && a.data.getTime() < alvo.data.getTime())
+      .sort((a, b) => b.data.getTime() - a.data.getTime())[0];
+    if (anterior) {
+      const horas = (alvo.data.getTime() - anterior.data.getTime()) / 3600_000;
+      const km = alvo.odometro != null && anterior.odometro != null ? alvo.odometro - anterior.odometro : null;
+      if (horas < INTERVALO_HORAS && km != null && km >= 0 && km < INTERVALO_KM) {
+        sinais.push({
+          tipo: "INTERVALO",
+          texto: `Abasteceu de novo ${fmt(Math.max(1, horas))}h depois do anterior, com ${fmt(km)} km rodados.`,
+        });
       }
     }
   }
