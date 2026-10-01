@@ -90,7 +90,7 @@ PUBLIC_APP_URL=https://app.movatruck.com.br
 > (`PUBLIC_APP_URL/v/<token>`), que a transportadora manda pro cliente dela, e a
 > página de pagamento da mensalidade (`PUBLIC_APP_URL/pagar/<token>`), que a
 > Movatruck manda pro financeiro da transportadora. **O prefixo do segundo está
-> congelado no template aprovado da Meta** (`cobranca_autorizacao_pix_link`) —
+> congelado no template aprovado da Meta** (`cobranca_autorizacao_pix_link_v2`, que substituiu o `cobranca_autorizacao_pix_link` em 01/10/2026) —
 > mudar esta env sem refazer o template deixa o botão "Pagar" apontando pro
 > domínio velho. Mora na API, e não como `NEXT_PUBLIC_*` no dashboard, porque lá seria
 > baked no build da imagem — aqui basta reiniciar. Sem valor, a API loga um

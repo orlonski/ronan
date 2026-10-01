@@ -15,14 +15,19 @@ Ele **não** entra em `ROTAS_WHATSAPP`, no envio nem no roteamento. É só uma
 receita para cadastrar pelo painel. As rotas seguem apontando para o template
 atual até a troca final.
 
-Candidatos hoje:
+Candidatos hoje: **nenhum**. O registro está vazio de propósito, como mecanismo
+reutilizável para o próximo template reclassificado.
 
-| Chave | Nome novo | Substitui |
-|---|---|---|
-| `CONVITE_EMPRESA_V2` | `convite_empresa_v2` | `CONVITE_EMPRESA` (`convite_empresa`) |
-| `COBRANCA_AUTORIZACAO_PIX_V2` | `cobranca_autorizacao_pix_link_v2` | `COBRANCA_AUTORIZACAO_PIX` (`cobranca_autorizacao_pix_link`) |
+## Histórico de trocas
 
-Os testes (`apps/api/src/whatsapp/envio/templates.spec.ts`) garantem: nenhum
+- **01/10/2026 — convite e cobrança Pix.** A Meta aprovou como UTILITY
+  `convite_empresa_v2` e `cobranca_autorizacao_pix_link_v2`; `CONVITE_EMPRESA` e
+  `COBRANCA_AUTORIZACAO_PIX` passaram a usá-los e os candidatos saíram do registro.
+  Os nomes antigos (`convite_empresa` e `cobranca_autorizacao_pix_link`) ficam na
+  Meta só como histórico e podem ser apagados lá depois de conferido o envio real
+  (passo 6).
+
+Os testes (`apps/api/src/whatsapp/envio/templates.spec.ts`) garantem, para todo candidato do registro (com ele vazio, valem para um candidato fictício que o próprio teste injeta): nenhum
 candidato é usado por rota, `substitui` é válido, o nome é diferente do atual, e
 `corpo`, botão e `exemplo` são idênticos aos do template substituído. É isso que
 faz a troca ser só renomear.
@@ -41,7 +46,7 @@ faz a troca ser só renomear.
 3. **Trocar no código** (só depois da confirmação do dono). Em
    `TEMPLATES_WHATSAPP`, na rota substituída, copiar `nome` e `textoAprovacao`
    do candidato. Corpo, botão e exemplo já são iguais.
-4. **Remover o candidato** de `TEMPLATES_CANDIDATOS_WHATSAPP`. Se a categoria da
+4. **Remover o candidato** de `TEMPLATES_CANDIDATOS_WHATSAPP` (o registro pode voltar a ficar vazio; não apagar o registro nem seus tipos). Se a categoria da
    rota em `ROTAS_WHATSAPP` precisar mudar, mudar junto.
 5. **Deploy** (push na `main`) e rodar `cd apps/api && pnpm exec vitest run`.
 6. **Conferir o envio**: na tela, "Conferir" deve mostrar a rota com o nome novo,

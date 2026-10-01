@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterAll, describe, it, expect } from "vitest";
 import {
   ROTAS_WHATSAPP,
   TEMPLATES_CANDIDATOS_WHATSAPP,
@@ -137,12 +137,33 @@ describe("catálogo de templates", () => {
   /**
    * Candidatos: receitas de texto novo (rota reclassificada pela Meta). Só valem
    * se forem o MESMO formato do atual — é o que faz a troca ser só renomear.
+   *
+   * O registro está VAZIO de propósito (troca de convite/cobrança feita em
+   * 01/10/2026). Pra o mecanismo continuar coberto, o teste injeta um candidato
+   * FICTÍCIO que substitui `CONVITE_EMPRESA` e o remove no fim.
    */
   describe("candidatos a substituir template reclassificado", () => {
+    const CHAVE_FICTICIA = "CONVITE_EMPRESA_TESTE_FICTICIO";
+    const fiction: TemplateCandidatoWhatsappDef = {
+      nome: "convite_empresa_teste_ficticio",
+      idioma: "pt_BR",
+      substitui: "CONVITE_EMPRESA",
+      categoria: "utility",
+      corpo: [0, 1],
+      textoAprovacao:
+        "Convite fictício: {{1}} cadastrou você no {{2}}. Se você não reconhece este convite, ignore esta mensagem.",
+      exemplo: ["Transportes Schaba", "Movatruck"],
+    };
+    // Síncrono, no corpo do describe: o it.each abaixo lê o registro na coleta.
+    (TEMPLATES_CANDIDATOS_WHATSAPP as Record<string, TemplateCandidatoWhatsappDef>)[CHAVE_FICTICIA] = fiction;
+    afterAll(() => {
+      delete (TEMPLATES_CANDIDATOS_WHATSAPP as Record<string, TemplateCandidatoWhatsappDef>)[CHAVE_FICTICIA];
+    });
+
     const cands = Object.entries(TEMPLATES_CANDIDATOS_WHATSAPP) as [string, TemplateCandidatoWhatsappDef][];
 
-    it("existem os dois esperados", () => {
-      expect(cands.map(([k]) => k).sort()).toEqual(["COBRANCA_AUTORIZACAO_PIX_V2", "CONVITE_EMPRESA_V2"]);
+    it("o candidato fictício está no registro (o mecanismo está sendo exercitado)", () => {
+      expect(cands.map(([k]) => k)).toContain(CHAVE_FICTICIA);
     });
 
     it.each(cands)("%s: nenhuma rota usa a chave nem o nome do candidato", (chave, def) => {
@@ -186,19 +207,24 @@ describe("catálogo de templates", () => {
         expect(achatarParam(v)).toBe(v);
       }
     });
+  });
 
-    it("os textos são exatamente os decididos", () => {
-      expect(TEMPLATES_CANDIDATOS_WHATSAPP.CONVITE_EMPRESA_V2.textoAprovacao).toBe(
+  describe("troca de 01/10/2026: convite e cobrança Pix já são os templates v2", () => {
+    it("as rotas apontam para os nomes v2, com o texto aprovado", () => {
+      expect(TEMPLATES_WHATSAPP.CONVITE_EMPRESA!.nome).toBe("convite_empresa_v2");
+      expect(TEMPLATES_WHATSAPP.CONVITE_EMPRESA!.textoAprovacao).toBe(
         "Convite de cadastro: {{1}} cadastrou você como motorista no {{2}}. Para aceitar ou recusar, abra o app com este número. Se você não reconhece este convite, ignore esta mensagem.",
       );
-      expect(TEMPLATES_CANDIDATOS_WHATSAPP.COBRANCA_AUTORIZACAO_PIX_V2.textoAprovacao).toBe(
+      expect(TEMPLATES_WHATSAPP.COBRANCA_AUTORIZACAO_PIX!.nome).toBe("cobranca_autorizacao_pix_link_v2");
+      expect(TEMPLATES_WHATSAPP.COBRANCA_AUTORIZACAO_PIX!.textoAprovacao).toBe(
         "Olá, {{1}}. Autorização de pagamento da assinatura Movatruck: {{2}} por mês, primeiro vencimento em {{3}}. Para autorizar, pague o Pix pelo botão abaixo.",
       );
     });
 
-    it("os templates ATUAIS seguem intactos (nada que envia hoje muda)", () => {
-      expect(TEMPLATES_WHATSAPP.CONVITE_EMPRESA!.nome).toBe("convite_empresa");
-      expect(TEMPLATES_WHATSAPP.COBRANCA_AUTORIZACAO_PIX!.nome).toBe("cobranca_autorizacao_pix_link");
+    it("os nomes v2 não são mais candidatos", () => {
+      const nomesCandidatos = Object.values(TEMPLATES_CANDIDATOS_WHATSAPP).map((t) => t.nome);
+      expect(nomesCandidatos).not.toContain("convite_empresa_v2");
+      expect(nomesCandidatos).not.toContain("cobranca_autorizacao_pix_link_v2");
     });
   });
 });

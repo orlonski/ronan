@@ -484,14 +484,11 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
     exemplo: ["482913", "10"],
   },
   CONVITE_EMPRESA: {
-    nome: "convite_empresa",
+    nome: "convite_empresa_v2",
     idioma: "pt_BR",
     corpo: [0, 1],
-    textoAprovacao: [
-      "🚛 *{{1}} quer te adicionar como motorista*",
-      "",
-      "Abra o {{2}} pra aceitar ou recusar o convite. Enquanto você não aceitar, a empresa não vê nada seu.",
-    ].join("\n"),
+    textoAprovacao:
+      "Convite de cadastro: {{1}} cadastrou você como motorista no {{2}}. Para aceitar ou recusar, abra o app com este número. Se você não reconhece este convite, ignore esta mensagem.",
     exemplo: ["Transportes Schaba", "Movatruck"],
   },
   AVISO_PESO: {
@@ -741,19 +738,12 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
    * texto e ela entregar outro.
    */
   COBRANCA_AUTORIZACAO_PIX: {
-    nome: "cobranca_autorizacao_pix_link",
+    nome: "cobranca_autorizacao_pix_link_v2",
     idioma: "pt_BR",
     corpo: [0, 1, 2],
     botao: { tipo: "URL", param: 5, texto: "Pagar" },
-    textoAprovacao: [
-      "Olá, {{1}}. A assinatura do Movatruck da sua empresa foi criada.",
-      "",
-      "Para ativar a cobrança automática de {{2}} por mês, pague o Pix pelo botão abaixo. Esta autorização é feita uma única vez.",
-      "",
-      "Vencimento da primeira mensalidade: {{3}}",
-      "",
-      "Qualquer dúvida, é só responder aqui.",
-    ].join("\n"),
+    textoAprovacao:
+      "Olá, {{1}}. Autorização de pagamento da assinatura Movatruck: {{2}} por mês, primeiro vencimento em {{3}}. Para autorizar, pague o Pix pelo botão abaixo.",
     exemplo: [
       "Marcos",
       "R$ 1.890,00",
@@ -805,53 +795,30 @@ export type TemplateCandidatoWhatsappDef = TemplateWhatsappDef & {
   categoria: "utility";
 };
 
-export type ChaveCandidatoWhatsapp = "CONVITE_EMPRESA_V2" | "COBRANCA_AUTORIZACAO_PIX_V2";
+/**
+ * Chave livre: o registro está vazio e cada candidato novo escolhe a sua
+ * (convenção: a chave da rota + `_V2`, ex.: `CONVITE_EMPRESA_V2`).
+ */
+export type ChaveCandidatoWhatsapp = string;
 
+/**
+ * VAZIO DE PROPÓSITO. A troca de convite e cobrança Pix para os templates v2
+ * foi feita em 01/10/2026 (aprovados como UTILITY) e os candidatos saíram
+ * daqui. O registro fica como mecanismo reutilizável: o próximo template
+ * reclassificado entra aqui, seguindo `docs/trocar-template-whatsapp.md`.
+ * Painel e webhook funcionam com ele vazio (nenhuma linha "Novo texto").
+ */
 export const TEMPLATES_CANDIDATOS_WHATSAPP: Record<
   ChaveCandidatoWhatsapp,
   TemplateCandidatoWhatsappDef
-> = {
-  // O atual ("quer te adicionar", emoji, "abra o app pra aceitar") lia como
-  // oferta a quem não tem relação, e a Meta o reclassificou como MARKETING.
-  // O novo é factual: quem cadastrou, o que fazer, e o que fazer se não conhece.
-  CONVITE_EMPRESA_V2: {
-    nome: "convite_empresa_v2",
-    idioma: "pt_BR",
-    substitui: "CONVITE_EMPRESA",
-    categoria: "utility",
-    corpo: [0, 1],
-    textoAprovacao:
-      "Convite de cadastro: {{1}} cadastrou você como motorista no {{2}}. Para aceitar ou recusar, abra o app com este número. Se você não reconhece este convite, ignore esta mensagem.",
-    exemplo: ["Transportes Schaba", "Movatruck"],
-  },
-  // O atual fala em "ativar a assinatura/cobrança automática", que a Meta leu
-  // como venda. O novo descreve a autorização de pagamento, sem verbo de oferta.
-  COBRANCA_AUTORIZACAO_PIX_V2: {
-    nome: "cobranca_autorizacao_pix_link_v2",
-    idioma: "pt_BR",
-    substitui: "COBRANCA_AUTORIZACAO_PIX",
-    categoria: "utility",
-    corpo: [0, 1, 2],
-    botao: { tipo: "URL", param: 5, texto: "Pagar" },
-    textoAprovacao:
-      "Olá, {{1}}. Autorização de pagamento da assinatura Movatruck: {{2}} por mês, primeiro vencimento em {{3}}. Para autorizar, pague o Pix pelo botão abaixo.",
-    exemplo: [
-      "Marcos",
-      "R$ 1.890,00",
-      "10/09/2026",
-      "",
-      "00020101021226790014br.gov.bcb.pix2557pix.asaas.com/qr/cob/0cd97f06-6965-4c31-80be-2ab8fb31b8de5204000053039865802BR5925MOVATRUCK DESENVOLVIMENTO6009Ponta Grossa62070503***6304ABCD",
-      "k7Qw2mT9xZ0aB3cD5eF6gH8j",
-    ],
-  },
-};
+> = {};
 
 /** O candidato daquela chave, ou `undefined` (chave de rota normal não é candidato). */
 export function templateCandidatoWhatsapp(
   chave: string,
 ): TemplateCandidatoWhatsappDef | undefined {
   return Object.prototype.hasOwnProperty.call(TEMPLATES_CANDIDATOS_WHATSAPP, chave)
-    ? TEMPLATES_CANDIDATOS_WHATSAPP[chave as ChaveCandidatoWhatsapp]
+    ? TEMPLATES_CANDIDATOS_WHATSAPP[chave]
     : undefined;
 }
 

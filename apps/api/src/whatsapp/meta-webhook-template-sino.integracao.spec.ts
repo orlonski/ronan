@@ -5,6 +5,7 @@ import type { Request } from "express";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import type { PrismaService } from "../prisma/prisma.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
+import { TEMPLATES_CANDIDATOS_WHATSAPP, type TemplateCandidatoWhatsappDef } from "@ronan/shared-types";
 import { MetaWebhookController } from "./meta-webhook.controller";
 
 /**
@@ -16,7 +17,7 @@ import { MetaWebhookController } from "./meta-webhook.controller";
 const URL_TESTE = process.env.CONFERENCIA_TESTE_DATABASE_URL;
 const SEGREDO = "segredo-integracao";
 const SUF = Date.now().toString(36);
-const CAND = "convite_empresa_v2";
+const CAND = "template_candidato_ficticio";
 
 describe.skipIf(!URL_TESTE)("aviso de template no sino — Prisma real", () => {
   let prisma: PrismaService;
@@ -37,6 +38,16 @@ describe.skipIf(!URL_TESTE)("aviso de template no sino — Prisma real", () => {
     comoSistema(() => prisma.adminNotificacao.findMany({ where: { tipo: "template-whatsapp" }, orderBy: { criadoEm: "asc" } }));
 
   beforeAll(async () => {
+    // Registro vazio de propósito (troca de 01/10/2026): candidato FICTÍCIO só no teste.
+    (TEMPLATES_CANDIDATOS_WHATSAPP as Record<string, TemplateCandidatoWhatsappDef>).CANDIDATO_FICTICIO = {
+      nome: CAND,
+      idioma: "pt_BR",
+      substitui: "CONVITE_EMPRESA",
+      categoria: "utility",
+      corpo: [0, 1],
+      textoAprovacao: "Texto fictício {{1}} e {{2}}. Fim.",
+      exemplo: ["a", "b"],
+    };
     process.env.DATABASE_URL = URL_TESTE;
     const { PrismaService: Real } = await import("../prisma/prisma.service");
     prisma = new Real();
@@ -57,6 +68,7 @@ describe.skipIf(!URL_TESTE)("aviso de template no sino — Prisma real", () => {
   });
 
   afterAll(async () => {
+    delete (TEMPLATES_CANDIDATOS_WHATSAPP as Record<string, TemplateCandidatoWhatsappDef>).CANDIDATO_FICTICIO;
     await prisma?.$disconnect();
   });
 
@@ -91,6 +103,8 @@ describe.skipIf(!URL_TESTE)("aviso de template no sino — Prisma real", () => {
 
   it("(3) outro estado e outro nome avisam; não candidato continua mudo", async () => {
     await status("REJECTED", CAND, "INVALID_FORMAT");
+    // v2 de convite/cobrança agora são templates de rota (não candidatos): mudos.
+    await status("APPROVED", "convite_empresa_v2");
     await status("APPROVED", "cobranca_autorizacao_pix_link_v2");
     await status("APPROVED", "aviso_peso");
     await enviar("template_category_update", { message_template_name: "conferencia_diaria", previous_category: "UTILITY", new_category: "MARKETING" });
@@ -100,7 +114,6 @@ describe.skipIf(!URL_TESTE)("aviso de template no sino — Prisma real", () => {
       "categoria:conferencia_diaria:MARKETING",
       `status:${CAND}:APPROVED`,
       `status:${CAND}:REJECTED`,
-      "status:cobranca_autorizacao_pix_link_v2:APPROVED",
     ].sort();
     expect(chaves).toEqual(esperado);
   });

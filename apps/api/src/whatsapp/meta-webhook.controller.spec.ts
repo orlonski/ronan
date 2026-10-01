@@ -1,5 +1,10 @@
 import { createHmac } from "node:crypto";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
+import {
+  TEMPLATES_CANDIDATOS_WHATSAPP,
+  TEMPLATES_WHATSAPP,
+  type TemplateCandidatoWhatsappDef,
+} from "@ronan/shared-types";
 import { UnauthorizedException } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import type { Request } from "express";
@@ -445,7 +450,34 @@ describe("aviso no sino da plataforma (templates)", () => {
   };
   const status = (c: MetaWebhookController, event: string, nome: string, reason?: string) =>
     enviar(c, "message_template_status_update", { event, message_template_name: nome, message_template_language: "pt_BR", reason });
-  const CAND = "convite_empresa_v2";
+  // O registro de candidatos está vazio de propósito (troca de 01/10/2026):
+  // o mecanismo é coberto com um candidato FICTÍCIO injetado só neste describe.
+  const CAND = "template_candidato_ficticio";
+  const registro = TEMPLATES_CANDIDATOS_WHATSAPP as Record<string, TemplateCandidatoWhatsappDef>;
+  beforeAll(() => {
+    registro.CANDIDATO_FICTICIO = {
+      nome: CAND,
+      idioma: "pt_BR",
+      substitui: "CONVITE_EMPRESA",
+      categoria: "utility",
+      corpo: [0, 1],
+      textoAprovacao: "Texto fictício {{1}} e {{2}}. Fim.",
+      exemplo: ["a", "b"],
+    };
+  });
+  afterAll(() => {
+    delete registro.CANDIDATO_FICTICIO;
+  });
+
+  it("os nomes v2 agora são templates de rota: APPROVED deles não avisa como candidato", async () => {
+    expect(TEMPLATES_WHATSAPP.CONVITE_EMPRESA!.nome).toBe("convite_empresa_v2");
+    expect(TEMPLATES_WHATSAPP.COBRANCA_AUTORIZACAO_PIX!.nome).toBe("cobranca_autorizacao_pix_link_v2");
+    const { c, disparar, reportar } = controller();
+    await status(c, "APPROVED", "convite_empresa_v2");
+    await status(c, "APPROVED", "cobranca_autorizacao_pix_link_v2");
+    expect(disparar).not.toHaveBeenCalled();
+    expect(reportar).not.toHaveBeenCalled();
+  });
 
   it("aprovação de candidato avisa só quem tem whatsapp.ver", async () => {
     const { c, disparar, contaFindFirst } = controller();

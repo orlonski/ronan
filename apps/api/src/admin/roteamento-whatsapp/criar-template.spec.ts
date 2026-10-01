@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { TEMPLATES_CANDIDATOS_WHATSAPP, type TemplateCandidatoWhatsappDef } from "@ronan/shared-types";
 import { AdminRoteamentoWhatsappService } from "./roteamento-whatsapp.service";
 
 /**
@@ -72,7 +73,7 @@ describe("criar template na Meta", () => {
       name: string;
       components: { type: string; text?: string; buttons?: { type: string; text: string; url: string; example: string[] }[] }[];
     };
-    expect(corpo.name).toBe("cobranca_autorizacao_pix_link");
+    expect(corpo.name).toBe("cobranca_autorizacao_pix_link_v2");
 
     const botao = corpo.components.find((c) => c.type === "BUTTONS")!.buttons![0]!;
     expect(botao.text).toBe("Pagar");
@@ -144,34 +145,77 @@ describe("criar template na Meta", () => {
     expect(botoes.every((b) => b.url === undefined)).toBe(true);
   });
 
+  /**
+   * Candidatos: o registro está vazio de propósito (troca de 01/10/2026), então
+   * o mecanismo é coberto com candidatos FICTÍCIOS injetados só aqui.
+   */
   describe("candidatos (texto novo de rota reclassificada)", () => {
-    it("cria o convite v2 com o NOME NOVO, UTILITY e o texto do catálogo", async () => {
+    const registro = TEMPLATES_CANDIDATOS_WHATSAPP as Record<string, TemplateCandidatoWhatsappDef>;
+    const CONVITE = "CONVITE_EMPRESA_TESTE_FICTICIO";
+    const COBRANCA = "COBRANCA_AUTORIZACAO_PIX_TESTE_FICTICIO";
+
+    beforeAll(() => {
+      registro[CONVITE] = {
+        nome: "convite_empresa_teste_ficticio",
+        idioma: "pt_BR",
+        substitui: "CONVITE_EMPRESA",
+        categoria: "utility",
+        corpo: [0, 1],
+        textoAprovacao:
+          "Convite fictício: {{1}} cadastrou você no {{2}}. Se você não reconhece este convite, ignore esta mensagem.",
+        exemplo: ["Transportes Schaba", "Movatruck"],
+      };
+      registro[COBRANCA] = {
+        nome: "cobranca_autorizacao_pix_link_teste_ficticio",
+        idioma: "pt_BR",
+        substitui: "COBRANCA_AUTORIZACAO_PIX",
+        categoria: "utility",
+        corpo: [0, 1, 2],
+        botao: { tipo: "URL", param: 5, texto: "Pagar" },
+        textoAprovacao:
+          "Olá, {{1}}. Pagamento fictício de {{2}}, vencimento em {{3}}. Para autorizar, use o botão abaixo.",
+        exemplo: [
+          "Marcos",
+          "R$ 1.890,00",
+          "10/09/2026",
+          "",
+          "00020101021226790014br.gov.bcb.pix2557pix.asaas.com/qr/cob/x",
+          "k7Qw2mT9xZ0aB3cD5eF6gH8j",
+        ],
+      };
+    });
+    afterAll(() => {
+      delete registro[CONVITE];
+      delete registro[COBRANCA];
+    });
+
+    it("cria o candidato com o NOME NOVO, UTILITY e o texto do catálogo", async () => {
       const { s, chamadas } = servico();
-      await s.criarTemplateNaMeta("waba1", "CONVITE_EMPRESA_V2");
+      await s.criarTemplateNaMeta("waba1", CONVITE);
       const corpo = chamadas[0]!.corpo as {
         name: string;
         category: string;
         components: { type: string; text?: string; example?: { body_text: string[][] } }[];
       };
-      expect(corpo.name).toBe("convite_empresa_v2");
+      expect(corpo.name).toBe("convite_empresa_teste_ficticio");
       expect(corpo.category).toBe("UTILITY");
       const body = corpo.components.find((c) => c.type === "BODY")!;
-      expect(body.text).toMatch(/^Convite de cadastro: \{\{1\}\} cadastrou você/);
+      expect(body.text).toMatch(/^Convite fictício: \{\{1\}\} cadastrou você/);
       expect(body.example!.body_text[0]).toEqual(["Transportes Schaba", "Movatruck"]);
       expect(corpo.components.some((c) => c.type === "BUTTONS")).toBe(false);
     });
 
-    it("cria a cobrança v2 com o mesmo botão Pagar e exige o prefixo", async () => {
+    it("candidato com botão Pagar exige o prefixo", async () => {
       const { s, chamadas } = servico();
-      await expect(s.criarTemplateNaMeta("waba1", "COBRANCA_AUTORIZACAO_PIX_V2")).rejects.toThrow(/urlBase/i);
+      await expect(s.criarTemplateNaMeta("waba1", COBRANCA)).rejects.toThrow(/urlBase/i);
       expect(chamadas).toHaveLength(0);
-      await s.criarTemplateNaMeta("waba1", "COBRANCA_AUTORIZACAO_PIX_V2", "https://app.movatruck.com.br/pagar/");
+      await s.criarTemplateNaMeta("waba1", COBRANCA, "https://app.movatruck.com.br/pagar/");
       const corpo = chamadas[0]!.corpo as {
         name: string;
         category: string;
         components: { type: string; buttons?: { text: string; url: string; example: string[] }[] }[];
       };
-      expect(corpo.name).toBe("cobranca_autorizacao_pix_link_v2");
+      expect(corpo.name).toBe("cobranca_autorizacao_pix_link_teste_ficticio");
       expect(corpo.category).toBe("UTILITY");
       const botao = corpo.components.find((c) => c.type === "BUTTONS")!.buttons![0]!;
       expect(botao.text).toBe("Pagar");
@@ -179,24 +223,21 @@ describe("criar template na Meta", () => {
       expect(botao.example[0]).not.toContain("br.gov.bcb.pix");
     });
 
-    it("templatesMeta lista os candidatos abaixo dos atuais, com a categoria que a Meta deu", async () => {
-      const meta = {
-        listarTemplates: async () => ({
-          ok: true,
-          resposta: {
-            data: [
-              { name: "convite_empresa", language: "pt_BR", status: "APPROVED", category: "MARKETING" },
-              { name: "convite_empresa_v2", language: "pt_BR", status: "APPROVED", category: "UTILITY" },
-            ],
-          },
-        }),
-      };
-      const s = new AdminRoteamentoWhatsappService(
+    function servicoComMeta(data: unknown[]) {
+      const meta = { listarTemplates: async () => ({ ok: true, resposta: { data } }) };
+      return new AdminRoteamentoWhatsappService(
         {} as never,
         {} as never,
         meta as never,
         { get: () => "https://app.movatruck.com.br" } as never,
       );
+    }
+
+    it("templatesMeta lista os candidatos abaixo dos atuais, com a categoria que a Meta deu", async () => {
+      const s = servicoComMeta([
+        { name: "convite_empresa_v2", language: "pt_BR", status: "APPROVED", category: "MARKETING" },
+        { name: "convite_empresa_teste_ficticio", language: "pt_BR", status: "APPROVED", category: "UTILITY" },
+      ]);
       const { esperados } = (await s.templatesMeta("waba1")) as {
         esperados: Record<string, unknown>[];
       };
@@ -204,9 +245,8 @@ describe("criar template na Meta", () => {
       const cands = esperados.filter((e) => e.candidato);
       // candidatos vêm DEPOIS de todos os atuais, e os atuais não ganham o campo
       expect(esperados.slice(-cands.length)).toEqual(cands);
-      expect(cands.map((c) => c.rota)).toEqual(["CONVITE_EMPRESA_V2", "COBRANCA_AUTORIZACAO_PIX_V2"]);
-      const convite = cands[0]!;
-      expect(convite).toMatchObject({
+      expect(cands.map((c) => c.rota)).toEqual([CONVITE, COBRANCA]);
+      expect(cands[0]).toMatchObject({
         substitui: "CONVITE_EMPRESA",
         status: "APPROVED",
         categoria: "UTILITY",
@@ -215,8 +255,27 @@ describe("criar template na Meta", () => {
       });
       expect(cands[1]).toMatchObject({ naMeta: "NÃO EXISTE", status: null, categoria: null });
       expect(cands[1]!.urlBaseSugerida).toBe("https://app.movatruck.com.br/pagar/");
-      // o atual segue como estava: aprovado, mas MARKETING (a tela avisa)
+      // o atual (já v2) segue como estava: aprovado, mas MARKETING (a tela avisa)
       expect(normais.find((e) => e.rota === "CONVITE_EMPRESA")).toMatchObject({ categoria: "MARKETING", categoriaEsperada: "UTILITY" });
+    });
+
+    it("com o registro vazio (estado normal), templatesMeta não devolve nenhuma linha de candidato", async () => {
+      const guardados = { ...registro };
+      for (const k of Object.keys(registro)) delete registro[k];
+      try {
+        const s = servicoComMeta([
+          { name: "convite_empresa_v2", language: "pt_BR", status: "APPROVED", category: "UTILITY" },
+        ]);
+        const { esperados } = (await s.templatesMeta("waba1")) as { esperados: Record<string, unknown>[] };
+        expect(esperados.filter((e) => e.candidato)).toHaveLength(0);
+        expect(esperados.find((e) => e.rota === "CONVITE_EMPRESA")).toMatchObject({
+          status: "APPROVED",
+          categoria: "UTILITY",
+          bate: true,
+        });
+      } finally {
+        Object.assign(registro, guardados);
+      }
     });
   });
 });
