@@ -448,6 +448,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Concluir o conserto num formulário só: a revisão recomeça a contar, a conta vai pra Contas a pagar e o motorista fica sabendo",
       "Programar a mesma revisão pra vários caminhões de uma vez",
       "Cadastrar pneus, multas e a validade dos documentos do caminhão",
+      "Ver para onde vai o dinheiro da oficina: gasto por mês (programado ou quebra), os caminhões que mais gastam, o que mais se conserta e em qual oficina",
     ],
     naoEAqui: {
       procurando: "a CNH e os documentos do motorista",

@@ -10,6 +10,7 @@ import { UploadsModule } from "../../uploads/uploads.module";
 import { AdminInboxModule } from "../inbox/inbox.module";
 import { PushModule } from "../../push/push.module";
 import { FrotaManutencaoService } from "./frota-manutencao.service";
+import { CustosManutencaoService } from "./custos-manutencao.service";
 
 @Module({
   imports: [UploadsModule, AdminInboxModule, PushModule],
@@ -20,7 +21,7 @@ import { FrotaManutencaoService } from "./frota-manutencao.service";
     DocumentosVeiculoController,
     ProblemasVeiculoMotoristaController,
   ],
-  providers: [FrotaManutencaoService],
+  providers: [FrotaManutencaoService, CustosManutencaoService],
   exports: [FrotaManutencaoService],
 })
 export class FrotaManutencaoModule {}

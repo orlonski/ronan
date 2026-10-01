@@ -51,6 +51,17 @@ import { RequerCapacidade } from "../../common/acesso-app/capacidade.decorator";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { FrotaManutencaoService, MAX_FOTOS_PROBLEMA } from "./frota-manutencao.service";
+import { CustosManutencaoService } from "./custos-manutencao.service";
+
+const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data no formato AAAA-MM-DD.");
+/** Até 2 anos: o gráfico é por mês, e 24 barras ainda se leem. */
+const CustosQuery = z
+  .object({ de: YMD, ate: YMD, veiculoId: z.string().uuid().optional() })
+  .refine((q) => q.de <= q.ate, { message: "A data final não pode ser antes da inicial.", path: ["ate"] })
+  .refine((q) => Date.parse(q.ate) - Date.parse(q.de) <= 731 * 86_400_000, {
+    message: "Período máximo de 2 anos.",
+    path: ["de"],
+  });
 
 const ListManutencoes = paginationQuerySchema.extend({
   veiculoId: z.string().uuid().optional(),
@@ -77,7 +88,19 @@ export class ManutencaoController {
   constructor(
     private readonly service: FrotaManutencaoService,
     private readonly uploads: UploadsService,
+    private readonly custos: CustosManutencaoService,
   ) {}
+
+  /** Aba "Custos": por mês, por caminhão, pelo que mais se conserta e por oficina. */
+  @EscopoPor("veiculo")
+  @RequerPermissao("custos-manutencao.ver")
+  @Get("custos")
+  resumoCustos(
+    @Query(new ZodValidationPipe(CustosQuery)) q: z.infer<typeof CustosQuery>,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.custos.resumo(q, user.escopo);
+  }
 
   @EscopoPor("veiculo")
   @RequerPermissao("manutencao.ver")

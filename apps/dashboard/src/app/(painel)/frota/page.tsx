@@ -35,6 +35,7 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { CaixaDeEntrada } from "./_components/caixa-entrada";
+import { CustosManutencao } from "./_components/custos";
 import { CancelarConserto } from "./_components/cancelar-conserto";
 import { ConcluirConserto } from "./_components/concluir-conserto";
 import {
@@ -56,7 +57,7 @@ export default function FrotaPage() {
   );
 }
 
-type Aba = "caixa" | "manutencoes" | "planos" | "pneus" | "multas" | "documentos";
+type Aba = "caixa" | "manutencoes" | "planos" | "pneus" | "multas" | "documentos" | "custos";
 
 function Conteudo() {
   const token = useAuthToken();
@@ -80,6 +81,7 @@ function Conteudo() {
       ["pneus", "Pneus", "pneus.ver"],
       ["multas", "Multas", "multas.ver"],
       ["documentos", "Documentos", "documentos-veiculo.ver"],
+      ["custos", "Custos", "custos-manutencao.ver"],
     ] as const
   ).filter(([, , perm]) => temPermissao(perm));
 
@@ -138,6 +140,7 @@ function Conteudo() {
       {aba === "pneus" && <ListaPneus />}
       {aba === "multas" && <ListaMultas />}
       {aba === "documentos" && <ListaDocumentos />}
+      {aba === "custos" && <CustosManutencao />}
     </div>
   );
 }

@@ -166,6 +166,10 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // Manutenção, pneu, documento do veículo e multa — o que some do radar e vira
   // caminhão parado ou multa vencida.
   { recurso: "manutencao", label: "Manutenção e vencimentos do caminhão", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
+  // Aba "Custos" da Manutenção: para onde vai o dinheiro da oficina. Chave
+  // própria porque é aba própria — o mesmo público de `manutencao`, por isso
+  // "Operação" (o Operador já via o valor de cada conserto).
+  { recurso: "custos-manutencao", label: "Custos da manutenção", modulo: "Operação", acoes: ["ver"] },
   { recurso: "pneus", label: "Pneus", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "multas", label: "Multas", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "documentos-veiculo", label: "Documentos do veículo", modulo: "Cadastros", acoes: ["ver", "editar"] },
