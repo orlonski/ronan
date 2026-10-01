@@ -34,7 +34,9 @@ export type TipoNotificacaoAdmin =
   // A Meta mudou o estado de um template do WhatsApp (da PLATAFORMA).
   | "template-whatsapp"
   // O funcionário pediu correção do ponto pelo app.
-  | "correcao-ponto";
+  | "correcao-ponto"
+  // Resumo diário de documento do motorista/caminhão vencendo.
+  | "documento-vencendo";
 
 /**
  * As abas do filtro do sininho. Agrupa por ASSUNTO, não por tipo técnico:
@@ -65,7 +67,7 @@ export const CATEGORIAS_INBOX = [
   },
   { chave: "motoristas", label: "Motoristas", tipos: ["motorista-cadastro", "motorista-senha-reset"] },
   { chave: "ponto", label: "Ponto", tipos: ["correcao-ponto"] },
-  { chave: "frota", label: "Frota", tipos: ["problema-veiculo"] },
+  { chave: "frota", label: "Frota", tipos: ["problema-veiculo", "documento-vencendo"] },
   {
     chave: "plataforma",
     label: "Plataforma",

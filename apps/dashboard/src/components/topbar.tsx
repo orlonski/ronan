@@ -249,6 +249,8 @@ export function IconeTipo({ tipo }: { tipo: string }) {
     return <TriangleAlert className={`${cls} text-red-600`} />;
   if (tipo === "problema-veiculo")
     return <Wrench className={`${cls} text-amber-600`} />;
+  if (tipo === "documento-vencendo")
+    return <ClipboardCheck className={`${cls} text-amber-600`} />;
   if (tipo === "conferencia-diaria")
     return <ClipboardCheck className={`${cls} text-amber-600`} />;
   if (tipo === "conta-auto-cadastro" || tipo === "lead-novo" || tipo === "lead-precisa-humano")
@@ -298,6 +300,8 @@ export function rotaParaNotificacao(n: AdminNotificacao): string | null {
   if (n.tipo === "alerta-torre") return "/torre";
   // O aviso se decide na aba "Avisos do motorista" da Manutenção.
   if (n.tipo === "problema-veiculo") return "/frota?aba=avisos";
+  // Documento do caminhão se renova na Manutenção; o do motorista, na lista de motoristas.
+  if (n.tipo === "documento-vencendo") return dados.de === "de caminhão" ? "/frota?aba=documentos" : "/motoristas";
   // Estado de template da Meta se confere na tela WhatsApp → Templates na Meta.
   if (n.tipo === "template-whatsapp") return "/whatsapp";
   // As sugestões da conferência se decidem na aba "Fila do gestor".

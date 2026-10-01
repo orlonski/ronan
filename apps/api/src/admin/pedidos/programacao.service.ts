@@ -16,6 +16,7 @@ import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { casarPlanejada, type PlanejadaParaCasar } from "../../common/pedido-saldo";
 import { planejarCopia } from "../../common/programacao-copia";
 import { PedidosService } from "./pedidos.service";
+import { DocumentosVencendoService } from "./documentos-vencendo.service";
 
 const INCLUDE = {
   pedido: {
@@ -46,6 +47,7 @@ export class ProgramacaoService {
     private readonly prisma: PrismaService,
     private readonly push: PushService,
     private readonly pedidos: PedidosService,
+    private readonly documentos: DocumentosVencendoService,
   ) {}
 
   /**
@@ -83,9 +85,21 @@ export class ProgramacaoService {
       orderBy: { nome: "asc" },
     });
 
+    // Selo de documento vencendo no motorista e no caminhão: é na hora de
+    // programar que "a CNH do Zé vence sexta" muda alguma coisa.
+    const veiculoIds = [
+      ...new Set(
+        [...planejadas.map((p) => p.veiculoId), ...motoristas.map((m) => m.veiculoDefault?.id)].filter(
+          (v): v is string => v != null,
+        ),
+      ),
+    ];
+    const documentos = await this.documentos.alertas(motoristas.map((m) => m.id), veiculoIds);
+
     return {
       data: dataIso,
       planejadas,
+      documentos,
       motoristas: motoristas.map((m) => ({
         ...m,
         programadas: planejadas.filter((p) => p.motoristaId === m.id).length,

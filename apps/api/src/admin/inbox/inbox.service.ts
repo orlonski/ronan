@@ -43,7 +43,9 @@ export type TipoNotificacaoAdmin =
   // O funcionário pediu correção do ponto pelo app (só pra quem decide).
   | "correcao-ponto"
   // A Meta mudou o estado/categoria de um template do WhatsApp. Da PLATAFORMA.
-  | "template-whatsapp";
+  | "template-whatsapp"
+  // Resumo diário: documento do motorista ou do caminhão vencendo/vencido.
+  | "documento-vencendo";
 
 export type DispararNotificacaoInput = {
   tipo: TipoNotificacaoAdmin;

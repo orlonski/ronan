@@ -38,6 +38,7 @@ const TIPO_LABEL: Record<string, string> = {
   "lead-precisa-humano": "Lead esperando atendimento",
   "template-whatsapp": "Template do WhatsApp",
   "correcao-ponto": "Correção de ponto",
+  "documento-vencendo": "Documento vencendo",
 };
 
 export default function InboxPage() {

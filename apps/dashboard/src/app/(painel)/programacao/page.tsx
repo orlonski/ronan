@@ -48,7 +48,15 @@ type MotoristaLinha = {
   veiculoDefault: { id: string; placa: string; capacidadeToneladas: string | null } | null;
 };
 
-type Quadro = { data: string; planejadas: Planejada[]; motoristas: MotoristaLinha[] };
+type AlertaDocumento = { texto: string; situacao: "VENCIDO" | "VENCE_LOGO"; dias: number };
+
+type Quadro = {
+  data: string;
+  planejadas: Planejada[];
+  motoristas: MotoristaLinha[];
+  /** Documento vencido ou vencendo em até 15 dias, por motorista e por caminhão. */
+  documentos?: { motoristas: Record<string, AlertaDocumento[]>; veiculos: Record<string, AlertaDocumento[]> };
+};
 
 type PedidoAberto = {
   id: string;
@@ -207,6 +215,10 @@ function Conteudo() {
                 dia={dia}
                 pedidos={pedidos.data?.data ?? []}
                 onMudou={recarregar}
+                alertas={[
+                  ...(quadro.data?.documentos?.motoristas[m.id] ?? []),
+                  ...(m.veiculoDefault ? (quadro.data?.documentos?.veiculos[m.veiculoDefault.id] ?? []) : []),
+                ]}
               />
             ))}
 
@@ -261,12 +273,14 @@ function LinhaMotorista({
   dia,
   pedidos,
   onMudou,
+  alertas = [],
 }: {
   motorista: MotoristaLinha;
   planejadas: Planejada[];
   dia: string;
   pedidos: PedidoAberto[];
   onMudou: () => void;
+  alertas?: AlertaDocumento[];
 }) {
   const token = useAuthToken();
   const [abrindo, setAbrindo] = React.useState(false);
@@ -301,7 +315,7 @@ function LinhaMotorista({
   return (
     <Card className="space-y-2 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{motorista.nome}</span>
           {motorista.veiculoDefault && (
             <Badge className="border-transparent bg-slate-100 text-slate-700">
@@ -317,6 +331,19 @@ function LinhaMotorista({
           {planejadas.length === 0 && (
             <span className="text-xs text-muted-foreground">sem nada programado</span>
           )}
+          {/* Só aviso: quem decide se o caminhão sai é o escritório. */}
+          {alertas.map((a) => (
+            <Badge
+              key={a.texto}
+              className={
+                a.situacao === "VENCIDO"
+                  ? "border-red-200 bg-red-100 text-red-800"
+                  : "border-amber-300 bg-amber-100 text-amber-900"
+              }
+            >
+              {a.texto}
+            </Badge>
+          ))}
         </div>
         <Permitido chave="programacao.editar">
           <Button variant="outline" size="sm" onClick={() => setAbrindo((v) => !v)}>
