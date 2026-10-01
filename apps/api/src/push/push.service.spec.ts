@@ -42,9 +42,11 @@ function montar(dados: {
   };
   const s = new PushService(prisma as never, notificacoes as never);
   const enviados: string[] = [];
+  const payloads: Record<string, unknown>[] = [];
   (s as unknown as { expo: unknown }).expo = {
     sendPushNotificationsAsync: vi.fn(async ([m]: [{ to: string }]) => {
       enviados.push(m.to);
+      payloads.push((m as unknown as { data: Record<string, unknown> }).data);
       return [dados.ticket ? dados.ticket(m.to) : { status: "ok", id: `t-${m.to}` }];
     }),
     getPushNotificationReceiptsAsync: vi.fn(async (ids: string[]) =>
@@ -52,7 +54,7 @@ function montar(dados: {
     ),
   };
   vi.useFakeTimers();
-  return { s, enviados, atualizarEntrega, updateMany };
+  return { s, enviados, payloads, atualizarEntrega, updateMany };
 }
 
 async function enviar(s: PushService, token: string) {
@@ -112,5 +114,12 @@ describe("PushService — alcança a pessoa, não o cadastro", () => {
       where: { expoPushToken: T_CADASTRO },
       data: { expoPushToken: null, pushTokenAtualizadoEm: null },
     });
+  });
+
+  it("todo push diz de qual cadastro é — o toque troca pra empresa certa", async () => {
+    const { s, payloads } = montar({ tokenCadastro: T_CADASTRO, tokenPessoa: T_PESSOA });
+    await enviar(s, T_CADASTRO);
+    expect(payloads).toHaveLength(2);
+    for (const d of payloads) expect(d).toMatchObject({ paraCadastro: "m-1", notificacaoId: "notif-1" });
   });
 });

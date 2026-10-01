@@ -30,7 +30,8 @@ import {
   sessoesSync,
   temAlgumaSessaoComToken,
 } from "@/lib/sessoes";
-import { atualizarCadastros, repararSessaoAtiva } from "@/lib/troca-empresa";
+import { atualizarCadastros, entrarNaEmpresaDoAviso, repararSessaoAtiva } from "@/lib/troca-empresa";
+import { showAlert } from "@/lib/alert";
 import {
   getCadastroStatus,
   loadCadastroStatus,
@@ -463,6 +464,39 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
         sub = Notifications.addNotificationResponseReceivedListener((resp) => {
           const data = resp.notification.request.content.data ?? {};
+          void (async () => {
+            // Aviso de OUTRA empresa: entra nela antes de abrir a tela — e
+            // antes de marcar lida, que é pela sessão do cadastro do aviso.
+            const paraCadastro = typeof data.paraCadastro === "string" ? data.paraCadastro : null;
+            const troca = await entrarNaEmpresaDoAviso(queryClient, paraCadastro).catch(
+              () => ({ r: "mesma" }) as const,
+            );
+            if (troca.r === "viagem-aberta") {
+              void showAlert({
+                title: `Esse aviso é da ${troca.contaNome}`,
+                message:
+                  "Você está com uma viagem em andamento aqui. Termine a viagem e troque de empresa no topo da tela inicial pra ver o aviso.",
+              });
+              return;
+            }
+            if (troca.r === "falhou") {
+              void showAlert({
+                title: `Esse aviso é da ${troca.contaNome}`,
+                message: "Não deu pra trocar de empresa agora. Veja sua internet e tente pelo topo da tela inicial.",
+              });
+              return;
+            }
+            if (troca.r === "trocou") {
+              void showAlert({
+                title: `Agora você está na ${troca.contaNome}`,
+                message: "Esse aviso é dessa empresa. Pra voltar, troque no topo da tela inicial.",
+              });
+            }
+            abrirAviso(data);
+          })();
+        });
+
+        function abrirAviso(data: Record<string, unknown>) {
           const kind = data.kind;
           const notificacaoId = typeof data.notificacaoId === "string" ? data.notificacaoId : null;
 
@@ -534,7 +568,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             void queryClient.invalidateQueries({ queryKey: ["meus-problemas"] });
             router.push("/meus-avisos");
           }
-        });
+        }
       } catch {
         /* expo-notifications/task-manager indisponivel — ok em dev */
       }

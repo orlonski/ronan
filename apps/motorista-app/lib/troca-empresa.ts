@@ -95,6 +95,43 @@ export async function repararSessaoAtiva(): Promise<void> {
   }
 }
 
+/**
+ * O toque num push de OUTRA empresa entra nela antes de abrir a tela.
+ *
+ * O push chega em todos os aparelhos da pessoa, com qualquer empresa ativa
+ * (decisão de 01/10/2026). Sem esta troca, tocar no aviso da empresa B com a A
+ * aberta levava pra uma tela que a sessão da A não enxerga — viagem 404, lista
+ * vazia — e parecia que o aviso era mentira.
+ *
+ * ⚠️ Com viagem guiada ABERTA na empresa atual, NÃO troca: rastreio e eventos
+ * estão amarrados à sessão que abriu a viagem, e trocar no meio a deixaria pela
+ * metade. É o mesmo cuidado do seletor de empresa, só que aqui não há tela
+ * pra ele confirmar — então quem decide é ele, depois, pelo seletor.
+ */
+export async function entrarNaEmpresaDoAviso(
+  qc: QueryClient,
+  paraCadastro: string | null,
+): Promise<
+  | { r: "mesma" }
+  | { r: "trocou"; contaNome: string }
+  | { r: "viagem-aberta"; contaNome: string }
+  | { r: "falhou"; contaNome: string }
+> {
+  if (!paraCadastro || (await motoristaAtivoId()) === paraCadastro) return { r: "mesma" };
+  const destino = (await listarSessoes()).find((s) => s.motoristaId === paraCadastro);
+  // Aviso de cadastro que este aparelho não conhece (outra pessoa usou o
+  // celular, cadastro excluído): fica onde está.
+  if (!destino) return { r: "mesma" };
+  const contaNome = destino.contaNome || "outra empresa";
+  if ((await avaliarTroca()).viagemAberta) return { r: "viagem-aberta", contaNome };
+  try {
+    await trocarEmpresa(qc, paraCadastro);
+    return { r: "trocou", contaNome };
+  } catch {
+    return { r: "falhou", contaNome };
+  }
+}
+
 /** O que ele perde de vista ao sair desta empresa agora. */
 export type AvisoTroca = {
   /** Viagem guiada aberta (iniciada e não finalizada) na empresa atual. */

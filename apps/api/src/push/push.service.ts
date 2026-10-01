@@ -123,6 +123,10 @@ export class PushService {
       ...(args.dados ?? {}),
       ...(notificacaoId ? { notificacaoId } : {}),
       kind: (args.dados?.kind as string | undefined) ?? tipo,
+      // De QUAL cadastro (empresa) é o aviso. O push agora chega em todos os
+      // aparelhos da pessoa, inclusive com outra empresa ativa no app; é por
+      // este campo que o toque entra na empresa certa antes de abrir a tela.
+      paraCadastro: args.motoristaId,
     };
 
     // Um aparelho por vez: cada ticket diz respeito a UM token, e é ele que
