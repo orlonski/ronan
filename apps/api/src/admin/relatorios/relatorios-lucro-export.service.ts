@@ -17,6 +17,7 @@ const COLUNAS_XLSX: { header: string; largura: number; fmt?: string }[] = [
   { header: "Caminhão", largura: 14 },
   { header: "Modelo", largura: 20 },
   { header: "Viagens", largura: 9, fmt: FMT_INT },
+  { header: "Km", largura: 10, fmt: FMT_INT },
   { header: "Faturou", largura: 15, fmt: FMT_BRL },
   { header: "Motorista", largura: 14, fmt: FMT_BRL },
   { header: "Combustível", largura: 14, fmt: FMT_BRL },
@@ -26,6 +27,7 @@ const COLUNAS_XLSX: { header: string; largura: number; fmt?: string }[] = [
   { header: "Custos fixos", largura: 14, fmt: FMT_BRL },
   { header: "Outras contas", largura: 14, fmt: FMT_BRL },
   { header: "Gastou", largura: 15, fmt: FMT_BRL },
+  { header: "Custo/km", largura: 11, fmt: FMT_BRL },
   { header: "Sobrou", largura: 15, fmt: FMT_BRL },
   { header: "Margem %", largura: 10, fmt: "0.0" },
 ];
@@ -91,6 +93,7 @@ export class RelatoriosLucroExportService {
         v.placa,
         v.modelo ?? "",
         v.viagens,
+        Number(v.km),
         Number(v.faturou),
         Number(v.custos.motorista),
         Number(v.custos.combustivel),
@@ -100,6 +103,7 @@ export class RelatoriosLucroExportService {
         Number(v.custos.custosFixos),
         Number(v.custos.outrasContas),
         Number(v.gastou),
+        v.porKm ? Number(v.porKm.gastou) : null,
         Number(v.sobrou),
         v.margem ?? null,
       ];
@@ -112,6 +116,7 @@ export class RelatoriosLucroExportService {
       "TOTAL",
       "",
       t.viagens,
+      Number(t.km),
       Number(t.faturou),
       Number(t.custos.motorista),
       Number(t.custos.combustivel),
@@ -121,6 +126,7 @@ export class RelatoriosLucroExportService {
       Number(t.custos.custosFixos),
       Number(t.custos.outrasContas),
       Number(t.gastou),
+      t.porKm ? Number(t.porKm.gastou) : null,
       Number(t.sobrou),
       t.margem ?? null,
     ];

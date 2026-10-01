@@ -108,6 +108,13 @@ export type ItemCustoFixo = { id: string; tipo: string; valorMensal: string; val
 
 export type LucroVeiculo = {
   viagens: number;
+  /** Km das viagens que entraram (o km faturado de cada uma). */
+  km: string;
+  /**
+   * Cada número dividido pelo km rodado — a régua pra comparar caminhão que
+   * rodou 2 mil km com caminhão que rodou 8 mil. Null sem km.
+   */
+  porKm: { faturou: string; gastou: string; sobrou: string; custos: Record<string, string> } | null;
   faturou: string;
   custos: {
     motorista: string;
@@ -295,8 +302,31 @@ export function calcularLucroVeiculo(e: EntradaLucroVeiculo): LucroVeiculo {
   const gastou2 = new Prisma.Decimal(gastou.toFixed(2));
   const sobrou = faturou2.sub(gastou2);
 
+  const km = e.viagens.reduce((acc, v) => acc.add(dec(v.km)), ZERO());
+  const custosValores = {
+    motorista,
+    combustivel,
+    pedagio,
+    manutencao: manut.total,
+    multas: multas.total,
+    custosFixos,
+    outrasContas: outras.total,
+  };
+  const porKm = km.gt(0)
+    ? {
+        faturou: faturou2.div(km).toFixed(2),
+        gastou: gastou2.div(km).toFixed(2),
+        sobrou: sobrou.div(km).toFixed(2),
+        custos: Object.fromEntries(
+          Object.entries(custosValores).map(([k, v]) => [k, v.div(km).toFixed(2)]),
+        ),
+      }
+    : null;
+
   return {
     viagens: e.viagens.length,
+    km: km.toFixed(0),
+    porKm,
     faturou: faturou2.toFixed(2),
     custos: {
       motorista: motorista.toFixed(2),

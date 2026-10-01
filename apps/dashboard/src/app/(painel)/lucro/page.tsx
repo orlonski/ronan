@@ -211,6 +211,7 @@ function Conteudo() {
               icon={TrendingDown}
               label="Gastou"
               value={fmtBRL(t.gastou)}
+              subtitle={t.porKm ? `${fmtBRL(t.porKm.gastou)} por km · ${Number(t.km).toLocaleString("pt-BR")} km` : undefined}
               info="Motorista, combustível, pedágio, manutenção, multas, custos fixos e outras contas lançadas pro caminhão."
             />
             <StatCard
@@ -260,6 +261,7 @@ function Conteudo() {
                       <th className="px-3 py-2 text-right font-medium">Viagens</th>
                       <th className="px-3 py-2 text-right font-medium">Faturou</th>
                       <th className="px-3 py-2 text-right font-medium">Gastou</th>
+                      <th className="px-3 py-2 text-right font-medium">Custo/km</th>
                       <th className="px-3 py-2 text-right font-medium">Sobrou</th>
                       <th className="px-3 py-2 text-right font-medium">Margem</th>
                     </tr>
@@ -290,6 +292,9 @@ function Conteudo() {
                           </td>
                           <td data-rotulo="Gastou" className="px-3 py-2 text-right tabular-nums">
                             {fmtBRL(v.gastou)}
+                          </td>
+                          <td data-rotulo="Custo/km" className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                            {v.porKm ? fmtBRL(v.porKm.gastou) : "—"}
                           </td>
                           <td
                             data-rotulo="Sobrou"
@@ -333,7 +338,19 @@ function Conteudo() {
   );
 }
 
-function Linha({ rotulo, valor, forte, negativo }: { rotulo: string; valor: string; forte?: boolean; negativo?: boolean }) {
+function Linha({
+  rotulo,
+  valor,
+  forte,
+  negativo,
+  porKm,
+}: {
+  rotulo: string;
+  valor: string;
+  forte?: boolean;
+  negativo?: boolean;
+  porKm?: string;
+}) {
   const zero = Number(valor) === 0;
   return (
     <div className={cn("flex items-baseline justify-between gap-3 py-1", forte && "font-semibold")}>
@@ -341,6 +358,11 @@ function Linha({ rotulo, valor, forte, negativo }: { rotulo: string; valor: stri
       <span className={cn("tabular-nums", zero && !forte && "text-muted-foreground")}>
         {negativo && !zero ? "− " : ""}
         {fmtBRL(valor)}
+        {porKm && !zero && (
+          <span className="ml-2 inline-block w-20 text-right text-xs font-normal text-muted-foreground">
+            {fmtBRL(porKm)}/km
+          </span>
+        )}
       </span>
     </div>
   );
@@ -397,14 +419,19 @@ function DetalheCaminhao({ linha, onFechar }: { linha: LinhaLucroVeiculo | null;
 
             <div className="mt-4 space-y-5 text-sm">
               <div>
-                <Linha rotulo={`Faturou (${linha.viagens} viagens)`} valor={linha.faturou} forte />
+                <Linha
+                  rotulo={`Faturou (${linha.viagens} viagens · ${Number(linha.km).toLocaleString("pt-BR")} km)`}
+                  valor={linha.faturou}
+                  forte
+                  porKm={linha.porKm?.faturou}
+                />
                 <div className="mt-1 border-l-2 pl-3">
                   {(Object.keys(ROTULO_CUSTO) as (keyof CustosLucro)[]).map((k) => (
-                    <Linha key={k} rotulo={ROTULO_CUSTO[k]} valor={linha.custos[k]} negativo />
+                    <Linha key={k} rotulo={ROTULO_CUSTO[k]} valor={linha.custos[k]} negativo porKm={linha.porKm?.custos[k]} />
                   ))}
                 </div>
                 <div className="mt-2 border-t pt-2">
-                  <Linha rotulo="Gastou" valor={linha.gastou} />
+                  <Linha rotulo="Gastou" valor={linha.gastou} porKm={linha.porKm?.gastou} />
                   <div
                     className={cn(
                       "flex items-baseline justify-between py-1 text-base font-semibold",

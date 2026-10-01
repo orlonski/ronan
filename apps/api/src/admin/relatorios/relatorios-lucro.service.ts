@@ -384,9 +384,22 @@ function totalizar(linhas: LinhaLucroVeiculo[]): RelatorioLucroResposta["frota"]
   const faturou = soma((l) => l.faturou);
   const gastou = soma((l) => l.gastou);
   const sobrou = faturou.sub(gastou);
+  const km = soma((l) => l.km);
+  const porKm = km.gt(0)
+    ? {
+        faturou: faturou.div(km).toFixed(2),
+        gastou: gastou.div(km).toFixed(2),
+        sobrou: sobrou.div(km).toFixed(2),
+        custos: Object.fromEntries(
+          chavesCusto.map((k) => [k, new Prisma.Decimal(custos[k]).div(km).toFixed(2)]),
+        ) as Record<keyof CustosLucro, string>,
+      }
+    : null;
   return {
     veiculos: linhas.length,
     viagens: linhas.reduce((s, l) => s + l.viagens, 0),
+    km: km.toFixed(0),
+    porKm,
     faturou: faturou.toFixed(2),
     gastou: gastou.toFixed(2),
     sobrou: sobrou.toFixed(2),

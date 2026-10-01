@@ -64,6 +64,18 @@ describe("calcularLucroVeiculo", () => {
     expect(r.margem).toBe(83.3);
   });
 
+  it("divide tudo pelo km rodado (a régua entre caminhões)", () => {
+    const r = calcularLucroVeiculo(entrada({ viagens: [viagem(), viagem({ id: "v2" })] }));
+    // 2 viagens de 50 km: 100 km. Faturou 1200, gastou 200 (motorista).
+    expect(r.km).toBe("100");
+    expect(r.porKm).toMatchObject({ faturou: "12.00", gastou: "2.00", sobrou: "10.00" });
+    expect(r.porKm!.custos.motorista).toBe("2.00");
+  });
+
+  it("caminhão sem km não tem valor por km", () => {
+    expect(calcularLucroVeiculo(entrada({})).porKm).toBeNull();
+  });
+
   it("viagem sem preço não vira R$ 0 calado: é contada", () => {
     const r = calcularLucroVeiculo(
       entrada({ viagens: [viagem(), viagem({ id: "v2", valorTotal: null, valorFrete: null })] }),

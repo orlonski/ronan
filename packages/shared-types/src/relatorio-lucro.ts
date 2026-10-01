@@ -59,11 +59,22 @@ export type ItemCustoFixoLucro = {
   valorNoPeriodo: string;
 };
 
+export type PorKmLucro = {
+  faturou: string;
+  gastou: string;
+  sobrou: string;
+  custos: Record<keyof CustosLucro, string>;
+};
+
 export type LinhaLucroVeiculo = {
   veiculoId: string;
   placa: string;
   modelo: string | null;
   viagens: number;
+  /** Km das viagens que entraram. */
+  km: string;
+  /** Tudo dividido pelo km. Null sem km. */
+  porKm: PorKmLucro | null;
   faturou: string;
   custos: CustosLucro;
   gastou: string;
@@ -88,6 +99,8 @@ export type RelatorioLucroResposta = {
   frota: {
     veiculos: number;
     viagens: number;
+    km: string;
+    porKm: PorKmLucro | null;
     faturou: string;
     gastou: string;
     sobrou: string;
