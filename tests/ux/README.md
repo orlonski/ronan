@@ -71,6 +71,24 @@ As próximas levas recolhem o menu lateral abaixo de 1536px. Os E2E que leem o `
 
 `navegacao-mobile.dashboard.spec.ts` roda só no projeto `mobile` e trava: barra inferior (4 destinos derivados do menu + "Mais"), folha "Mais" com busca, o cabeçalho com Voltar nas páginas filhas, a barra que some com o teclado e — a regra central — que a folha do celular mostra **exatamente** as telas da sidebar do desktop (admin e `operador@modelo.test`, papel restrito do seed). A regra de quem vê o quê (menu, semente da barra, raiz x filha) também tem teste sem navegador em `tests/e2e/menu-fonte-unica.dashboard.spec.ts`. A suíte não grava "visto" do passo a passo, então a home abre com o tour por cima: o spec o pula.
 
+## Janelas como folha de baixo + banner "Sobre esta tela" (Leva 1, fatia 3)
+
+Abaixo de 768px (`max-md:`) toda `DialogContent`/`SheetContent` vira **folha de baixo** (`components/ui/folha-mobile.tsx`): ancorada
+embaixo, largura total, cantos de cima arredondados, alça de arrasto, cabeçalho e rodapé de ações fixos e SÓ o miolo rola,
+fechar de 44px, sobe pela altura do teclado (`visualViewport`, o iOS não redimensiona a janela) e traz o campo focado pro meio.
+Do `md` pra cima nada muda (o miolo vira `display: contents`).
+
+**Critério folha x centrado:** `centrado` (`modoCelular="centrado"`) só pra CONFIRMAÇÃO curta sem campo — título + 1-2 linhas +
+2 botões, ou seja o `useConfirm()`. Qualquer outra janela (campo, lista, tabela, mapa, preview, ou que possa crescer) é folha.
+
+O banner "Sobre esta tela" (`components/sobre-a-tela.tsx`) no celular é UMA linha ("Sobre esta tela ▸"), fechada por padrão;
+abrir fica lembrado por tela (`ronan.sobre-a-tela-celular.<rota>`); "Entendi" (a chave `ronan.sobre-a-tela.<rota>` de sempre) dispensa em todos os tamanhos.
+
+- `janelas-mobile.dashboard.spec.ts` (roda no `pnpm ux`): comportamento da folha, teclado (Android e iPhone simulados), rotação, tour, banner, e a prova de que o desktop segue centrado.
+- `pnpm ux:janelas` (`UX_FASE=antes|depois`): abre ~25 janelas pelo gatilho real e captura/mede nos 4 viewports (`resultados/dialogos/<fase>/<viewport>/`), mais 7 telas com o banner (`resultados/banner/`). Só abre, nunca confirma. É lento (minutos): fora do `pnpm ux`.
+- `python3 tests/ux/comparar-dialogos.py desktop` prova MacBook/ultra idênticos entre `antes` e `depois`; `... lado <pasta>` gera as imagens antes|depois do celular.
+- O stack fixa o relógio da API no dia do seed **mas ele segue andando**: o número de alertas da Torre (e por isso `textosMenor14` dela no celular) depende de há quanto tempo o stack subiu. Rode `pnpm ux` logo depois de `pnpm ux:stack subir`.
+
 ## Detalhes
 
 - Login: `admin@modelo.test` / `uxmedidas123` (`/whatsapp` abre com `super@movatruck.test`, tela só da plataforma; `operador@modelo.test` tem papel restrito).

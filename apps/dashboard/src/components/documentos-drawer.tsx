@@ -96,7 +96,7 @@ export function DocumentosDrawer({ open, onClose, motoristaId, motoristaNome }: 
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="overflow-hidden p-0">
+      <SheetContent className="overflow-hidden p-0 max-md:!h-[85dvh]" corpoClassName="max-md:px-0 max-md:pb-0">
         <div className="flex h-full flex-col">
           <div className="border-b p-6">
             <SheetHeader>

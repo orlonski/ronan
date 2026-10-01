@@ -44,6 +44,16 @@ body {
   touch-action: none;
 }
 
+/* Toast (sonner) no celular: o botão de fechar tem 20px e fica no canto. A área de toque vira 44px por um
+ * pseudo-elemento maior que o botão, sem mudar o desenho (só < 768px). */
+@media (max-width: 767px) {
+  [data-sonner-toast] [data-close-button]::before {
+    content: "";
+    position: absolute;
+    inset: -12px;
+  }
+}
+
 /* Safe-area (notch / home-bar do iPhone) — usadas no header sticky e na
  * bottom-nav. env() cai pra 0px em navegadores/telas sem inset. */
 @layer utilities {

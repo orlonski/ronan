@@ -79,7 +79,7 @@ export function useConfirm() {
     const temAviso = variant === "destructive" || variant === "warning";
     return (
       <Dialog open onOpenChange={(open) => !open && fechar(false)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" modoCelular="centrado">
           <DialogHeader>
             <div className="flex items-start gap-3">
               {temAviso && (

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowRight, Check, ChevronDown, HelpCircle, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ChevronRight, HelpCircle, X } from "lucide-react";
 import { sobreATela } from "@/lib/sobre-as-telas";
 import { cn } from "@/lib/utils";
 
@@ -33,9 +33,14 @@ export function SobreATela() {
   const pathname = usePathname();
   const dados = sobreATela(pathname);
   const chave = `ronan.sobre-a-tela.${pathname}`;
+  /** Só o celular: a explicação abriu por vontade da pessoa (fica lembrado por tela). Não é o "já vi" da chave acima. */
+  const chaveCelular = `ronan.sobre-a-tela-celular.${pathname}`;
 
   /** `null` = ainda não li o disco. Renderizar antes faria a tela piscar. */
   const [aberta, setAberta] = useState<boolean | null>(null);
+  /** Abaixo de 768px o banner vira UMA linha compacta, fechada por padrão (a explicação inteira come 60% da tela do celular). */
+  const [celular, setCelular] = useState(false);
+  const [abertaNoCelular, setAbertaNoCelular] = useState(false);
 
   useEffect(() => {
     setAberta(null);
@@ -48,38 +53,45 @@ export function SobreATela() {
       // fechada. Errar pro lado de não atrapalhar quem está trabalhando.
       setAberta(false);
     }
-  }, [chave, dados]);
+    // Lido no mesmo efeito que `aberta`: o banner só aparece (não é null) quando os dois já estão certos,
+    // então não há "piscada" do cartão grande antes de virar a linha, nem diferença entre servidor e cliente.
+    const mq = window.matchMedia("(max-width: 767px)");
+    setCelular(mq.matches);
+    try {
+      setAbertaNoCelular(localStorage.getItem(chaveCelular) === "1");
+    } catch {
+      setAbertaNoCelular(false);
+    }
+    const aoMudar = () => setCelular(mq.matches); // girar o aparelho
+    mq.addEventListener("change", aoMudar);
+    return () => mq.removeEventListener("change", aoMudar);
+  }, [chave, chaveCelular, dados]);
 
   function fechar() {
     setAberta(false);
+    setAbertaNoCelular(false);
     try {
       localStorage.setItem(chave, "1");
+      localStorage.removeItem(chaveCelular);
     } catch {
       /* sem storage: reabre na próxima visita, e tudo bem */
     }
   }
 
-  if (!dados || aberta === null) return null;
-
-  if (!aberta) {
-    return (
-      <button
-        type="button"
-        onClick={() => setAberta(true)}
-        className={cn(
-          "group mb-4 flex items-center gap-1.5 text-xs text-muted-foreground/70",
-          "transition-colors hover:text-foreground",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        )}
-      >
-        <HelpCircle className="h-3.5 w-3.5" />
-        Para que serve esta tela
-        <ChevronDown className="h-3 w-3 transition-transform group-hover:translate-y-0.5" />
-      </button>
-    );
+  function alternarNoCelular() {
+    const proximo = !abertaNoCelular;
+    setAbertaNoCelular(proximo);
+    try {
+      if (proximo) localStorage.setItem(chaveCelular, "1");
+      else localStorage.removeItem(chaveCelular);
+    } catch {
+      /* sem storage: vale só até sair da tela */
+    }
   }
 
-  return (
+  if (!dados || aberta === null) return null;
+
+  const cartao = (
     <section
       aria-label="Para que serve esta tela"
       className="mb-6 overflow-hidden rounded-xl border border-primary/20 bg-primary/[0.04]"
@@ -128,4 +140,46 @@ export function SobreATela() {
       </div>
     </section>
   );
+
+  if (celular) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={alternarNoCelular}
+          aria-expanded={abertaNoCelular}
+          className={cn(
+            "flex min-h-11 w-full items-center gap-1.5 text-sm text-muted-foreground/70",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            abertaNoCelular && "mb-1",
+          )}
+        >
+          <HelpCircle className="h-3.5 w-3.5" />
+          Sobre esta tela
+          <ChevronRight className={cn("h-3 w-3 transition-transform", abertaNoCelular && "rotate-90")} />
+        </button>
+        {abertaNoCelular && cartao}
+      </>
+    );
+  }
+
+  if (!aberta) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAberta(true)}
+        className={cn(
+          "group mb-4 flex items-center gap-1.5 text-xs text-muted-foreground/70",
+          "transition-colors hover:text-foreground",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        )}
+      >
+        <HelpCircle className="h-3.5 w-3.5" />
+        Para que serve esta tela
+        <ChevronDown className="h-3 w-3 transition-transform group-hover:translate-y-0.5" />
+      </button>
+    );
+  }
+
+  return cartao;
 }

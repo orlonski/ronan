@@ -150,7 +150,7 @@ export function Combobox({
                 key={o.value}
                 type="button"
                 onClick={() => selecionar(o.value)}
-                className={`flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-accent/30 ${
+                className={`flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-accent/30 max-md:min-h-11 ${
                   ativo ? "bg-accent/40" : ""
                 }`}
               >
