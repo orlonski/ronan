@@ -203,6 +203,23 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
+  "/cartao-combustivel": {
+    oQue:
+      "O extrato do cartão combustível ao lado do que os motoristas lançaram no app: o que " +
+      "confere, o que tem litros ou valor diferente e o que passou no cartão sem ninguém lançar.",
+    faz: [
+      "Subir o extrato que a operadora do cartão exporta em planilha ou CSV (Ticket Log, Repom, Valecard e outras)",
+      "Ver, passada por passada, se bate com o abastecimento lançado do mesmo caminhão no mesmo dia",
+      "Achar o que passou no cartão e ninguém lançou, e o que foi lançado e não está no cartão",
+      "Desfazer uma importação feita com o arquivo errado",
+    ],
+    naoEAqui: {
+      procurando: "quantos km por litro cada caminhão faz",
+      vaEm: "Relatórios",
+      href: "/relatorios",
+    },
+  },
+
   "/abastecimentos": {
     oQue:
       "Todo o combustível que os motoristas registraram pelo app: litros, " +

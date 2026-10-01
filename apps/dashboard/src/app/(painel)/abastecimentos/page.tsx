@@ -29,6 +29,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { MotoristaCombobox } from "@/components/fk-comboboxes";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { InfoIcone } from "@/components/info-icone";
+import { AbasDaTela } from "@/components/abas-da-tela";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { useAuthToken, fetchApi, useResourceOptions } from "@/lib/client-api";
@@ -241,6 +242,8 @@ export default function AbastecimentosPage() {
         </div>
         <ViewModeToggle value={viewMode} onChange={setViewMode} />
       </header>
+
+      <AbasDaTela grupo="abastecimentos" />
 
       {list.data && list.data.totais.count > 0 && (
         // No celular vira lista (rótulo à esquerda, número à direita) — em 3

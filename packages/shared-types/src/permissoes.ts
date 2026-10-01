@@ -169,6 +169,9 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // Aba "Custos" da Manutenção: para onde vai o dinheiro da oficina. Chave
   // própria porque é aba própria — o mesmo público de `manutencao`, por isso
   // "Operação" (o Operador já via o valor de cada conserto).
+  // Extrato do cartão combustível ao lado do que o motorista lançou. `importar`
+  // à parte: subir (e desfazer) extrato é do escritório financeiro.
+  { recurso: "cartao-combustivel", label: "Cartão combustível", modulo: "Operação", acoes: ["ver", "importar"] },
   { recurso: "custos-manutencao", label: "Custos da manutenção", modulo: "Operação", acoes: ["ver"] },
   { recurso: "pneus", label: "Pneus", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "multas", label: "Multas", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },

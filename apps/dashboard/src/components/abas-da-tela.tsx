@@ -85,6 +85,12 @@ export const ABAS = {
     { href: "/torre", label: "Torre de controle", perm: "torre.ver" },
     { href: "/configuracoes/torre", label: "Quando avisar", perm: "config-torre.ver", config: true },
   ],
+  // O extrato do cartão só faz sentido ao lado dos abastecimentos que ele
+  // confere — é a mesma pergunta: "o diesel que eu paguei foi pro caminhão?".
+  abastecimentos: [
+    { href: "/abastecimentos", label: "Abastecimentos", perm: "abastecimentos.ver" },
+    { href: "/cartao-combustivel", label: "Cartão combustível", perm: "cartao-combustivel.ver" },
+  ],
   viagens: [
     { href: "/viagens", label: "Viagens", perm: "viagens.ver" },
     { href: "/conferencias", label: "Conferir tickets", perm: "conferencia-ticket.ver" },

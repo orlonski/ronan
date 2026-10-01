@@ -198,7 +198,14 @@ export const GRUPOS: Grupo[] = [
           { href: "/configuracoes/conferencia-diaria", perm: "config-conferencia-diaria.ver" },
         ],
       },
-      { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel, perm: "abastecimentos.ver" },
+      {
+        href: "/abastecimentos",
+        label: "Abastecimentos",
+        icon: Fuel,
+        perm: "abastecimentos.ver",
+        // Aba: o extrato do cartão combustível ao lado do que foi lançado.
+        ou: [{ href: "/cartao-combustivel", perm: "cartao-combustivel.ver" }],
+      },
     ],
   },
   {

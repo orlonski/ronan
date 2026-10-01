@@ -566,6 +566,8 @@ model Conta {
   baixasTitulo                   BaixaTitulo[]
   fornecedores                   Fornecedor[]
   custosFixosVeiculo             CustoFixoVeiculo[]
+  extratosCartao                 ExtratoCartao[]
+  transacoesCartao               TransacaoCartao[]
   manutencoesVeiculo             ManutencaoVeiculo[]
   problemasVeiculo               ProblemaVeiculo[]
   leiturasOdometro               LeituraOdometro[]
@@ -786,7 +788,8 @@ model User {
   aceitesTermo              AceiteTermo[]
   onboarding                OnboardingUsuario?
 
-  coletasCriadas ConviteColeta[] @relation("CriouColeta")
+  coletasCriadas           ConviteColeta[] @relation("CriouColeta")
+  extratosCartaoImportados ExtratoCartao[] @relation("ImportouExtratoCartao")
 
   @@index([contaId])
   @@map("users")
@@ -2110,12 +2113,12 @@ model WhatsappMensagem {
 }
 
 model Veiculo {
-  contaId             String          @default("__SEM_CONTA__")
-  conta               Conta           @relation(fields: [contaId], references: [id])
-  id                  String          @id @default(uuid())
-  placa               String
-  modelo              String?
-  ativo               Boolean         @default(true)
+  contaId                String          @default("__SEM_CONTA__")
+  conta                  Conta           @relation(fields: [contaId], references: [id])
+  id                     String          @id @default(uuid())
+  placa                  String
+  modelo                 String?
+  ativo                  Boolean         @default(true)
   // --- ficha técnica ---
   // Até aqui o veículo eram quatro campos: placa, modelo (texto livre), ativo e
   // frota. Não dava pra dizer se cabia a carga, e nada disso existia pro MDF-e.
@@ -2123,40 +2126,40 @@ model Veiculo {
   // cadastro incompleto — o que exigir o campo cobra na hora de usar.
   /// Quanto o caminhão carrega, em toneladas. É o que permite responder
   /// "preciso de quantos caminhões pra 180 t?" na programação.
-  capacidadeToneladas Decimal?        @db.Decimal(10, 3)
+  capacidadeToneladas    Decimal?        @db.Decimal(10, 3)
   /// Litros que cabem no tanque de diesel (somando os dois, se bitanque).
   /// Opcional: sem ele o abastecimento não é comparado com o tanque.
   capacidadeTanqueLitros Int?
   /// Peso do veículo vazio. Obrigatório no MDF-e.
-  tara                Decimal?        @db.Decimal(10, 3)
-  renavam             String?
-  chassi              String?
-  anoFabricacao       Int?
-  anoModelo           Int?
-  marca               String?
+  tara                   Decimal?        @db.Decimal(10, 3)
+  renavam                String?
+  chassi                 String?
+  anoFabricacao          Int?
+  anoModelo              Int?
+  marca                  String?
   /// Código do MDF-e: 01 Truck, 02 Toco, 03 Cavalo Mecânico, 04 VAN,
   /// 05 Utilitário, 06 Outros. String e não enum pra acompanhar a tabela da
   /// SEFAZ sem migration quando ela mudar.
-  tipoRodado          String?
+  tipoRodado             String?
   /// Código do MDF-e: 00 N/A, 01 aberta, 02 fechada/baú, 03 granelera,
   /// 04 porta-container, 05 sider. Agregado é 03.
-  tipoCarroceria      String?
+  tipoCarroceria         String?
   /// Próprio, arrendado ou de terceiro. Muda o grupo `prop` do MDF-e — e é
   /// exigido quando o veículo não é do emitente, que é o caso do agregado.
-  tipoProprietario    String?
+  tipoProprietario       String?
   /// CNPJ/CPF do dono quando não é a própria empresa.
-  cpfCnpjProprietario String?
-  rntrcProprietario   String?
+  cpfCnpjProprietario    String?
+  rntrcProprietario      String?
   /// Documento do veículo com validade, pra avisar antes de parar na balança.
-  crlvValidade        DateTime?       @db.Date
+  crlvValidade           DateTime?       @db.Date
   /// Vencimento do seguro do casco/RCTR-C.
-  seguroValidade      DateTime?       @db.Date
+  seguroValidade         DateTime?       @db.Date
   /// Frota dona do caminhão. Null = não classificado. Serve de fallback quando
   /// o motorista não tem transportadora no momento do lançamento.
-  transportadora      Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
-  transportadoraId    String?
-  criadoEm            DateTime        @default(now())
-  alteradoEm          DateTime        @updatedAt
+  transportadora         Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadoraId       String?
+  criadoEm               DateTime        @default(now())
+  alteradoEm             DateTime        @updatedAt
 
   motoristasComoDefault Motorista[]        @relation("VeiculoDefaultMotorista")
   motoristas            MotoristaVeiculo[]
@@ -2172,6 +2175,7 @@ model Veiculo {
   custosFixos  CustoFixoVeiculo[]
 
   manutencoes      ManutencaoVeiculo[]
+  transacoesCartao TransacaoCartao[]
   problemas        ProblemaVeiculo[]
   leiturasOdometro LeituraOdometro[]
   planosManutencao PlanoManutencao[]
@@ -7956,4 +7960,59 @@ model PassoTour {
 
   @@index([tourId, ordem])
   @@map("passos_tour")
+}
+
+/// Extrato do cartão combustível (Ticket Log, Repom, Valecard…) importado em
+/// planilha. As transações ficam guardadas; a conciliação com os abastecimentos
+/// lançados é calculada na leitura (o app é offline-first: o lançamento pode
+/// chegar depois do extrato).
+model ExtratoCartao {
+  contaId        String   @default("__SEM_CONTA__")
+  conta          Conta    @relation(fields: [contaId], references: [id])
+  id             String   @id @default(uuid())
+  nomeArquivo    String
+  /// Nome da operadora, se a pessoa informou. Texto livre.
+  operadora      String?
+  periodoDe      DateTime
+  periodoAte     DateTime
+  /// Linhas novas gravadas nesta importação (as repetidas de outro extrato não contam).
+  transacoes     Int
+  importadoPor   User?    @relation("ImportouExtratoCartao", fields: [importadoPorId], references: [id], onDelete: SetNull)
+  importadoPorId String?
+  importadoEm    DateTime @default(now())
+
+  itens TransacaoCartao[]
+
+  @@index([contaId, importadoEm])
+  @@map("extratos_cartao")
+}
+
+/// Uma passada no cartão combustível. `chave` é a impressão digital da linha
+/// (placa + hora + litros + valor): subir o mesmo extrato duas vezes, ou dois
+/// extratos que se sobrepõem, não duplica.
+model TransacaoCartao {
+  contaId     String        @default("__SEM_CONTA__")
+  conta       Conta         @relation(fields: [contaId], references: [id])
+  id          String        @id @default(uuid())
+  extrato     ExtratoCartao @relation(fields: [extratoId], references: [id], onDelete: Cascade)
+  extratoId   String
+  chave       String
+  data        DateTime
+  /// Placa como veio no extrato; `veiculoId` quando casou com o cadastro.
+  placa       String?
+  veiculo     Veiculo?      @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
+  veiculoId   String?
+  motorista   String?
+  posto       String?
+  combustivel String?
+  litros      Decimal?      @db.Decimal(10, 3)
+  valor       Decimal       @db.Decimal(12, 2)
+  odometro    Int?
+  criadoEm    DateTime      @default(now())
+
+  @@unique([contaId, chave])
+  @@index([contaId, data])
+  @@index([veiculoId, data])
+  @@index([extratoId])
+  @@map("transacoes_cartao")
 }

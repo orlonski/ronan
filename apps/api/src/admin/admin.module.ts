@@ -27,6 +27,7 @@ import { UsersModule } from "./users/users.module";
 import { LocaisModule } from "./locais/locais.module";
 import { ViagensAdminModule } from "./viagens/viagens.module";
 import { AbastecimentosAdminModule } from "./abastecimentos/abastecimentos.module";
+import { CartaoCombustivelModule } from "./cartao-combustivel/cartao-combustivel.module";
 import { TrackingConfigModule } from "./tracking-config/tracking-config.module";
 import { AgenteConfigModule } from "./agente-config/agente-config.module";
 import { BuscaLocaisConfigModule } from "./busca-locais-config/busca-locais-config.module";
@@ -78,6 +79,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     LocaisModule,
     ViagensAdminModule,
     AbastecimentosAdminModule,
+    CartaoCombustivelModule,
     TrackingConfigModule,
     AgenteConfigModule,
     BuscaLocaisConfigModule,

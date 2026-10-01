@@ -81,6 +81,9 @@ export const MODULOS: ModuloDef[] = [
       // mandá-la pra "torre" tiraria o ao vivo de quem não contratou a torre.
       "ao-vivo",
       "abastecimentos",
+      // Conciliação com o extrato do cartão: é conferência de abastecimento,
+      // que todo cliente já tem.
+      "cartao-combustivel",
       // O molde de acessos do app é do núcleo: quem tem motorista tem app, e
       // quem tem app precisa dizer o que cada tipo de pessoa faz nele.
       "perfis-acesso",
