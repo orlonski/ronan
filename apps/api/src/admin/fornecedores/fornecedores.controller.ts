@@ -6,6 +6,7 @@ import {
   CriarCustoFixoInput,
   CriarFornecedorInput,
   EncerrarCustoFixoInput,
+  LoteCustoFixoInput,
   TIPOS_FORNECEDOR,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -82,6 +83,13 @@ export class CustosVeiculoController {
   @Post()
   create(@Body(new ZodValidationPipe(CriarCustoFixoInput)) body: CriarCustoFixoInput) {
     return this.service.criarCusto(body);
+  }
+
+  /** Vários caminhões de uma vez. `simular: true` (o padrão) só confere. */
+  @RequerPermissao("custos-veiculo.editar")
+  @Post("lote")
+  lote(@Body(new ZodValidationPipe(LoteCustoFixoInput)) body: LoteCustoFixoInput) {
+    return this.service.loteCustos(body);
   }
 
   @RequerPermissao("custos-veiculo.editar")

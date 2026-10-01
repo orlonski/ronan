@@ -27,6 +27,8 @@ import { primeiroDiaDoMesSP, ultimoDiaDoMesSP } from "@/lib/datetime-br";
 import { fmtBRL } from "@/lib/fechamento-helpers";
 import { cn } from "@/lib/utils";
 import { PeriodoPresets } from "../relatorios/_components/periodo-presets";
+import { Permitido } from "@/components/requer-tela";
+import { CustosEmLote } from "./_components/custos-em-lote";
 
 /**
  * Lucro por caminhão: o que cada um faturou menos o que a empresa gastou com
@@ -117,6 +119,7 @@ function Conteudo() {
   const baixar = useBaixarArquivo();
   const [baixando, setBaixando] = React.useState<"xlsx" | "pdf" | null>(null);
   const [aberto, setAberto] = React.useState<LinhaLucroVeiculo | null>(null);
+  const [lote, setLote] = React.useState(false);
 
   const state = useDataTableState({
     defaultFilters: { de: primeiroDiaDoMesSP(), ate: ultimoDiaDoMesSP() },
@@ -157,30 +160,37 @@ function Conteudo() {
             O que cada caminhão faturou menos o que ele custou no período.
           </p>
         </div>
-        {podeExportar && (
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!data || baixando !== null}
-              onClick={() => exportar("xlsx")}
-            >
-              <FileSpreadsheet className="mr-1.5 h-4 w-4" />
-              {baixando === "xlsx" ? "Gerando…" : "Excel"}
+        <div className="flex flex-wrap gap-2">
+          <Permitido chave="custos-veiculo.editar">
+            <Button type="button" size="sm" disabled={!data} onClick={() => setLote(true)}>
+              Cadastrar custos fixos
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!data || baixando !== null}
-              onClick={() => exportar("pdf")}
-            >
-              <Download className="mr-1.5 h-4 w-4" />
-              {baixando === "pdf" ? "Gerando…" : "PDF"}
-            </Button>
-          </div>
-        )}
+          </Permitido>
+          {podeExportar && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!data || baixando !== null}
+                onClick={() => exportar("xlsx")}
+              >
+                <FileSpreadsheet className="mr-1.5 h-4 w-4" />
+                {baixando === "xlsx" ? "Gerando…" : "Excel"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!data || baixando !== null}
+                onClick={() => exportar("pdf")}
+              >
+                <Download className="mr-1.5 h-4 w-4" />
+                {baixando === "pdf" ? "Gerando…" : "PDF"}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <Card className="p-3">
@@ -314,6 +324,11 @@ function Conteudo() {
       )}
 
       <DetalheCaminhao linha={aberto} onFechar={() => setAberto(null)} />
+      <CustosEmLote
+        aberto={lote}
+        onFechar={() => setLote(false)}
+        caminhoes={[...(data?.veiculos ?? [])].sort((a, b) => a.placa.localeCompare(b.placa))}
+      />
     </div>
   );
 }
