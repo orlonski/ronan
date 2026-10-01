@@ -1,9 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type {
   AtualizarFornecedorInput,
   CriarCustoFixoInput,
   CriarFornecedorInput,
+  EncerrarCustoFixoInput,
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
@@ -97,6 +98,16 @@ export class FornecedoresService {
         vigenciaAte: data.vigenciaAte ? new Date(`${data.vigenciaAte}T00:00:00Z`) : null,
       },
     });
+  }
+
+  async encerrarCusto(id: string, data: EncerrarCustoFixoInput) {
+    const c = await this.prisma.custoFixoVeiculo.findUnique({ where: { id } });
+    if (!c) throw new NotFoundException("Custo não encontrado");
+    const ate = new Date(`${data.vigenciaAte}T00:00:00Z`);
+    if (ate < c.vigenciaDe) {
+      throw new BadRequestException("O fim não pode ser antes do início do custo.");
+    }
+    return this.prisma.custoFixoVeiculo.update({ where: { id }, data: { vigenciaAte: ate } });
   }
 
   async removerCusto(id: string) {

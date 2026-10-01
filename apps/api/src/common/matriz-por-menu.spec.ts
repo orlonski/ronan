@@ -119,7 +119,7 @@ describe("matriz de papéis agrupada pelo menu", () => {
     expect(linha("espelho-ponto")?.rotulo).toBe("Quem bate ponto › Espelho de ponto");
     const sobras = secoes.find((sec) => sec.titulo === SECAO_SEM_ITEM_NO_MENU)?.linhas.map((l) => l.recurso) ?? [];
     // Sem tela no painel (só API) e a da plataforma. Entrar aqui é decisão.
-    expect(sobras.sort()).toEqual(["config-ia", "custos-veiculo", "fornecedores"]);
+    expect(sobras.sort()).toEqual(["config-ia", "fornecedores"]);
   });
 
   it("aba vira sub-linha do item, com o rótulo \"Item › Aba\"", () => {

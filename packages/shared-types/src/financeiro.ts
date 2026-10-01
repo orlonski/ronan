@@ -180,5 +180,27 @@ export const TIPOS_CUSTO_FIXO = [
   "DEPRECIACAO",
   "RASTREADOR",
   "LICENCIAMENTO",
+  // Motorista registrado não é pago por viagem: o salário dele é custo do
+  // caminhão que ele dirige, e é por aqui que entra no lucro por caminhão.
+  "SALARIO_MOTORISTA",
   "OUTRO",
 ] as const;
+
+export const TIPO_CUSTO_FIXO_LABEL: Record<(typeof TIPOS_CUSTO_FIXO)[number], string> = {
+  IPVA: "IPVA",
+  SEGURO: "Seguro",
+  FINANCIAMENTO: "Parcela do financiamento",
+  DEPRECIACAO: "Depreciação",
+  RASTREADOR: "Rastreador",
+  LICENCIAMENTO: "Licenciamento",
+  SALARIO_MOTORISTA: "Salário do motorista",
+  OUTRO: "Outro",
+};
+
+/**
+ * Fechar a vigência de um custo que parou (seguro vencido, caminhão quitado).
+ * Apagar a linha apagaria junto os meses em que ele valeu, e o lucro do passado
+ * mudaria sozinho.
+ */
+export const EncerrarCustoFixoInput = z.object({ vigenciaAte: DATA });
+export type EncerrarCustoFixoInput = z.infer<typeof EncerrarCustoFixoInput>;

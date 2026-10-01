@@ -158,6 +158,11 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "financeiro", label: "Contas a pagar e receber", modulo: "Operação", acoes: ["ver", "faturar", "baixar"] },
   { recurso: "fornecedores", label: "Fornecedores", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "custos-veiculo", label: "Custos fixos do veículo", modulo: "Cadastros", acoes: ["ver", "editar"] },
+  // Faturou menos gastou, caminhão a caminhão. Mostra a margem do negócio e
+  // quanto cada motorista ganha — é conversa de dono. `modulo: "Sistema"` NÃO
+  // é organização visual (a matriz segue o menu): é o que mantém a chave fora
+  // do `PERMISSOES_OPERADOR`, que pega tudo de "Operação" e "Cadastros".
+  { recurso: "lucro-caminhao", label: "Lucro por caminhão", modulo: "Sistema", acoes: ["ver", "exportar"] },
   // Manutenção, pneu, documento do veículo e multa — o que some do radar e vira
   // caminhão parado ou multa vencida.
   { recurso: "manutencao", label: "Manutenção e vencimentos do caminhão", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },

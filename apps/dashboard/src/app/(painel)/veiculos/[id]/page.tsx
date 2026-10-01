@@ -8,6 +8,7 @@ import { useResourceItem } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { VeiculoForm, type Veiculo } from "../_components/veiculo-form";
 import { ProntuarioDoCaminhao } from "./prontuario";
+import { CustosFixosDoCaminhao } from "./custos-fixos";
 
 /**
  * A página do caminhão: o PRONTUÁRIO em cima (km, custo, revisões, linha do
@@ -23,6 +24,7 @@ export default function VeiculoPage({ params }: { params: Promise<{ id: string }
   const { temPermissao, temModulo } = usePermissoes();
   const verProntuario = temPermissao("manutencao.ver") && temModulo("manutencao.ver");
   const podeEditar = temPermissao("veiculos.editar");
+  const verCustos = temPermissao("custos-veiculo.ver") && temModulo("custos-veiculo.ver");
   const [editando, setEditando] = useState(false);
 
   const titulo = item.data
@@ -43,6 +45,7 @@ export default function VeiculoPage({ params }: { params: Promise<{ id: string }
         {item.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
         {item.data && (!verProntuario || editando) && podeEditar && <VeiculoForm initial={item.data} />}
         {verProntuario && <ProntuarioDoCaminhao veiculoId={id} />}
+        {verCustos && <CustosFixosDoCaminhao veiculoId={id} />}
       </div>
     </RequerTela>
   );

@@ -37,6 +37,7 @@ import {
   Target,
   TowerControl,
   TrafficCone,
+  TrendingUp,
   Truck,
   Upload,
   Users,
@@ -228,6 +229,7 @@ export const GRUPOS: Grupo[] = [
       { href: "/cte", label: "CT-e emitidos", icon: FileCheck2, perm: "cte.ver" },
       { href: "/financeiro", label: "Contas a pagar e receber", icon: Wallet, perm: "financeiro.ver" },
       { href: "/acertos", label: "Acertos com motorista", icon: HandCoins, perm: "acertos.ver" },
+      { href: "/lucro", label: "Lucro por caminhão", icon: TrendingUp, perm: "lucro-caminhao.ver" },
     ],
   },
   {
@@ -250,7 +252,14 @@ export const GRUPOS: Grupo[] = [
         ou: [{ href: "/modalidades", perm: "modalidades.ver" }],
         partes: [{ perm: "coletas.ver", label: "Pedir documentos por link" }],
       },
-      { href: "/veiculos", label: "Veículos", icon: Truck, perm: "veiculos.ver" },
+      {
+        href: "/veiculos",
+        label: "Veículos",
+        icon: Truck,
+        perm: "veiculos.ver",
+        // Bloco "Custos fixos" dentro da página do caminhão.
+        partes: [{ perm: "custos-veiculo.ver", label: "Custos fixos" }],
+      },
       {
         href: "/frota",
         label: "Manutenção",

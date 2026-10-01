@@ -5,6 +5,8 @@ import {
   RelatorioAbastecimentosExportQuery,
   RelatorioAbastecimentosQuery,
   RelatorioConferenciaQuery,
+  RelatorioLucroExportQuery,
+  RelatorioLucroQuery,
   RelatorioViagensExportQuery,
   RelatorioViagensQuery,
 } from "@ronan/shared-types";
@@ -20,6 +22,8 @@ import { RelatoriosExportService } from "./relatorios-export.service";
 import { RelatoriosAbastecimentosService } from "./relatorios-abastecimentos.service";
 import { RelatoriosAbastecimentosExportService } from "./relatorios-abastecimentos-export.service";
 import { RelatoriosConferenciaService } from "./relatorios-conferencia.service";
+import { RelatoriosLucroService } from "./relatorios-lucro.service";
+import { RelatoriosLucroExportService } from "./relatorios-lucro-export.service";
 import { exigirComercialParaDimensao, podeVerComercial } from "./comercial-relatorio";
 import { exigirComercialParaFiltros } from "../viagens/comercial";
 
@@ -38,6 +42,8 @@ export class RelatoriosController {
     private readonly abastecimentos: RelatoriosAbastecimentosService,
     private readonly exportarAbastecimentos: RelatoriosAbastecimentosExportService,
     private readonly conferencia: RelatoriosConferenciaService,
+    private readonly lucro: RelatoriosLucroService,
+    private readonly exportarLucro: RelatoriosLucroExportService,
   ) {}
 
   @EscopoPor("viagem")
@@ -150,6 +156,39 @@ export class RelatoriosController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.conferencia.resumo(query, user.escopo);
+  }
+
+  /**
+   * Lucro por caminhão: faturou menos o que a empresa gastou com ele.
+   *
+   * Chave própria (`lucro-caminhao`), não `relatorios.ver`: mostra a margem do
+   * negócio e quanto cada motorista ganha, e `relatorios.ver` chega até no
+   * gestor de frota terceira.
+   */
+  @EscopoPor("veiculo")
+  @RequerPermissao("lucro-caminhao.ver")
+  @Get("lucro")
+  resumoLucro(
+    @Query(new ZodValidationPipe(RelatorioLucroQuery)) query: RelatorioLucroQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.lucro.lucroPorVeiculo(query, user.escopo);
+  }
+
+  @EscopoPor("veiculo")
+  @RequerPermissao("lucro-caminhao.exportar")
+  @Get("lucro/exportar")
+  async exportarLucroArquivo(
+    @Query(new ZodValidationPipe(RelatorioLucroExportQuery)) query: RelatorioLucroExportQuery,
+    @CurrentUser() user: AuthAdminUser,
+    @Res() res: Response,
+  ) {
+    const relatorio = await this.lucro.lucroPorVeiculo(query, user.escopo);
+    const pdf = query.formato === "pdf";
+    const buffer = pdf
+      ? await this.exportarLucro.pdf(relatorio)
+      : await this.exportarLucro.xlsx(relatorio);
+    responderArquivo(res, buffer, `lucro-por-caminhao-${query.de}_${query.ate}`, pdf);
   }
 }
 

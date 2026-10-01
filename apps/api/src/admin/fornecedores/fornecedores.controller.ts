@@ -5,6 +5,7 @@ import {
   AtualizarFornecedorInput,
   CriarCustoFixoInput,
   CriarFornecedorInput,
+  EncerrarCustoFixoInput,
   TIPOS_FORNECEDOR,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -81,6 +82,15 @@ export class CustosVeiculoController {
   @Post()
   create(@Body(new ZodValidationPipe(CriarCustoFixoInput)) body: CriarCustoFixoInput) {
     return this.service.criarCusto(body);
+  }
+
+  @RequerPermissao("custos-veiculo.editar")
+  @Patch(":id/encerrar")
+  encerrar(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EncerrarCustoFixoInput)) body: EncerrarCustoFixoInput,
+  ) {
+    return this.service.encerrarCusto(id, body);
   }
 
   @RequerPermissao("custos-veiculo.editar")

@@ -336,6 +336,23 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
+  "/lucro": {
+    oQue:
+      "Quanto cada caminhão deu de dinheiro no período: o que ele faturou menos o " +
+      "que a empresa gastou com ele.",
+    faz: [
+      "Ver primeiro os caminhões que menos deram lucro (ou deram prejuízo)",
+      "Abrir um caminhão e ver de onde veio cada real gasto: motorista, diesel, pedágio, oficina, multas e custos fixos",
+      "Descobrir o que está faltando pra conta ficar certa, como viagem sem preço ou custo fixo não cadastrado",
+      "Baixar em planilha ou PDF",
+    ],
+    naoEAqui: {
+      procurando: "cadastrar IPVA, seguro ou parcela do caminhão",
+      vaEm: "Veículos",
+      href: "/veiculos",
+    },
+  },
+
   "/financeiro": {
     oQue:
       "O dinheiro que ainda não entrou e o que ainda não saiu — quanto está " +
