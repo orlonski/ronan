@@ -84,7 +84,8 @@ export default function CamposLayoutPage() {
       </header>
 
       <Card>
-        <Table>
+        {/* Celular: cada campo vira um bloco (rótulo em cima, dados com rótulo, ações no fim): ver `.tabela-cartoes`. */}
+        <Table className="tabela-cartoes">
           <TableHeader>
             <TableRow>
               <TableHead>Label</TableHead>
@@ -104,19 +105,19 @@ export default function CamposLayoutPage() {
             )}
             {list.data?.map((c) => (
               <TableRow key={c.id}>
-                <TableCell className="font-medium">
+                <TableCell data-mobile="titulo" className="font-medium">
                   <span className="flex items-center gap-1">
                     {c.sistema && <Lock className="h-3 w-3 text-muted-foreground" />}
                     {c.label}
                   </span>
                 </TableCell>
-                <TableCell className="font-mono text-xs">{c.slug}</TableCell>
-                <TableCell className="text-xs">{c.tipo}</TableCell>
-                <TableCell className="max-w-xs truncate text-xs text-muted-foreground">
+                <TableCell data-rotulo="Slug" className="font-mono text-xs">{c.slug}</TableCell>
+                <TableCell data-rotulo="Tipo" className="text-xs">{c.tipo}</TableCell>
+                <TableCell data-rotulo="Descrição" data-mobile="bloco" className="max-w-xs truncate text-xs text-muted-foreground">
                   {c.descricao ?? "—"}
                 </TableCell>
-                <TableCell className="text-xs">{c.ordem}</TableCell>
-                <TableCell>
+                <TableCell data-mobile="oculta" className="text-xs">{c.ordem}</TableCell>
+                <TableCell data-rotulo="Status">
                   <StatusToggle
                     active={c.ativo}
                     onChange={(next) =>
@@ -126,7 +127,7 @@ export default function CamposLayoutPage() {
                     label
                   />
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell data-mobile="acoes" className="text-right">
                   <Permitido chave="config-campos-layout.editar">
                     <Link href={`/configuracoes/campos-layout/${c.id}`}>
                       <Button variant="ghost" size="icon" title="Editar">

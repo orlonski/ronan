@@ -55,6 +55,152 @@ body {
 }
 
 /* ============================================================
+ * Tabelas no celular (Leva 1 / fatia 5) — SÓ abaixo de 768px
+ * ============================================================
+ * Tabela larga não cabe num celular: ou vira lista de blocos (`.tabela-cartoes`) ou rola de lado
+ * DENTRO do contêiner, com a 1ª coluna fixa e sombra na borda (`.tabela-rolagem`).
+ * Do 768px pra cima NADA aqui vale: o desktop segue com a tabela de sempre.
+ *
+ * `.tabela-cartoes` (na <table>): cada <tr> vira um bloco separado por linha.
+ *   <td data-rotulo="Km">   campo "Km ........ 12,3" (rótulo à esquerda, valor à direita)
+ *   <td data-mobile="titulo">  linha de destaque, sem rótulo (o nome do item)
+ *   <td data-mobile="acoes">   botões da linha, no fim, alinhados à direita
+ *   <td data-mobile="oculta">  não aparece no celular
+ *   <td> sem nada             largura toda, sem rótulo (linha "Nenhum registro", TOTAL)
+ * O <thead> some: os rótulos vêm do `data-rotulo`.
+ * `.tabela-rolagem` (no contêiner que rola): 1ª coluna fixa + sombra quando há mais coluna do lado.
+ */
+@media (max-width: 767px) {
+  .tabela-cartoes,
+  .tabela-cartoes tbody,
+  .tabela-cartoes tfoot,
+  .tabela-cartoes tr,
+  .tabela-cartoes td {
+    display: block;
+    width: 100%;
+  }
+  .tabela-cartoes thead {
+    display: none;
+  }
+  .tabela-cartoes tr {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  /* o título sobe pro topo e as ações descem pro fim, seja qual for a ordem das colunas */
+  .tabela-cartoes td[data-mobile="titulo"] {
+    order: -1;
+  }
+  .tabela-cartoes td[data-mobile="acoes"] {
+    order: 99;
+  }
+  .tabela-cartoes tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .tabela-cartoes tfoot tr {
+    border-top: 2px solid var(--border);
+    border-bottom: 0;
+  }
+  .tabela-cartoes td {
+    position: relative;
+    max-width: none;
+    padding: 0.25rem 0 0.25rem 45%;
+    text-align: right;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    font-size: 0.875rem;
+    min-height: 1.75rem;
+    overflow-wrap: anywhere;
+  }
+  .tabela-cartoes td :where(span, code, p, div, small) {
+    font-size: 0.875rem;
+  }
+  .tabela-cartoes td[data-rotulo]::before {
+    content: attr(data-rotulo);
+    position: absolute;
+    left: 0;
+    top: 0.25rem;
+    width: 42%;
+    text-align: left;
+    color: var(--muted-foreground);
+    font-weight: 400;
+    font-size: 0.875rem;
+  }
+  /* título: sem rótulo, à esquerda, em destaque */
+  .tabela-cartoes td:not([data-rotulo]) {
+    padding-left: 0;
+    text-align: left;
+  }
+  .tabela-cartoes td[data-mobile="titulo"] {
+    font-size: 1rem;
+    font-weight: 600;
+    padding-bottom: 0.5rem;
+  }
+  .tabela-cartoes td[data-mobile="titulo"] :where(p, small, code) {
+    font-weight: 400;
+  }
+  /* texto longo (descrição): rótulo em cima, texto embaixo, à esquerda */
+  .tabela-cartoes td[data-mobile="bloco"] {
+    padding-left: 0;
+    text-align: left;
+  }
+  .tabela-cartoes td[data-mobile="bloco"][data-rotulo]::before {
+    position: static;
+    display: block;
+    width: auto;
+    margin-bottom: 0.125rem;
+  }
+  .tabela-cartoes td[data-mobile="acoes"] {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0 0;
+    border-top: 1px solid var(--border);
+    text-align: right;
+  }
+  .tabela-cartoes td[data-mobile="oculta"] {
+    display: none;
+  }
+  /* Rótulo maior que o valor curto: o valor não encosta no rótulo. */
+  .tabela-cartoes td[data-rotulo] > * {
+    max-width: 100%;
+  }
+
+  /* Rolagem horizontal com 1ª coluna fixa e sombra nas bordas (técnica das sombras com `background-attachment`). */
+  .tabela-rolagem {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    background-color: var(--background);
+    background-image:
+      linear-gradient(to right, var(--background) 30%, transparent),
+      linear-gradient(to left, var(--background) 30%, transparent),
+      radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 0.28), transparent),
+      radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 0.28), transparent);
+    background-position: 0 0, 100% 0, 0 0, 100% 0;
+    background-repeat: no-repeat;
+    background-size: 2.5rem 100%, 2.5rem 100%, 0.875rem 100%, 0.875rem 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+  .tabela-rolagem table {
+    min-width: 36rem;
+  }
+  .tabela-rolagem :is(th, td):first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background-color: var(--background);
+    border-right: 1px solid var(--border);
+  }
+  .tabela-rolagem thead :is(th, td):first-child {
+    background-color: var(--muted);
+  }
+}
+
+/* ============================================================
  * MacBook compacto (Leva 2 / fatia 4) — faixa 768px a 1535px
  * ============================================================
  * Tudo que MUDA mora dentro de `@media (min-width: 768px) and (max-width: 1535.98px)`

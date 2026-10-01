@@ -266,7 +266,8 @@ function TabelaPeriodos({ data }: { data: RelatorioConferenciaResposta }) {
 
   return (
     <Card>
-      <div className="overflow-x-auto">
+      {/* Celular: tabela de estatísticas (mediana, p90, por origem): compara colunas, então rola de lado com a coluna Período fixa. */}
+      <div className="tabela-rolagem overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/40">
             <tr className="text-left">

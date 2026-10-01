@@ -21,6 +21,7 @@ import { EnviarWhatsappButton } from "@/components/enviar-whatsapp-button";
 import { EnviarResumoMotoristaButton } from "@/components/enviar-resumo-motorista-button";
 import { DocumentosBadge } from "@/components/documentos-badge";
 import { DocumentosDrawerButton } from "@/components/documentos-drawer";
+import { AcoesSecundariasMobile } from "@/components/acoes-secundarias-mobile";
 import { Permitido } from "@/components/requer-tela";
 import { TransportadoraCombobox } from "@/components/fk-comboboxes";
 import { Badge } from "@/components/ui/badge";
@@ -761,6 +762,9 @@ export default function MotoristasPage() {
                     size="sm"
                   />
                 </Permitido>
+                {/* Celular: só o toggle Ativo e o Editar ficam na faixa; Documentos, Push, Resumo, Convite e Excluir vão pro menu ⋯
+                    (os MESMOS botões, com os mesmos gates — ver AcoesSecundariasMobile). Desktop: igual a antes. */}
+                <AcoesSecundariasMobile rotuloMenu={`Mais ações de ${m.nome}`}>
                 <Permitido chave="motoristas.documentos">
                   <DocumentosDrawerButton motoristaId={m.id} motoristaNome={m.nome}>
                     {(open) => (
@@ -771,7 +775,7 @@ export default function MotoristasPage() {
                   </DocumentosDrawerButton>
                 </Permitido>
                 <Permitido chave="motoristas.editar">
-                  <Link href={`/motoristas/${m.id}/editar`}>
+                  <Link href={`/motoristas/${m.id}/editar`} data-mobile-visivel>
                     <Button variant="ghost" size="icon" title="Editar">
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -799,6 +803,7 @@ export default function MotoristasPage() {
                   id={m.id}
                   nomeRecurso={`o motorista "${m.nome}"`}
                 />
+                </AcoesSecundariasMobile>
               </div>
             </div>
           </Card>

@@ -21,8 +21,8 @@ export function DataTablePagination({
   const end = Math.min(page * pageSize, total);
 
   return (
-    <div className="flex flex-col gap-3 px-2 py-1 text-sm md:flex-row md:items-center md:justify-between">
-      <div className="text-muted-foreground">
+    <div className="flex flex-col gap-3 px-2 py-1 text-sm md:flex-row md:items-center md:justify-between max-md:gap-2 max-md:px-0">
+      <div className="text-muted-foreground max-md:text-center">
         {total === 0 ? (
           "Nada encontrado"
         ) : (
@@ -34,8 +34,9 @@ export function DataTablePagination({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-3 max-md:flex-nowrap max-md:gap-0">
+        {/* Celular: sem "por página" (a lista já é curta e o seletor ocupava uma linha inteira). */}
+        <label className="flex items-center gap-2 text-muted-foreground max-md:hidden">
           <span>Por página</span>
           <select
             value={pageSize}
@@ -50,12 +51,12 @@ export function DataTablePagination({
           </select>
         </label>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 max-md:w-full max-md:justify-between">
           <Button
             type="button"
             variant="outline"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 max-md:hidden"
             onClick={() => state.setPage(1)}
             disabled={page <= 1}
             title="Primeira página"
@@ -67,35 +68,37 @@ export function DataTablePagination({
             type="button"
             variant="outline"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 max-md:h-11 max-md:w-auto max-md:px-4"
             onClick={() => state.setPage(page - 1)}
             disabled={page <= 1}
             title="Anterior"
             aria-label="Anterior"
           >
             <ChevronLeft className="h-4 w-4" />
+            <span className="md:hidden">Anterior</span>
           </Button>
-          <span className="px-2 text-muted-foreground">
-            Página <span className="font-medium text-foreground">{page}</span> de{" "}
+          <span className="px-2 text-muted-foreground max-md:px-1 max-md:text-center">
+            <span className="md:hidden">Pág. </span><span className="max-md:hidden">Página </span><span className="font-medium text-foreground">{page}</span> de{" "}
             <span className="font-medium text-foreground">{totalPages}</span>
           </span>
           <Button
             type="button"
             variant="outline"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 max-md:h-11 max-md:w-auto max-md:px-4"
             onClick={() => state.setPage(page + 1)}
             disabled={page >= totalPages}
             title="Próxima"
             aria-label="Próxima"
           >
+            <span className="md:hidden">Próxima</span>
             <ChevronRight className="h-4 w-4" />
           </Button>
           <Button
             type="button"
             variant="outline"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 max-md:hidden"
             onClick={() => state.setPage(totalPages)}
             disabled={page >= totalPages}
             title="Última página"

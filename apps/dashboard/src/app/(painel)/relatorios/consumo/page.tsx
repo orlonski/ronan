@@ -147,7 +147,8 @@ function Conteudo() {
           ) : (
             <Card className="overflow-hidden p-0">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                {/* Celular: cada caminhão vira um bloco: ver `.tabela-cartoes` no globals.css. */}
+                <table className="tabela-cartoes w-full text-sm">
                   <thead className="border-b bg-muted/40">
                     <tr>
                       <th className="px-3 py-2 text-left font-medium">Caminhão</th>
@@ -166,7 +167,7 @@ function Conteudo() {
                         v.kmPorLitro != null && melhor != null && v.kmPorLitro < melhor * 0.9;
                       return (
                         <tr key={v.veiculoId} className="border-b last:border-0">
-                          <td className="px-3 py-2">
+                          <td data-mobile="titulo" className="px-3 py-2">
                             <span className="font-medium">{v.placa}</span>
                             {v.modelo && (
                               <span className="ml-1 text-xs text-muted-foreground">{v.modelo}</span>
@@ -175,7 +176,7 @@ function Conteudo() {
                               <p className="mt-0.5 text-xs text-muted-foreground">{v.motivo}</p>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-right tabular-nums">
+                          <td data-rotulo="km/l" className="px-3 py-2 text-right tabular-nums">
                             {v.kmPorLitro != null ? (
                               <span className={ruim ? "font-semibold text-amber-700" : "font-medium"}>
                                 {num(v.kmPorLitro, 2)}
@@ -184,14 +185,14 @@ function Conteudo() {
                               <span className="text-muted-foreground">—</span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          <td data-rotulo="Km" className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                             {v.kmRodados > 0 ? num(v.kmRodados) : "—"}
                           </td>
-                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          <td data-rotulo="Litros" className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                             {v.litros > 0 ? num(v.litros, 1) : "—"}
                           </td>
-                          <td className="px-3 py-2 text-right tabular-nums">{brl(v.gasto)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">
+                          <td data-rotulo="Gasto" className="px-3 py-2 text-right tabular-nums">{brl(v.gasto)}</td>
+                          <td data-rotulo="R$/km" className="px-3 py-2 text-right tabular-nums">
                             {v.custoPorKm ? brl(v.custoPorKm) : "—"}
                           </td>
                         </tr>

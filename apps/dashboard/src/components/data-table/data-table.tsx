@@ -23,6 +23,9 @@ import { ErroCard, ErroEstado } from "@/components/erro-estado";
 import { temFiltroDoUsuario, type DataTableState } from "@/hooks/use-data-table-state";
 import type { Pagination } from "@/lib/client-api";
 import { DataTablePagination } from "./data-table-pagination";
+import { DataTableSortSelect } from "./data-table-toolbar";
+import { CartaoAutomatico, rotuloDaColuna } from "./cartao-automatico";
+import "./column-meta";
 import { LINHA_CLICAVEL_CLASSES, useLinhaClicavel } from "./linha-clicavel";
 
 export type DataTableProps<T> = {
@@ -34,12 +37,15 @@ export type DataTableProps<T> = {
   isFetching?: boolean;
   /** Conteúdo extra acima da tabela (toolbar com busca/filtros). */
   toolbar?: React.ReactNode;
-  /** Versão mobile alternativa: cards renderizados pra cada linha. Se ausente, mostra a tabela em qualquer breakpoint. */
+  /**
+   * Cartão próprio da tela pra cada linha. Se ausente, o celular (< 768px) mostra um CARTÃO AUTOMÁTICO
+   * montado das colunas (`meta.mobile`, ver `column-meta.ts`) — nunca uma tabela larga.
+   */
   renderMobileCard?: (row: T) => React.ReactNode;
   /**
-   * Modo de visualização. Quando especificado, força cards/tabela em todos
-   * os breakpoints. Quando undefined, mantém comportamento legado: cards
-   * em <md, tabela em md+.
+   * Modo de visualização. Quando especificado, força cards/tabela em md+. Quando undefined,
+   * cards em <md, tabela em md+. Abaixo de 768px (celular) é SEMPRE cartão, mesmo com
+   * `viewMode="table"` (preferência salva no desktop): tabela larga não cabe na tela.
    */
   viewMode?: "cards" | "table";
   /**
@@ -61,6 +67,11 @@ export type DataTableProps<T> = {
    * Mantenha também um <a> real numa célula (teclado/nova aba). Opcional.
    */
   getRowHref?: (row: T) => string | undefined;
+  /**
+   * Só pro cartão do celular (o automático): abre esse href ao tocar no cartão, sem tornar a LINHA da tabela
+   * clicável no desktop. Sem ele vale `getRowHref`.
+   */
+  getCardHref?: (row: T) => string | undefined;
 };
 
 export function DataTable<T>({
@@ -78,6 +89,7 @@ export function DataTable<T>({
   error,
   onRetry,
   getRowHref,
+  getCardHref,
 }: DataTableProps<T>) {
   const linhaClicavel = useLinhaClicavel();
   const sorting: SortingState = React.useMemo(
@@ -106,6 +118,17 @@ export function DataTable<T>({
   });
 
   const colCount = columns.length;
+  // Opções de ordenação do cartão automático (o cabeçalho clicável some junto com a tabela, no celular).
+  const opcoesOrdenacao = React.useMemo(
+    () =>
+      renderMobileCard
+        ? []
+        : table
+            .getAllLeafColumns()
+            .filter((c) => c.getCanSort() && rotuloDaColuna(c))
+            .map((c) => ({ value: c.id, label: rotuloDaColuna(c) as string })),
+    [table, renderMobileCard, columns],
+  );
   // Erro vence vazio: lista que não carregou não é lista sem registros.
   const showErro = !isLoading && !!isError && data.length === 0;
   const showEmpty = !isLoading && !showErro && data.length === 0;
@@ -135,46 +158,52 @@ export function DataTable<T>({
     <div className="space-y-3">
       {toolbar}
 
-      {/* Cards: sempre quando viewMode="cards", ou só em <md quando legado.
-          Tabela: oposto. */}
-      {renderMobileCard && (
-        <div
-          className={
-            viewMode === "cards"
-              ? // De 1024 a 1535px (MacBook) os cartões formam GRADE (até 2 colunas, cada uma com no mínimo 36rem: com o menu FIXO a tela fica estreita e o cartão de motorista perde o nome): um cartão por
-                // linha, esticado em ~950px, deixava metade da tela vazia. Em 1536px+ (ultrawide)
-                // e abaixo de 1024px segue a coluna única de sempre. `space-y` vira `gap`
-                // (o `space-y` poria margem no 2º cartão da grade).
-                "space-y-3 lg:max-2xl:grid lg:max-2xl:grid-cols-[repeat(auto-fill,minmax(min(100%,36rem),1fr))] lg:max-2xl:gap-3 lg:max-2xl:space-y-0"
-              : viewMode === "table"
-                ? "hidden"
-                : "space-y-3 md:hidden"
-          }
-        >
-          {isLoading && <Card className="p-6 lg:max-2xl:col-span-full"><LoadingInline /></Card>}
-          {showErro && (
-            <div className="lg:max-2xl:col-span-full">
-              <ErroCard erro={error} onRetry={onRetry} />
-            </div>
-          )}
-          {showEmpty && (
-            <Card className="p-6 text-center text-sm text-muted-foreground lg:max-2xl:col-span-full">{vazio}</Card>
-          )}
-          {data.map((row, idx) => (
-            <React.Fragment key={getRowKey(row, idx)}>{renderMobileCard(row)}</React.Fragment>
-          ))}
-        </div>
-      )}
+      {/* Cartões: sempre quando viewMode="cards"; só em <md quando legado; e SEMPRE em <md mesmo com
+          viewMode="table" (a tabela larga nunca aparece no celular). Sem `renderMobileCard`, o cartão
+          é o automático (`meta.mobile`). A tabela vem a seguir, com o oposto. */}
+      <div
+        className={
+          viewMode === "cards"
+            ? // De 1024 a 1535px (MacBook) os cartões formam GRADE (até 2 colunas, cada uma com no mínimo 36rem: com o menu FIXO a tela fica estreita e o cartão de motorista perde o nome): um cartão por
+              // linha, esticado em ~950px, deixava metade da tela vazia. Em 1536px+ (ultrawide)
+              // e abaixo de 1024px segue a coluna única de sempre. `space-y` vira `gap`
+              // (o `space-y` poria margem no 2º cartão da grade).
+              "space-y-3 lg:max-2xl:grid lg:max-2xl:grid-cols-[repeat(auto-fill,minmax(min(100%,36rem),1fr))] lg:max-2xl:gap-3 lg:max-2xl:space-y-0"
+            : viewMode === "table"
+              ? "hidden space-y-3 max-md:block"
+              : "space-y-3 md:hidden"
+        }
+      >
+        {/* Cartão automático: a ordenação que o cabeçalho da tabela dava (some no celular). */}
+        {!renderMobileCard && opcoesOrdenacao.length > 0 && (
+          <DataTableSortSelect state={state} options={opcoesOrdenacao} className="md:hidden" />
+        )}
+        {isLoading && <Card className="p-6 lg:max-2xl:col-span-full"><LoadingInline /></Card>}
+        {showErro && (
+          <div className="lg:max-2xl:col-span-full">
+            <ErroCard erro={error} onRetry={onRetry} />
+          </div>
+        )}
+        {showEmpty && (
+          <Card className="p-6 text-center text-sm text-muted-foreground lg:max-2xl:col-span-full">{vazio}</Card>
+        )}
+        {renderMobileCard
+          ? data.map((row, idx) => (
+              <React.Fragment key={getRowKey(row, idx)}>{renderMobileCard(row)}</React.Fragment>
+            ))
+          : !isLoading &&
+            table.getRowModel().rows.map((row) => (
+              <CartaoAutomatico key={row.id} row={row} href={(getCardHref ?? getRowHref)?.(row.original)} />
+            ))}
+      </div>
 
       <Card
         className={
           viewMode === "table"
-            ? undefined
+            ? "max-md:hidden"
             : viewMode === "cards"
               ? "hidden"
-              : renderMobileCard
-                ? "hidden md:block"
-                : undefined
+              : "hidden md:block"
         }
       >
         <Table>

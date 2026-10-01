@@ -49,12 +49,14 @@ export function ViagensDoLocal({
       {
         id: "data",
         accessorKey: "data",
+        meta: { mobile: "subtitulo", rotulo: "Data" },
         header: ({ column }) => <DataTableColumnHeader column={column} title="Data" />,
         cell: ({ row }) => <span className="text-sm">{fmtBR(row.original.data)}</span>,
       },
       {
         id: "ticket",
         accessorKey: "ticket",
+        meta: { mobile: "titulo", rotulo: "Ticket" },
         header: ({ column }) => <DataTableColumnHeader column={column} title="Ticket" />,
         cell: ({ row }) => (
           <span className="font-mono text-sm">{row.original.ticket}</span>
@@ -62,6 +64,7 @@ export function ViagensDoLocal({
       },
       {
         id: "lado",
+        meta: { mobile: "campo", rotulo: "Lado" },
         enableSorting: false,
         header: "Lado",
         cell: ({ row }) => (
@@ -71,12 +74,14 @@ export function ViagensDoLocal({
       {
         id: "motorista",
         accessorKey: "motorista.nome",
+        meta: { mobile: "campo", rotulo: "Motorista" },
         header: ({ column }) => <DataTableColumnHeader column={column} title="Motorista" />,
         cell: ({ row }) => <span className="text-sm">{row.original.motorista.nome}</span>,
       },
       {
         id: "cliente",
         accessorKey: "cliente.nome",
+        meta: { mobile: "campo", rotulo: "Obra" },
         header: ({ column }) => <DataTableColumnHeader column={column} title="Obra" />,
         cell: ({ row }) => (
           <span className="text-sm">{row.original.cliente?.nome ?? "—"}</span>
@@ -85,6 +90,7 @@ export function ViagensDoLocal({
       {
         id: "status",
         accessorKey: "status",
+        meta: { mobile: "selo", rotulo: "Status" },
         header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
         cell: ({ row }) => (
           <Badge className={STATUS_VIAGEM_COLOR[row.original.status] ?? ""}>
@@ -94,6 +100,7 @@ export function ViagensDoLocal({
       },
       {
         id: "acoes",
+        meta: { mobile: "acoes" },
         size: 80,
         enableSorting: false,
         header: () => <span className="block text-center">Abrir</span>,
@@ -113,7 +120,7 @@ export function ViagensDoLocal({
   );
 
   return (
-    <Card className="space-y-3 p-6">
+    <Card className="space-y-3 p-6 max-md:p-3">
       <div className="flex items-center gap-2 text-sm font-medium">
         <Truck className="h-4 w-4 text-muted-foreground" /> Viagens deste local
         {totalViagens != null && (
@@ -130,6 +137,7 @@ export function ViagensDoLocal({
         isError={viagens.isError}
         error={viagens.error}
         onRetry={() => void viagens.refetch()}
+        getCardHref={(v) => `/viagens/${v.id}`}
         emptyMessage="Nenhuma viagem usou este local ainda."
       />
     </Card>

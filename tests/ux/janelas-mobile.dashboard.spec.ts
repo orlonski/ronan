@@ -144,7 +144,9 @@ test.describe("celular", () => {
     await abrirRota(page, ROTA_CPF);
     const pular = page.getByRole("button", { name: "Pular" });
     if (await pular.count()) await pular.click();
-    await page.getByRole("button", { name: /Excluir o motorista/ }).first().click();
+    // Leva 1 / fatia 5: no celular as ações secundárias do cartão moram no menu "⋯"
+    await page.getByRole("button", { name: /^Mais ações de / }).first().click();
+    await page.getByRole("menuitem", { name: /Excluir definitivamente/ }).click();
     const j = page.locator('[role="dialog"][data-folha="centrado"]');
     await expect(j).toBeVisible();
     await page.waitForTimeout(500);
@@ -196,7 +198,8 @@ test.describe("celular", () => {
     await abrirRota(page, ROTA_CPF);
     const pular = page.getByRole("button", { name: "Pular" });
     if (await pular.count()) await pular.click();
-    await page.getByRole("button", { name: "Documentos" }).first().click();
+    await page.getByRole("button", { name: /^Mais ações de / }).first().click();
+    await page.getByRole("menuitem", { name: /Documentos/ }).click();
     const gaveta = page.locator(JANELA);
     await expect(gaveta).toBeVisible();
     await page.waitForTimeout(700);

@@ -343,7 +343,8 @@ function TabelaResumo({
   return (
     <Card className={carregando ? "opacity-60 transition-opacity" : undefined}>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        {/* Celular: cada grupo vira um bloco (nome em cima, números com rótulo): ver `.tabela-cartoes` no globals.css. */}
+        <table className="tabela-cartoes w-full text-sm">
           <thead className="border-b bg-muted/40">
             <tr className="text-left">
               <th className="px-3 py-2 font-medium">
@@ -369,32 +370,32 @@ function TabelaResumo({
                 onClick={() => onAbrirGrupo(g)}
                 className="cursor-pointer border-b last:border-0 hover:bg-muted/40"
               >
-                <td className="px-3 py-2">
+                <td data-mobile="titulo" className="px-3 py-2">
                   <span className="font-medium">{g.nome}</span>
                   {g.detalhe && (
                     <span className="ml-1.5 text-xs text-muted-foreground">{g.detalhe}</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{g.viagens}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
+                <td data-rotulo="Viagens" className="px-3 py-2 text-right tabular-nums">{g.viagens}</td>
+                <td data-rotulo="Toneladas" className="px-3 py-2 text-right tabular-nums">
                   {fmtNum(Number(g.toneladas), 3)}
                 </td>
                 {comercial && (
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td data-rotulo="Ton. faturada" className="px-3 py-2 text-right tabular-nums">
                     {fmtNum(Number(g.toneladasEfetiva ?? 0), 3)}
                     {!!g.toneladasAjustadas && (
                       <span className="ml-1 text-xs text-amber-600">↑</span>
                     )}
                   </td>
                 )}
-                <td className="px-3 py-2 text-right tabular-nums">{fmtNum(Number(g.km), 2)}</td>
+                <td data-rotulo="Km" className="px-3 py-2 text-right tabular-nums">{fmtNum(Number(g.km), 2)}</td>
                 {comercial && (
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td data-rotulo="Km faturado" className="px-3 py-2 text-right tabular-nums">
                     {fmtNum(Number(g.kmEfetivo ?? 0), 2)}
                     {!!g.kmAjustados && <span className="ml-1 text-xs text-amber-600">↑</span>}
                   </td>
                 )}
-                <td className="px-3 py-2 text-right tabular-nums">
+                <td data-rotulo="Pedágio" className="px-3 py-2 text-right tabular-nums">
                   {fmtBRL(Number(g.pedagio))}
                 </td>
               </tr>
@@ -403,24 +404,24 @@ function TabelaResumo({
           <tfoot className="border-t-2 bg-muted/30 font-semibold">
             <tr>
               <td className="px-3 py-2">TOTAL</td>
-              <td className="px-3 py-2 text-right tabular-nums">{totais.viagens}</td>
-              <td className="px-3 py-2 text-right tabular-nums">
+              <td data-rotulo="Viagens" className="px-3 py-2 text-right tabular-nums">{totais.viagens}</td>
+              <td data-rotulo="Toneladas" className="px-3 py-2 text-right tabular-nums">
                 {fmtNum(Number(totais.toneladas), 3)}
               </td>
               {comercial && (
-                <td className="px-3 py-2 text-right tabular-nums">
+                <td data-rotulo="Ton. faturada" className="px-3 py-2 text-right tabular-nums">
                   {fmtNum(Number(totais.toneladasEfetiva ?? 0), 3)}
                 </td>
               )}
-              <td className="px-3 py-2 text-right tabular-nums">
+              <td data-rotulo="Km" className="px-3 py-2 text-right tabular-nums">
                 {fmtNum(Number(totais.km), 2)}
               </td>
               {comercial && (
-                <td className="px-3 py-2 text-right tabular-nums">
+                <td data-rotulo="Km faturado" className="px-3 py-2 text-right tabular-nums">
                   {fmtNum(Number(totais.kmEfetivo ?? 0), 2)}
                 </td>
               )}
-              <td className="px-3 py-2 text-right tabular-nums">
+              <td data-rotulo="Pedágio" className="px-3 py-2 text-right tabular-nums">
                 {fmtBRL(Number(totais.pedagio))}
               </td>
             </tr>

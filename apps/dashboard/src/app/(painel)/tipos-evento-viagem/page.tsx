@@ -172,7 +172,8 @@ export default function TiposEventoViagemPage() {
         </header>
 
         <Card className="overflow-x-auto">
-          <Table>
+          {/* Celular: cada evento vira um bloco (nome em cima, rótulos nos campos, ações no fim): ver `.tabela-cartoes`. */}
+          <Table className="tabela-cartoes">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-14 text-center">Ordem</TableHead>
@@ -201,18 +202,18 @@ export default function TiposEventoViagemPage() {
               )}
               {dados.map((t) => (
                 <TableRow key={t.id} className={t.ativo ? undefined : "opacity-60"}>
-                  <TableCell className="text-center tabular-nums">{t.ordem}</TableCell>
-                  <TableCell className="font-medium">{t.nome}</TableCell>
-                  <TableCell>
+                  <TableCell data-rotulo="Ordem" className="text-center tabular-nums">{t.ordem}</TableCell>
+                  <TableCell data-mobile="titulo" className="font-medium">{t.nome}</TableCell>
+                  <TableCell data-rotulo="Slug">
                     <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{t.slug}</code>
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-rotulo="Comportamento">
                     <FlagsMarco t={t} />
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-rotulo="Pede">
                     <PedeIcones t={t} />
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-rotulo="Status">
                     {podeEditar ? (
                       <StatusToggle
                         active={t.ativo}
@@ -226,7 +227,7 @@ export default function TiposEventoViagemPage() {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-mobile="acoes">
                     <div className="flex justify-center">
                       <Permitido chave="tipos-evento-viagem.editar">
                         <Button

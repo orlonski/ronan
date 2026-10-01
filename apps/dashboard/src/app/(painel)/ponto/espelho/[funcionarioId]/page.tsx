@@ -162,7 +162,8 @@ function Conteudo({ funcionarioId }: { funcionarioId: string }) {
             </div>
           )}
 
-          <Card className="overflow-x-auto p-0">
+          {/* Celular: grade inerentemente tabular (dia x batidas x horas): rola de lado com a coluna Dia fixa. Ver `.tabela-rolagem`. */}
+          <Card className="tabela-rolagem overflow-x-auto p-0">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">

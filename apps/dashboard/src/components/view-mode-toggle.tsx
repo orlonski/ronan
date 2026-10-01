@@ -15,7 +15,8 @@ export function ViewModeToggle({
   onChange: (m: ListViewMode) => void;
 }) {
   return (
-    <div className="inline-flex rounded-md border bg-background p-0.5">
+    // Celular: sempre cartões, então o seletor some (< 768px).
+    <div className="inline-flex rounded-md border bg-background p-0.5 max-md:hidden">
       <button
         type="button"
         onClick={() => onChange("cards")}

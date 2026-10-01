@@ -317,7 +317,8 @@ function TabelaResumo({
   return (
     <Card className={carregando ? "opacity-60 transition-opacity" : undefined}>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        {/* Celular: cada grupo vira um bloco: ver `.tabela-cartoes` no globals.css. */}
+        <table className="tabela-cartoes w-full text-sm">
           <thead className="border-b bg-muted/40">
             <tr className="text-left">
               <th className="px-3 py-2 font-medium">
@@ -339,13 +340,13 @@ function TabelaResumo({
                 onClick={() => onAbrirGrupo(g)}
                 className="cursor-pointer border-b last:border-0 hover:bg-muted/40"
               >
-                <td className="px-3 py-2">
+                <td data-mobile="titulo" className="px-3 py-2">
                   <span className="font-medium">{g.nome}</span>
                   {g.detalhe && (
                     <span className="ml-1.5 text-xs text-muted-foreground">{g.detalhe}</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">
+                <td data-rotulo="Abastecimentos" className="px-3 py-2 text-right tabular-nums">
                   {g.abastecimentos}
                   {/* Sem este aviso, um grupo cheio de comboio parece barato. */}
                   {!!g.semValor && (
@@ -357,9 +358,9 @@ function TabelaResumo({
                     </span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtNum(Number(g.litros), 3)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtBRL(Number(g.valor))}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
+                <td data-rotulo="Litros" className="px-3 py-2 text-right tabular-nums">{fmtNum(Number(g.litros), 3)}</td>
+                <td data-rotulo="Valor" className="px-3 py-2 text-right tabular-nums">{fmtBRL(Number(g.valor))}</td>
+                <td data-rotulo="R$/litro" className="px-3 py-2 text-right tabular-nums">
                   {fmtNum(Number(g.precoMedio), 3)}
                 </td>
               </tr>
@@ -368,12 +369,12 @@ function TabelaResumo({
           <tfoot className="border-t-2 bg-muted/30 font-semibold">
             <tr>
               <td className="px-3 py-2">TOTAL</td>
-              <td className="px-3 py-2 text-right tabular-nums">{totais.abastecimentos}</td>
-              <td className="px-3 py-2 text-right tabular-nums">
+              <td data-rotulo="Abastecimentos" className="px-3 py-2 text-right tabular-nums">{totais.abastecimentos}</td>
+              <td data-rotulo="Litros" className="px-3 py-2 text-right tabular-nums">
                 {fmtNum(Number(totais.litros), 3)}
               </td>
-              <td className="px-3 py-2 text-right tabular-nums">{fmtBRL(Number(totais.valor))}</td>
-              <td className="px-3 py-2 text-right tabular-nums">
+              <td data-rotulo="Valor" className="px-3 py-2 text-right tabular-nums">{fmtBRL(Number(totais.valor))}</td>
+              <td data-rotulo="R$/litro" className="px-3 py-2 text-right tabular-nums">
                 {fmtNum(Number(totais.precoMedio), 3)}
               </td>
             </tr>

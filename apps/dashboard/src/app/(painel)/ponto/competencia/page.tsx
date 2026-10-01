@@ -181,7 +181,8 @@ function Conteudo() {
             )}
           </Card>
 
-          <Card className="overflow-x-auto p-0">
+          {/* Celular: rola de lado com a 1ª coluna fixa. Ver `.tabela-rolagem`. */}
+          <Card className="tabela-rolagem overflow-x-auto p-0">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">

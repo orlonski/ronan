@@ -114,7 +114,7 @@ export function DetalheGrupoSheet({
         ) : list.isLoading ? (
           <LoadingInline />
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div className="tabela-rolagem min-h-0 flex-1 overflow-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 border-b bg-background">
                 <tr className="text-left">
