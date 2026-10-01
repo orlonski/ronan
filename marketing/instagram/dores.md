@@ -145,6 +145,21 @@ escritório; quando decidem, o motorista recebe notificação e vê o status em 
 avisos" (`apps/motorista-app/app/avisar-problema.tsx`, `meus-avisos.tsx`,
 `admin/frota-manutencao/frota-manutencao.service.ts`).
 
+### 16. O exame toxicológico vence, e a multa chega sozinha
+**Como ele diz:** "nem fiquei sabendo que tinha vencido — a multa que me avisou."
+**O que custa:** o art. 165-D do CTB torna a multa automática 30 dias depois do
+exame toxicológico vencer, sem fiscalização na estrada pra avisar antes. Fora a
+multa, carga não se libera com documento vencido — e o autônomo refaz esse
+cadastro a cada viagem, pra cada transportadora nova.
+**O que mata:** carteira de documentos pessoais no app (CNH, toxicológico,
+RNTRC, CRLV por placa, cronotacógrafo, MOPP…) com validade e situação calculadas
+sozinhas, aviso por push com antecedência maior pro toxicológico (60 dias, não
+30) e o link de cadastro pra mandar tudo de uma vez pra quem libera a carga
+(`packages/shared-types/src/documento-pessoal.ts`,
+`apps/api/src/frete-pessoal/aviso-documentos.service.ts`,
+`apps/motorista-app/app/meus-documentos.tsx`). Fonte do prazo legal: art. 165-D
+do Código de Trânsito Brasileiro, já levantado em `docs/motorista-sem-empresa.md`.
+
 ---
 
 ## De onde vem isto, e o que falta
