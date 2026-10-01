@@ -28,7 +28,7 @@ function servicoMotorista(diasRetencaoLocalizacao: number) {
     },
     motivoCorrecaoPonto: { findMany: async () => [] },
   };
-  return new PontoService(prisma as never, {} as never);
+  return new PontoService(prisma as never, {} as never, {} as never);
 }
 
 describe("o interruptor da coleta chega no aparelho", () => {

@@ -139,6 +139,31 @@ export default function PontoTab() {
     })),
   ].sort((a, b) => a.hora.localeCompare(b.hora));
 
+  /**
+   * Os pedidos de correção do dia, na MESMA lista e em ordem de horário.
+   *
+   * Antes não apareciam aqui: quem pedia "esqueci de bater às 07:30" voltava
+   * pra aba, via a lista igual e concluía que o pedido não tinha ido. Ficam
+   * com cara própria (tracejado, rótulo) porque pedido não é batida — e não
+   * entram na contagem de batidas, pelo mesmo motivo.
+   */
+  const horaDaMarcacao = new Map((data?.marcacoes ?? []).map((m) => [m.id, horaBR(m.marcadoEm)]));
+  const pedidos = (data?.correcoes ?? []).map((c) => ({
+      chave: c.id,
+      hora:
+        c.tipo === "INCLUSAO" && c.instantePretendido
+          ? horaBR(c.instantePretendido)
+          : c.tipo === "DESCONSIDERACAO" && c.marcacaoId
+            ? horaDaMarcacao.get(c.marcacaoId) ?? null
+            : null,
+      tipo: c.tipo,
+      status: c.status,
+    }));
+  const linhas = [
+    ...batidas.map((b) => ({ ...b, pedido: null })),
+    ...pedidos.map((p) => ({ chave: p.chave, hora: p.hora ?? "", estado: "pedido" as const, pedido: p })),
+  ].sort((a, b) => (a.hora || "99").localeCompare(b.hora || "99"));
+
   function cancelarHold() {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
@@ -377,16 +402,24 @@ export default function PontoTab() {
               : batidas.length === 1
                 ? "1 batida"
                 : `${batidas.length} batidas`}
+            {pedidos.length === 1
+              ? " · 1 pedido"
+              : pedidos.length > 1
+                ? ` · ${pedidos.length} pedidos`
+                : ""}
           </Text>
         </View>
 
-        {batidas.length === 0 ? (
+        {linhas.length === 0 ? (
           <Text className="text-base text-muted-foreground">
             Sua primeira batida de hoje aparece aqui.
           </Text>
         ) : (
           <View className="gap-2">
-            {batidas.map((b) => (
+            {linhas.map((b) =>
+              b.pedido ? (
+                <LinhaPedido key={b.chave} hora={b.pedido.hora} tipo={b.pedido.tipo} status={b.pedido.status} />
+              ) : (
               <View
                 key={b.chave}
                 className={`flex-row items-center justify-between rounded-2xl border-2 px-4 py-3 ${
@@ -406,7 +439,8 @@ export default function PontoTab() {
                   <CloudOff size={22} color={COR_AVISO} />
                 )}
               </View>
-            ))}
+              ),
+            )}
           </View>
         )}
 
@@ -535,6 +569,63 @@ function Tarja({
           ? "Carregando suas batidas…"
           : "Bata quando começar, na saída e na volta do almoço, e no fim."}
       </Text>
+    </View>
+  );
+}
+
+/**
+ * Um pedido de correção na lista do dia. Tracejado e com rótulo escrito: é a
+ * diferença entre "bati" e "pedi pra incluir", e quem lê com pressa precisa
+ * ver isso sem interpretar ícone.
+ */
+function LinhaPedido({
+  hora,
+  tipo,
+  status,
+}: {
+  hora: string | null;
+  tipo: "INCLUSAO" | "DESCONSIDERACAO" | "ANOTACAO";
+  status: "PENDENTE" | "APROVADA" | "RECUSADA";
+}) {
+  const oQue =
+    tipo === "INCLUSAO"
+      ? "pedido para incluir"
+      : tipo === "DESCONSIDERACAO"
+        ? "pedido para não contar"
+        : "anotação do dia";
+  const situacao =
+    status === "PENDENTE"
+      ? "esperando o escritório"
+      : status === "APROVADA"
+        ? "aceito pelo escritório"
+        : "recusado pelo escritório";
+  const cores =
+    status === "PENDENTE"
+      ? "border-warning/60 bg-warning/10"
+      : status === "APROVADA"
+        ? "border-success/40 bg-success/5"
+        : "border-border bg-muted";
+  return (
+    <View
+      className={`flex-row items-center gap-3 rounded-2xl border-2 border-dashed px-4 py-3 ${cores}`}
+      accessibilityLabel={`${oQue}${hora ? ` às ${hora}` : ""}, ${situacao}`}
+    >
+      <Text
+        className={`text-2xl font-bold ${status === "RECUSADA" ? "text-muted-foreground line-through" : "text-foreground"}`}
+      >
+        {hora ?? "—"}
+      </Text>
+      <View className="flex-1">
+        <Text className="text-sm font-semibold text-foreground">{oQue}</Text>
+        <Text className="text-xs text-muted-foreground">{situacao}</Text>
+      </View>
+      {status === "PENDENTE" ? (
+        <Clock size={22} color={COR_AVISO} />
+      ) : status === "APROVADA" ? (
+        <Check size={22} color={COR_OK} strokeWidth={3} />
+      ) : (
+        <PenLine size={20} color="#64748b" />
+      )}
     </View>
   );
 }

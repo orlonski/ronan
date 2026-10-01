@@ -32,7 +32,70 @@ export type TipoNotificacaoAdmin =
   | "lead-novo"
   | "lead-precisa-humano"
   // A Meta mudou o estado de um template do WhatsApp (da PLATAFORMA).
-  | "template-whatsapp";
+  | "template-whatsapp"
+  // O funcionário pediu correção do ponto pelo app.
+  | "correcao-ponto";
+
+/**
+ * As abas do filtro do sininho. Agrupa por ASSUNTO, não por tipo técnico:
+ * ninguém quer escolher entre "resposta-divergencia-km" e "…-ticket"; quer ver
+ * "o que é de viagem" ou "o que é de ponto".
+ *
+ * Tipo novo que não entrar aqui cai em "Outros" — some do filtro específico,
+ * mas nunca some do sininho.
+ */
+export const CATEGORIAS_INBOX = [
+  {
+    chave: "viagens",
+    label: "Viagens",
+    tipos: [
+      "nova-viagem",
+      "resposta-divergencia-pedagio",
+      "resposta-divergencia-km",
+      "resposta-divergencia-ticket",
+      "resposta-divergencia-material",
+      "resposta-divergencia-dados",
+      "resposta-divergencia-foto",
+      "nova-mensagem-viagem",
+      "foto-anexada",
+      "local-em-validacao",
+      "alerta-torre",
+      "conferencia-diaria",
+    ],
+  },
+  { chave: "motoristas", label: "Motoristas", tipos: ["motorista-cadastro", "motorista-senha-reset"] },
+  { chave: "ponto", label: "Ponto", tipos: ["correcao-ponto"] },
+  { chave: "frota", label: "Frota", tipos: ["problema-veiculo"] },
+  {
+    chave: "plataforma",
+    label: "Plataforma",
+    tipos: [
+      "conta-auto-cadastro",
+      "lead-novo",
+      "lead-precisa-humano",
+      "onboarding-quer-continuar",
+      "template-whatsapp",
+    ],
+  },
+] as const;
+
+export type ChaveCategoriaInbox = (typeof CATEGORIAS_INBOX)[number]["chave"];
+
+export function tiposDaCategoria(chave?: ChaveCategoriaInbox): readonly string[] | undefined {
+  return CATEGORIAS_INBOX.find((c) => c.chave === chave)?.tipos;
+}
+
+/** Não lidas por categoria, a partir da contagem por tipo da API. */
+export function naoLidasPorCategoria(
+  porTipo: Record<string, number> | undefined,
+): Partial<Record<ChaveCategoriaInbox, number>> {
+  const r: Partial<Record<ChaveCategoriaInbox, number>> = {};
+  for (const c of CATEGORIAS_INBOX) {
+    const n = c.tipos.reduce((s, t) => s + (porTipo?.[t] ?? 0), 0);
+    if (n > 0) r[c.chave] = n;
+  }
+  return r;
+}
 
 export type AdminNotificacao = {
   id: string;
@@ -50,10 +113,14 @@ const PATH = "/admin/inbox";
 // no mesmo host onde o backend roda.
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
-export function useInboxLista(opts?: { somenteNaoLidas?: boolean }) {
+export function useInboxLista(opts?: {
+  somenteNaoLidas?: boolean;
+  tipos?: readonly string[];
+}) {
   const token = useAuthToken();
+  const tipos = opts?.tipos?.join(",");
   return useInfiniteQuery({
-    queryKey: ["admin-inbox", { somenteNaoLidas: opts?.somenteNaoLidas }],
+    queryKey: ["admin-inbox", { somenteNaoLidas: opts?.somenteNaoLidas, tipos }],
     enabled: !!token,
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
@@ -61,6 +128,7 @@ export function useInboxLista(opts?: { somenteNaoLidas?: boolean }) {
       qs.set("limit", "30");
       if (pageParam) qs.set("cursor", pageParam);
       if (opts?.somenteNaoLidas) qs.set("naoLidas", "true");
+      if (tipos) qs.set("tipos", tipos);
       return fetchApi<{ itens: AdminNotificacao[]; nextCursor: string | null }>(
         `${PATH}?${qs.toString()}`,
         { token },
@@ -76,7 +144,7 @@ export function useInboxContagem() {
     queryKey: ["admin-inbox-contar"],
     enabled: !!token,
     // Sem refetchInterval — SSE invalida quando chega evento novo.
-    queryFn: () => fetchApi<{ naoLidas: number }>(`${PATH}/contar`, { token }),
+    queryFn: () => fetchApi<{ naoLidas: number; porTipo?: Record<string, number> }>(`${PATH}/contar`, { token }),
   });
 }
 

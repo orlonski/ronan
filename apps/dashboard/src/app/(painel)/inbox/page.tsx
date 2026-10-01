@@ -14,6 +14,9 @@ import {
 } from "@/components/topbar";
 import {
   type AdminNotificacao,
+  type ChaveCategoriaInbox,
+  CATEGORIAS_INBOX,
+  tiposDaCategoria,
   useInboxLista,
   useMarcarLida,
   useMarcarTodasLidas,
@@ -34,17 +37,19 @@ const TIPO_LABEL: Record<string, string> = {
   "lead-novo": "Contato pelo site",
   "lead-precisa-humano": "Lead esperando atendimento",
   "template-whatsapp": "Template do WhatsApp",
+  "correcao-ponto": "Correção de ponto",
 };
 
 export default function InboxPage() {
   const [somenteNaoLidas, setSomenteNaoLidas] = useState(false);
-  const [tipo, setTipo] = useState<string | undefined>();
-  const lista = useInboxLista({ somenteNaoLidas });
+  const [categoria, setCategoria] = useState<ChaveCategoriaInbox | undefined>();
+  // Filtro no SERVIDOR: filtrando no cliente, o assunto só achava o que já
+  // estava nas páginas carregadas — e dizia "nenhuma" com mais na fila.
+  const lista = useInboxLista({ somenteNaoLidas, tipos: tiposDaCategoria(categoria) });
   const marcarLida = useMarcarLida();
   const marcarTodas = useMarcarTodasLidas();
 
-  const todos = lista.data?.pages.flatMap((p) => p.itens) ?? [];
-  const filtrados = tipo ? todos.filter((n) => n.tipo === tipo) : todos;
+  const filtrados = lista.data?.pages.flatMap((p) => p.itens) ?? [];
 
   return (
     <div className="space-y-6">
@@ -60,14 +65,11 @@ export default function InboxPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Combobox
-            value={tipo}
-            onChange={(v) => setTipo(v)}
-            placeholder="Tipo"
+            value={categoria}
+            onChange={(v) => setCategoria(v as ChaveCategoriaInbox | undefined)}
+            placeholder="Assunto"
             showSearch={false}
-            options={Object.entries(TIPO_LABEL).map(([value, label]) => ({
-              value,
-              label,
-            }))}
+            options={CATEGORIAS_INBOX.map((c) => ({ value: c.chave, label: c.label }))}
           />
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input

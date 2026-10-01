@@ -88,9 +88,14 @@ function CorrigirPontoScreenTela() {
       // O espelho do mês do DIA CORRIGIDO — que pode não ser o mês atual.
       // Sem invalidar, ele volta pra tela anterior e não vê o próprio pedido.
       await qc.invalidateQueries({ queryKey: ["ponto-espelho"] });
+      // E a lista de "Hoje" da aba, que agora mostra os pedidos do dia.
+      await qc.invalidateQueries({ queryKey: ["ponto-hoje"] });
       void showAlert({
         title: "Pedido enviado",
-        message: `O escritório vai analisar. Você acompanha em "Meu espelho", no mês de ${nomeDoMes(dia)} — o dia ${dia.slice(-2)} já aparece marcado como pedido.`,
+        message:
+          dia === hojeISO()
+            ? "O escritório vai analisar. O pedido já aparece na sua lista de hoje, e a resposta também chega lá."
+            : `O escritório vai analisar. Você acompanha em "Meu espelho", no mês de ${nomeDoMes(dia)} — o dia ${dia.slice(-2)} já aparece marcado como pedido.`,
       });
       router.back();
     } catch {

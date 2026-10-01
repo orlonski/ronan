@@ -9,6 +9,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamentos-resgatados.service";
 import type { AuthFuncionario } from "../auth/types";
 import { PontoAdminService } from "./ponto-admin.service";
+import { AdminInboxService } from "../admin/inbox/inbox.service";
 
 /**
  * O REGISTRO DE PONTO do funcionário.
@@ -31,6 +32,7 @@ export class PontoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly vala: LancamentosResgatadosService,
+    private readonly inbox: AdminInboxService,
   ) {}
 
   /**
@@ -222,7 +224,7 @@ export class PontoService {
    * exatamente o que o registro não faz.
    */
   async hoje(user: AuthFuncionario, dia: string) {
-    const [funcionario, marcacoes, cfg] = await Promise.all([
+    const [funcionario, marcacoes, cfg, correcoes] = await Promise.all([
       this.prisma.funcionario.findFirst({
         where: { id: user.funcionarioId },
         select: { id: true, nome: true, cpf: true, cargo: true, desligadoEm: true },
@@ -233,8 +235,28 @@ export class PontoService {
         select: { id: true, numeroRegistro: true, marcadoEm: true, clientId: true },
       }),
       this.prisma.configPonto.findFirst({ select: { razaoSocial: true } }),
+      /**
+       * Os pedidos de correção DO DIA, ao lado das batidas.
+       *
+       * Sem isto, quem pedia "esqueci de bater às 07:30" voltava pra aba e
+       * via a lista de hoje igualzinha — e a leitura natural é "não foi".
+       * Pedido não é batida (a lista separa os dois), mas tem que estar à
+       * vista no dia a que ele se refere.
+       */
+      this.prisma.correcaoPonto.findMany({
+        where: { funcionarioId: user.funcionarioId, dia },
+        orderBy: { criadoEm: "asc" },
+        select: {
+          id: true,
+          tipo: true,
+          status: true,
+          instantePretendido: true,
+          marcacaoId: true,
+          pedidoPor: true,
+        },
+      }),
     ]);
-    if (!funcionario) return { funcionario: null, dia, marcacoes: [] };
+    if (!funcionario) return { funcionario: null, dia, marcacoes: [], correcoes: [] };
 
     return {
       funcionario: {
@@ -250,6 +272,14 @@ export class PontoService {
         clientId: m.clientId,
         numeroRegistro: m.numeroRegistro,
         marcadoEm: m.marcadoEm.toISOString(),
+      })),
+      correcoes: correcoes.map((c) => ({
+        id: c.id,
+        tipo: c.tipo,
+        status: c.status,
+        instantePretendido: c.instantePretendido?.toISOString() ?? null,
+        marcacaoId: c.marcacaoId,
+        pedidoPor: c.pedidoPor,
       })),
     };
   }
@@ -333,7 +363,7 @@ export class PontoService {
       if (ja) return ja;
     }
 
-    return this.prisma.correcaoPonto.create({
+    const criada = await this.prisma.correcaoPonto.create({
       data: {
         funcionarioId: user.funcionarioId,
         dia: dados.dia,
@@ -348,6 +378,43 @@ export class PontoService {
         clientId: dados.clientId ?? null,
       },
     });
+    await this.avisarEscritorio(user, criada);
+    return criada;
+  }
+
+  /**
+   * O sininho de quem decide. Pedido parado é jornada sem conta fechada: sem
+   * aviso, ele só era visto quando alguém abria "Acerto de ponto" por acaso.
+   *
+   * Vai só pra quem tem `correcoes-ponto.decidir` — avisar quem não pode
+   * resolver é ruído. Best-effort: o pedido já está gravado, e o sininho
+   * falhar não pode virar erro pra quem pediu.
+   */
+  private async avisarEscritorio(
+    user: AuthFuncionario,
+    c: { id: string; dia: string; tipo: string; instantePretendido: Date | null },
+  ) {
+    try {
+      const [, m, d] = c.dia.split("-");
+      const hora = c.instantePretendido
+        ? new Date(c.instantePretendido.getTime() - 3 * 3_600_000).toISOString().slice(11, 16)
+        : null;
+      const oQue =
+        c.tipo === "INCLUSAO"
+          ? `incluir ${hora ?? "uma batida"}`
+          : c.tipo === "DESCONSIDERACAO"
+            ? "desconsiderar uma batida"
+            : "anotar o dia";
+      await this.inbox.disparar({
+        tipo: "correcao-ponto",
+        titulo: `${user.nome} pediu correção do ponto`,
+        corpo: `Dia ${d}/${m}: ${oQue}.`,
+        dados: { correcaoId: c.id, funcionarioId: user.funcionarioId, dia: c.dia },
+        permissao: "correcoes-ponto.decidir",
+      });
+    } catch (e) {
+      this.log.warn(`Sininho da correção ${c.id} não saiu: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /**

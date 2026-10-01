@@ -23,7 +23,7 @@ function servico(correcao: Record<string, unknown> | null) {
       },
     },
   };
-  return { s: new PontoService(prisma as never, {} as never), apagados };
+  return { s: new PontoService(prisma as never, {} as never, {} as never), apagados };
 }
 
 describe("cancelar pedido de correção", () => {

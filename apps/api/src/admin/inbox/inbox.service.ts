@@ -40,6 +40,8 @@ export type TipoNotificacaoAdmin =
   // Conferência diária de viagens: o sistema tem uma sugestão esperando decisão
   // (motorista disse que saiu, parou de receber, número que não entrega…).
   | "conferencia-diaria"
+  // O funcionário pediu correção do ponto pelo app (só pra quem decide).
+  | "correcao-ponto"
   // A Meta mudou o estado/categoria de um template do WhatsApp. Da PLATAFORMA.
   | "template-whatsapp";
 
@@ -203,11 +205,12 @@ export class AdminInboxService implements OnModuleDestroy {
 
   async listar(
     usuarioId: string,
-    args: { limit?: number; cursor?: string; somenteNaoLidas?: boolean },
+    args: { limit?: number; cursor?: string; somenteNaoLidas?: boolean; tipos?: string[] },
   ): Promise<{ itens: AdminNotificacao[]; nextCursor: string | null }> {
     const limit = Math.min(Math.max(args.limit ?? 30, 1), 100);
     const where: Prisma.AdminNotificacaoWhereInput = { usuarioId };
     if (args.somenteNaoLidas) where.lida = false;
+    if (args.tipos?.length) where.tipo = { in: args.tipos };
     const itens = await this.prisma.adminNotificacao.findMany({
       where,
       orderBy: [{ criadoEm: "desc" }, { id: "desc" }],
@@ -226,6 +229,16 @@ export class AdminInboxService implements OnModuleDestroy {
     return this.prisma.adminNotificacao.count({
       where: { usuarioId, lida: false },
     });
+  }
+
+  /** Não lidas por tipo — o número de cada aba do filtro do sininho. */
+  async contarNaoLidasPorTipo(usuarioId: string): Promise<Record<string, number>> {
+    const grupos = await this.prisma.adminNotificacao.groupBy({
+      by: ["tipo"],
+      where: { usuarioId, lida: false },
+      _count: { _all: true },
+    });
+    return Object.fromEntries(grupos.map((g) => [g.tipo, g._count._all]));
   }
 
   async marcarLida(id: string, usuarioId: string): Promise<AdminNotificacao> {

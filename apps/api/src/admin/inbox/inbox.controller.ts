@@ -24,6 +24,8 @@ const ListarQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   cursor: z.string().uuid().optional(),
   naoLidas: z.enum(["true", "false"]).optional(),
+  /** CSV de tipos — o filtro por categoria do sininho. */
+  tipos: z.string().max(1000).optional(),
 });
 
 /**
@@ -54,13 +56,17 @@ export class AdminInboxController {
       limit: q.limit,
       cursor: q.cursor,
       somenteNaoLidas: q.naoLidas === "true",
+      tipos: q.tipos?.split(",").map((t) => t.trim()).filter(Boolean),
     });
   }
 
   @Get("contar")
   async contar(@CurrentUser() user: AuthAdminUser) {
-    const naoLidas = await this.service.contarNaoLidas(user.id);
-    return { naoLidas };
+    const [naoLidas, porTipo] = await Promise.all([
+      this.service.contarNaoLidas(user.id),
+      this.service.contarNaoLidasPorTipo(user.id),
+    ]);
+    return { naoLidas, porTipo };
   }
 
   @Patch(":id/lida")

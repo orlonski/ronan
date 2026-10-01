@@ -804,6 +804,18 @@ export type PontoHoje = {
   funcionario: { id: string; nome: string; cargo: string | null; empresa: string | null; desligado: boolean } | null;
   dia: string;
   marcacoes: { id: string; clientId: string; numeroRegistro: number; marcadoEm: string }[];
+  /**
+   * Pedidos de correção DO DIA. Opcional porque o cache gravado antes deste
+   * campo não tem — quem lê usa `?? []` (compat on-read).
+   */
+  correcoes?: {
+    id: string;
+    tipo: "INCLUSAO" | "DESCONSIDERACAO" | "ANOTACAO";
+    status: "PENDENTE" | "APROVADA" | "RECUSADA";
+    instantePretendido: string | null;
+    marcacaoId: string | null;
+    pedidoPor: "FUNCIONARIO" | "GESTOR";
+  }[];
 };
 
 /**

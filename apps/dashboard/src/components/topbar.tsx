@@ -9,6 +9,7 @@ import {
   Building2,
   Camera,
   ClipboardCheck,
+  Clock,
   KeyRound,
   MapPin,
   PiggyBank,
@@ -25,6 +26,10 @@ import {
 } from "@/components/ui/popover";
 import {
   type AdminNotificacao,
+  type ChaveCategoriaInbox,
+  CATEGORIAS_INBOX,
+  naoLidasPorCategoria,
+  tiposDaCategoria,
   useInboxContagem,
   useInboxLista,
   useMarcarLida,
@@ -40,14 +45,31 @@ import {
  */
 export function Topbar() {
   const [open, setOpen] = useState(false);
+  const [categoria, setCategoria] = useState<ChaveCategoriaInbox | undefined>();
   const contagem = useInboxContagem();
-  const lista = useInboxLista();
+  const todas = useInboxLista();
+  const filtrada = useInboxLista({ tipos: tiposDaCategoria(categoria) });
+  const lista = categoria ? filtrada : todas;
   const marcarLida = useMarcarLida();
   const marcarTodas = useMarcarTodasLidas();
   const router = useRouter();
 
   const naoLidas = contagem.data?.naoLidas ?? 0;
   const itens = lista.data?.pages.flatMap((p) => p.itens).slice(0, 10) ?? [];
+
+  /**
+   * Só aparece a aba de assunto que a pessoa de fato recebe — quem não é da
+   * plataforma não vê "Plataforma", quem não decide ponto não vê "Ponto".
+   * Aba que sempre abre vazia ensina a não usar o filtro.
+   */
+  const porCategoria = naoLidasPorCategoria(contagem.data?.porTipo);
+  const tiposVistos = new Set((todas.data?.pages.flatMap((p) => p.itens) ?? []).map((n) => n.tipo));
+  const abas = CATEGORIAS_INBOX.filter(
+    (c) =>
+      c.chave === categoria ||
+      (porCategoria[c.chave] ?? 0) > 0 ||
+      c.tipos.some((t) => tiposVistos.has(t)),
+  );
 
   function aoClicarItem(n: AdminNotificacao): void {
     if (!n.lida) marcarLida.mutate(n.id);
@@ -92,6 +114,30 @@ export function Topbar() {
           )}
         </div>
 
+        {abas.length > 1 && (
+          <div
+            role="tablist"
+            aria-label="Filtrar notificações por assunto"
+            className="flex gap-1 overflow-x-auto border-b px-3 py-2"
+          >
+            <AbaCategoria
+              ativa={!categoria}
+              label="Todas"
+              naoLidas={naoLidas}
+              onClick={() => setCategoria(undefined)}
+            />
+            {abas.map((c) => (
+              <AbaCategoria
+                key={c.chave}
+                ativa={categoria === c.chave}
+                label={c.label}
+                naoLidas={porCategoria[c.chave] ?? 0}
+                onClick={() => setCategoria(c.chave)}
+              />
+            ))}
+          </div>
+        )}
+
         <div className="max-h-[400px] overflow-y-auto">
           {lista.isLoading && (
             <div className="p-6 text-center text-sm text-muted-foreground">
@@ -101,7 +147,7 @@ export function Topbar() {
           {!lista.isLoading && itens.length === 0 && (
             <div className="p-6 text-center text-sm text-muted-foreground">
               <Bell className="mx-auto mb-2 h-6 w-6 opacity-50" />
-              Nenhuma notificação ainda.
+              {categoria ? "Nada deste assunto por enquanto." : "Nenhuma notificação ainda."}
             </div>
           )}
           {itens.map((n) => (
@@ -120,6 +166,43 @@ export function Topbar() {
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function AbaCategoria({
+  ativa,
+  label,
+  naoLidas,
+  onClick,
+}: {
+  ativa: boolean;
+  label: string;
+  naoLidas: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={ativa}
+      onClick={onClick}
+      className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+        ativa
+          ? "bg-foreground text-background"
+          : "bg-muted text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {label}
+      {naoLidas > 0 && (
+        <span
+          className={`rounded-full px-1.5 text-[10px] font-bold ${
+            ativa ? "bg-background/20" : "bg-red-600 text-white"
+          }`}
+        >
+          {naoLidas > 99 ? "99+" : naoLidas}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -170,6 +253,8 @@ export function IconeTipo({ tipo }: { tipo: string }) {
     return <ClipboardCheck className={`${cls} text-amber-600`} />;
   if (tipo === "conta-auto-cadastro" || tipo === "lead-novo" || tipo === "lead-precisa-humano")
     return <Building2 className={`${cls} text-emerald-600`} />;
+  if (tipo === "correcao-ponto")
+    return <Clock className={`${cls} text-blue-600`} />;
   if (tipo === "template-whatsapp")
     return <ClipboardCheck className={`${cls} text-amber-600`} />;
   if (tipo === "nova-viagem")
@@ -217,6 +302,8 @@ export function rotaParaNotificacao(n: AdminNotificacao): string | null {
   if (n.tipo === "template-whatsapp") return "/whatsapp";
   // As sugestões da conferência se decidem na aba "Fila do gestor".
   if (n.tipo === "conferencia-diaria") return "/conferencia-diaria?aba=fila";
+  // Pedido de correção se decide na tela "Acerto de ponto".
+  if (n.tipo === "correcao-ponto") return "/ponto/correcoes";
   if (n.tipo === "nova-viagem" && dados.viagemId) {
     return `/viagens/${dados.viagemId}`;
   }
