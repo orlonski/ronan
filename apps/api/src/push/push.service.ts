@@ -106,15 +106,18 @@ export class PushService {
       return { enviado: false, motivo: "Motorista desativou push." };
     }
 
-    if (!Expo.isExpoPushToken(args.token)) {
+    // 2) Pra QUAIS aparelhos. Nunca só o token deste cadastro — ver
+    //    `aparelhosDaPessoa`.
+    const tokens = await this.aparelhosDaPessoa(args.motoristaId, args.token);
+    if (tokens.length === 0) {
       await this.marcarEntrega(notificacaoId, {
         entregaStatus: "ERRO",
-        entregaErro: "TokenInvalido",
+        entregaErro: "SemAparelho",
       });
-      return { enviado: false, motivo: "Token inválido" };
+      return { enviado: false, motivo: "Ele ainda não abriu o app em nenhum aparelho (sem token)." };
     }
 
-    // 2) Embute notificacaoId no payload + preserva `kind` pro tap dispatcher
+    // 3) Embute notificacaoId no payload + preserva `kind` pro tap dispatcher
     //    no app saber o tipo (mensagem-admin abre /notificacoes).
     const dadosFinal: Record<string, unknown> = {
       ...(args.dados ?? {}),
@@ -122,96 +125,156 @@ export class PushService {
       kind: (args.dados?.kind as string | undefined) ?? tipo,
     };
 
-    const message: ExpoPushMessage = {
-      to: args.token,
-      title: args.titulo,
-      body: args.corpo,
-      data: dadosFinal,
-      // "ding" = asset embutido no app (apps/motorista-app/assets/sounds/ding.wav)
-      sound: "ding",
-      priority: "high",
-      channelId: "default",
-    };
-
-    const { ticket, ultimoErro } = await this.despachar(message);
-
-    if (!ticket) {
-      const msg = ultimoErro instanceof Error ? ultimoErro.message : "Falha ao enviar";
-      this.log.error(`Push motoristaId=${args.motoristaId}: ${msg}`);
-      await this.marcarEntrega(notificacaoId, {
-        entregaStatus: "ERRO",
-        entregaErro: `transitorio_max_retry: ${msg.slice(0, 200)}`,
+    // Um aparelho por vez: cada ticket diz respeito a UM token, e é ele que
+    // sai do banco quando o Expo diz que o aparelho não existe mais.
+    const aceitos: { token: string; ticketId: string }[] = [];
+    const erros: string[] = [];
+    for (const token of tokens) {
+      const { ticket, ultimoErro } = await this.despachar({
+        to: token,
+        title: args.titulo,
+        body: args.corpo,
+        data: dadosFinal,
+        // "ding" = asset embutido no app (apps/motorista-app/assets/sounds/ding.wav)
+        sound: "ding",
+        priority: "high",
+        channelId: "default",
       });
-      return { enviado: false, motivo: "Não foi possível enviar agora. Tente de novo." };
+      if (!ticket) {
+        const msg = ultimoErro instanceof Error ? ultimoErro.message : "Falha ao enviar";
+        this.log.error(`Push motoristaId=${args.motoristaId}: ${msg}`);
+        erros.push(`transitorio_max_retry: ${msg.slice(0, 200)}`);
+        continue;
+      }
+      if (ticket.status === "error") {
+        const detalhe = ticket.details?.error;
+        erros.push(detalhe ?? ticket.message ?? "ticket_erro");
+        if (detalhe === "DeviceNotRegistered") await this.esquecerToken(token);
+        else this.log.warn(`Push ticket erro motoristaId=${args.motoristaId}: ${ticket.message}`);
+        continue;
+      }
+      aceitos.push({ token, ticketId: ticket.id });
     }
 
-    if (ticket.status === "error") {
-      const detalhe = ticket.details?.error;
-      await this.marcarEntrega(notificacaoId, {
-        entregaStatus: "ERRO",
-        entregaErro: detalhe ?? ticket.message ?? "ticket_erro",
-      });
-      if (detalhe === "DeviceNotRegistered") {
-        await this.prisma.motorista.update({
-          where: { id: args.motoristaId },
-          data: { expoPushToken: null, pushTokenAtualizadoEm: null },
-        });
-        return {
-          enviado: false,
-          motivo: "Motorista precisa abrir o app de novo (token expirado).",
-        };
-      }
-      this.log.warn(`Push ticket erro motoristaId=${args.motoristaId}: ${ticket.message}`);
-      return { enviado: false, motivo: ticket.message ?? "Erro do Expo" };
+    if (aceitos.length === 0) {
+      await this.marcarEntrega(notificacaoId, { entregaStatus: "ERRO", entregaErro: erros.join(" | ") });
+      return {
+        enviado: false,
+        motivo: erros.includes("DeviceNotRegistered")
+          ? "Token expirado — ele precisa abrir o app de novo."
+          : `Não foi possível enviar: ${erros.join(" | ")}`,
+      };
     }
 
     // Ticket "ok" só significa que o Expo aceitou. A entrega real (Expo → FCM →
     // device) é assíncrona — só confirmamos consultando o receipt.
-    const ticketId = ticket.id;
-    this.log.log(`Push aceita pelo Expo, ticket=${ticketId} motoristaId=${args.motoristaId}`);
-    await this.marcarEntrega(notificacaoId, { expoTicketId: ticketId });
+    this.log.log(
+      `Push aceita pelo Expo, tickets=${aceitos.map((a) => a.ticketId).join(",")} motoristaId=${args.motoristaId} aparelhos=${aceitos.length}`,
+    );
+    await this.marcarEntrega(notificacaoId, { expoTicketId: aceitos[0]!.ticketId });
 
     await delay(3000);
     try {
-      const receipts = await this.expo.getPushNotificationReceiptsAsync([ticketId]);
-      const receipt = receipts[ticketId];
-      if (!receipt) {
-        // Receipt ainda não disponível — considera enviado e segue
-        // (Expo às vezes leva > 5s; não bloqueia o admin esperando).
-        return { enviado: true };
+      const receipts = await this.expo.getPushNotificationReceiptsAsync(aceitos.map((a) => a.ticketId));
+      let algumOk = false;
+      let algumPendente = false;
+      const errosReceipt: string[] = [];
+      for (const a of aceitos) {
+        const r = receipts[a.ticketId];
+        if (!r) algumPendente = true;
+        else if (r.status === "ok") algumOk = true;
+        else {
+          const detalhe = r.details?.error;
+          this.log.warn(
+            `Push receipt ERRO motoristaId=${args.motoristaId} ticket=${a.ticketId} error=${detalhe} message=${r.message}`,
+          );
+          errosReceipt.push(detalhe ?? r.message ?? "receipt_erro");
+          if (detalhe === "DeviceNotRegistered") await this.esquecerToken(a.token);
+        }
       }
-      if (receipt.status === "ok") {
+      if (algumOk) {
         await this.marcarEntrega(notificacaoId, { entregaStatus: "ENTREGUE" });
         return { enviado: true };
       }
-      // receipt.status === "error"
-      const detalhe = receipt.details?.error;
-      this.log.warn(
-        `Push receipt ERRO motoristaId=${args.motoristaId} ticket=${ticketId} error=${detalhe} message=${receipt.message}`,
-      );
-      await this.marcarEntrega(notificacaoId, {
-        entregaStatus: "ERRO",
-        entregaErro: detalhe ?? receipt.message ?? "receipt_erro",
-      });
-      if (detalhe === "DeviceNotRegistered") {
-        await this.prisma.motorista.update({
-          where: { id: args.motoristaId },
-          data: { expoPushToken: null, pushTokenAtualizadoEm: null },
-        });
-        return {
-          enviado: false,
-          motivo: "Token expirado — motorista precisa abrir o app de novo.",
-        };
-      }
-      return {
-        enviado: false,
-        motivo: `${detalhe ?? "Erro Expo"}: ${receipt.message ?? "sem detalhe"}`,
-      };
+      // Receipt ainda não disponível — considera enviado e segue
+      // (Expo às vezes leva > 5s; não bloqueia o admin esperando).
+      if (algumPendente) return { enviado: true };
+      await this.marcarEntrega(notificacaoId, { entregaStatus: "ERRO", entregaErro: errosReceipt.join(" | ") });
+      return { enviado: false, motivo: errosReceipt.join(" | ") };
     } catch (e) {
       // Falha ao consultar receipt — não bloqueia (Expo já aceitou, provavelmente entregou)
       this.log.warn(`Push receipt consulta falhou motoristaId=${args.motoristaId}: ${e}`);
       return { enviado: true };
     }
+  }
+
+  /**
+   * Todos os aparelhos da PESSOA por trás deste cadastro, sem repetir.
+   *
+   * ⚠️ O token mora em três lugares, e nenhum sozinho é confiável: no cadastro
+   * de motorista (`Motorista.expoPushToken`, por empresa), na pessoa
+   * (`MotoristaIdentidade.expoPushToken`) e nos OUTROS cadastros dela em outras
+   * empresas. O app grava o token só no cadastro da empresa ATIVA naquele
+   * momento — então quem tem (ou já teve) cadastro em mais de uma empresa
+   * ficava com o token no cadastro "errado", e o push daquela empresa não
+   * chegava. A plataforma é uma só: push tem que chegar não importa em
+   * quantas empresas ele está nem qual está aberta no app.
+   *
+   * Mandar o aviso de uma empresa pra um aparelho registrado em outro
+   * cadastro dele não vaza nada: é o MESMO celular da mesma pessoa.
+   */
+  private async aparelhosDaPessoa(motoristaId: string, tokenDoCadastro: string): Promise<string[]> {
+    const tokens = new Set<string>();
+    if (Expo.isExpoPushToken(tokenDoCadastro)) tokens.add(tokenDoCadastro);
+    try {
+      await comoSistema(async () => {
+        const m = await this.prisma.motorista.findUnique({
+          where: { id: motoristaId },
+          select: { identidadeId: true, cpf: true, expoPushToken: true },
+        });
+        if (!m) return;
+        if (m.expoPushToken && Expo.isExpoPushToken(m.expoPushToken)) tokens.add(m.expoPushToken);
+        const cpf = m.cpf.replace(/\D/g, "");
+        const [identidade, outros] = await Promise.all([
+          this.prisma.motoristaIdentidade.findFirst({
+            where: m.identidadeId ? { id: m.identidadeId } : { cpf },
+            select: { expoPushToken: true },
+          }),
+          this.prisma.motorista.findMany({
+            where: {
+              id: { not: motoristaId },
+              expoPushToken: { not: null },
+              OR: [...(m.identidadeId ? [{ identidadeId: m.identidadeId }] : []), { cpf }],
+            },
+            select: { expoPushToken: true },
+            take: 10,
+          }),
+        ]);
+        for (const t of [identidade?.expoPushToken, ...outros.map((o) => o.expoPushToken)]) {
+          if (t && Expo.isExpoPushToken(t)) tokens.add(t);
+        }
+      });
+    } catch (e) {
+      // Falhar aqui não pode impedir o envio pro token que o caller já tinha.
+      this.log.warn(`Aparelhos da pessoa (motoristaId=${motoristaId}) não resolvidos: ${e}`);
+    }
+    return [...tokens];
+  }
+
+  /** O Expo disse que o aparelho não existe mais: sai de TODO lugar onde estava. */
+  private async esquecerToken(token: string): Promise<void> {
+    await comoSistema(() =>
+      Promise.all([
+        this.prisma.motorista.updateMany({
+          where: { expoPushToken: token },
+          data: { expoPushToken: null, pushTokenAtualizadoEm: null },
+        }),
+        this.prisma.motoristaIdentidade.updateMany({
+          where: { expoPushToken: token },
+          data: { expoPushToken: null, pushTokenAtualizadoEm: null },
+        }),
+      ]),
+    ).catch((e) => this.log.warn(`Falha ao esquecer token: ${e}`));
   }
 
   /**

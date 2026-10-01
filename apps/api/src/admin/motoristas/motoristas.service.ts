@@ -1204,12 +1204,11 @@ export class MotoristasService {
     });
     if (!m) throw new NotFoundException("Motorista não encontrado");
     if (!m.ativo) return { enviado: false, motivo: "Motorista inativo" };
-    if (!m.expoPushToken) {
-      return { enviado: false, motivo: "Motorista ainda não abriu o app (sem token)" };
-    }
+    // Sem token NESTE cadastro, o PushService ainda procura os aparelhos da
+    // pessoa; se não achar nenhum, ele mesmo devolve "sem token".
     return this.push.enviar({
       motoristaId: m.id,
-      token: m.expoPushToken,
+      token: m.expoPushToken ?? "",
       titulo: body.titulo,
       corpo: body.corpo,
       dados: body.dados,

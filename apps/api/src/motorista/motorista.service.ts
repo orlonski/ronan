@@ -97,11 +97,15 @@ export class MotoristaService {
     // senão o device recebe push duplicado (1 por cadastro que compartilha o
     // token).
     //
-    // A limpeza roda em `comoSistema` porque a fronteira aqui é o APARELHO, não
-    // a empresa: quem tem cadastro em duas e está trabalhando pra uma não pode
-    // receber na tela o aviso da outra. Confinada à conta atual (que é o que a
-    // trava faria), a limpeza deixava o token vivo no cadastro da outra empresa
-    // e ela seguia empurrando conteúdo dela pro celular dele.
+    // Roda em `comoSistema` porque a fronteira é o APARELHO, não a empresa.
+    //
+    // ⚠️ Isto evita só o push DUPLICADO. Já não decide quem recebe: desde
+    // 01/10/2026 o dono decidiu que o push chega não importa em quantas
+    // empresas a pessoa está nem qual está ativa no app — o `PushService`
+    // procura os aparelhos da pessoa por todos os cadastros dela e pela
+    // identidade (ver `aparelhosDaPessoa`). Antes, esta limpeza fazia o
+    // celular receber só da empresa ativa, e quem trocou ou excluiu cadastro
+    // ficava sem push na que restou.
     //
     // Isto NÃO lê nem escreve dado de negócio de outra conta: mexe só no campo
     // que endereça o aparelho.

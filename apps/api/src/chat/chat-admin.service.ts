@@ -228,11 +228,13 @@ export class ChatAdminService {
 
     let enviados = 0;
     for (const d of destinatarios) {
-      if (mudos.has(d.id) || !d.expoPushToken) continue;
+      // Sem token NESTE cadastro não é "sem aparelho": o PushService acha os
+      // aparelhos da pessoa pelos outros caminhos (ver aparelhosDaPessoa).
+      if (mudos.has(d.id)) continue;
       try {
         const r = await this.push.enviar({
           motoristaId: d.id,
-          token: d.expoPushToken,
+          token: d.expoPushToken ?? "",
           titulo: "Avisos da transportadora",
           corpo: input.texto.slice(0, 160),
           tipo: "chat-aviso",

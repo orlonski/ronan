@@ -1123,9 +1123,8 @@ export class PontoAdminService {
    *   do cadastro — é por ele que viagem, km e manutenção já avisam;
    * - funcionário só registrado: o token é o da PESSOA (`MotoristaIdentidade`).
    * A primeira versão mandava só pela identidade, e quem entrava como
-   * motorista não recebia nada. Agora vai pelos dois, sem repetir o mesmo
-   * aparelho. Pelo cadastro de motorista o aviso também entra no sininho do
-   * app e fica com status de entrega gravado — dá pra ver se chegou.
+   * motorista não recebia nada. Pelo cadastro de motorista o aviso também
+   * entra no sininho do app e fica com status de entrega gravado.
    *
    * Em segundo plano (não esperado): `PushService.enviar` aguarda o recibo da
    * Expo por 3s, e o escritório não pode ficar esperando isso no clique.
@@ -1161,50 +1160,31 @@ export class PontoAdminService {
             .catch(() => {});
         }
       }
-      const [identidade, motorista] = await Promise.all([
-        identidadeId
-          ? comoSistema(() =>
-              this.prisma.motoristaIdentidade.findUnique({
-                where: { id: identidadeId! },
-                select: { expoPushToken: true },
-              }),
-            )
-          : null,
-        this.prisma.motorista.findFirst({
-          where: { cpf, ativo: true },
-          select: { id: true, expoPushToken: true },
-        }),
-      ]);
-
-      const envios: Promise<unknown>[] = [];
-      if (motorista) {
-        envios.push(
-          this.push
-            .enviar({
-              motoristaId: motorista.id,
-              token: motorista.expoPushToken ?? "",
-              titulo: a.titulo,
-              corpo: a.corpo,
-              dados,
-              tipo: "ponto-correcao",
-            })
-            .then((r) => this.log.log(`Push correção ${a.correcaoId} (motorista): ${JSON.stringify(r)}`)),
+      // Com cadastro de motorista, vai por ele: entra no sininho do app, grava
+      // o status de entrega, e o `PushService` já alcança todos os aparelhos da
+      // pessoa (inclusive o token da identidade). Sem cadastro de motorista,
+      // só a pessoa.
+      const motorista = await this.prisma.motorista.findFirst({
+        where: { cpf, ativo: true },
+        select: { id: true, expoPushToken: true },
+      });
+      const envio = motorista
+        ? this.push.enviar({
+            motoristaId: motorista.id,
+            token: motorista.expoPushToken ?? "",
+            titulo: a.titulo,
+            corpo: a.corpo,
+            dados,
+            tipo: "ponto-correcao",
+          })
+        : identidadeId
+          ? this.push.enviarParaIdentidade({ identidadeId, titulo: a.titulo, corpo: a.corpo, dados })
+          : Promise.resolve({ enviado: false, motivo: "Sem app instalado." });
+      void envio
+        .then((r) => this.log.log(`Push correção ${a.correcaoId}: ${JSON.stringify(r)}`))
+        .catch((e) =>
+          this.log.warn(`Push da correção ${a.correcaoId} falhou: ${e instanceof Error ? e.message : e}`),
         );
-      }
-      const tokenIdentidade = identidade?.expoPushToken ?? null;
-      if (identidadeId && tokenIdentidade && tokenIdentidade !== motorista?.expoPushToken) {
-        envios.push(
-          this.push
-            .enviarParaIdentidade({ identidadeId, titulo: a.titulo, corpo: a.corpo, dados })
-            .then((r) => this.log.log(`Push correção ${a.correcaoId} (pessoa): ${JSON.stringify(r)}`)),
-        );
-      }
-      if (envios.length === 0) {
-        this.log.log(`Push correção ${a.correcaoId}: ninguém alcançável (sem app ou sem token).`);
-      }
-      void Promise.all(envios).catch((e) =>
-        this.log.warn(`Push da correção ${a.correcaoId} falhou: ${e instanceof Error ? e.message : e}`),
-      );
     } catch (e) {
       this.log.warn(`Push da correção ${a.correcaoId} não saiu: ${e instanceof Error ? e.message : e}`);
     }

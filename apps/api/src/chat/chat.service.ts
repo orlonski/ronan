@@ -526,10 +526,12 @@ export class ChatService {
         where: { id: destinoId },
         select: { expoPushToken: true },
       });
-      if (!destino?.expoPushToken) return;
+      if (!destino) return;
+      // Token vazio aqui não encerra: o PushService alcança os aparelhos da
+      // pessoa pelos outros cadastros e pela identidade.
       await this.push.enviar({
         motoristaId: destinoId,
-        token: destino.expoPushToken,
+        token: destino.expoPushToken ?? "",
         titulo: args.titulo,
         corpo: args.corpo,
         tipo: "chat-mensagem",
