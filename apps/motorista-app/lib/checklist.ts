@@ -5,7 +5,7 @@ import { useMeuChecklist } from "@/lib/queries";
 import { hojeISO } from "@/lib/datetime";
 
 /** Dia de Brasília de um ISO (UTC-3 fixo, como o hojeISO). */
-function diaBR(iso: string): string {
+export function diaBR(iso: string): string {
   return new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString().slice(0, 10);
 }
 

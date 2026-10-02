@@ -183,6 +183,37 @@ export class ChecklistService {
   }
 
   /**
+   * Os checklists dele dos últimos 7 dias (hoje incluso), pra tela do app
+   * mostrar o que já foi feito antes de oferecer um novo. Só o que ELE fez,
+   * e só o que interessa a ele: placa, hora e o que deu problema.
+   */
+  async recentes(motoristaId: string, hojeYmd: string) {
+    const inicio = inicioDoDiaBR(hojeYmd);
+    inicio.setUTCDate(inicio.getUTCDate() - 6);
+    const lista = await this.prisma.checklistVeiculo.findMany({
+      where: { motoristaId, feitoEm: { gte: inicio } },
+      select: {
+        id: true,
+        veiculoId: true,
+        feitoEm: true,
+        reprovados: true,
+        veiculo: { select: { placa: true } },
+        respostas: { where: { ok: false }, select: { texto: true, observacao: true } },
+      },
+      orderBy: { feitoEm: "desc" },
+      take: 30,
+    });
+    return lista.map((c) => ({
+      id: c.id,
+      veiculoId: c.veiculoId,
+      placa: c.veiculo?.placa ?? null,
+      feitoEm: c.feitoEm.toISOString(),
+      reprovados: c.reprovados,
+      problemas: c.respostas.map((r) => (r.observacao ? `${r.texto}: ${r.observacao}` : r.texto)),
+    }));
+  }
+
+  /**
    * O checklist que o app mandou. As fotos vêm no mesmo envio, cada uma no
    * campo `foto_<índice da resposta>`. Idempotente pelo clientId.
    */

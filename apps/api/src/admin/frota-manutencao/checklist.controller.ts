@@ -116,13 +116,18 @@ export class ChecklistMotoristaController {
     if (m?.status !== "APROVADO") throw new ForbiddenException("Seu cadastro ainda está em análise.");
   }
 
-  /** O modelo que a empresa montou (null = não montou) e o que ele já fez hoje. */
+  /** O modelo que a empresa montou (null = não montou), o que ele fez hoje e nos últimos 7 dias. */
   @Get()
   async meu(@CurrentUser() user: AuthMotorista, @Query("hoje") hoje?: string) {
     await this.exigirAprovado(user.id);
     const dia = /^\d{4}-\d{2}-\d{2}$/.test(hoje ?? "") ? hoje! : new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
-    const [modelo, feitosHoje] = await Promise.all([this.service.modeloAtivo(), this.service.feitosHoje(user.id, dia)]);
-    return { modelo, feitosHoje };
+    const [modelo, feitosHoje, recentes] = await Promise.all([
+      this.service.modeloAtivo(),
+      this.service.feitosHoje(user.id, dia),
+      this.service.recentes(user.id, dia),
+    ]);
+    // `feitosHoje` fica pela versão do app que ainda não lê `recentes`.
+    return { modelo, feitosHoje, recentes };
   }
 
   /** Multipart: `dados` (JSON do RegistrarChecklistInput) + `foto_<índice da resposta>`. */

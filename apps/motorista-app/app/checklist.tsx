@@ -12,7 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { showAlert } from "@/lib/alert";
-import { useCatalogos, useMe, useMeuChecklist } from "@/lib/queries";
+import { useCatalogos, useMe, useMeuChecklist, type ChecklistFeito } from "@/lib/queries";
+import { usePendingChecklists } from "@/hooks/use-pending-checklists";
+import { diaBR } from "@/lib/checklist";
+import { fmtDataCurta, fmtHoraBR, hojeISO } from "@/lib/datetime";
 import { enqueueChecklist } from "@/lib/sync";
 
 type Resposta = { ok: boolean | null; observacao: string; foto: CapturedPhoto | null };
@@ -43,6 +46,30 @@ function Conteudo() {
   const [veiculoId, setVeiculoId] = useState("");
   const [respostas, setRespostas] = useState<Record<string, Resposta>>({});
   const [enviando, setEnviando] = useState(false);
+  // Já fez hoje? A tela abre mostrando o que foi feito; o formulário em branco
+  // só abre se ele pedir (trocou de caminhão, achou problema à tarde). Nunca
+  // trava: lembrar, não impedir.
+  const [fazendoNovo, setFazendoNovo] = useState(false);
+  const pendentes = usePendingChecklists();
+  const feitos = useMemo<(ChecklistFeito & { naFila?: boolean })[]>(() => {
+    const daFila = pendentes.map((p) => {
+      const ruins = p.respostas.filter((r) => !r.ok);
+      return {
+        id: p.clientId,
+        veiculoId: p.veiculoId,
+        placa: p.placa,
+        feitoEm: p.feitoEm,
+        reprovados: ruins.length,
+        problemas: ruins.map((r) => (r.observacao ? `${r.texto}: ${r.observacao}` : r.texto)),
+        naFila: true,
+      };
+    });
+    return [...daFila, ...(q.data?.recentes ?? [])].sort((a, b) => b.feitoEm.localeCompare(a.feitoEm));
+  }, [pendentes, q.data?.recentes]);
+  const hoje = hojeISO();
+  const deHoje = feitos.filter((f) => diaBR(f.feitoEm) === hoje);
+  const anteriores = feitos.filter((f) => diaBR(f.feitoEm) !== hoje);
+  const mostrarFormulario = fazendoNovo || deHoje.length === 0;
 
   useEffect(() => {
     if (me.data?.veiculoDefaultId && !veiculoId) setVeiculoId(me.data.veiculoDefaultId);
@@ -126,8 +153,27 @@ function Conteudo() {
             <Text className="text-base text-muted-foreground">
               A empresa ainda não montou o checklist do caminhão. Quando montar, ele aparece aqui.
             </Text>
+          ) : !mostrarFormulario ? (
+            <>
+              <Text className="text-lg font-semibold text-foreground">Checklist de hoje feito</Text>
+              {deHoje.map((f) => (
+                <CartaoChecklist key={f.id} feito={f} />
+              ))}
+              <Text className="text-sm text-muted-foreground">
+                Trocou de caminhão ou achou algum problema depois? Dá pra fazer outro.
+              </Text>
+              <Button variant="outline" onPress={() => setFazendoNovo(true)}>
+                Fazer de outro caminhão
+              </Button>
+              <Historico itens={anteriores} />
+            </>
           ) : (
             <>
+              {deHoje.length > 0 && (
+                <Button variant="outline" onPress={() => setFazendoNovo(false)}>
+                  Voltar pro checklist de hoje
+                </Button>
+              )}
               <Text className="text-base text-muted-foreground">
                 Dá uma olhada no caminhão antes de sair. O que tiver problema vai direto pro escritório
                 cuidar do conserto.
@@ -208,10 +254,58 @@ function Conteudo() {
               <Button variant="success" onPress={() => void enviar()} loading={enviando} disabled={enviando}>
                 Concluir checklist
               </Button>
+              {deHoje.length === 0 && <Historico itens={anteriores} />}
             </>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+/** Um checklist já feito: placa, hora e o que deu problema. */
+function CartaoChecklist({ feito }: { feito: ChecklistFeito & { naFila?: boolean } }) {
+  const tudoOk = feito.reprovados === 0;
+  return (
+    <View
+      className={`gap-1 rounded-xl border-2 p-3 ${tudoOk ? "border-success bg-success/10" : "border-warning bg-warning/10"}`}
+    >
+      <Text className="text-base font-semibold text-foreground">
+        {feito.placa ?? "Caminhão não informado"} · {fmtHoraBR(feito.feitoEm)}
+      </Text>
+      <Text className="text-sm text-foreground">
+        {tudoOk
+          ? "Tudo OK"
+          : `${feito.reprovados} ${feito.reprovados === 1 ? "item com problema" : "itens com problema"}`}
+      </Text>
+      {feito.problemas.map((p, i) => (
+        <Text key={i} className="text-sm text-muted-foreground">
+          • {p}
+        </Text>
+      ))}
+      {feito.naFila && (
+        <Text className="text-xs text-muted-foreground">Guardado no celular, sobe quando tiver sinal.</Text>
+      )}
+    </View>
+  );
+}
+
+/** Os dos dias anteriores (até 7), pra ele conferir o que já mandou. */
+function Historico({ itens }: { itens: ChecklistFeito[] }) {
+  if (itens.length === 0) return null;
+  return (
+    <View className="mt-2 gap-2">
+      <Text className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Últimos 7 dias</Text>
+      {itens.map((f) => (
+        <View key={f.id} className="flex-row items-center justify-between rounded-xl border-2 border-border px-3 py-2">
+          <Text className="text-sm text-foreground">
+            {fmtDataCurta(diaBR(f.feitoEm))} · {fmtHoraBR(f.feitoEm)} · {f.placa ?? "—"}
+          </Text>
+          <Text className={`text-sm font-semibold ${f.reprovados === 0 ? "text-success" : "text-foreground"}`}>
+            {f.reprovados === 0 ? "Tudo OK" : `${f.reprovados} com problema`}
+          </Text>
+        </View>
+      ))}
+    </View>
   );
 }

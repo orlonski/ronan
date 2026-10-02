@@ -2733,6 +2733,20 @@ export type MeuChecklist = {
   modelo: ModeloChecklistApp | null;
   /** O que ele já mandou hoje (o servidor só sabe do que já subiu). */
   feitosHoje: { veiculoId: string | null; feitoEm: string; reprovados: number }[];
+  /**
+   * Últimos 7 dias, com placa e o que deu problema. Opcional: cache gravado
+   * antes deste campo existir não tem ele (a tela trata como lista vazia).
+   */
+  recentes?: ChecklistFeito[];
+};
+
+export type ChecklistFeito = {
+  id: string;
+  veiculoId: string | null;
+  placa: string | null;
+  feitoEm: string;
+  reprovados: number;
+  problemas: string[];
 };
 
 /**
