@@ -924,6 +924,9 @@ export const api = {
     }),
   atualizarPushToken: (token: string) =>
     request<{ ok: true }>("POST", "/m/push-token", { body: { token } }),
+  /** Logout: o aparelho sai de todo cadastro e para de receber push. */
+  removerPushToken: (token: string) =>
+    request<{ ok: true }>("POST", "/m/push-token/remover", { body: { token } }),
   /** O mesmo token, na PESSOA — é por ele que o convite de empresa chega. */
   atualizarPushTokenIdentidade: (token: string) =>
     request<{ ok: true }>("POST", "/m/eu/push-token", { body: { token }, comoIdentidade: true }),

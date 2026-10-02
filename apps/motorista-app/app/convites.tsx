@@ -7,6 +7,7 @@ import { Building2, LogOut, RefreshCw, Search, Wallet } from "lucide-react-nativ
 import { Button } from "@/components/ui/button";
 import { api, type ConviteEmpresa } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
+import { desregistrarPushToken } from "@/lib/notifications";
 import { setAuthState } from "@/lib/auth-state";
 import { clearCadastroStatus, setCadastroStatus } from "@/lib/cadastro-status";
 import { marcarEmpresaEscolhida, guardarSessao } from "@/lib/sessoes";
@@ -75,6 +76,7 @@ export default function ConvitesScreen() {
 
   async function sair() {
     // `clearTokens` já esquece a sessão da pessoa junto (ver lib/auth.ts).
+    await desregistrarPushToken();
     await clearTokens();
     await clearCadastroStatus();
     setAuthState(false);

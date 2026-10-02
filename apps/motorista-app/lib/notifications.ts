@@ -179,3 +179,29 @@ export async function obterEEnviarPushToken(): Promise<void> {
     /* silencioso — push não pode quebrar o boot do app */
   }
 }
+
+/**
+ * Chamar ANTES de `clearTokens` (precisa da sessão pra falar com a API).
+ * Sem isto o token deste aparelho ficava gravado no motorista pra sempre e o
+ * celular seguia recebendo o push dele mesmo depois de sair. Silencioso e com
+ * teto de tempo: sair nunca pode travar por causa de rede ruim.
+ */
+export async function desregistrarPushToken(): Promise<void> {
+  try {
+    const Device = await import("expo-device");
+    if (!Device.isDevice) return;
+    const Notifications = await import("expo-notifications");
+    const projectId =
+      (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas
+        ?.projectId ?? EXPO_PROJECT_ID_FALLBACK;
+    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+    if (!token) return;
+    const { api } = await import("./api");
+    await Promise.race([
+      api.removerPushToken(token),
+      new Promise((resolve) => setTimeout(resolve, 4000)),
+    ]);
+  } catch {
+    /* silencioso — o servidor também limpa quando outra pessoa entra no aparelho */
+  }
+}

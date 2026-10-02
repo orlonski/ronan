@@ -109,16 +109,60 @@ export class MotoristaService {
     //
     // Isto NÃO lê nem escreve dado de negócio de outra conta: mexe só no campo
     // que endereça o aparelho.
+    //
+    // ⚠️ O aparelho é de UMA PESSOA por vez. O token sai de qualquer cadastro
+    // ou identidade que NÃO seja dela (outro CPF/identidade). Sem isto, o
+    // celular de quem entrou como outro motorista (suporte, teste, o dono)
+    // ficava gravado nele pra sempre e recebia o push dele mesmo deslogado.
+    const atual = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+      select: { cpf: true, identidadeId: true },
+    });
+    const cpf = atual?.cpf.replace(/\D/g, "");
+    const mesmaPessoa = [
+      ...(atual?.identidadeId ? [{ identidadeId: atual.identidadeId }] : []),
+      ...(atual ? [{ cpf: atual.cpf }, ...(cpf && cpf !== atual.cpf ? [{ cpf }] : [])] : []),
+    ];
     await comoSistema(() =>
-      this.prisma.motorista.updateMany({
-        where: { expoPushToken: token, id: { not: motoristaId } },
-        data: { expoPushToken: null, pushTokenAtualizadoEm: null },
-      }),
+      Promise.all([
+        this.prisma.motorista.updateMany({
+          where: {
+            expoPushToken: token,
+            id: { not: motoristaId },
+            ...(mesmaPessoa.length ? { NOT: { OR: mesmaPessoa } } : {}),
+          },
+          data: { expoPushToken: null, pushTokenAtualizadoEm: null },
+        }),
+        this.prisma.motoristaIdentidade.updateMany({
+          where: {
+            expoPushToken: token,
+            ...(atual?.identidadeId ? { id: { not: atual.identidadeId } } : {}),
+            ...(cpf ? { cpf: { not: cpf } } : {}),
+          },
+          data: { expoPushToken: null, pushTokenAtualizadoEm: null },
+        }),
+      ]),
     );
     await this.prisma.motorista.update({
       where: { id: motoristaId },
       data: { expoPushToken: token, pushTokenAtualizadoEm: new Date() },
     });
+  }
+
+  /** Logout: este aparelho deixa de receber push desta pessoa. */
+  async removerPushToken(token: string): Promise<void> {
+    await comoSistema(() =>
+      Promise.all([
+        this.prisma.motorista.updateMany({
+          where: { expoPushToken: token },
+          data: { expoPushToken: null, pushTokenAtualizadoEm: null },
+        }),
+        this.prisma.motoristaIdentidade.updateMany({
+          where: { expoPushToken: token },
+          data: { expoPushToken: null, pushTokenAtualizadoEm: null },
+        }),
+      ]),
+    );
   }
 
   /**

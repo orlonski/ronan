@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, type MeuPerfil } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
+import { desregistrarPushToken } from "@/lib/notifications";
 import { setAuthState } from "@/lib/auth-state";
 import { clearCadastroStatus } from "@/lib/cadastro-status";
 import { showAlert, showConfirm } from "@/lib/alert";
@@ -151,6 +152,7 @@ export function PerfilPessoal() {
       confirmLabel: "Sair",
     });
     if (!ok) return;
+    await desregistrarPushToken();
     await clearTokens();
     await clearCadastroStatus();
     setAuthState(false);

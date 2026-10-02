@@ -37,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
+import { desregistrarPushToken } from "@/lib/notifications";
 import { sessaoAtivaSync, sessoesSync } from "@/lib/sessoes";
 import { clearCadastroStatus } from "@/lib/cadastro-status";
 import { setAuthState } from "@/lib/auth-state";
@@ -133,6 +134,7 @@ function PerfilDaEmpresa() {
   }
 
   async function sair() {
+    await desregistrarPushToken();
     await clearTokens();
     await clearCadastroStatus();
     setAuthState(false);

@@ -403,12 +403,33 @@ export class EuService {
 
   /** Guarda o token de push do aparelho na PESSOA (o aparelho é dela). */
   async registrarPushToken(identidadeId: string, token: string) {
-    await comoSistema(() =>
-      this.prisma.motoristaIdentidade.update({
+    // O aparelho é de UMA pessoa por vez: sai de qualquer outra identidade ou
+    // cadastro (outro CPF) que ainda o tenha, senão quem entrou como outro
+    // motorista continuaria recebendo o push dele depois de sair.
+    await comoSistema(async () => {
+      const eu = await this.prisma.motoristaIdentidade.findUnique({
+        where: { id: identidadeId },
+        select: { cpf: true },
+      });
+      const limpo = { expoPushToken: null, pushTokenAtualizadoEm: null };
+      if (eu) {
+        await this.prisma.motoristaIdentidade.updateMany({
+          where: { expoPushToken: token, id: { not: identidadeId } },
+          data: limpo,
+        });
+        await this.prisma.motorista.updateMany({
+          where: {
+            expoPushToken: token,
+            NOT: { OR: [{ identidadeId }, { cpf: eu.cpf }] },
+          },
+          data: limpo,
+        });
+      }
+      await this.prisma.motoristaIdentidade.update({
         where: { id: identidadeId },
         data: { expoPushToken: token, pushTokenAtualizadoEm: new Date() },
-      }),
-    );
+      });
+    });
     return { ok: true };
   }
 

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, HttpCode, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { RegistrarPushTokenInput } from "@ronan/shared-types";
@@ -87,6 +87,16 @@ export class MotoristaController {
     @Body(new ZodValidationPipe(RegistrarPushTokenInput)) body: RegistrarPushTokenInput,
   ) {
     await this.service.registrarPushToken(user.id, body.token);
+    return { ok: true };
+  }
+
+  /** Logout: o aparelho sai de TODO cadastro/identidade e para de receber push. */
+  @HttpCode(200)
+  @Post("push-token/remover")
+  async removerPushToken(
+    @Body(new ZodValidationPipe(RegistrarPushTokenInput)) body: RegistrarPushTokenInput,
+  ) {
+    await this.service.removerPushToken(body.token);
     return { ok: true };
   }
 
