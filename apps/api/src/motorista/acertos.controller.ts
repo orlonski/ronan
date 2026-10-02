@@ -1,4 +1,5 @@
-import { Controller, ForbiddenException, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Controller, ForbiddenException, Get, NotFoundException, Param, Post, UseGuards } from "@nestjs/common";
+import { AcertoPdfService } from "../admin/acertos/acerto-pdf.service";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AcertoDoMotorista } from "@ronan/shared-types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -31,7 +32,10 @@ import { RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
 @Controller("m/acertos")
 @RequerCapacidade("app.acertos.ver")
 export class AcertosMotoristaController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pdf: AcertoPdfService,
+  ) {}
 
   private async exigirAprovado(motoristaId: string) {
     const m = await this.prisma.motorista.findUnique({
@@ -110,5 +114,17 @@ export class AcertosMotoristaController {
       data: { vistoEm: new Date() },
     });
     return { ok: true };
+  }
+
+  /** Link do PDF do acerto (abre no navegador do celular). Só o dele, só fechado/pago. */
+  @Get(":id/link")
+  async link(@CurrentUser() user: AuthMotorista, @Param("id") id: string) {
+    await this.exigirAprovado(user.id);
+    const a = await this.prisma.acertoMotorista.findFirst({
+      where: { id, motoristaId: user.id, status: { in: ["FECHADO", "PAGO"] } },
+      select: { id: true, contaId: true },
+    });
+    if (!a) throw new NotFoundException("Acerto não encontrado.");
+    return { url: this.pdf.link(a.id, a.contaId) };
   }
 }

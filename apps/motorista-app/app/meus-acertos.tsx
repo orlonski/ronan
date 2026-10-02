@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { Linking, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { HandCoins, Wallet } from "lucide-react-native";
@@ -8,7 +8,8 @@ import { ITEM_ACERTO_LABEL } from "@ronan/shared-types";
 import { ScreenHeader } from "@/components/screen-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
-import { api } from "@/lib/api";
+import { api, humanizeApiError } from "@/lib/api";
+import { showAlert } from "@/lib/alert";
 import { RequerCapacidade } from "@/components/requer-capacidade";
 
 /**
@@ -98,6 +99,21 @@ function periodo(inicio: string, fim: string): string {
 
 function AcertoCard({ acerto }: { acerto: AcertoDoMotorista }) {
   const [aberto, setAberto] = useState(false);
+  const [abrindoPdf, setAbrindoPdf] = useState(false);
+
+  // O PDF abre no navegador do celular por um link assinado (vale 30 dias):
+  // dá pra salvar ou mandar pra quem quiser, sem módulo nativo novo.
+  async function abrirPdf() {
+    setAbrindoPdf(true);
+    try {
+      const { url } = await api.get<{ url: string }>(`/m/acertos/${acerto.id}/link`);
+      await Linking.openURL(url);
+    } catch (e) {
+      await showAlert({ title: "Não consegui abrir o PDF", message: humanizeApiError(e), variant: "warning" });
+    } finally {
+      setAbrindoPdf(false);
+    }
+  }
   const creditos = acerto.itens.filter((i) => Number(i.valor) >= 0);
   const debitos = acerto.itens.filter((i) => Number(i.valor) < 0);
   const pago = acerto.status === "PAGO";
@@ -143,12 +159,17 @@ function AcertoCard({ acerto }: { acerto: AcertoDoMotorista }) {
         )}
       </View>
 
-      <Text
-        onPress={() => setAberto((v) => !v)}
-        className="mt-3 text-sm font-semibold text-primary"
-      >
-        {aberto ? "Esconder detalhes" : `Ver as ${acerto.itens.length} linhas`}
-      </Text>
+      <View className="mt-3 flex-row flex-wrap justify-between gap-3">
+        <Text onPress={() => setAberto((v) => !v)} className="text-sm font-semibold text-primary">
+          {aberto ? "Esconder detalhes" : `Ver as ${acerto.itens.length} linhas`}
+        </Text>
+        <Text
+          onPress={abrindoPdf ? undefined : () => void abrirPdf()}
+          className={`text-sm font-semibold text-primary ${abrindoPdf ? "opacity-50" : ""}`}
+        >
+          {abrindoPdf ? "Abrindo…" : "Baixar PDF"}
+        </Text>
+      </View>
 
       {aberto && (
         <View className="mt-2 gap-3">

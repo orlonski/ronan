@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
+import type { Response } from "express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import {
@@ -16,6 +17,7 @@ import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorato
 import { EscopoPor } from "../../common/escopo/escopo.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { AcertosService } from "./acertos.service";
+import { AcertoPdfService } from "./acerto-pdf.service";
 
 const ListQuery = paginationQuerySchema.extend({
   motoristaId: z.string().uuid().optional(),
@@ -41,7 +43,10 @@ type ListQuery = z.infer<typeof ListQuery>;
 @Roles("ADMIN_USER")
 @Controller("admin/acertos")
 export class AcertosController {
-  constructor(private readonly service: AcertosService) {}
+  constructor(
+    private readonly service: AcertosService,
+    private readonly pdfService: AcertoPdfService,
+  ) {}
 
   @EscopoPor("motorista")
   @RequerPermissao("acertos.ver")
@@ -58,6 +63,29 @@ export class AcertosController {
   @Get(":id")
   detalhe(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.detalhe(id, user.escopo);
+  }
+
+  /** O extrato em PDF (o detalhe antes garante o escopo de frota). */
+  @EscopoPor("motorista")
+  @RequerPermissao("acertos.ver")
+  @Get(":id/pdf")
+  async pdf(@Param("id") id: string, @CurrentUser() user: AuthAdminUser, @Res() res: Response) {
+    await this.service.detalhe(id, user.escopo);
+    const { buffer, nome } = await this.pdfService.gerar(id);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${nome}"`);
+    res.setHeader("Cache-Control", "no-store");
+    res.send(buffer);
+  }
+
+  /** Link assinado (30 dias) pra mandar ao parceiro, e o telefone dele pro WhatsApp. */
+  @EscopoPor("motorista")
+  @RequerPermissao("acertos.ver")
+  @Get(":id/link")
+  async link(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    const a = (await this.service.detalhe(id, user.escopo)) as { contaId: string };
+    const telefone = await this.service.telefoneDoMotoristaDoAcerto(id);
+    return { url: this.pdfService.link(id, a.contaId), telefone };
   }
 
   @RequerPermissao("acertos.gerar")

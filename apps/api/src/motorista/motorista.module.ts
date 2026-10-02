@@ -1,3 +1,4 @@
+import { AcertoPdfService } from "../admin/acertos/acerto-pdf.service";
 import { PixMotoristaController } from "./pix.controller";
 import { PixMotoristaService } from "./pix.service";
 import { Module } from "@nestjs/common";
@@ -93,6 +94,7 @@ import { ProgramacaoMotoristaController } from "./programacao.controller";
     ProgramacaoMotoristaController,
   ],
   providers: [
+    AcertoPdfService,
     PixMotoristaService,
     MotoristaService,
     LembreteLancamentoService,

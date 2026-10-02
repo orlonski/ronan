@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Lock, LockOpen, Plus, Trash2, Wallet } from "lucide-react";
+import { Check, FileDown, Lock, LockOpen, MessageCircle, Plus, Trash2, Wallet } from "lucide-react";
 import { ITEM_ACERTO_LABEL, TIPOS_DEBITO_ACERTO, TIPOS_ITEM_MANUAL } from "@ronan/shared-types";
 import type { TipoItemAcertoTipo } from "@ronan/shared-types";
 import { Permitido, RequerTela } from "@/components/requer-tela";
@@ -128,6 +128,37 @@ function Conteudo({ id }: { id: string }) {
     if (ok) await acao("pagar", { meio: "PIX" });
   }
 
+  /** Baixa o extrato em PDF (vem da API com o token). */
+  async function baixarPdf() {
+    if (!token) return;
+    setErro(null);
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ""}/admin/acertos/${id}/pdf`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return setErro("Não consegui gerar o PDF do acerto.");
+    const url = URL.createObjectURL(await res.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "acerto.pdf";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
+  /** Abre o WhatsApp com o link do extrato (vale 30 dias) pro parceiro. */
+  async function mandarNoWhatsapp() {
+    if (!token || !a) return;
+    setErro(null);
+    try {
+      const r = await fetchApi<{ url: string; telefone: string | null }>(`/admin/acertos/${id}/link`, { token });
+      const texto = `Olá, ${a.motorista.nome.split(" ")[0]}! Segue o extrato do seu acerto de ${dataBR(a.periodoInicio)} a ${dataBR(a.periodoFim)}: ${r.url}`;
+      const digitos = (r.telefone ?? "").replace(/\D/g, "");
+      const numero = digitos.length >= 10 && digitos.length <= 11 ? `55${digitos}` : digitos;
+      window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, "_blank", "noopener");
+    } catch (e) {
+      setErro((e as Error).message);
+    }
+  }
+
   if (isLoading) return <LoadingCard />;
   if (!a) return <Card className="p-6 text-sm">Acerto não encontrado.</Card>;
 
@@ -158,6 +189,15 @@ function Conteudo({ id }: { id: string }) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => void baixarPdf()} variant="outline">
+              <FileDown className="h-4 w-4" /> Baixar PDF
+            </Button>
+            {/* Em aberto o número ainda muda: só manda pro parceiro depois de fechado. */}
+            {a.status !== "ABERTO" && (
+              <Button onClick={() => void mandarNoWhatsapp()} variant="outline">
+                <MessageCircle className="h-4 w-4" /> Mandar no WhatsApp
+              </Button>
+            )}
             {a.status === "ABERTO" && (
               <Permitido chave="acertos.fechar">
                 <Button onClick={() => void fecharAcerto()} disabled={ocupado} variant="warning">

@@ -17,7 +17,7 @@ async function bootstrap() {
       : rawCors.split(",").map((s) => s.trim()).filter(Boolean);
   // exposedHeaders: sem isso o browser não deixa o dashboard LER headers
   // customizados cross-origin (X-Imagem-Tipo diz se a foto do local é Street
-  // View ou satélite).
+  // View ou satélite; Content-Disposition traz o nome do PDF baixado).
   //
   // maxAge: toda chamada do painel leva `Authorization`, então o navegador
   // pergunta antes (OPTIONS) se pode. Sem Max-Age o Chrome lembra a resposta
@@ -26,7 +26,7 @@ async function bootstrap() {
   app.enableCors({
     origin,
     credentials: true,
-    exposedHeaders: ["X-Imagem-Tipo"],
+    exposedHeaders: ["X-Imagem-Tipo", "Content-Disposition"],
     maxAge: 7200,
   });
 

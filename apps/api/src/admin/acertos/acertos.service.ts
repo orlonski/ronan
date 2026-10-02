@@ -90,6 +90,15 @@ export class AcertosService {
     });
   }
 
+  /** Telefone do parceiro do acerto (pro "mandar no WhatsApp" do painel). */
+  async telefoneDoMotoristaDoAcerto(id: string): Promise<string | null> {
+    const a = await this.prisma.acertoMotorista.findUnique({
+      where: { id },
+      select: { motorista: { select: { telefone: true } } },
+    });
+    return a?.motorista.telefone ?? null;
+  }
+
   async detalhe(id: string, escopo: EscopoAdmin) {
     const acerto = await this.prisma.acertoMotorista.findFirst({
       where: {
