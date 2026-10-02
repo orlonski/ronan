@@ -39,6 +39,7 @@ const TIPO_LABEL: Record<string, string> = {
   "template-whatsapp": "Template do WhatsApp",
   "correcao-ponto": "Correção de ponto",
   "documento-vencendo": "Documento vencendo",
+  "pedido-obra": "Pedido da obra",
 };
 
 export default function InboxPage() {

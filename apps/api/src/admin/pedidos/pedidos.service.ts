@@ -170,7 +170,8 @@ export class PedidosService {
     };
   }
 
-  private async viagensDoPedido(pedido: Parameters<PedidosService["montarWhereViagens"]>[0]) {
+  /** Público pro portal da obra (`encarregado/`), que soma o valor do que abateu. */
+  async viagensDoPedido(pedido: Parameters<PedidosService["montarWhereViagens"]>[0]) {
     return this.prisma.viagem.findMany({
       where: this.montarWhereViagens(pedido),
       select: {

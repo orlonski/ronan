@@ -227,6 +227,11 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "mapa", label: "Mapa", modulo: "Cadastros", acoes: ["ver", "expurgar"] },
   { recurso: "empresas", label: "Clientes", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "layouts"] },
   { recurso: "clientes", label: "Obras", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  // Gente do CLIENTE que entra no portal da obra (/obra) pelo celular. `editar`
+  // é convidar, desativar e liberar valores: é dar acesso a quem é de fora da
+  // empresa, por isso nasce só no Administrador (ADMIN_ONLY) e a empresa
+  // decide na matriz quem mais pode.
+  { recurso: "encarregados", label: "Obras — encarregados (portal da obra)", modulo: "Cadastros", acoes: ["ver", "editar"] },
   { recurso: "locais", label: "Locais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "homologar"] },
   { recurso: "pedagios", label: "Praças de pedágio", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "importar"] },
   { recurso: "materiais", label: "Materiais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
@@ -379,6 +384,8 @@ export const ADMIN_ONLY: string[] = [
   "envios.excluir",
   "pedagios.excluir",
   "pedagios.importar",
+  // Convidar gente de fora da empresa pro portal da obra.
+  "encarregados.editar",
 ];
 
 /** Permissões do papel Operador: tudo de Operação + Cadastros, menos as

@@ -577,6 +577,9 @@ model Conta {
   checklistsVeiculo              ChecklistVeiculo[]
   respostasChecklist             RespostaChecklist[]
   trocasPixPendentes             TrocaPixPendente[]
+  encarregadosObra               EncarregadoObra[]
+  sessoesEncarregado             SessaoEncarregado[]
+  solicitacoesObra               SolicitacaoObra[]
   manutencoesVeiculo             ManutencaoVeiculo[]
   problemasVeiculo               ProblemaVeiculo[]
   leiturasOdometro               LeituraOdometro[]
@@ -766,6 +769,8 @@ model User {
   itensAcertoCriados        ItemAcerto[]          @relation("CriouItemAcerto")
   pedidosCriados            Pedido[]              @relation("CriouPedido")
   planejadasCriadas         ViagemPlanejada[]     @relation("CriouViagemPlanejada")
+  encarregadosConvidados    EncarregadoObra[]     @relation("ConvidouEncarregado")
+  solicitacoesRespondidas   SolicitacaoObra[]     @relation("RespondeuSolicitacaoObra")
   modulosLigados            ModuloContratado[]    @relation("LigouModulo")
   faturasCriadas            Fatura[]              @relation("CriouFatura")
   titulosPagarCriados       TituloPagar[]         @relation("CriouTituloPagar")
@@ -2371,6 +2376,10 @@ model Cliente {
 
   pedidos Pedido[]
 
+  /// Gente da obra (do cliente) que entra no portal /obra. Ver EncarregadoObra.
+  encarregados     EncarregadoObra[]
+  solicitacoesObra SolicitacaoObra[]
+
   // --- dados fiscais ---
   // O Cliente era um rótulo comercial dentro de uma Empresa, sem nenhum
   // documento. Pra CT-e ele é remetente ou destinatário, e sem CNPJ/endereço
@@ -2445,6 +2454,8 @@ model Material {
   criadoPorId  String?
 
   pedidos Pedido[]
+
+  solicitacoesObra SolicitacaoObra[]
 
   @@unique([contaId, nome])
   @@index([ativo])
@@ -2872,6 +2883,8 @@ model Pedido {
 
   planejadas ViagemPlanejada[]
 
+  solicitacoesObra SolicitacaoObra[]
+
   @@unique([contaId, numero])
   @@index([contaId, status])
   @@index([empresaId, prazoEm])
@@ -2936,6 +2949,16 @@ model ViagemPlanejada {
   criadoPorId  String?
   criadoEm     DateTime              @default(now())
   alteradoEm   DateTime              @updatedAt
+
+  /// O pedido de caminhão da obra que originou esta viagem, quando veio do
+  /// portal do encarregado e o escritório confirmou.
+  solicitacaoObra   SolicitacaoObra? @relation(fields: [solicitacaoObraId], references: [id], onDelete: SetNull)
+  solicitacaoObraId String?
+  /// A obra disse "pode vir" pelo portal. Só informa o escritório — não muda o
+  /// status, que continua sendo o combinado com o motorista.
+  aprovadaObraEm    DateTime?
+  aprovadaObraPor   EncarregadoObra? @relation("AprovouPlanejadaObra", fields: [aprovadaObraPorId], references: [id], onDelete: SetNull)
+  aprovadaObraPorId String?
 
   @@index([contaId, dataPrevista])
   @@index([motoristaId, dataPrevista])
@@ -8144,4 +8167,124 @@ model TrocaPixPendente {
 
   @@index([contaId])
   @@map("trocas_pix_pendentes")
+}
+
+/// O encarregado da OBRA: gente do cliente (quem recebe a carga), não da
+/// transportadora. Entra pelo portal `/obra` com código no WhatsApp e vê só a
+/// obra dele — pedidos, programação, tickets do dia — e pede caminhão.
+///
+/// ⚠️ Não é `User` e não é `Motorista`, de propósito: não tem papel, não tem
+/// permissão do painel, não lança nada. Reaproveitar um dos dois abriria a
+/// porta do painel ou do app pra quem é de fora da empresa.
+///
+/// O mesmo celular pode ser encarregado de várias obras (e até de duas
+/// transportadoras): o login devolve uma sessão por obra.
+model EncarregadoObra {
+  contaId           String    @default("__SEM_CONTA__")
+  conta             Conta     @relation(fields: [contaId], references: [id])
+  id                String    @id @default(uuid())
+  /// A obra (model `Cliente`, "Obra" na tela). Tudo que ele vê sai daqui.
+  cliente           Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId         String
+  nome              String
+  /// Celular com DDD e nono dígito, só números (11 dígitos, sem o 55).
+  telefone          String
+  ativo             Boolean   @default(true)
+  /// Ver R$ é decisão da transportadora, por pessoa: o encarregado nem sempre
+  /// é quem negocia o frete.
+  podeVerValores    Boolean   @default(false)
+  podePedirCaminhao Boolean   @default(true)
+  convidadoPor      User?     @relation("ConvidouEncarregado", fields: [convidadoPorId], references: [id], onDelete: SetNull)
+  convidadoPorId    String?
+  conviteEnviadoEm  DateTime?
+  ultimoAcessoEm    DateTime?
+  criadoEm          DateTime  @default(now())
+  alteradoEm        DateTime  @updatedAt
+
+  sessoes             SessaoEncarregado[]
+  solicitacoes        SolicitacaoObra[]
+  planejadasAprovadas ViagemPlanejada[]   @relation("AprovouPlanejadaObra")
+
+  @@unique([clienteId, telefone])
+  @@index([telefone])
+  @@index([contaId])
+  @@map("encarregados_obra")
+}
+
+/// Sessão do portal da obra. Token opaco: o banco guarda só o SHA-256, então
+/// um vazamento da tabela não entrega sessão nenhuma. Revogar = carimbar
+/// `revogadaEm` (desativar o encarregado revoga todas).
+model SessaoEncarregado {
+  contaId       String          @default("__SEM_CONTA__")
+  conta         Conta           @relation(fields: [contaId], references: [id])
+  id            String          @id @default(uuid())
+  encarregado   EncarregadoObra @relation(fields: [encarregadoId], references: [id], onDelete: Cascade)
+  encarregadoId String
+  tokenHash     String          @unique
+  criadoEm      DateTime        @default(now())
+  expiraEm      DateTime
+  revogadaEm    DateTime?
+  ultimoUsoEm   DateTime?
+
+  @@index([encarregadoId])
+  @@index([contaId])
+  @@map("sessoes_encarregado")
+}
+
+/// O código de entrada do portal, por TELEFONE. Global (sem conta) porque o
+/// login acontece antes de saber de qual empresa a pessoa é — e o mesmo
+/// celular pode estar em duas. Guarda o hash do código, nunca o código.
+model CodigoEncarregado {
+  telefone   String   @id
+  codigoHash String
+  expiraEm   DateTime
+  tentativas Int      @default(0)
+  enviadoEm  DateTime @default(now())
+
+  @@map("codigos_encarregado")
+}
+
+enum StatusSolicitacaoObra {
+  PENDENTE
+  /// O escritório confirmou e programou as viagens.
+  CONFIRMADA
+  RECUSADA
+}
+
+/// "Preciso de caminhão": o pedido que o encarregado faz pelo portal. Cai na
+/// caixa de entrada e na programação; o escritório confirma (vira viagem
+/// programada) ou recusa com motivo, que o encarregado lê no portal.
+model SolicitacaoObra {
+  contaId            String                @default("__SEM_CONTA__")
+  conta              Conta                 @relation(fields: [contaId], references: [id])
+  id                 String                @id @default(uuid())
+  encarregado        EncarregadoObra       @relation(fields: [encarregadoId], references: [id], onDelete: Cascade)
+  encarregadoId      String
+  cliente            Cliente               @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId          String
+  /// Pra quando ele quer o caminhão.
+  data               DateTime              @db.Date
+  quantidade         Decimal               @db.Decimal(12, 3)
+  unidade            UnidadePedido         @default(VIAGENS)
+  material           Material?             @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  materialId         String?
+  observacao         String?
+  status             StatusSolicitacaoObra @default(PENDENTE)
+  /// O pedido em que o escritório encaixou (existente ou criado na hora).
+  pedido             Pedido?               @relation(fields: [pedidoId], references: [id], onDelete: SetNull)
+  pedidoId           String?
+  viagensProgramadas Int?
+  respondidoPor      User?                 @relation("RespondeuSolicitacaoObra", fields: [respondidoPorId], references: [id], onDelete: SetNull)
+  respondidoPorId    String?
+  respondidoEm       DateTime?
+  recusaMotivo       String?
+  criadoEm           DateTime              @default(now())
+  alteradoEm         DateTime              @updatedAt
+
+  planejadas ViagemPlanejada[]
+
+  @@index([contaId, status])
+  @@index([clienteId, criadoEm])
+  @@index([contaId])
+  @@map("solicitacoes_obra")
 }

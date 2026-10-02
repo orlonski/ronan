@@ -10,6 +10,6 @@ import { ProgramacaoService } from "./programacao.service";
   imports: [PushModule, AdminInboxModule],
   controllers: [PedidosController, ProgramacaoController],
   providers: [PedidosService, ProgramacaoService, DocumentosVencendoService],
-  exports: [ProgramacaoService],
+  exports: [ProgramacaoService, PedidosService],
 })
 export class PedidosModule {}

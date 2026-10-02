@@ -27,6 +27,7 @@ import { NotificacoesModule } from "./notificacoes/notificacoes.module";
 import { ClickupRunnerModule } from "./clickup-runner/clickup-runner.module";
 import { ConferenciaWorkerModule } from "./conferencia-ticket/conferencia-worker.module";
 import { CompartilhamentoModule } from "./compartilhamento/compartilhamento.module";
+import { EncarregadoModule } from "./encarregado/encarregado.module";
 import { CaptacaoModule } from "./captacao/captacao.module";
 import { CadastroContaModule } from "./cadastro-conta/cadastro-conta.module";
 import { ProspeccaoModule } from "./prospeccao/prospeccao.module";
@@ -68,6 +69,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     ClickupRunnerModule,
     ConferenciaWorkerModule,
     CompartilhamentoModule,
+    EncarregadoModule,
     CaptacaoModule,
     CadastroContaModule,
     ProspeccaoModule,

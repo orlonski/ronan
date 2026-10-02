@@ -5,6 +5,7 @@ import { RequerTela } from "@/components/requer-tela";
 import { FormPageHeader } from "@/components/form-page-header";
 import { useResourceItem } from "@/lib/client-api";
 import { ClienteForm, type Cliente } from "../_components/cliente-form";
+import { EncarregadosObra } from "../_components/encarregados-obra";
 
 export default function EditarClientePage({
   params,
@@ -25,6 +26,8 @@ export default function EditarClientePage({
           <p className="text-sm text-muted-foreground">Carregando…</p>
         )}
         {item.data && <ClienteForm initial={item.data} />}
+        {/* Quem da obra acompanha pelo celular. Some sozinho sem a permissão. */}
+        {item.data && <EncarregadosObra clienteId={item.data.id} obraNome={item.data.nome} />}
       </div>
     </RequerTela>
   );

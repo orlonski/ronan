@@ -15,6 +15,7 @@ import { LoadingCard } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { useConfirm } from "@/components/confirm-dialog";
 import { hojeSP } from "@/lib/datetime-br";
+import { PedidosDasObras } from "./_components/pedidos-das-obras";
 
 type Planejada = {
   id: string;
@@ -26,6 +27,11 @@ type Planejada = {
   observacao: string | null;
   recusaMotivo: string | null;
   publicadoEm: string | null;
+  /** A obra disse "pode vir" pelo portal do encarregado. */
+  aprovadaObraEm?: string | null;
+  aprovadaObraPor?: { nome: string } | null;
+  /** Veio de um pedido de caminhão feito pela obra no portal. */
+  solicitacaoObraId?: string | null;
   motorista: { id: string; nome: string; telefone: string | null } | null;
   veiculo: { id: string; placa: string; capacidadeToneladas: string | null } | null;
   viagem: { id: string; ticket: string | null; toneladas: string | null } | null;
@@ -101,6 +107,12 @@ function Conteudo() {
   const token = useAuthToken();
   const queryClient = useQueryClient();
   const [dia, setDia] = React.useState(hojeSP);
+  // `?data=AAAA-MM-DD` abre o dia direto — é por onde chega o aviso de pedido
+  // da obra no sininho. Lido depois de montar (o HTML do servidor não tem a URL).
+  React.useEffect(() => {
+    const d = new URLSearchParams(window.location.search).get("data");
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) setDia(d);
+  }, []);
   const [erro, setErro] = React.useState<string | null>(null);
   const [ocupado, setOcupado] = React.useState(false);
 
@@ -194,6 +206,14 @@ function Conteudo() {
       <Permitido chave="programacao.editar">
         <RepetirOutroDia dia={dia} onCopiou={recarregar} />
       </Permitido>
+
+      <PedidosDasObras
+        motoristas={quadro.data?.motoristas ?? []}
+        onProgramou={(d) => {
+          setDia(d);
+          void queryClient.invalidateQueries({ queryKey: ["programacao", d] });
+        }}
+      />
 
       {erro && <Card className="border-l-4 border-l-blue-500 p-3 text-sm">{erro}</Card>}
       {quadro.isLoading && <LoadingCard />}
@@ -446,6 +466,22 @@ function CardPlanejada({ p, onMudou }: { p: Planejada; onMudou: () => void }) {
           <p className="mt-1 text-xs font-medium text-red-700">
             Recusou: {p.recusaMotivo}
           </p>
+        )}
+        {p.aprovadaObraEm && (
+          <p className="mt-0.5 text-xs font-medium text-emerald-700">
+            ✓ Aprovado pela obra em{" "}
+            {new Date(p.aprovadaObraEm).toLocaleString("pt-BR", {
+              timeZone: "America/Sao_Paulo",
+              day: "2-digit",
+              month: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+            {p.aprovadaObraPor ? ` · ${p.aprovadaObraPor.nome}` : ""}
+          </p>
+        )}
+        {p.solicitacaoObraId && !p.aprovadaObraEm && (
+          <p className="mt-0.5 text-xs text-muted-foreground">Pedido pela obra no portal</p>
         )}
         {p.viagem && (
           <p className="mt-0.5 text-xs text-emerald-700">

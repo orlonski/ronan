@@ -33,6 +33,8 @@ const INCLUDE = {
   motorista: { select: { id: true, nome: true, telefone: true } },
   veiculo: { select: { id: true, placa: true, capacidadeToneladas: true } },
   viagem: { select: { id: true, ticket: true, toneladas: true } },
+  // O selo "aprovado pela obra" no quadro: quem do cliente disse "pode vir".
+  aprovadaObraPor: { select: { nome: true } },
 } satisfies Prisma.ViagemPlanejadaInclude;
 
 function diaUtc(iso: string): Date {
