@@ -1,3 +1,4 @@
+import { INSTRUCOES_PEDIDO_DOCUMENTO } from "../common/ia/pedido-documento";
 import { cupomDoJson, INSTRUCOES_CUPOM } from "../common/ia/cupom";
 import Anthropic from "@anthropic-ai/sdk";
 import { Injectable, Logger } from "@nestjs/common";
@@ -531,6 +532,77 @@ Responda APENAS um JSON válido:
         erro: (err as Error).message,
       });
       this.log.warn(`OCR cupom falhou: ${(err as Error).message}`);
+      throw err;
+    }
+  }
+
+  /**
+   * Lê um pedido de transporte (PDF, foto ou texto de e-mail) e devolve o JSON
+   * CRU da IA — quem confere e casa com o cadastro é `pedidoDoJson`
+   * (common/ia/pedido-documento.ts). A IA nunca salva nada: isto vira sugestão
+   * num formulário que a pessoa confere.
+   *
+   * Lança quando a chamada falha (quem chama traduz pra resposta HTTP): aqui há
+   * uma pessoa esperando na tela, e "não consegui ler" precisa chegar nela em
+   * vez de virar um formulário vazio sem explicação.
+   */
+  async lerPedidoDocumento(args: {
+    fonte:
+      | { tipo: "pdf"; base64: string }
+      | { tipo: "imagem"; base64: string; mime: "image/jpeg" | "image/png" | "image/webp" }
+      | { tipo: "texto"; texto: string };
+    catalogo: string;
+    /** "Hoje é AAAA-MM-DD (dia)." — âncora das datas relativas. */
+    referenciaHoje: string;
+  }): Promise<Record<string, unknown> | null> {
+    if (!this.client) throw new Error("Anthropic API key não configurada");
+    const modelo = await this.modeloAtual();
+    const t0 = Date.now();
+
+    const { fonte } = args;
+    const documento: Anthropic.ContentBlockParam =
+      fonte.tipo === "pdf"
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: fonte.base64 } }
+        : fonte.tipo === "imagem"
+          ? { type: "image", source: { type: "base64", media_type: fonte.mime, data: fonte.base64 } }
+          : // Texto colado vai como documento de texto, e não solto na mensagem:
+            // separa o que é o pedido do que é a instrução, e um e-mail que diga
+            // "ignore as instruções" fica claramente do lado do conteúdo.
+            { type: "document", source: { type: "text", media_type: "text/plain", data: fonte.texto } };
+
+    try {
+      const resp = await this.client.messages.create({
+        model: modelo,
+        max_tokens: 800,
+        system: [
+          { type: "text", text: INSTRUCOES_PEDIDO_DOCUMENTO },
+          { type: "text", text: args.catalogo },
+        ],
+        messages: [
+          {
+            role: "user",
+            content: [documento, { type: "text", text: `${args.referenciaHoje} Leia este pedido.` }],
+          },
+        ],
+      });
+      this.uso.registrar({ escopo: "pedido-documento", modelo, usage: resp.usage, duracaoMs: Date.now() - t0 });
+      const text = resp.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { type: "text"; text: string }).text)
+        .join("\n");
+      const parsed = extractJson<unknown>(text);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch (err) {
+      this.uso.registrar({
+        escopo: "pedido-documento",
+        modelo,
+        duracaoMs: Date.now() - t0,
+        sucesso: false,
+        erro: (err as Error).message,
+      });
+      this.log.warn(`Leitura de pedido falhou: ${(err as Error).message}`);
       throw err;
     }
   }

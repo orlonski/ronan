@@ -33,6 +33,7 @@ export * from "./regra-minimo";
 export * from "./tabela-preco";
 export * from "./acerto-motorista";
 export * from "./pedido";
+export * from "./pedido-documento";
 export * from "./modulos";
 export * from "./financeiro";
 export * from "./frota";

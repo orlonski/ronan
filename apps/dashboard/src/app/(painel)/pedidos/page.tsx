@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { ClipboardList, Pencil, Plus } from "lucide-react";
+import { ClipboardList, FileText, Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { UNIDADE_PEDIDO_LABEL, type UnidadePedidoTipo } from "@ronan/shared-types";
 import { Permitido, RequerTela } from "@/components/requer-tela";
@@ -232,9 +232,16 @@ function Conteudo() {
             não é contador.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <Permitido chave="pedidos.criar">
+            {/* Pedido chega por PDF/e-mail: a leitura preenche o formulário de
+                novo pedido, e a pessoa confere e salva. */}
+            <Link href="/pedidos/novo?documento=1">
+              <Button>
+                <FileText className="h-4 w-4" /> Criar pedido a partir de documento
+              </Button>
+            </Link>
             <Link href="/pedidos/novo">
               <Button>
                 <Plus className="h-4 w-4" /> Novo pedido

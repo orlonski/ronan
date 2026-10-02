@@ -165,5 +165,5 @@ export function calcularUso(modelo: string, usage: UsageAnthropic | null | undef
  * separa "o OCR do app" de "o conferente" — os dois usam o mesmo modelo, então
  * sem isso não dá pra saber qual dos dois está pesando.
  */
-export const ESCOPOS_IA = ["ocr-app", "conferencia", "match", "layout", "transcricao"] as const;
+export const ESCOPOS_IA = ["ocr-app", "conferencia", "match", "layout", "transcricao", "pedido-documento"] as const;
 export type EscopoIa = (typeof ESCOPOS_IA)[number];
