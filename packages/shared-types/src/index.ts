@@ -67,3 +67,4 @@ export * from "./divergencia";
 export * from "./checklist";
 export * from "./email-ticket";
 export * from "./encarregado";
+export * from "./cobranca-asaas";

@@ -47,7 +47,9 @@ export type TipoNotificacaoAdmin =
   // Resumo diário: documento do motorista ou do caminhão vencendo/vencido.
   | "documento-vencendo"
   // O encarregado da obra pediu caminhão pelo portal (vai pra quem programa).
-  | "pedido-obra";
+  | "pedido-obra"
+  // O Asaas da transportadora avisou: cliente pagou, boleto venceu, estorno.
+  | "cobranca-cliente";
 
 export type DispararNotificacaoInput = {
   tipo: TipoNotificacaoAdmin;

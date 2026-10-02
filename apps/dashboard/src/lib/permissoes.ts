@@ -154,6 +154,8 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/acertos", perm: "acertos.ver" },
   { prefixo: "/lucro", perm: "lucro-caminhao.ver" },
   { prefixo: "/resultado-obra", perm: "resultado-obra.ver" },
+  // Mais específico antes: a conexão com o Asaas é do dono, não de quem vê o financeiro.
+  { prefixo: "/financeiro/cobranca-asaas", perm: "cobranca-asaas.ver" },
   { prefixo: "/financeiro", perm: "financeiro.ver" },
   { prefixo: "/frota", perm: "manutencao.ver" },
   // Aba "Documentos que pedimos" de Minha empresa. A página já se protegia

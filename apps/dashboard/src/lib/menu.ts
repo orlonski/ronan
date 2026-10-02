@@ -237,7 +237,13 @@ export const GRUPOS: Grupo[] = [
       },
       // Abas: preço e mínimo (km e tonelada).
       { href: "/cte", label: "CT-e emitidos", icon: FileCheck2, perm: "cte.ver" },
-      { href: "/financeiro", label: "Contas a pagar e receber", icon: Wallet, perm: "financeiro.ver" },
+      {
+        href: "/financeiro",
+        label: "Contas a pagar e receber",
+        icon: Wallet,
+        perm: "financeiro.ver",
+        partes: [{ perm: "cobranca-asaas.ver", label: "Cobrança pelo Asaas" }],
+      },
       { href: "/acertos", label: "Acertos com motorista", icon: HandCoins, perm: "acertos.ver" },
       { href: "/lucro", label: "Lucro por caminhão", icon: TrendingUp, perm: "lucro-caminhao.ver" },
       { href: "/resultado-obra", label: "Resultado por obra", icon: PieChart, perm: "resultado-obra.ver" },

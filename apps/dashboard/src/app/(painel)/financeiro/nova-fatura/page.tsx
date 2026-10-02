@@ -13,6 +13,8 @@ import { Select } from "@/components/ui/select";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 import { primeiroDiaDoMesSP, ultimoDiaDoMesSP } from "@/lib/datetime-br";
 import type { PreviaSobretaxa } from "@ronan/shared-types";
+import { toast } from "sonner";
+import { useAsaasConectado } from "../cobranca-titulo";
 
 /**
  * Gerar a fatura do cliente: as viagens com valor do período, e as estadias
@@ -85,6 +87,9 @@ function Conteudo() {
   const [dieselManual, setDieselManual] = React.useState("");
   /** O preço à mão que a prévia na tela usou. É ele que vai pro gerar, não o campo. */
   const [dieselAplicado, setDieselAplicado] = React.useState<number | null>(null);
+  const asaasConectado = useAsaasConectado();
+  /** Gerar o boleto/Pix de todas as parcelas logo depois da fatura. Marcado: é o caso normal de quem conectou o Asaas. */
+  const [gerarCobrancas, setGerarCobrancas] = React.useState(true);
 
   // Mudou o que se fatura: a conferência anterior não vale mais.
   React.useEffect(() => {
@@ -126,7 +131,7 @@ function Conteudo() {
     setErro(null);
     setOcupado(true);
     try {
-      await fetchApi("/admin/financeiro/faturas", {
+      const fatura = await fetchApi<{ id: string; numero: number }>("/admin/financeiro/faturas", {
         token,
         method: "POST",
         body: JSON.stringify({
@@ -141,7 +146,26 @@ function Conteudo() {
           precoDiesel: dieselAplicado,
         }),
       });
-      router.push("/financeiro");
+      // A fatura já existe; o boleto é um segundo passo. Falhar aqui (cliente
+      // sem CNPJ, Asaas fora do ar) não desfaz a fatura — avisa e cada parcela
+      // continua com o botão "Gerar boleto/Pix".
+      if (asaasConectado && gerarCobrancas) {
+        try {
+          const r = await fetchApi<{ resultados: { ok: boolean; parcela: number; erro?: string }[] }>(
+            `/admin/cobranca-asaas/faturas/${fatura.id}/cobrancas`,
+            { token, method: "POST" },
+          );
+          const falhas = r.resultados.filter((x) => !x.ok);
+          if (falhas.length === 0) toast.success(`Fatura ${fatura.numero} gerada, com boleto/Pix no Asaas.`);
+          else
+            toast.error(`Fatura ${fatura.numero} gerada, mas ${falhas.length} boleto(s) não saíram`, {
+              description: falhas[0]?.erro,
+            });
+        } catch (e) {
+          toast.error(`Fatura ${fatura.numero} gerada, mas o boleto/Pix não saiu`, { description: (e as Error).message });
+        }
+      }
+      router.push("/financeiro?aba=receber");
     } catch (e) {
       setErro((e as Error).message);
       setOcupado(false);
@@ -358,6 +382,17 @@ function Conteudo() {
                 <Input id="fat-obs" value={observacao} onChange={(e) => setObservacao(e.target.value)} />
               </div>
             </div>
+            {asaasConectado && (
+              <label className="flex cursor-pointer items-center gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={gerarCobrancas}
+                  onChange={(e) => setGerarCobrancas(e.target.checked)}
+                />
+                Gerar o boleto/Pix no Asaas para todas as parcelas
+              </label>
+            )}
             <p className="text-base">
               Total da fatura: <strong className="tabular-nums">{brl(total)}</strong>
               {(valorEstadias > 0 || valorSobretaxa > 0) && (

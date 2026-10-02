@@ -38,7 +38,9 @@ export type TipoNotificacaoAdmin =
   // Resumo diário de documento do motorista/caminhão vencendo.
   | "documento-vencendo"
   // O encarregado da obra pediu caminhão pelo portal.
-  | "pedido-obra";
+  | "pedido-obra"
+  // O Asaas da transportadora avisou: cliente pagou, boleto venceu, estorno.
+  | "cobranca-cliente";
 
 /**
  * As abas do filtro do sininho. Agrupa por ASSUNTO, não por tipo técnico:
@@ -71,6 +73,7 @@ export const CATEGORIAS_INBOX = [
   { chave: "motoristas", label: "Motoristas", tipos: ["motorista-cadastro", "motorista-senha-reset"] },
   { chave: "ponto", label: "Ponto", tipos: ["correcao-ponto"] },
   { chave: "frota", label: "Frota", tipos: ["problema-veiculo", "documento-vencendo"] },
+  { chave: "dinheiro", label: "Dinheiro", tipos: ["cobranca-cliente"] },
   {
     chave: "plataforma",
     label: "Plataforma",
