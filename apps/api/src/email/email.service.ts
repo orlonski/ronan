@@ -72,6 +72,7 @@ export class EmailService implements OnModuleInit {
   private readonly usuario: string;
   private readonly senha: string;
   private readonly remetente: string;
+  private readonly ehlo: string;
   private transporter: Transporter | null = null;
 
   constructor(
@@ -84,6 +85,7 @@ export class EmailService implements OnModuleInit {
     this.usuario = (config.get<string>("SMTP_USER") ?? "").trim();
     this.senha = config.get<string>("SMTP_PASS") ?? "";
     this.remetente = (config.get<string>("EMAIL_REMETENTE") ?? "").trim();
+    this.ehlo = (config.get<string>("SMTP_EHLO") ?? "").trim();
   }
 
   onModuleInit() {
@@ -175,6 +177,12 @@ export class EmailService implements OnModuleInit {
     });
   }
 
+  private nomeEhlo(): string | undefined {
+    if (this.ehlo) return this.ehlo;
+    const dominio = /@([^>\s]+)/.exec(this.remetente)?.[1];
+    return dominio || undefined;
+  }
+
   private transporte(): Transporter {
     if (!this.transporter) {
       this.transporter = createTransport({
@@ -183,6 +191,11 @@ export class EmailService implements OnModuleInit {
         // 465 é TLS direto; 587/2525 começam em claro e sobem com STARTTLS.
         secure: this.porta === 465,
         auth: this.usuario ? { user: this.usuario, pass: this.senha } : undefined,
+        // O nome com que o servidor se apresenta (EHLO). O padrão é o hostname
+        // do container — um id aleatório sem domínio — e o relay do Google
+        // Workspace (autenticado por IP, sem senha) recusa a conversa com
+        // "421 ... EHLO". Apresentar-se com o domínio do remetente resolve.
+        name: this.nomeEhlo(),
         // Cron não pode ficar pendurado num SMTP que não responde.
         connectionTimeout: 15_000,
         greetingTimeout: 10_000,
