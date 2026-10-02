@@ -27,6 +27,7 @@ import { formatarBRL, lerNumero } from "@/lib/numero";
 import { hojeSP } from "@/lib/datetime-br";
 import { useConfirm } from "@/components/confirm-dialog";
 import { toast } from "sonner";
+import { CobrancaAsaasTitulo, type CobrancaDoTitulo } from "./cobranca-titulo";
 
 type Aging = {
   faixas: Record<FaixaAgingTipo, string>;
@@ -53,7 +54,9 @@ type Titulo = {
   motorista?: { nome: string } | null;
   fornecedor?: { nome: string } | null;
   veiculo?: { placa: string } | null;
-  baixas?: { id: string; valor: string; data: string; meio: string }[];
+  baixas?: { id: string; valor: string; data: string; meio: string; cobrancaClienteId?: string | null }[];
+  /** A última cobrança do Asaas deste título (só a receber). */
+  cobrancas?: CobrancaDoTitulo[];
   acertoId?: string | null;
   observacao?: string | null;
 };
@@ -90,6 +93,13 @@ function Conteudo() {
   const token = useAuthToken();
   const [aba, setAba] = React.useState<Aba>("resumo");
 
+  // O aviso do sininho (pagamento pelo Asaas) chega com `?aba=receber`. Lido no
+  // efeito, e não com useSearchParams, pra a página não precisar de Suspense.
+  React.useEffect(() => {
+    const pedida = new URLSearchParams(window.location.search).get("aba");
+    if (pedida === "receber" || pedida === "pagar") setAba(pedida);
+  }, []);
+
   const resumo = useQuery({
     queryKey: ["financeiro-resumo"],
     enabled: Boolean(token),
@@ -106,6 +116,14 @@ function Conteudo() {
         <p className="text-sm text-muted-foreground">
           Quem está devendo, há quanto tempo, e o que você tem a pagar.
         </p>
+        <Permitido chave="cobranca-asaas.ver">
+          <Link
+            href={"/financeiro/cobranca-asaas" as Route}
+            className="mt-1 inline-block text-sm text-blue-700 underline-offset-2 hover:underline"
+          >
+            Cobrança pelo Asaas (boleto e Pix com baixa automática)
+          </Link>
+        </Permitido>
       </header>
 
       <div className="flex gap-1 border-b">
@@ -459,7 +477,9 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
                       <Wallet className="h-3.5 w-3.5" />
                       {tipo === "receber" ? "Dar baixa no recebimento" : "Dar baixa no pagamento"}
                     </Button>
-                    {(t.baixas ?? []).map((b) => (
+                    {/* A baixa que veio do Asaas não se estorna daqui: o dinheiro
+                        está na conta, e o estorno de verdade é lá. */}
+                    {(t.baixas ?? []).filter((b) => !b.cobrancaClienteId).map((b) => (
                       <Button
                         key={b.id}
                         size="sm"
@@ -475,6 +495,14 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
                   </div>
                 )}
               </Permitido>
+            )}
+
+            {tipo === "receber" && (
+              <CobrancaAsaasTitulo
+                tituloId={t.id}
+                cobranca={t.cobrancas?.[0] ?? null}
+                tituloAberto={t.status === "ABERTO" || t.status === "PARCIAL"}
+              />
             )}
 
             {podeCancelar && baixando !== t.id && (

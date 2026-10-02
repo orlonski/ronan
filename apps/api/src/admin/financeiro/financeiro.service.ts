@@ -495,6 +495,16 @@ export class FinanceiroService {
           "Essa fatura já tem recebimento lançado. Cancele as baixas antes, ou lance um ajuste.",
         );
       }
+      // Boleto/Pix vivo no Asaas de uma fatura cancelada continua pagável pelo
+      // cliente — e o dinheiro entraria num título que não existe mais.
+      const cobrancasVivas = await this.prisma.cobrancaCliente.count({
+        where: { tituloReceber: { faturaId: id }, status: { in: ["PENDENTE", "VENCIDA"] } },
+      });
+      if (cobrancasVivas > 0) {
+        throw new ConflictException(
+          "Essa fatura tem boleto/Pix em aberto no Asaas. Cancele as cobranças nas parcelas antes de cancelar a fatura.",
+        );
+      }
     }
 
     const atualizada = await this.prisma.fatura.update({
@@ -539,8 +549,28 @@ export class FinanceiroService {
         // API desde sempre — não tinha como virar botão. Baixa errada parecia
         // permanente pra quem opera.
         baixas: {
-          select: { id: true, valor: true, data: true, meio: true },
+          select: { id: true, valor: true, data: true, meio: true, cobrancaClienteId: true },
           orderBy: { data: "desc" },
+        },
+        // A última cobrança do Asaas (a viva, ou a que morreu por último): é
+        // o que a linha mostra — situação, link do boleto/Pix, cancelar.
+        cobrancas: {
+          orderBy: { criadoEm: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            status: true,
+            ambiente: true,
+            asaasPaymentId: true,
+            valor: true,
+            vencimento: true,
+            linkFatura: true,
+            linhaDigitavel: true,
+            pixCopiaCola: true,
+            pagoEm: true,
+            valorRecebido: true,
+            meio: true,
+          },
         },
       },
     });
@@ -702,6 +732,14 @@ export class FinanceiroService {
   async estornarBaixa(baixaId: string, usuarioId: string) {
     const baixa = await this.prisma.baixaTitulo.findUnique({ where: { id: baixaId } });
     if (!baixa) throw new NotFoundException("Baixa não encontrada");
+    // A baixa que o Asaas lançou espelha dinheiro que ESTÁ na conta. Apagá-la
+    // aqui deixaria a cobrança "paga" sem baixa, e nenhum evento futuro a
+    // recriaria. O estorno de verdade é no Asaas — o webhook desfaz a baixa.
+    if (baixa.cobrancaClienteId) {
+      throw new ConflictException(
+        "Essa baixa veio do pagamento pelo Asaas. Pra desfazer, estorne o pagamento no Asaas — a baixa some sozinha aqui.",
+      );
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.baixaTitulo.delete({ where: { id: baixaId } });

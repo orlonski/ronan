@@ -27,14 +27,19 @@ const PREFIXO = "v1";
  */
 const SAL = "ronan:chaves-ia:v1";
 
-function chaveDe(segredo: string): Buffer {
-  return scryptSync(segredo, SAL, 32);
+/**
+ * `sal` separa as finalidades: a chave de API do Asaas de uma transportadora
+ * usa o próprio sal (`cobranca-cliente/segredo-asaas.ts`), e por isso nunca
+ * decifra com a chave que abre as chaves de IA, nem o contrário.
+ */
+function chaveDe(segredo: string, sal: string = SAL): Buffer {
+  return scryptSync(segredo, sal, 32);
 }
 
 /** `v1:<iv>:<tag>:<dados>`, tudo em base64url. */
-export function cifrar(valor: string, segredo: string): string {
+export function cifrar(valor: string, segredo: string, sal: string = SAL): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", chaveDe(segredo), iv);
+  const cipher = createCipheriv("aes-256-gcm", chaveDe(segredo, sal), iv);
   const dados = Buffer.concat([cipher.update(valor, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return [PREFIXO, iv.toString("base64url"), tag.toString("base64url"), dados.toString("base64url")].join(":");
@@ -48,7 +53,11 @@ export function cifrar(valor: string, segredo: string): string {
  * formato antigo. Texto COM o prefixo que não decifra devolve `null` — aí é
  * adulteração ou troca de segredo, e seguir em frente seria pior.
  */
-export function decifrar(guardado: string | null | undefined, segredo: string): string | null {
+export function decifrar(
+  guardado: string | null | undefined,
+  segredo: string,
+  sal: string = SAL,
+): string | null {
   const bruto = (guardado ?? "").trim();
   if (!bruto) return null;
   if (!bruto.startsWith(`${PREFIXO}:`)) return bruto;
@@ -56,7 +65,7 @@ export function decifrar(guardado: string | null | undefined, segredo: string): 
   const [, iv, tag, dados] = bruto.split(":");
   if (!iv || !tag || !dados) return null;
   try {
-    const decipher = createDecipheriv("aes-256-gcm", chaveDe(segredo), Buffer.from(iv, "base64url"));
+    const decipher = createDecipheriv("aes-256-gcm", chaveDe(segredo, sal), Buffer.from(iv, "base64url"));
     decipher.setAuthTag(Buffer.from(tag, "base64url"));
     return Buffer.concat([decipher.update(Buffer.from(dados, "base64url")), decipher.final()]).toString("utf8");
   } catch {

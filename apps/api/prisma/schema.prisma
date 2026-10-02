@@ -672,6 +672,11 @@ model Conta {
   acessosEfetivosApp AcessoEfetivoApp[]
   logsAcessoApp      LogAcessoApp[]
 
+  // --- Cobrança do cliente pelo Asaas DA transportadora (não o da Movatruck). ---
+  conexaoAsaas           ConexaoAsaas?
+  cobrancasCliente       CobrancaCliente[]
+  eventosCobrancaCliente EventoCobrancaCliente[]
+
   @@index([ativa])
   @@map("contas")
 }
@@ -3203,7 +3208,11 @@ model TituloReceber {
   criadoEm   DateTime     @default(now())
   alteradoEm DateTime     @updatedAt
 
-  baixas BaixaTitulo[]
+  baixas    BaixaTitulo[]
+  /// Boletos/Pix emitidos no Asaas da transportadora pra este título. No
+  /// máximo UM vivo por vez (ver `CobrancaCliente.tituloAtivoId`); os mortos
+  /// ficam como histórico.
+  cobrancas CobrancaCliente[]
 
   /// A tela "o que está vencido" vive deste índice.
   @@index([contaId, status, vencimento])
@@ -3258,30 +3267,156 @@ model TituloPagar {
  * abril?", que é a pergunta que o financeiro faz toda semana.
  */
 model BaixaTitulo {
-  contaId         String         @default("__SEM_CONTA__")
-  conta           Conta          @relation(fields: [contaId], references: [id])
-  id              String         @id @default(uuid())
-  tituloReceber   TituloReceber? @relation(fields: [tituloReceberId], references: [id], onDelete: Cascade)
-  tituloReceberId String?
-  tituloPagar     TituloPagar?   @relation(fields: [tituloPagarId], references: [id], onDelete: Cascade)
-  tituloPagarId   String?
-  data            DateTime       @db.Date
-  valor           Decimal        @db.Decimal(12, 2)
+  contaId           String           @default("__SEM_CONTA__")
+  conta             Conta            @relation(fields: [contaId], references: [id])
+  id                String           @id @default(uuid())
+  tituloReceber     TituloReceber?   @relation(fields: [tituloReceberId], references: [id], onDelete: Cascade)
+  tituloReceberId   String?
+  tituloPagar       TituloPagar?     @relation(fields: [tituloPagarId], references: [id], onDelete: Cascade)
+  tituloPagarId     String?
+  data              DateTime         @db.Date
+  valor             Decimal          @db.Decimal(12, 2)
   /// "PIX", "TED", "DINHEIRO", "BOLETO". Texto livre: cada empresa chama de um
   /// jeito, e um enum viraria migration a cada cliente novo.
-  meio            String
-  /// Quem deu baixa. User REAL, sempre — nenhum robô baixa título. Mesma
-  /// doutrina do `revisadoEm`: automação não assina decisão de dinheiro.
-  usuario         User           @relation("DeuBaixa", fields: [usuarioId], references: [id])
-  usuarioId       String
-  observacao      String?
-  criadoEm        DateTime       @default(now())
+  meio              String
+  /// Quem deu baixa. Baixa À MÃO é sempre de um User real — automação não
+  /// assina decisão de dinheiro. A única baixa sem usuário é a que o BANCO
+  /// confirmou pelo gateway (`cobrancaCliente` preenchido): aí ninguém decidiu
+  /// nada, o dinheiro entrou na conta da transportadora e o Asaas avisou.
+  usuario           User?            @relation("DeuBaixa", fields: [usuarioId], references: [id], onDelete: Restrict)
+  usuarioId         String?
+  /// A cobrança do Asaas que gerou esta baixa. `@unique` é a idempotência: o
+  /// mesmo pagamento (PAYMENT_CONFIRMED e depois PAYMENT_RECEIVED, ou o
+  /// gateway reenviando) nunca vira duas baixas.
+  cobrancaCliente   CobrancaCliente? @relation(fields: [cobrancaClienteId], references: [id], onDelete: SetNull)
+  cobrancaClienteId String?          @unique
+  observacao        String?
+  criadoEm          DateTime         @default(now())
 
   @@index([contaId, data])
   @@index([tituloReceberId])
   @@index([tituloPagarId])
   @@index([contaId])
   @@map("baixas_titulo")
+}
+
+enum AmbienteAsaas {
+  SANDBOX
+  PRODUCAO
+}
+
+/**
+ * A conta Asaas DA TRANSPORTADORA, conectada pela chave de API dela.
+ * O dinheiro da fatura cai direto na conta dela — nunca numa subconta nem na
+ * conta da Movatruck (essa é a da mensalidade, `assinaturas/`). Por isso a
+ * chave é dela, colada uma vez no painel, e por isso ela é SEGREDO: quem tem a
+ * chave emite cobrança e consulta o extrato no nome da empresa.
+ */
+model ConexaoAsaas {
+  contaId             String        @unique @default("__SEM_CONTA__")
+  conta               Conta         @relation(fields: [contaId], references: [id], onDelete: Cascade)
+  id                  String        @id @default(uuid())
+  ambiente            AmbienteAsaas
+  /// A chave de API CIFRADA (`common/cripto.ts`, AES-256-GCM). Nunca sai pela API.
+  chaveCifrada        String
+  /// Os 4 últimos caracteres, pra pessoa reconhecer qual chave está colada.
+  chaveFinal          String
+  /// Nome da conta no Asaas, lido na conexão. É a prova pra quem conectou de
+  /// que o dinheiro vai pra conta certa.
+  nomeContaAsaas      String?
+  documentoContaAsaas String?
+  /// Webhook registrado na conta Asaas dela, apontando pra nossa rota pública.
+  webhookId           String?
+  /// SHA-256 (hex) do token que o Asaas devolve no header de cada webhook. Hash
+  /// e não cifra: a gente só precisa CONFERIR, nunca mostrar de volta.
+  webhookTokenHash    String
+  /// Por que o webhook não ficou registrado (null = registrado). Sem webhook a
+  /// cobrança sai, mas a baixa automática não chega.
+  webhookErro         String?
+  conectadoPorId      String?
+  conectadoEm         DateTime      @default(now())
+  criadoEm            DateTime      @default(now())
+  alteradoEm          DateTime      @updatedAt
+
+  @@map("conexoes_asaas")
+}
+
+enum StatusCobrancaCliente {
+  PENDENTE
+  VENCIDA
+  PAGA
+  ESTORNADA
+  CANCELADA
+}
+
+/**
+ * Um boleto/Pix emitido no Asaas da transportadora para um título a receber.
+ * O status do TÍTULO continua derivado das baixas (`common/financeiro.ts`); o
+ * status daqui é o da COBRANÇA no gateway. Quando o Asaas confirma o
+ * pagamento, nasce uma `BaixaTitulo` amarrada a esta linha — e é ela que move
+ * o título, pelo mesmo caminho de qualquer outra baixa.
+ */
+model CobrancaCliente {
+  contaId         String                @default("__SEM_CONTA__")
+  conta           Conta                 @relation(fields: [contaId], references: [id])
+  id              String                @id @default(uuid())
+  tituloReceber   TituloReceber         @relation(fields: [tituloReceberId], references: [id], onDelete: Cascade)
+  tituloReceberId String
+  /// = `tituloReceberId` enquanto a cobrança está VIVA (pendente, vencida ou
+  /// paga); null quando morre (cancelada/estornada). O `@unique` é o que
+  /// garante UMA cobrança viva por título mesmo com dois cliques simultâneos —
+  /// o Prisma não expressa índice parcial, e isto expressa.
+  tituloAtivoId   String?               @unique
+  status          StatusCobrancaCliente @default(PENDENTE)
+  ambiente        AmbienteAsaas
+  /// Null só no instante entre reservar a vaga e o Asaas responder.
+  asaasPaymentId  String?
+  asaasCustomerId String?
+  valor           Decimal               @db.Decimal(12, 2)
+  vencimento      DateTime              @db.Date
+  /// Página do Asaas onde o cliente escolhe boleto ou Pix.
+  linkFatura      String?
+  linhaDigitavel  String?
+  pixCopiaCola    String?
+  pagoEm          DateTime?             @db.Date
+  valorRecebido   Decimal?              @db.Decimal(12, 2)
+  /// "PIX", "BOLETO", "CARTAO" — o que o cliente escolheu na página do Asaas.
+  meio            String?
+  criadoPorId     String?
+  criadoEm        DateTime              @default(now())
+  alteradoEm      DateTime              @updatedAt
+
+  baixa   BaixaTitulo?
+  eventos EventoCobrancaCliente[]
+
+  @@unique([contaId, asaasPaymentId])
+  @@index([tituloReceberId])
+  @@index([contaId])
+  @@map("cobrancas_cliente")
+}
+
+/**
+ * O evento cru que o Asaas da transportadora mandou, guardado ANTES de aplicar.
+ * `(contaId, eventoId)` único = o reenvio do gateway não aplica duas vezes.
+ */
+model EventoCobrancaCliente {
+  contaId           String           @default("__SEM_CONTA__")
+  conta             Conta            @relation(fields: [contaId], references: [id])
+  id                String           @id @default(uuid())
+  eventoId          String
+  tipo              String
+  asaasPaymentId    String?
+  cobranca          CobrancaCliente? @relation(fields: [cobrancaClienteId], references: [id], onDelete: SetNull)
+  cobrancaClienteId String?
+  payload           Json
+  /// "aplicado", "ignorado: …" ou "falhou: …".
+  resultado         String?
+  recebidoEm        DateTime         @default(now())
+
+  @@unique([contaId, eventoId])
+  @@index([cobrancaClienteId])
+  @@index([contaId])
+  @@map("eventos_cobranca_cliente")
 }
 
 /**

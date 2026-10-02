@@ -34,6 +34,7 @@ import { ProspeccaoModule } from "./prospeccao/prospeccao.module";
 import { MarketingModule } from "./marketing/marketing.module";
 import { TermosModule } from "./termos/termos.module";
 import { AssinaturasModule } from "./assinaturas/assinaturas.module";
+import { CobrancaClienteModule } from "./cobranca-cliente/cobranca-cliente.module";
 import { PontoModule } from "./ponto/ponto.module";
 import { AdmissaoModule } from "./admissao/admissao.module";
 import { EmailModule } from "./email/email.module";
@@ -76,6 +77,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     ProspeccaoModule,
     MarketingModule,
     AssinaturasModule,
+    CobrancaClienteModule,
     TermosModule,
     PontoModule,
     AdmissaoModule,
