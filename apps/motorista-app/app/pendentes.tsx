@@ -28,6 +28,7 @@ import {
   type PendingStory,
   type PendingDocumentoAdmissao,
   type PendingProblemaVeiculo,
+  type PendingChecklist,
   type ZodIssueSaved,
 } from "@/db/database";
 import { usePendingViagens } from "@/hooks/use-pending-viagens";
@@ -39,6 +40,7 @@ import { usePendingPonto } from "@/hooks/use-pending-ponto";
 import { usePendingOutros } from "@/hooks/use-pending-outros";
 import { usePendingDocumentos } from "@/hooks/use-pending-documentos";
 import { usePendingProblemas } from "@/hooks/use-pending-problemas";
+import { usePendingChecklists } from "@/hooks/use-pending-checklists";
 import {
   descartarViagemPendente,
   descartarPedagioPendente,
@@ -49,6 +51,7 @@ import {
   descartarStoryPendente,
   descartarDocumentoAdmissaoPendente,
   descartarProblemaVeiculoPendente,
+  descartarChecklistPendente,
   drain,
   tentarNovamenteViagemPendente,
   tentarNovamentePedagioPendente,
@@ -62,6 +65,7 @@ import {
   tentarNovamenteStoryPendente,
   tentarNovamenteDocumentoAdmissaoPendente,
   tentarNovamenteProblemaVeiculoPendente,
+  tentarNovamenteChecklistPendente,
 } from "@/lib/sync";
 import { descartarViagemGuiada } from "@/lib/lifecycle";
 import { useCatalogos } from "@/lib/queries";
@@ -82,7 +86,8 @@ type PendingRow =
   | { kind: "local"; item: PendingLocal }
   | { kind: "story"; item: PendingStory }
   | { kind: "documento"; item: PendingDocumentoAdmissao }
-  | { kind: "problema"; item: PendingProblemaVeiculo };
+  | { kind: "problema"; item: PendingProblemaVeiculo }
+  | { kind: "checklist"; item: PendingChecklist };
 
 const TIPO_COMBUSTIVEL_LABEL: Record<string, string> = {
   DIESEL_S10: "Diesel S10",
@@ -102,6 +107,7 @@ export default function Pendentes() {
   const outros = usePendingOutros();
   const documentos = usePendingDocumentos();
   const problemas = usePendingProblemas();
+  const checklists = usePendingChecklists();
   const cat = useCatalogos();
   const [sincronizando, setSincronizando] = useState(false);
 
@@ -190,9 +196,10 @@ export default function Pendentes() {
       ...outros.stories.map((item) => ({ kind: "story" as const, item })),
       ...documentos.map((item) => ({ kind: "documento" as const, item })),
       ...problemas.map((item) => ({ kind: "problema" as const, item })),
+      ...checklists.map((item) => ({ kind: "checklist" as const, item })),
     ];
     return all.sort((a, b) => a.item.createdAt - b.item.createdAt);
-  }, [viagens, pedagios, abastecimentos, outros, documentos, problemas]);
+  }, [viagens, pedagios, abastecimentos, outros, documentos, problemas, checklists]);
 
   // Helpers de lookup por id no catalogo
   const lookups = useMemo(() => {
@@ -214,6 +221,7 @@ export default function Pendentes() {
     story: "este story",
     documento: "este documento",
     problema: "este aviso",
+    checklist: "este checklist",
   };
 
   async function confirmarExcluir(row: PendingRow) {
@@ -233,6 +241,7 @@ export default function Pendentes() {
     else if (row.kind === "local") await descartarLocalPendente(id);
     else if (row.kind === "documento") await descartarDocumentoAdmissaoPendente(id);
     else if (row.kind === "problema") await descartarProblemaVeiculoPendente(id);
+    else if (row.kind === "checklist") await descartarChecklistPendente(id);
     else await descartarStoryPendente(id);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
@@ -247,6 +256,7 @@ export default function Pendentes() {
     else if (row.kind === "local") await tentarNovamenteLocalPendente(id);
     else if (row.kind === "documento") await tentarNovamenteDocumentoAdmissaoPendente(id);
     else if (row.kind === "problema") await tentarNovamenteProblemaVeiculoPendente(id);
+    else if (row.kind === "checklist") await tentarNovamenteChecklistPendente(id);
     else await tentarNovamenteStoryPendente(id);
   }
 
@@ -741,6 +751,15 @@ function resumoCard(
       titulo: row.item.placa ?? "Caminhão não informado",
       subtitulo: fmtData(new Date(row.item.createdAt).toISOString()),
       linha3: row.item.descricao,
+    };
+  }
+  if (row.kind === "checklist") {
+    const reprovados = row.item.respostas.filter((r) => !r.ok).length;
+    return {
+      tipoLabel: "Checklist do caminhão",
+      titulo: row.item.placa ?? "Caminhão não informado",
+      subtitulo: fmtData(row.item.feitoEm),
+      linha3: reprovados > 0 ? `${reprovados} item(ns) com problema` : "Tudo certo",
     };
   }
   if (row.kind === "local") {

@@ -326,6 +326,39 @@ export type PendingProblemaVeiculo = {
   errorPermanenteLocal?: boolean;
 };
 
+/**
+ * Checklist do caminhão feito no app. Uma resposta por item; o item reprovado
+ * pode ter foto (cópia em `documentDirectory`). `clientId` novo a cada
+ * checklist.
+ */
+export type PendingChecklist = {
+  clientId: string;
+  veiculoId: string | null;
+  /** Pra tela de Pendentes mostrar a placa sem ir buscar na rede. */
+  placa: string | null;
+  modeloId: string | null;
+  /** Quando ele terminou (o envio pode esperar dias por sinal). */
+  feitoEm: string;
+  lat?: number | null;
+  lng?: number | null;
+  respostas: {
+    itemId: string | null;
+    texto: string;
+    ok: boolean;
+    observacao?: string | null;
+    fotoUri?: string | null;
+    fotoMime?: string | null;
+  }[];
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
+};
+
 export type PendingPonto = {
   clientId: string;
   payload: {
@@ -498,6 +531,7 @@ const COMPLETAR_PESO_KEY = "outbox.viagem-completar-peso";
 const PONTO_KEY = "outbox.ponto";
 const DOCUMENTO_ADMISSAO_KEY = "outbox.documento-admissao";
 const PROBLEMAS_VEICULO_KEY = "outbox.problemas-veiculo";
+const CHECKLISTS_KEY = "outbox.checklists";
 
 /** Todos os sufixos do outbox — usado pela adoção/limpeza do storage legado. */
 const SUFIXOS_OUTBOX = [
@@ -518,6 +552,7 @@ const SUFIXOS_OUTBOX = [
   PONTO_KEY,
   DOCUMENTO_ADMISSAO_KEY,
   PROBLEMAS_VEICULO_KEY,
+  CHECKLISTS_KEY,
 ];
 
 async function readList<T>(key: string): Promise<T[]> {
@@ -781,6 +816,26 @@ export async function deletePendingProblemaVeiculo(clientId: string): Promise<vo
   const list = await listPendingProblemasVeiculo();
   await writeList(
     PROBLEMAS_VEICULO_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingChecklists(): Promise<PendingChecklist[]> {
+  return readList<PendingChecklist>(CHECKLISTS_KEY);
+}
+
+export async function upsertPendingChecklist(item: PendingChecklist): Promise<void> {
+  const list = await listPendingChecklists();
+  const i = list.findIndex((x) => x.clientId === item.clientId);
+  if (i >= 0) list[i] = item;
+  else list.push(item);
+  await writeList(CHECKLISTS_KEY, list);
+}
+
+export async function deletePendingChecklist(clientId: string): Promise<void> {
+  const list = await listPendingChecklists();
+  await writeList(
+    CHECKLISTS_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }

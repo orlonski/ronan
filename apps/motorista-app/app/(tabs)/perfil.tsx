@@ -7,6 +7,7 @@ import {
   CalendarDays,
   FileText,
   Wrench,
+  ClipboardCheck,
   HandCoins,
   ChevronRight,
   HelpCircle,
@@ -76,6 +77,7 @@ function PerfilDaEmpresa() {
   const verDocumentos = usePermite("app.documentos.enviar");
   // Motorista CLT também avisa: quem corta é o acesso (mora no cadastro de motorista).
   const verAvisos = usePermite("app.problema.avisar");
+  const verChecklist = usePermite("app.checklist.fazer");
   const salvarPrefs = useSalvarPreferenciasNotificacao();
   const [showChange, setShowChange] = useState(false);
   const [senhaAtual, setSenhaAtual] = useState("");
@@ -341,6 +343,16 @@ function PerfilDaEmpresa() {
                     icon={<Wrench size={20} color="#13316b" />}
                     title="Meus avisos do caminhão"
                     onPress={() => router.push("/meus-avisos")}
+                  />
+                </>
+              )}
+              {verChecklist && (
+                <>
+                  <View className="h-px bg-border" />
+                  <ActionRow
+                    icon={<ClipboardCheck size={20} color="#13316b" />}
+                    title="Checklist do caminhão"
+                    onPress={() => router.push("/checklist")}
                   />
                 </>
               )}

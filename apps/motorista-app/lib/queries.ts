@@ -39,6 +39,7 @@ import { api, ApiError } from "./api";
 import { motoristaAtivoId } from "./sessoes";
 import { reportarEvento } from "./event-reporter";
 import { haversineMetros } from "./geo";
+import { hojeISO } from "./datetime";
 import {
   pedagiosNaLinhaReta,
   pedagiosNaRotaOffline,
@@ -2704,5 +2705,37 @@ export function useMeusProblemas(opts: { enabled?: boolean } = {}) {
     staleTime: 60_000,
     enabled: opts.enabled ?? true,
     queryFn: () => cacheFirst<MeuProblemaVeiculo[]>(["meus-problemas"], cacheKey, buscarRede),
+  });
+}
+
+export type ModeloChecklistApp = {
+  id: string;
+  nome: string;
+  itens: { id: string; texto: string; fotoSeReprovar: boolean }[];
+};
+
+export type MeuChecklist = {
+  /** Null = a empresa ainda não montou o checklist. */
+  modelo: ModeloChecklistApp | null;
+  /** O que ele já mandou hoje (o servidor só sabe do que já subiu). */
+  feitosHoje: { veiculoId: string | null; feitoEm: string; reprovados: number }[];
+};
+
+/**
+ * O checklist do caminhão que a empresa montou e o que ele já fez hoje.
+ * Cache-first: abre na hora sem sinal (o modelo muda pouco).
+ */
+export function useMeuChecklist(opts: { enabled?: boolean } = {}) {
+  const cacheKey = "q:meu-checklist";
+  const buscarRede = async (): Promise<MeuChecklist> => {
+    const fresh = await api.get<MeuChecklist>(`/m/checklists?hoje=${hojeISO()}`);
+    void cachePut(cacheKey, fresh).catch(() => {});
+    return fresh;
+  };
+  return useQuery({
+    queryKey: ["meu-checklist"],
+    staleTime: 60_000,
+    enabled: opts.enabled ?? true,
+    queryFn: () => cacheFirst<MeuChecklist>(["meu-checklist"], cacheKey, buscarRede),
   });
 }

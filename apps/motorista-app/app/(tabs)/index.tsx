@@ -13,6 +13,7 @@ import {
   Wrench,
   MapPin,
   Play,
+  ClipboardCheck,
   Plus,
   Receipt,
   RotateCw,
@@ -22,6 +23,7 @@ import {
   Truck,
   WifiOff,
 } from "lucide-react-native";
+import { useChecklistDeHoje } from "@/lib/checklist";
 import { HomePessoal } from "@/components/home-pessoal";
 import { HomeRegistrado } from "@/components/home-registrado";
 import { BlocoDocumentos } from "@/components/bloco-documentos";
@@ -130,6 +132,9 @@ function HomeDaEmpresa() {
   // O aviso dele em andamento aparece no Início: sem isso a resposta do
   // escritório só era vista por quem abrisse o Perfil (squad de 24/09/2026).
   const meusProblemas = useMeusProblemas({ enabled: podeAvisarProblema });
+  // Lembrete, nunca trava: só aparece se a empresa montou o checklist e ele
+  // ainda não fez hoje (feito sem sinal, na fila, já conta).
+  const checklistHoje = useChecklistDeHoje(me.data?.veiculoDefaultId);
   const avisoEmAndamento = avisoPraMostrar(meusProblemas.data ?? []);
   const pending = usePending();
   const aguardandoPeso = useViagensAguardandoPeso();
@@ -527,6 +532,21 @@ function HomeDaEmpresa() {
                   </Text>
                   <Text className="text-sm text-muted-foreground">
                     Toque pra completar o peso e o romaneio
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
+            {checklistHoje.devoLembrar && (
+              <Pressable
+                onPress={() => router.push("/checklist")}
+                className="flex-row items-center gap-3 rounded-2xl border-2 border-warning bg-warning/10 p-4 active:opacity-85"
+              >
+                <ClipboardCheck size={26} color="#B4501A" />
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-foreground">Checklist do caminhão</Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Dá uma olhada antes de sair. Leva um minuto.
                   </Text>
                 </View>
               </Pressable>

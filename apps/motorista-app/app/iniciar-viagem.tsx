@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { ArrowRight, Play } from "lucide-react-native";
+import { ArrowRight, ClipboardCheck, Play } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Pressable,
   ScrollView,
   Text,
   View,
@@ -23,6 +24,7 @@ import { showAlert } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { hidratarViagemDoServidor, iniciarViagemGuiada } from "@/lib/lifecycle";
 import { useCatalogos, useMe } from "@/lib/queries";
+import { useChecklistDeHoje } from "@/lib/checklist";
 import { pagadorSeDiferente } from "@/lib/utils";
 import { escolherModoDaLista } from "@ronan/shared-types";
 
@@ -36,6 +38,9 @@ export default function IniciarViagem() {
   const cat = useCatalogos();
   const qc = useQueryClient();
   const [veiculoId, setVeiculoId] = useState("");
+  // Lembrete do checklist pro caminhão escolhido. Só lembra — começar a
+  // viagem sem ele continua liberado.
+  const checklistHoje = useChecklistDeHoje(veiculoId || null);
   const [clienteId, setClienteId] = useState("");
   // Modo de serviço escolhido. "" = o padrão da conta (o caso de quem tem um
   // modo só, que nem vê a pergunta).
@@ -173,6 +178,18 @@ export default function IniciarViagem() {
           contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 20 }}
           keyboardShouldPersistTaps="handled"
         >
+          {checklistHoje.devoLembrar && veiculoId ? (
+            <Pressable
+              onPress={() => router.push("/checklist")}
+              className="flex-row items-center gap-3 rounded-xl border-2 border-warning bg-warning/10 p-3 active:opacity-85"
+            >
+              <ClipboardCheck size={22} color="#B4501A" />
+              <Text className="flex-1 text-sm text-foreground">
+                Ainda não fez o checklist deste caminhão hoje. Toque pra fazer agora — ou siga, se preferir.
+              </Text>
+            </Pressable>
+          ) : null}
+
           <View className="gap-2" onLayout={v.onLayoutCampo("placa")}>
             <Label error={!!v.erroDe("placa")}>Placa</Label>
             <Select

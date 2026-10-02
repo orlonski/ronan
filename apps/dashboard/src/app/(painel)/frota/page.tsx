@@ -36,6 +36,7 @@ import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { CaixaDeEntrada } from "./_components/caixa-entrada";
 import { CustosManutencao } from "./_components/custos";
+import { ChecklistCaminhao } from "./_components/checklist";
 import { CancelarConserto } from "./_components/cancelar-conserto";
 import { ConcluirConserto } from "./_components/concluir-conserto";
 import {
@@ -57,7 +58,7 @@ export default function FrotaPage() {
   );
 }
 
-type Aba = "caixa" | "manutencoes" | "planos" | "pneus" | "multas" | "documentos" | "custos";
+type Aba = "caixa" | "manutencoes" | "planos" | "pneus" | "multas" | "documentos" | "custos" | "checklist";
 
 function Conteudo() {
   const token = useAuthToken();
@@ -82,6 +83,7 @@ function Conteudo() {
       ["multas", "Multas", "multas.ver"],
       ["documentos", "Documentos", "documentos-veiculo.ver"],
       ["custos", "Custos", "custos-manutencao.ver"],
+      ["checklist", "Checklist", "checklists.ver"],
     ] as const
   ).filter(([, , perm]) => temPermissao(perm));
 
@@ -141,6 +143,7 @@ function Conteudo() {
       {aba === "multas" && <ListaMultas />}
       {aba === "documentos" && <ListaDocumentos />}
       {aba === "custos" && <CustosManutencao />}
+      {aba === "checklist" && <ChecklistCaminhao />}
     </div>
   );
 }
@@ -643,6 +646,7 @@ function ListaPlanos() {
   return (
     <div className="space-y-3">
       <ConfirmDialog />
+      <PreventivaAutomatica />
       <p className="text-sm text-muted-foreground">
         A manutenção que se repete — a cada tantos km ou a cada tantos dias. Quando estiver
         chegando, ela aparece na Caixa de entrada. O km do caminhão vem do odômetro anotado no
@@ -1515,5 +1519,63 @@ function ListaDocumentos() {
         </Card>
       ))}
     </div>
+  );
+}
+
+/**
+ * Opção da empresa: revisão que vence abre a OS sozinha (6h30). Desligada por
+ * padrão — sem ela, a revisão vencida espera a decisão do gestor na caixa de
+ * entrada, como sempre.
+ */
+function PreventivaAutomatica() {
+  const token = useAuthToken();
+  const queryClient = useQueryClient();
+  const { temPermissao } = usePermissoes();
+  const q = useQuery({
+    queryKey: ["manutencao-config"],
+    enabled: Boolean(token),
+    queryFn: () => fetchApi<{ abreOsPreventiva: boolean }>("/admin/manutencao/config", { token: token! }),
+  });
+  const [salvando, setSalvando] = React.useState(false);
+  if (!q.data) return null;
+  const ligado = q.data.abreOsPreventiva;
+
+  async function alternar() {
+    if (!token) return;
+    setSalvando(true);
+    try {
+      await fetchApi("/admin/manutencao/config", {
+        token,
+        method: "PUT",
+        body: JSON.stringify({ abreOsPreventiva: !ligado }),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["manutencao-config"] });
+      toast.success(!ligado ? "Ligado: revisão vencida vai abrir a OS sozinha." : "Desligado.");
+    } catch (e) {
+      toast.error("Não consegui salvar", { description: (e as Error).message });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+      <div className="max-w-xl">
+        <p className="text-sm font-semibold">Abrir a OS sozinho quando a revisão vencer</p>
+        <p className="text-sm text-muted-foreground">
+          {ligado
+            ? "Ligado: todo dia às 6h30, revisão vencida sem OS vira OS aberta, e concluir a OS zera a contagem."
+            : "Desligado: a revisão vencida aparece na caixa de entrada esperando você decidir."}
+        </p>
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={salvando || !temPermissao("manutencao.editar")}
+        onClick={alternar}
+      >
+        {ligado ? "Desligar" : "Ligar"}
+      </Button>
+    </Card>
   );
 }

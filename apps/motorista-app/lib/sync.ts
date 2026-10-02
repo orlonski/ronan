@@ -30,6 +30,10 @@ import {
   upsertPendingProblemaVeiculo,
   deletePendingProblemaVeiculo,
   type PendingProblemaVeiculo,
+  listPendingChecklists,
+  upsertPendingChecklist,
+  deletePendingChecklist,
+  type PendingChecklist,
   listPendingEventosViagem,
   listPendingFotos,
   listPendingLocais,
@@ -430,6 +434,23 @@ export async function descartarProblemaVeiculoPendente(clientId: string): Promis
     void FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => {});
   }
   notify();
+}
+
+export async function descartarChecklistPendente(clientId: string): Promise<void> {
+  const item = (await listPendingChecklists()).find((x) => x.clientId === clientId);
+  await deletePendingChecklist(clientId);
+  for (const r of item?.respostas ?? []) {
+    if (r.fotoUri) void FileSystem.deleteAsync(r.fotoUri, { idempotent: true }).catch(() => {});
+  }
+  notify();
+}
+
+export async function tentarNovamenteChecklistPendente(clientId: string): Promise<void> {
+  const item = (await listPendingChecklists()).find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingChecklist(resetItem(item));
+  notify();
+  void drain();
 }
 
 export async function tentarNovamenteProblemaVeiculoPendente(clientId: string): Promise<void> {
@@ -870,6 +891,8 @@ export async function pendingCounts(): Promise<{
   documentos: number;
   /** Avisos de problema no caminhão esperando subir. */
   problemas: number;
+  /** Checklists do caminhão esperando subir. */
+  checklists: number;
   /**
    * TUDO que está esperando subir.
    *
@@ -882,7 +905,7 @@ export async function pendingCounts(): Promise<{
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr] = await Promise.all([
+  const [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
@@ -896,10 +919,11 @@ export async function pendingCounts(): Promise<{
     listPendingPonto(),
     listPendingDocumentosAdmissao(),
     listPendingProblemasVeiculo(),
+    listPendingChecklists(),
   ]);
   // foto/local/story ficavam de fora da contagem: item travado desses não
   // aparecia em lugar nenhum, nem no badge da home nem na tela de Pendentes.
-  const comErro = [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr].reduce(
+  const comErro = [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck].reduce(
     (acc, lista) => acc + lista.filter((i) => i.attempts >= MAX_ATTEMPTS).length,
     0,
   );
@@ -914,7 +938,8 @@ export async function pendingCounts(): Promise<{
     ponto: pt.length,
     documentos: dc.length,
     problemas: pr.length,
-    total: [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr].reduce(
+    checklists: ck.length,
+    total: [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck].reduce(
       (acc, l) => acc + l.length,
       0,
     ),
@@ -1145,6 +1170,7 @@ async function snapshotPendentes(): Promise<{ total: number; motivo?: string }> 
     listPendingPonto(),
     listPendingDocumentosAdmissao(),
     listPendingProblemasVeiculo(),
+    listPendingChecklists(),
   ]);
   const todos = listas.flat();
   const motivo = todos.map((i) => i.errorMsg).find(Boolean) ?? undefined;
@@ -1224,6 +1250,7 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
     // depende dele pra nada. O ponto continua primeiro — é prova de jornada.
     await drainDocumentosAdmissao();
     await drainProblemasVeiculo();
+    await drainChecklists();
     const depois = await snapshotPendentes();
     return {
       enviados: Math.max(0, antes.total - depois.total),
@@ -1285,6 +1312,11 @@ async function rescueStaleItems(): Promise<void> {
   for (const pv of await listPendingProblemasVeiculo()) {
     if (pv.status === "syncing" && isStale(pv.lastTriedAt)) {
       await upsertPendingProblemaVeiculo({ ...pv, status: "pending" });
+    }
+  }
+  for (const ck of await listPendingChecklists()) {
+    if (ck.status === "syncing" && isStale(ck.lastTriedAt)) {
+      await upsertPendingChecklist({ ...ck, status: "pending" });
     }
   }
   for (const cp of await listPendingCompletarPeso()) {
@@ -1774,6 +1806,108 @@ export async function enqueueProblemaVeiculo(e: {
   void drain();
   // A lista "Meus avisos" mostra o que ainda está na fila; o que subir aparece
   // quando ela revalidar.
+}
+
+async function drainChecklists(): Promise<void> {
+  const list = await listPendingChecklists();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!(await podeTentar("checklist"))) return;
+    await processChecklist(item);
+  }
+}
+
+async function processChecklist(item: PendingChecklist): Promise<void> {
+  await upsertPendingChecklist({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    const fd = new FormData();
+    fd.append(
+      "dados",
+      JSON.stringify({
+        clientId: item.clientId,
+        veiculoId: item.veiculoId,
+        modeloId: item.modeloId,
+        feitoEm: item.feitoEm,
+        lat: item.lat ?? null,
+        lng: item.lng ?? null,
+        respostas: item.respostas.map((r) => ({
+          itemId: r.itemId,
+          texto: r.texto,
+          ok: r.ok,
+          observacao: r.observacao ?? null,
+        })),
+      }),
+    );
+    // Foto sumida do aparelho: o checklist sobe sem ela em vez de travar a fila.
+    for (const [i, r] of item.respostas.entries()) {
+      if (!r.fotoUri || !r.fotoMime) continue;
+      if (!(await fotoAindaExiste(r.fotoUri))) {
+        reportarFotoPerdida("checklist", item.clientId, r.fotoUri);
+        continue;
+      }
+      fd.append(`foto_${i}`, {
+        uri: r.fotoUri,
+        name: `checklist-${i + 1}.${r.fotoMime.includes("png") ? "png" : "jpg"}`,
+        type: r.fotoMime,
+      } as unknown as Blob);
+    }
+    await api.postForm("/m/checklists", fd, { outbox: true, timeoutMs: 120_000 });
+    await deletePendingChecklist(item.clientId);
+    for (const r of item.respostas) {
+      if (r.fotoUri) void FileSystem.deleteAsync(r.fotoUri, { idempotent: true }).catch(() => {});
+    }
+  } catch (err) {
+    const permanente = isErroPermanente(err);
+    const base = proximoEstadoFalha(item, err, permanente, "checklist");
+    const ainda = (await listPendingChecklists()).some((x) => x.clientId === item.clientId);
+    if (ainda) await upsertPendingChecklist({ ...item, ...base });
+  }
+  notify();
+}
+
+/**
+ * Enfileira o checklist do caminhão. As fotos dos itens reprovados são
+ * copiadas pra `documentDirectory` antes (a câmera grava em `Caches/`, que o
+ * iOS esvazia sob pressão).
+ */
+export async function enqueueChecklist(e: {
+  veiculoId: string | null;
+  placa: string | null;
+  modeloId: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  respostas: { itemId: string | null; texto: string; ok: boolean; observacao?: string | null; foto?: { uri: string; mime: string } | null }[];
+}): Promise<void> {
+  const clientId = uuidPonto();
+  const respostas: PendingChecklist["respostas"] = [];
+  for (const [i, r] of e.respostas.entries()) {
+    let fotoUri: string | null = null;
+    let fotoMime: string | null = null;
+    if (r.foto) {
+      const ext = r.foto.mime.includes("png") ? "png" : "jpg";
+      fotoUri = `${FileSystem.documentDirectory}checklist-${clientId}-${i}.${ext}`;
+      await FileSystem.copyAsync({ from: r.foto.uri, to: fotoUri });
+      fotoMime = r.foto.mime;
+    }
+    respostas.push({ itemId: r.itemId, texto: r.texto, ok: r.ok, observacao: r.observacao ?? null, fotoUri, fotoMime });
+  }
+  await upsertPendingChecklist({
+    clientId,
+    veiculoId: e.veiculoId,
+    placa: e.placa,
+    modeloId: e.modeloId,
+    feitoEm: new Date().toISOString(),
+    lat: e.lat ?? null,
+    lng: e.lng ?? null,
+    respostas,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
 }
 
 async function drainPonto(): Promise<void> {
