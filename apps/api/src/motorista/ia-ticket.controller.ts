@@ -8,7 +8,9 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
+  ExtrairCupomInput,
   ExtrairTicketInput,
+  type ExtrairCupomResult,
   type ExtrairTicketResult,
 } from "@ronan/shared-types";
 import { AcessoMotorista } from "../auth/decorators/acesso-motorista.decorator";
@@ -102,6 +104,34 @@ export class IaTicketController {
         "Falha ao processar a foto com IA",
         HttpStatus.SERVICE_UNAVAILABLE,
       );
+    }
+  }
+
+  /**
+   * Leitura do cupom de combustível: mesma torneira do OCR de ticket (a conta
+   * precisa estar liberada, e o motorista com a leitura por IA ligada). Só
+   * sugere — o app preenche o que estiver vazio e o motorista confere.
+   */
+  @Post("extrair-cupom")
+  @AcessoMotorista("podeUsarOcrTicket")
+  async extrairCupom(
+    @CurrentUser() user: AuthMotorista,
+    @Body(new ZodValidationPipe(ExtrairCupomInput)) body: { fotoBase64: string; mime: string },
+  ): Promise<ExtrairCupomResult> {
+    const conta = await this.prisma.conta.findUnique({
+      where: { id: user.contaId },
+      select: { iaLeituraTicket: true },
+    });
+    if (!conta?.iaLeituraTicket) {
+      throw new HttpException("A leitura automática não está liberada para esta empresa.", HttpStatus.FORBIDDEN);
+    }
+    if (!this.ia.habilitada) {
+      throw new HttpException("Serviço de IA indisponível no momento", HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    try {
+      return await this.ia.extrairCupom(body);
+    } catch {
+      throw new HttpException("Falha ao processar a foto com IA", HttpStatus.SERVICE_UNAVAILABLE);
     }
   }
 }

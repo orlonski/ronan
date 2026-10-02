@@ -29,9 +29,11 @@ import {
   useAbastecimentos,
   useCatalogos,
   useCriarAbastecimento,
+  useExtrairCupom,
   useMe,
   usePostosRecentes,
 } from "@/lib/queries";
+import * as FileSystem from "expo-file-system/legacy";
 import { atualizarAbastecimentoPendente } from "@/lib/sync";
 import type { FotoPendente } from "@/db/database";
 import {
@@ -97,6 +99,9 @@ export default function NovoAbastecimento() {
   // Válvula pra quem não consegue fotografar — ver nova-viagem.tsx.
   const [justificativaSemFoto, setJustificativaSemFoto] = useState("");
   const [pedindoJustificativa, setPedindoJustificativa] = useState(false);
+  // Leitura do cupom pela IA: preenche só o que está VAZIO e avisa pra conferir.
+  const extrairCupom = useExtrairCupom();
+  const [lidoDoCupom, setLidoDoCupom] = useState<string | null>(null);
 
   /**
    * Quais comprovantes este abastecimento exige.
@@ -275,6 +280,37 @@ export default function NovoAbastecimento() {
       const f = fotos[tipo];
       return f ? [{ tipo, uri: f.uri, mime: f.mime }] : [];
     });
+  }
+
+  /**
+   * Lê o cupom e preenche o que estiver vazio. Falhou (sem sinal, IA fora,
+   * foto ruim)? Fica quieto: o motorista digita como sempre fez.
+   */
+  async function lerCupom(f: CapturedPhoto) {
+    try {
+      const fotoBase64 = await FileSystem.readAsStringAsync(f.uri, { encoding: "base64" });
+      const r = await extrairCupom.mutateAsync({ fotoBase64, mime: f.mime });
+      if (r.confidence < 0.3) return;
+      const preenchidos: string[] = [];
+      const br = (n: number, casas: number) => n.toFixed(casas).replace(".", ",");
+      if (r.litros && !litros) {
+        setLitros(br(r.litros, 2));
+        preenchidos.push("litros");
+      }
+      if (r.valorTotal && !valor && !emComboio) {
+        setValor(br(r.valorTotal, 2));
+        preenchidos.push("valor");
+      }
+      if (r.postoNome && !postoNome) {
+        setPostoNome(r.postoNome);
+        preenchidos.push("posto");
+      }
+      if (preenchidos.length) {
+        setLidoDoCupom(`Li do cupom: ${preenchidos.join(", ")}. Confira antes de salvar.`);
+      }
+    } catch {
+      /* best-effort */
+    }
   }
 
   async function salvar() {
@@ -675,8 +711,15 @@ export default function NovoAbastecimento() {
                   onChange={(f) => {
                     val.limpar();
                     setFotos((atual) => ({ ...atual, [tipo]: f }));
+                    if (tipo === "CUPOM" && f && me.data?.podeUsarOcrTicket) void lerCupom(f);
                   }}
                 />
+                {tipo === "CUPOM" && extrairCupom.isPending ? (
+                  <Text className="text-sm text-muted-foreground">Lendo o cupom…</Text>
+                ) : null}
+                {tipo === "CUPOM" && lidoDoCupom ? (
+                  <Text className="text-sm text-foreground">{lidoDoCupom}</Text>
+                ) : null}
                 {val.erroDe(`foto-${tipo}`) ? (
                   <ErroCampo msg={val.erroDe(`foto-${tipo}`)!} />
                 ) : null}

@@ -1,7 +1,8 @@
+import { cupomDoJson, INSTRUCOES_CUPOM } from "../common/ia/cupom";
 import Anthropic from "@anthropic-ai/sdk";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { ExtrairTicketResult } from "@ronan/shared-types";
+import type { ExtrairCupomResult, ExtrairTicketResult } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { CachePorConta } from "../common/conta/cache-por-conta";
 import { UsoIaService } from "./uso-ia.service";
@@ -479,6 +480,57 @@ Responda APENAS um JSON válido:
         erro: (err as Error).message,
       });
       this.log.warn(`OCR ticket falhou: ${(err as Error).message}`);
+      throw err;
+    }
+  }
+
+  /**
+   * Leitura do cupom de combustível (litros, valor, posto, data, produto).
+   * Best-effort como o ticket: só sugere, o motorista confere. A conferência
+   * dos números mora em common/ia/cupom.ts.
+   */
+  async extrairCupom(args: { fotoBase64: string; mime: string }): Promise<ExtrairCupomResult> {
+    if (!this.client) throw new Error("Anthropic API key não configurada");
+    const modelo = await this.modeloAtual();
+    const t0 = Date.now();
+    try {
+      const resp = await this.client.messages.create({
+        model: modelo,
+        max_tokens: 400,
+        system: INSTRUCOES_CUPOM,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: args.mime as "image/jpeg" | "image/png" | "image/webp",
+                  data: args.fotoBase64,
+                },
+              },
+              { type: "text", text: "Leia este cupom." },
+            ],
+          },
+        ],
+      });
+      this.uso.registrar({ escopo: "ocr-app", modelo, usage: resp.usage, duracaoMs: Date.now() - t0 });
+      const text = resp.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { type: "text"; text: string }).text)
+        .join("\n");
+      const parsed = extractJson<Record<string, unknown>>(text);
+      return parsed ? cupomDoJson(parsed) : { confidence: 0 };
+    } catch (err) {
+      this.uso.registrar({
+        escopo: "ocr-app",
+        modelo,
+        duracaoMs: Date.now() - t0,
+        sucesso: false,
+        erro: (err as Error).message,
+      });
+      this.log.warn(`OCR cupom falhou: ${(err as Error).message}`);
       throw err;
     }
   }

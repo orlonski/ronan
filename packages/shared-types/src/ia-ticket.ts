@@ -29,3 +29,21 @@ export type ExtrairTicketResult = {
   observacoes?: string;
   confidence: number; // 0..1
 };
+
+/**
+ * Leitura do cupom de combustível pela IA (mesma foto do cupom do abastecimento).
+ * Só SUGERE: o app preenche o que estiver vazio e o motorista confere.
+ */
+export const ExtrairCupomInput = ExtrairTicketInput;
+export type ExtrairCupomInput = z.infer<typeof ExtrairCupomInput>;
+
+export type ExtrairCupomResult = {
+  litros?: number;
+  valorTotal?: number;
+  precoLitro?: number;
+  postoNome?: string;
+  /** AAAA-MM-DD */
+  data?: string;
+  tipo?: "DIESEL_S10" | "DIESEL_S500" | "ARLA_32" | "GASOLINA" | "ETANOL";
+  confidence: number;
+};

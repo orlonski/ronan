@@ -13,6 +13,7 @@ import {
 } from "@tanstack/react-query";
 import type {
   ExtrairTicketResult,
+  ExtrairCupomResult,
   FonteGps,
   LembreteLancamentoApp,
   ReferenciaKmPayload,
@@ -2544,6 +2545,19 @@ export function useExtrairTicket() {
   return useMutation({
     mutationFn: async (input: { fotoBase64: string; mime: string }) =>
       api.post<ExtrairTicketResult>("/m/ia/extrair-ticket", input, {
+        timeoutMs: OCR_TIMEOUT_MS,
+      }),
+  });
+}
+
+/**
+ * Leitura do cupom de combustível pela IA. Best-effort como o ticket: uma
+ * tentativa por foto; sem sinal ou IA desligada, o motorista digita.
+ */
+export function useExtrairCupom() {
+  return useMutation({
+    mutationFn: async (input: { fotoBase64: string; mime: string }) =>
+      api.post<ExtrairCupomResult>("/m/ia/extrair-cupom", input, {
         timeoutMs: OCR_TIMEOUT_MS,
       }),
   });
