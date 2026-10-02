@@ -193,7 +193,10 @@ const config: ExpoConfig = {
   // A janela fecha quando o painel parar de mostrar aparelhos em 1.0.5.
   runtimeVersion: "1.1.0",
   updates: {
-    fallbackToCacheTimeout: 0,
+    // Espera até 3s pelo OTA no 1º arranque. Com 0, quem acabou de baixar da loja
+    // via o JS embutido no binário (a tela de cadastro de quando o build foi
+    // gerado) e só pegava a versão atual na 2ª abertura. Sem rede, cai no embutido.
+    fallbackToCacheTimeout: 3000,
     url: "https://u.expo.dev/33e8e936-fbac-4bb3-9f98-5de6dc84da53",
     // Canonical way: requestHeaders sai como meta-data
     // expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY

@@ -69,6 +69,9 @@ export type CadastroIniciado = {
 };
 
 /** Um convite de empresa esperando resposta dele. */
+/** Empresa que apareceu na busca por nome — só o que ele precisa pra reconhecê-la. */
+export type EmpresaBusca = { id: string; nome: string; local: string | null; logoUrl: string | null };
+
 export type ConviteEmpresa = {
   motoristaId: string;
   contaId: string;
@@ -721,6 +724,16 @@ export const api = {
   trocarSenhaPessoa: (senhaAtual: string, novaSenha: string) =>
     request<{ ok: true }>("POST", "/m/eu/trocar-senha", {
       body: { senhaAtual, novaSenha },
+      comoIdentidade: true,
+    }),
+  /** Procura empresa pelo nome (só as que aceitam pedido). Exige rede. */
+  buscarEmpresas: (q: string) =>
+    request<EmpresaBusca[]>("GET", `/m/eu/empresas/buscar?q=${encodeURIComponent(q)}`, {
+      comoIdentidade: true,
+    }),
+  /** Pede pra entrar numa empresa; ela aprova no painel. */
+  pedirEntradaEmpresa: (contaId: string) =>
+    request<{ ok: true; contaNome: string }>("POST", `/m/eu/empresas/${contaId}/pedir-entrada`, {
       comoIdentidade: true,
     }),
   meusConvites: () =>

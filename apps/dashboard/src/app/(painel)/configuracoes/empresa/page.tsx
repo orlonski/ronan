@@ -171,9 +171,10 @@ function Conteudo() {
           <div>
             <p className="text-sm font-medium">Código para os motoristas se cadastrarem</p>
             <p className="text-xs text-muted-foreground">
-              Passe este código para os seus motoristas. Eles digitam no app ao criar a conta, e
-              é assim que o cadastro chega até você — sem ele, ninguém entra. Ele só direciona:
-              o motorista continua aparecendo aqui para você aprovar.
+              Só vale para quem ainda usa uma versão antiga do app. Na versão atual o motorista
+              se cadastra só com o CPF e você o convida pelo CPF, ou ele te procura pelo nome
+              (veja “Aparecer na busca do app” abaixo). Quem entra por aqui continua
+              aparecendo para você aprovar.
             </p>
           </div>
           <div className="flex min-h-28 items-center justify-center rounded-md border bg-muted/20 p-4">
@@ -190,10 +191,60 @@ function Conteudo() {
         </Card>
       </div>
 
+      <BuscaNoAppCard />
       <ComprovantesCard />
       <ContatoMotoristaCard />
       <IdentidadeFiscalCard />
     </div>
+  );
+}
+
+/**
+ * A empresa escolhe se o motorista que ainda não foi convidado pode achá-la
+ * pelo nome no app. Nasce desligado: ninguém aparece numa busca sem querer.
+ * Quem pede entra como "aguardando aprovação" — quem decide é a empresa.
+ */
+function BuscaNoAppCard() {
+  const token = useAuthToken();
+  const queryClient = useQueryClient();
+  const config = useQuery({
+    queryKey: [PATH_MINHA_EMPRESA],
+    enabled: !!token,
+    queryFn: () => fetchApi<{ aceitaPedidoMotorista: boolean }>(PATH_MINHA_EMPRESA, { token }),
+  });
+  const salvar = useMutation({
+    mutationFn: (aceitaPedidoMotorista: boolean) =>
+      fetchApi(PATH_MINHA_EMPRESA, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ aceitaPedidoMotorista }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: [PATH_MINHA_EMPRESA] });
+      toast.success("Salvo.");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não consegui salvar."),
+  });
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Aparecer na busca do app</p>
+          <p className="text-xs text-muted-foreground">
+            Ligado, o motorista que ainda não foi convidado digita o nome da sua empresa no
+            app e pede para entrar. O pedido chega aqui como “aguardando aprovação” — ninguém
+            entra sem você aceitar. Aparecem só o nome, a cidade e a logo.
+          </p>
+        </div>
+        <StatusToggle
+          active={config.data?.aceitaPedidoMotorista ?? false}
+          onChange={(next) => salvar.mutate(next)}
+          size="sm"
+          disabled={config.isLoading || salvar.isPending}
+        />
+      </div>
+    </Card>
   );
 }
 

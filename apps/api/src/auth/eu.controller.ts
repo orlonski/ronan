@@ -17,6 +17,7 @@ import {
   AtualizarPerfilInput,
   MarcarRecebidoInput,
   AtualizarPlacasInput,
+  BuscarEmpresasQuery,
   CriarLancamentoPessoalInput,
   CriarViagemPessoalInput,
   EditarLancamentoPessoalInput,
@@ -96,6 +97,22 @@ export class EuController {
   @Get("convites")
   convites(@CurrentUser() user: AuthIdentidade) {
     return this.service.convites(user.id);
+  }
+
+  /** Procura empresa pelo nome — só as que aceitam pedido de motorista. */
+  @Get("empresas/buscar")
+  buscarEmpresas(
+    @CurrentUser() user: AuthIdentidade,
+    @Query(new ZodValidationPipe(BuscarEmpresasQuery)) query: BuscarEmpresasQuery,
+  ) {
+    return this.service.buscarEmpresas(user.id, query.q);
+  }
+
+  /** Pede pra entrar na empresa; ela aprova no painel. */
+  @Post("empresas/:contaId/pedir-entrada")
+  @HttpCode(200)
+  pedirEntrada(@CurrentUser() user: AuthIdentidade, @Param("contaId") contaId: string) {
+    return this.service.pedirEntrada(user.id, contaId);
   }
 
   @HttpCode(200)

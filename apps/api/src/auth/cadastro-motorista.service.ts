@@ -307,7 +307,7 @@ export class CadastroMotoristaService {
     // dela, com token. Cria o vínculo como sempre criou — aguardando aprovação
     // do admin, que é o que a tela dele sabe mostrar.
     if (pendente.contaConvite) {
-      await this.criarVinculoLegado(pendente.contaConvite, identidade.id, pendente);
+      await this.criarVinculoPendente(pendente.contaConvite, identidade.id, pendente);
     }
 
     await comoSistema(() =>
@@ -339,12 +339,13 @@ export class CadastroMotoristaService {
   }
 
   /**
-   * O cadastro na empresa que o código apontou (só app antigo).
+   * O pedido de entrada na empresa: veio do código (app antigo) ou da busca
+   * por nome (`EuService.pedirEntrada`).
    *
    * Nasce PENDENTE_APROVACAO, como sempre nasceu: quem decide continua sendo a
    * empresa. `aceite` já é ACEITO — foi ele que pediu pra entrar.
    */
-  private async criarVinculoLegado(
+  async criarVinculoPendente(
     contaId: string,
     identidadeId: string,
     dados: { cpf: string; nome: string; telefone: string; email: string | null; senhaHash: string; placas: unknown },

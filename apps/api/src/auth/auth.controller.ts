@@ -19,12 +19,16 @@ import { ContaAtivaService } from "./conta-ativa.service";
 import { CadastroMotoristaService } from "./cadastro-motorista.service";
 import { RedefinicaoSenhaService } from "./redefinicao-senha.service";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { criarRateLimitIpGuard } from "../common/rate-limit/rate-limit-ip.guard";
 import { Public } from "./decorators/public.decorator";
 import { Roles } from "./decorators/roles.decorator";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { RolesGuard } from "./guards/roles.guard";
 import { PlataformaGuard } from "./guards/plataforma.guard";
 import type { AuthAdminUser, AuthIdentidade, AuthMotorista } from "./types";
+
+// Cada chamada que passa manda um WhatsApp: sem freio por IP, isto vira disparador.
+const limiteCadastro = criarRateLimitIpGuard({ limitePorMinuto: 10, nome: "cadastro-motorista" });
 
 @ApiTags("auth")
 @Controller()
@@ -37,6 +41,7 @@ export class AuthController {
   ) {}
 
   @Public()
+  @UseGuards(limiteCadastro)
   @HttpCode(200)
   @Post("m/auth/cadastro/iniciar")
   async iniciarCadastro(
@@ -46,6 +51,7 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(limiteCadastro)
   @HttpCode(200)
   @Post("m/auth/cadastro/reenviar")
   async reenviarCodigo(

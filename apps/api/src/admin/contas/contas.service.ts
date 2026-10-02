@@ -480,6 +480,7 @@ export class ContasService implements OnModuleInit {
         nome: true,
         exigeFotoViagem: true,
         exigeFotoAbastecimento: true,
+        aceitaPedidoMotorista: true,
         // A identidade fiscal. Sai daqui porque é da EMPRESA — o CT-e é o
         // primeiro a usar, mas o MDF-e e o que vier depois usam a mesma coisa.
         cnpj: true,

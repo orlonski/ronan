@@ -423,6 +423,10 @@ model Conta {
   /// alguém precisa ser o destino padrão. Com mais de uma conta marcada, o
   /// signup passa a exigir o `contaSlug` no formulário.
   permiteAutoCadastro    Boolean   @default(false)
+  /// A empresa aparece na busca por nome do app do motorista (quem não tem
+  /// vínculo procura a empresa e PEDE pra entrar; a empresa aprova no painel).
+  /// Nasce desligado: ninguém aparece numa lista pública sem ter escolhido.
+  aceitaPedidoMotorista  Boolean   @default(false)
   /// Esta transportadora exige a FOTO do comprovante no lançamento.
   ///
   /// É política DELA, não do tomador: "aqui todo lançamento tem foto". Por isso

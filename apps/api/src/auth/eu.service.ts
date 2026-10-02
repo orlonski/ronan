@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { AcaoAuditoria } from "@prisma/client";
 import { ehCapacidadeApp, type AcessoAppDaConta, type SessaoEmpresa } from "@ronan/shared-types";
 import { comConta, comoSistema } from "../common/conta/conta-context";
@@ -8,6 +8,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { AuthService } from "./auth.service";
+import { CadastroMotoristaService } from "./cadastro-motorista.service";
 import { IdentidadeService } from "./identidade.service";
 
 /**
@@ -18,6 +19,8 @@ import { IdentidadeService } from "./identidade.service";
  * atravessa a fronteira é só o nome da empresa que convidou: ele precisa saber
  * quem o chamou pra decidir.
  */
+const BUSCAS_EMPRESA = new Map<string, number[]>();
+
 @Injectable()
 export class EuService {
   private readonly log = new Logger(EuService.name);
@@ -28,6 +31,7 @@ export class EuService {
     private readonly identidades: IdentidadeService,
     private readonly auditoria: AuditoriaService,
     private readonly uploads: UploadsService,
+    private readonly cadastro: CadastroMotoristaService,
   ) {}
 
   async perfil(identidadeId: string) {
@@ -250,6 +254,91 @@ export class EuService {
       });
     });
     return { ok: true };
+  }
+
+  /**
+   * Procura empresa pelo nome — pra quem roda pra uma e ainda não foi convidado.
+   *
+   * Só aparece quem ESCOLHEU aparecer (`aceitaPedidoMotorista`), e só sai o que
+   * ele precisa pra reconhecer a empresa: nome, cidade e logo. Exige token de
+   * identidade (CPF + código por WhatsApp confirmados), então não é lista
+   * pública, e tem teto por pessoa pra não virar varredura do cadastro de clientes.
+   */
+  async buscarEmpresas(identidadeId: string, q: string) {
+    this.limitarBuscaEmpresas(identidadeId);
+    const termo = q.trim();
+    if (termo.length < 3) throw new BadRequestException("Digite ao menos 3 letras.");
+    const contas = await comoSistema(() =>
+      this.prisma.conta.findMany({
+        where: {
+          ativa: true,
+          aceitaPedidoMotorista: true,
+          nome: { contains: termo, mode: "insensitive" },
+        },
+        select: { id: true, nome: true, municipio: true, uf: true, logoUrl: true },
+        orderBy: { nome: "asc" },
+        take: 8,
+      }),
+    );
+    return contas.map((c) => ({
+      id: c.id,
+      nome: c.nome,
+      local: [c.municipio, c.uf].filter(Boolean).join(" - ") || null,
+      logoUrl: c.logoUrl,
+    }));
+  }
+
+  /**
+   * Ele pede pra entrar numa empresa. Nasce PENDENTE_APROVACAO com o aceite já
+   * dado (foi ele que pediu); quem decide é a empresa, no painel.
+   */
+  async pedirEntrada(identidadeId: string, contaId: string) {
+    const conta = await comoSistema(() =>
+      this.prisma.conta.findFirst({
+        where: { id: contaId, ativa: true, aceitaPedidoMotorista: true },
+        select: { id: true, nome: true },
+      }),
+    );
+    if (!conta) throw new BadRequestException("Essa empresa não está recebendo pedidos agora.");
+
+    const eu = await comoSistema(() =>
+      this.prisma.motoristaIdentidade.findUniqueOrThrow({
+        where: { id: identidadeId },
+        select: { cpf: true, nome: true, telefone: true, email: true, senhaHash: true, placas: true },
+      }),
+    );
+    if (!eu.telefone) {
+      throw new BadRequestException("Informe seu celular no perfil antes de pedir pra entrar.");
+    }
+    const jaTem = await comoSistema(() =>
+      this.prisma.motorista.findFirst({
+        where: { contaId: conta.id, OR: [{ identidadeId }, { cpf: eu.cpf }] },
+        select: { id: true },
+      }),
+    );
+    if (jaTem) {
+      throw new ConflictException("Você já tem um cadastro ou um pedido nessa empresa.");
+    }
+    await this.cadastro.criarVinculoPendente(conta.id, identidadeId, {
+      cpf: eu.cpf,
+      nome: eu.nome,
+      telefone: eu.telefone,
+      email: eu.email,
+      senhaHash: eu.senhaHash,
+      placas: eu.placas,
+    });
+    return { ok: true, contaNome: conta.nome };
+  }
+
+  /** Teto por pessoa: 40 buscas por hora (digitar vale uma, não uma por letra). */
+  private limitarBuscaEmpresas(identidadeId: string) {
+    const agora = Date.now();
+    const feitas = (BUSCAS_EMPRESA.get(identidadeId) ?? []).filter((t) => t > agora - 60 * 60_000);
+    if (feitas.length >= 40) {
+      throw new BadRequestException("Muitas buscas seguidas. Tente de novo daqui a pouco.");
+    }
+    feitas.push(agora);
+    BUSCAS_EMPRESA.set(identidadeId, feitas);
   }
 
   async atualizarPerfil(

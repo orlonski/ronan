@@ -16,6 +16,8 @@ export const AtualizarMinhaEmpresaInput = z.object({
   // Material.exigeTicket, que é o NÚMERO do ticket.
   exigeFotoViagem: z.boolean().optional(),
   exigeFotoAbastecimento: z.boolean().optional(),
+  /// Aparecer na busca por nome do app do motorista (pedido de entrada).
+  aceitaPedidoMotorista: z.boolean().optional(),
 
   // --- identidade fiscal ---
   // Estes campos existiam no banco desde a fase 0 e não tinham tela nenhuma:
@@ -60,3 +62,9 @@ export const AtualizarMinhaEmpresaInput = z.object({
   tipoTransportador: z.enum(["ETC", "CTC", "TAC"]).nullish(),
 });
 export type AtualizarMinhaEmpresaInput = z.infer<typeof AtualizarMinhaEmpresaInput>;
+
+/** Busca de empresa pelo motorista que ainda não tem vínculo. */
+export const BuscarEmpresasQuery = z.object({
+  q: z.string().trim().min(3, "Digite ao menos 3 letras.").max(60),
+});
+export type BuscarEmpresasQuery = z.infer<typeof BuscarEmpresasQuery>;

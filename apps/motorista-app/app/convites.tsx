@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, LogOut, RefreshCw, Wallet } from "lucide-react-native";
+import { Building2, LogOut, RefreshCw, Search, Wallet } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { api, type ConviteEmpresa } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
@@ -20,8 +20,9 @@ import { MovatruckLogo } from "@/components/movatruck-logo";
  * que fazia o app parecer uma sala de espera. Hoje o app é dele desde o primeiro
  * dia, e o convite é um banner na home que leva até aqui.
  *
- * A entrada numa empresa é sempre por convite: ele não procura empresa nem
- * digita código. Ver docs/identidade-motorista.md.
+ * A entrada numa empresa é por convite dela (CPF) ou por pedido dele, procurando
+ * a empresa pelo nome em `buscar-empresa` — sem digitar código. Ver
+ * docs/identidade-motorista.md.
  */
 export default function ConvitesScreen() {
   const queryClient = useQueryClient();
@@ -142,8 +143,8 @@ export default function ConvitesScreen() {
                   sem transportadora. */}
               <Text className="text-2xl font-bold text-foreground">Nenhum convite agora</Text>
               <Text className="text-base leading-6 text-muted-foreground">
-                Se uma transportadora quiser te chamar, é o seu CPF que ela usa. O convite
-                aparece aqui pra você aceitar ou recusar.
+                Sua empresa já te cadastrou? Ela te chama pelo seu CPF e o convite aparece aqui.
+                Ainda não chamou? Procure ela pelo nome e peça pra entrar.
               </Text>
               <Text className="text-base leading-6 text-muted-foreground">
                 Até lá — e depois também — o app segue sendo seu: os fretes que você rodar e o
@@ -151,6 +152,11 @@ export default function ConvitesScreen() {
               </Text>
             </View>
           )}
+
+          <Button size="lg" onPress={() => router.push("/buscar-empresa")}>
+            <Search size={20} color="white" />
+            <Text className="text-lg font-bold text-white">Procurar minha empresa</Text>
+          </Button>
 
           {/* O caderninho é dele e existe antes de qualquer empresa — é o que dá
               o que fazer no app enquanto ninguém o chamou. */}

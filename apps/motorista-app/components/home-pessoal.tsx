@@ -170,6 +170,22 @@ export function HomePessoal() {
           </Pressable>
         ))}
 
+        {convites.length === 0 && (
+          <Pressable
+            onPress={() => router.push("/buscar-empresa")}
+            className="flex-row items-center gap-3 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+          >
+            <View className="h-12 w-12 items-center justify-center rounded-full bg-secondary">
+              <Building2 size={22} color="#13316b" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-base font-bold text-foreground">Você roda pra uma empresa?</Text>
+              <Text className="text-sm text-muted-foreground">Procure ela pelo nome e peça pra entrar</Text>
+            </View>
+            <ArrowRight size={20} color="#64748b" />
+          </Pressable>
+        )}
+
         {docsAlerta && (
           <Pressable
             onPress={() => router.push("/meus-documentos")}

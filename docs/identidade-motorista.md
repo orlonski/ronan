@@ -359,5 +359,10 @@ MinIO por conta) e edição de um lançamento já enviado (hoje: apagar e relan�
 - **Push token na identidade x no vínculo.** O desenho põe na identidade (o
   aparelho é da pessoa). O `PushService` hoje resolve pelo vínculo; na fase 1
   ele ganha fallback pra identidade, sem mudar o resto.
-- **Diretório de empresas pro motorista se candidatar** — descartado por ora: a
-  entrada é sempre por convite da empresa.
+- **Busca de empresa por nome + pedido de entrada** — NO CÓDIGO desde 02/10/2026
+  (antes estava descartado). Não é diretório público: exige token de identidade
+  (`GET m/eu/empresas/buscar`, mín. 3 letras, teto por pessoa) e só lista a
+  empresa que ligou `Conta.aceitaPedidoMotorista` (nasce desligado; interruptor em
+  Minha empresa). `POST m/eu/empresas/:contaId/pedir-entrada` cria o vínculo
+  `PENDENTE_APROVACAO` com aceite já dado; a empresa aprova no painel. Convite por
+  CPF segue sendo o caminho principal.
