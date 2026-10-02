@@ -40,6 +40,8 @@ import type { PrevisaoChegada } from "../common/previsao-chegada";
  * - `transportadora`/`transportadoraId` — estrutura de frota.
  * - metadados de sync (`criadoOfflineEm`, `sincronizadoEm`, `appVersaoCriacao`…).
  * - `mensagens`/`eventos`/`eventosViagem` — chat interno e lifecycle.
+ * - DINHEIRO nenhum (pedágio, frete, valor): o comprovante vai pro cliente da
+ *   empresa, e R$ ali é conversa comercial dela — decisão do dono, 01/10/2026.
  * - `fotos[].storageKey` — a chave do MinIO NUNCA sai; a foto é servida por um
  *   endpoint que valida o token.
  * - dos locais: `logradouro`/`numero`/`bairro`/`cep`/`apelidos`/
@@ -72,11 +74,6 @@ export type ViagemPublica = {
 
   km: { informado: string; efetivo: string; ajustadoPorMinimo: boolean };
   toneladas: { informada: string; efetiva: string; ajustadoPorMinimo: boolean };
-
-  pedagio: {
-    total: string | null;
-    itens: { praca: string; valor: string; data: string }[];
-  };
 
   rotaGeometria: string | null;
   /**
@@ -120,7 +117,6 @@ export const SELECT_VIAGEM_PUBLICA = {
   data: true,
   km: true,
   toneladas: true,
-  valorPedagioTotal: true,
   rotaGeometria: true,
   material: { select: { id: true, nome: true } },
   // Necessário pro guarda de mínimo em aplicarMinimos (diária não tem mínimo).
@@ -136,10 +132,6 @@ export const SELECT_VIAGEM_PUBLICA = {
   trechos: {
     orderBy: { ordem: "asc" },
     select: { tipo: true, km: true, local: { select: { nome: true } } },
-  },
-  pedagios: {
-    orderBy: { data: "asc" },
-    select: { pracaPedagio: true, valor: true, data: true },
   },
   fotos: { orderBy: { capturadaEm: "asc" }, select: { id: true, rotacao: true } },
   recebedorNome: true,
@@ -177,32 +169,6 @@ function local(l: ViagemSelecionada["localCarga"]): LocalPublico | null {
 /** Data-only (`@db.Date`) sai como YYYY-MM-DD — sem hora, sem fuso pra errar. */
 function dataISO(d: Date | null): string | null {
   return d ? d.toISOString().slice(0, 10) : null;
-}
-
-/**
- * O pedágio do comprovante, de UMA fonte só — a mesma regra de
- * `pedagioDaViagem` (`common/acerto-motorista.ts`).
- *
- * `Viagem.valorPedagioTotal` (app nativo) e as linhas de `Pedagio` (PWA antigo)
- * são fontes independentes. O comprovante mostrava o total de uma e a lista da
- * outra: "R$ 33,89" em cima de uma praça de "R$ 28,68", num documento que a
- * transportadora manda pro CLIENTE dela (achado da QA dos anúncios, 28/09).
- * Com o total do app, vai só o total; sem ele, as linhas e a soma delas.
- */
-export function pedagioPublico(viagem: Pick<ViagemSelecionada, "valorPedagioTotal" | "pedagios">): ViagemPublica["pedagio"] {
-  if (viagem.valorPedagioTotal != null && viagem.valorPedagioTotal.gt(0)) {
-    return { total: viagem.valorPedagioTotal.toFixed(2), itens: [] };
-  }
-  if (viagem.pedagios.length === 0) return { total: null, itens: [] };
-  const soma = viagem.pedagios.reduce((acc, p) => acc.add(p.valor), new Prisma.Decimal(0));
-  return {
-    total: soma.toFixed(2),
-    itens: viagem.pedagios.map((p) => ({
-      praca: p.pracaPedagio,
-      valor: p.valor.toFixed(2),
-      data: dataISO(p.data) ?? "",
-    })),
-  };
 }
 
 export function serializarViagemPublica(
@@ -258,8 +224,6 @@ export function serializarViagemPublica(
       efetiva: minimos.toneladasEfetiva,
       ajustadoPorMinimo: minimos.toneladasAjustada,
     },
-
-    pedagio: pedagioPublico(viagem),
 
     // `Viagem.rotaGeometria` só existe quando o motorista ESCOLHEU uma rota no
     // seletor — na maioria das viagens é null, e sem o fallback o mapa do

@@ -33,7 +33,6 @@ type Comprovante = {
   trechos: { rotulo: string; localNome: string | null; km: string | null }[];
   km: { informado: string; efetivo: string; ajustadoPorMinimo: boolean };
   toneladas: { informada: string; efetiva: string; ajustadoPorMinimo: boolean };
-  pedagio: { total: string | null; itens: { praca: string; valor: string; data: string }[] };
   rotaGeometria: string | null;
   /** "cache" = ilustração do trecho, não o caminho que o motorista registrou. */
   rotaGeometriaFonte: "viagem" | "cache" | null;
@@ -117,7 +116,6 @@ export default async function ComprovantePage({
 
   const d = r.dados;
   const urlComprovante = `${API_BROWSER}/publico/viagens/${encodeURIComponent(token)}`;
-  const temPedagio = d.pedagio.total != null || d.pedagio.itens.length > 0;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 text-slate-800 sm:px-6 sm:py-10">
@@ -199,24 +197,6 @@ export default async function ComprovantePage({
             <Campo icone={User} rotulo="Motorista" valor={d.motorista.nome} />
           </dl>
         </Card>
-
-        {temPedagio && (
-          <Card titulo="Pedágio">
-            <p className="text-2xl font-bold text-slate-900">
-              {d.pedagio.total ? `R$ ${numBR(d.pedagio.total)}` : "—"}
-            </p>
-            {d.pedagio.itens.length > 0 && (
-              <ul className="mt-3 divide-y border-t text-sm">
-                {d.pedagio.itens.map((p, i) => (
-                  <li key={i} className="flex justify-between py-2">
-                    <span className="text-slate-600">{p.praca}</span>
-                    <span className="font-medium text-slate-900">R$ {numBR(p.valor)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        )}
 
         {(d.origem || d.destino || d.rotaGeometria) && (
           <>
