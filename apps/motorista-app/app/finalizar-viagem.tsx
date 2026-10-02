@@ -18,6 +18,8 @@ import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { SemCatalogo } from "@/components/sem-catalogo";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { AvisoKmEstimado } from "@/components/aviso-km-estimado";
+import { AssinaturaPad } from "@/components/assinatura-pad";
+import { usePermite } from "@/lib/acessos-app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,6 +75,12 @@ export default function FinalizarViagem() {
   const [descargaEm, setDescargaEm] = useState<string | undefined>(undefined);
   const [valorPedagio, setValorPedagio] = useState("");
   const [observacao, setObservacao] = useState("");
+  // Prova de entrega, opcional: quem recebeu e a assinatura no dedo.
+  const pedeAssinatura = usePermite("app.viagem.assinatura");
+  const [recebedorNome, setRecebedorNome] = useState("");
+  const [recebedorDoc, setRecebedorDoc] = useState("");
+  const [assinatura, setAssinatura] = useState("");
+  const [assinando, setAssinando] = useState(false);
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   // Válvula pra quem não consegue fotografar — ver nova-viagem.tsx.
   const [justificativaSemFoto, setJustificativaSemFoto] = useState("");
@@ -582,6 +590,9 @@ export default function FinalizarViagem() {
         valorPedagioTotal:
           mostraPedagio && valorPedagio ? parseFloat(valorPedagio.replace(",", ".")) : undefined,
         observacao: observacao.trim() || undefined,
+        recebedorNome: pedeAssinatura && recebedorNome.trim().length >= 2 ? recebedorNome.trim() : undefined,
+        recebedorDoc: pedeAssinatura && recebedorDoc.trim() ? recebedorDoc.trim() : undefined,
+        assinaturaRecebedor: pedeAssinatura && assinatura ? assinatura : undefined,
         foto: foto ? { uri: foto.uri, mime: foto.mime } : undefined,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -625,6 +636,8 @@ export default function FinalizarViagem() {
             ref={val.scrollRef}
             contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
             keyboardShouldPersistTaps="handled"
+            // Travada enquanto o dedo assina: senão a rolagem rouba o traço.
+            scrollEnabled={!assinando}
           >
             {/* 1) Onde descarregou — captura já dispara sozinha ao abrir a tela
                    (o motorista veio do "Finalizar viagem" acabando de descarregar).
@@ -913,6 +926,28 @@ export default function FinalizarViagem() {
                 <ErroCampo msg={val.erroDe("observacao")!} />
               ) : null}
             </View>
+
+            {pedeAssinatura && (
+              <View className="gap-2">
+                <Label>
+                  Quem recebeu{" "}
+                  <Text className="text-sm font-normal text-muted-foreground">(opcional)</Text>
+                </Label>
+                <Input
+                  value={recebedorNome}
+                  onChangeText={setRecebedorNome}
+                  placeholder="Nome de quem recebeu a carga"
+                  maxLength={120}
+                />
+                <Input
+                  value={recebedorDoc}
+                  onChangeText={setRecebedorDoc}
+                  placeholder="Documento (opcional)"
+                  maxLength={30}
+                />
+                <AssinaturaPad valor={assinatura} onChange={setAssinatura} onDesenhando={setAssinando} />
+              </View>
+            )}
 
             {erro ? <ErroCampo msg={erro} /> : null}
 

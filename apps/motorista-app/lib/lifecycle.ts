@@ -608,6 +608,10 @@ export async function finalizarViagemGuiada(input: {
   descargaDistanciaMetros?: number;
   valorPedagioTotal?: number;
   observacao?: string;
+  /** Prova de entrega (opcional). */
+  recebedorNome?: string;
+  recebedorDoc?: string;
+  assinaturaRecebedor?: string;
   foto?: { uri: string; mime: string };
 }): Promise<void> {
   const atual = await getLifecycleLocal();
@@ -640,6 +644,9 @@ export async function finalizarViagemGuiada(input: {
       descargaDistanciaMetros: input.descargaDistanciaMetros,
       valorPedagioTotal: input.valorPedagioTotal,
       observacao: input.observacao,
+      recebedorNome: input.recebedorNome,
+      recebedorDoc: input.recebedorDoc,
+      assinaturaRecebedor: input.assinaturaRecebedor,
     },
     input.foto,
   );

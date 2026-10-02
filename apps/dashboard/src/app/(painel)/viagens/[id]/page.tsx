@@ -157,6 +157,10 @@ type ViagemDetalhe = {
   }[];
   status: string;
   observacao: string | null;
+  /** Prova de entrega (o app pede na descarga, opcional). */
+  recebedorNome?: string | null;
+  recebedorDoc?: string | null;
+  assinaturaRecebedor?: string | null;
   valorPedagioTotal: string | null;
   lat: number | null;
   lng: number | null;
@@ -779,6 +783,26 @@ export default function ViagemDetalhePage({
                 Observação
               </div>
               <p className="mt-0.5 break-words text-sm">{v.observacao}</p>
+            </div>
+          )}
+
+          {(v.recebedorNome || v.assinaturaRecebedor) && (
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Recebido por</div>
+              <p className="mt-0.5 text-sm">
+                {v.recebedorNome ?? "Nome não informado"}
+                {v.recebedorDoc && <span className="text-muted-foreground"> · {v.recebedorDoc}</span>}
+              </p>
+              {v.assinaturaRecebedor && (
+                <svg
+                  viewBox="0 0 300 150"
+                  className="mt-2 h-24 w-full max-w-xs rounded-md border bg-white"
+                  role="img"
+                  aria-label="Assinatura de quem recebeu"
+                >
+                  <path d={v.assinaturaRecebedor} fill="none" stroke="#0f172a" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
             </div>
           )}
 

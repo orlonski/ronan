@@ -91,6 +91,11 @@ export type ViagemPublica = {
    * `common/previsao-chegada.ts`). Null fora de viagem em andamento carregada.
    */
   chegada: PrevisaoChegada | null;
+  /**
+   * Prova de entrega: o NOME de quem recebeu e a assinatura (path SVG 300×150).
+   * O documento (CPF/RG) fica de fora — é dado pessoal de terceiro.
+   */
+  recebedor: { nome: string | null; assinatura: string | null } | null;
 };
 
 export type LocalPublico = {
@@ -137,6 +142,8 @@ export const SELECT_VIAGEM_PUBLICA = {
     select: { pracaPedagio: true, valor: true, data: true },
   },
   fotos: { orderBy: { capturadaEm: "asc" }, select: { id: true, rotacao: true } },
+  recebedorNome: true,
+  assinaturaRecebedor: true,
 } satisfies Prisma.ViagemSelect;
 
 type ViagemSelecionada = Prisma.ViagemGetPayload<{ select: typeof SELECT_VIAGEM_PUBLICA }>;
@@ -272,5 +279,9 @@ export function serializarViagemPublica(
         : null,
     fotos: viagem.fotos.map((f) => ({ id: f.id, rotacao: f.rotacao })),
     chegada: ctx.chegada ?? null,
+    recebedor:
+      viagem.recebedorNome || viagem.assinaturaRecebedor
+        ? { nome: viagem.recebedorNome, assinatura: viagem.assinaturaRecebedor }
+        : null,
   };
 }

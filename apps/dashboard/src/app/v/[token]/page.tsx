@@ -38,6 +38,8 @@ type Comprovante = {
   /** "cache" = ilustração do trecho, não o caminho que o motorista registrou. */
   rotaGeometriaFonte: "viagem" | "cache" | null;
   fotos: { id: string; rotacao: number }[];
+  /** Quem recebeu na obra e a assinatura (path SVG num quadro de 300×150). */
+  recebedor?: { nome: string | null; assinatura: string | null } | null;
   /** Só em viagem em andamento já carregada. Nunca traz a posição do caminhão. */
   chegada?:
     | { tipo: "PREVISTA"; destinoNome: string; chegaEm: string; atualizadoEm: string }
@@ -240,6 +242,22 @@ export default async function ComprovantePage({
               </Card>
             </div>
           </>
+        )}
+
+        {d.recebedor && (
+          <Card titulo="Recebido por">
+            {d.recebedor.nome && <p className="font-semibold text-slate-900">{d.recebedor.nome}</p>}
+            {d.recebedor.assinatura && (
+              <svg
+                viewBox="0 0 300 150"
+                className="mt-2 h-28 w-full max-w-sm rounded-md border bg-white"
+                role="img"
+                aria-label="Assinatura de quem recebeu"
+              >
+                <path d={d.recebedor.assinatura} fill="none" stroke="#0f172a" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </Card>
         )}
 
         {d.fotos.length > 0 && (

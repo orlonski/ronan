@@ -26,6 +26,7 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.viagem.lancar",
   "app.viagem.guiada",
   "app.viagem.gpsClassico",
+  "app.viagem.assinatura",
   "app.historico.ver",
   "app.ticket.ocr",
   "app.km.referencia",
@@ -168,6 +169,20 @@ const DEFS: CapacidadeAppDef[] = [
     gate: "SERVIDOR",
     aoPerder: "VALA",
     colunaLegada: { coluna: "podeIniciarViagem", espelha: true },
+  },
+  {
+    // Prova de entrega na descarga: nome de quem recebeu e assinatura no dedo.
+    // Opcional pro motorista; a empresa desliga se não quiser o passo.
+    chave: "app.viagem.assinatura",
+    label: "Assinatura de quem recebeu",
+    efeito: "Ao finalizar a viagem, o app oferece colher o nome e a assinatura de quem recebeu a carga (opcional).",
+    grupo: "Viagens",
+    tipo: "EMPRESA",
+    vinculo: "MOTORISTA",
+    modulo: "operacao",
+    dependeDe: ["app.viagem.guiada"],
+    gate: "SO_TELA",
+    aoPerder: "VALA",
   },
   {
     // Quem manda no app é a empresa (dono, 23/09/2026): até aqui o histórico

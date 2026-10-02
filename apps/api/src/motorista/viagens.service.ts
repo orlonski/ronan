@@ -2462,6 +2462,11 @@ export class ViagensMotoristaService {
         descargaDistanciaMetros: input.descargaDistanciaMetros,
         valorPedagioTotal: input.valorPedagioTotal,
         observacao: input.observacao,
+        // Prova de entrega (opcional). undefined não sobrescreve o que o
+        // painel já tiver preenchido.
+        recebedorNome: input.recebedorNome,
+        recebedorDoc: input.recebedorDoc,
+        assinaturaRecebedor: input.assinaturaRecebedor,
         sincronizadoEm: new Date(),
         justificativaSemFoto: resolverJustificativaSemFoto(
           exigeFotoFin,

@@ -167,6 +167,9 @@ export type EncerrarOcorrenciaInput = z.infer<typeof EncerrarOcorrenciaInput>;
 // só destruía o lançamento. O que falta é carimbado como divergência e
 // resolvido no painel. A obrigatoriedade de verdade vive no app, ANTES de
 // enfileirar (FinalizarViagemInput, logo abaixo).
+/** Teto do traço da assinatura (path SVG): uma assinatura cabe folgado em 20 mil caracteres. */
+export const ASSINATURA_MAX = 30_000;
+
 export const FinalizarViagemBase = z.object({
   // Opcional: o cliente já foi escolhido no iniciar (backend reusa o da viagem
   // se não vier). Mantido no schema pra compat/edição.
@@ -214,6 +217,15 @@ export const FinalizarViagemBase = z.object({
   fotoKey: z.string().optional(),
   // Ver CriarViagemBase.justificativaSemFoto.
   justificativaSemFoto: z.string().min(10).max(500).optional(),
+  // Prova de entrega, OPCIONAL: quem recebeu na obra e a assinatura no dedo.
+  recebedorNome: z.string().trim().min(2).max(120).optional(),
+  recebedorDoc: z.string().trim().max(30).optional(),
+  /** Traço da assinatura como `d` de path SVG, num quadro de 300×150. */
+  assinaturaRecebedor: z
+    .string()
+    .max(ASSINATURA_MAX)
+    .regex(/^[MLQ0-9.\s,-]+$/, "Assinatura inválida.")
+    .optional(),
 });
 export type FinalizarViagemBase = z.infer<typeof FinalizarViagemBase>;
 

@@ -4161,26 +4161,29 @@ model Viagem {
   // digitação dupla é o que mata sistema de operação em 90 dias.
   /// Chave de 44 dígitos da NF-e da carga. O OCR do ticket já lê o número da
   /// nota e jogava fora.
-  nfeChave      String?
+  nfeChave            String?
   /// Valor da mercadoria transportada, quando conhecido — normalmente o total
   /// da NF-e que acompanha a carga. Vence a referência do material no CT-e:
   /// aproximação não deve passar por cima de um número que se sabe.
-  valorCarga    Decimal? @db.Decimal(12, 2)
-  nfeNumero     String?
-  nfeSerie      String?
+  valorCarga          Decimal? @db.Decimal(12, 2)
+  nfeNumero           String?
+  nfeSerie            String?
   /// Conhecimento de transporte emitido pra esta viagem.
-  cteChave      String?
-  cteNumero     String?
-  cteSerie      String?
+  cteChave            String?
+  cteNumero           String?
+  cteSerie            String?
   /// Manifesto do veículo no dia.
-  mdfeChave     String?
+  mdfeChave           String?
   // --- comprovante de entrega ---
   // O evento 110180 do CT-e (Comprovante de Entrega Eletrônico) exige data,
   // hora, geolocalização, identificação de quem recebeu e hash da imagem. Três
   // dos quatro já existiam (descargaLat/Lng, TicketFoto, timestamp) — faltava
   // só saber quem recebeu.
-  recebedorNome String?
-  recebedorDoc  String?
+  recebedorNome       String?
+  recebedorDoc        String?
+  /// Assinatura de quem recebeu, desenhada no celular do motorista na
+  /// descarga: `d` de path SVG num quadro de 300×150. Opcional.
+  assinaturaRecebedor String?
 
   faturaLinhas FaturaLinha[]
 
