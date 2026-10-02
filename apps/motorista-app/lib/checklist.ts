@@ -10,8 +10,14 @@ function diaBR(iso: string): string {
 }
 
 /**
- * Já fez o checklist deste caminhão hoje? Junta o que o servidor sabe com o
- * que está na fila esperando sinal — feito sem internet conta como feito.
+ * Já fez o checklist hoje? Junta o que o servidor sabe com o que está na fila
+ * esperando sinal — feito sem internet conta como feito.
+ *
+ * Com `veiculoId`, vale só o checklist DESSE caminhão (tela de iniciar viagem,
+ * onde ele acabou de escolher a placa). Sem ele (null), vale qualquer caminhão:
+ * na tela inicial não dá pra saber com qual ele vai sair, e comparar com o
+ * "caminhão padrão" do cadastro deixava o lembrete aceso pra sempre em quem
+ * não tem padrão ou fez o checklist de outra placa.
  *
  * `devoLembrar` é LEMBRETE, nunca trava: a regra da casa é aceitar e deixar o
  * painel ver quem rodou sem. Só lembra quando a empresa montou um checklist e
@@ -24,9 +30,10 @@ export function useChecklistDeHoje(veiculoId: string | null | undefined) {
 
   return useMemo(() => {
     const hoje = hojeISO();
-    const feitoNaFila = pendentes.some((p) => (p.veiculoId ?? null) === (veiculoId ?? null) && diaBR(p.feitoEm) === hoje);
+    const desteCaminhao = (v: string | null | undefined) => !veiculoId || (v ?? null) === veiculoId;
+    const feitoNaFila = pendentes.some((p) => desteCaminhao(p.veiculoId) && diaBR(p.feitoEm) === hoje);
     const feitoNoServidor = (q.data?.feitosHoje ?? []).some(
-      (f) => (f.veiculoId ?? null) === (veiculoId ?? null) && diaBR(f.feitoEm) === hoje,
+      (f) => desteCaminhao(f.veiculoId) && diaBR(f.feitoEm) === hoje,
     );
     const feito = feitoNaFila || feitoNoServidor;
     const temModelo = Boolean(q.data?.modelo && q.data.modelo.itens.length > 0);

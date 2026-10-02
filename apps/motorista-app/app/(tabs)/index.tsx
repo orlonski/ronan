@@ -134,7 +134,8 @@ function HomeDaEmpresa() {
   const meusProblemas = useMeusProblemas({ enabled: podeAvisarProblema });
   // Lembrete, nunca trava: só aparece se a empresa montou o checklist e ele
   // ainda não fez hoje (feito sem sinal, na fila, já conta).
-  const checklistHoje = useChecklistDeHoje(me.data?.veiculoDefaultId);
+  // Qualquer caminhão: daqui não dá pra saber com qual ele vai sair hoje.
+  const checklistHoje = useChecklistDeHoje(null);
   const avisoEmAndamento = avisoPraMostrar(meusProblemas.data ?? []);
   const pending = usePending();
   const aguardandoPeso = useViagensAguardandoPeso();

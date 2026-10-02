@@ -483,6 +483,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       // Story recém-enviado: assim que o upload sincroniza, refaz o feed pra a
       // bolinha real substituir o "Enviando…" na hora (senão parece que sumiu).
       void queryClient.invalidateQueries({ queryKey: ["stories-feed"] });
+      // Checklist que acabou de subir sai da fila: a lista "feitos hoje" tem
+      // que vir do servidor já com ele, senão o lembrete da home volta a acender.
+      void queryClient.invalidateQueries({ queryKey: ["meu-checklist"] });
       // Ponto: sem isto a batida fica "guardada aqui" na tela mesmo depois de
       // subir, e só o pull-to-refresh corrigia. Pra quem bate quatro vezes
       // por dia, puxar a tela toda vez é o app cobrando trabalho do usuário
