@@ -148,7 +148,7 @@ export const MODULOS: ModuloDef[] = [
     chave: "financeiro",
     nome: "Financeiro",
     pitch: "O acerto do motorista e do agregado: o que ele ganhou, adiantou e deve.",
-    recursos: ["acertos", "financeiro", "fornecedores", "custos-veiculo", "lucro-caminhao"],
+    recursos: ["acertos", "financeiro", "fornecedores", "custos-veiculo", "lucro-caminhao", "resultado-obra"],
   },
   {
     // Era "Frota" até 24/09/2026 (junto com rastreamento e pedágio, que foram

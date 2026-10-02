@@ -153,6 +153,7 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/tabelas-preco", perm: "tabelas-preco.ver" },
   { prefixo: "/acertos", perm: "acertos.ver" },
   { prefixo: "/lucro", perm: "lucro-caminhao.ver" },
+  { prefixo: "/resultado-obra", perm: "resultado-obra.ver" },
   { prefixo: "/financeiro", perm: "financeiro.ver" },
   { prefixo: "/frota", perm: "manutencao.ver" },
   // Aba "Documentos que pedimos" de Minha empresa. A página já se protegia

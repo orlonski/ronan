@@ -16,9 +16,10 @@ import {
   type AbastecimentoParaLucro,
   type CustoFixoParaLucro,
   type DespesaParaLucro,
+  type EntradaLucroVeiculo,
   type PedagioAvulsoParaLucro,
-  type ViagemParaLucro,
 } from "../../common/lucro-veiculo";
+import type { ViagemParaResultado } from "../../common/resultado-obra";
 import { dentroDeEmprego, soDigitos } from "../../common/regime-vigente";
 import { inicioDoDiaBR } from "../../common/timezone";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
@@ -43,6 +44,46 @@ export class RelatoriosLucroService {
   constructor(private readonly prisma: PrismaService) {}
 
   async lucroPorVeiculo(q: RelatorioLucroQuery, escopo: EscopoAdmin): Promise<RelatorioLucroResposta> {
+    const caminhoes = await this.carregarCaminhoes(q, escopo);
+    const linhas: LinhaLucroVeiculo[] = [];
+    for (const { veiculo: v, entrada } of caminhoes) {
+      const r = calcularLucroVeiculo(entrada);
+
+      // Caminhão desativado sem nenhum movimento não é linha: é cadastro velho.
+      // Ativo parado entra — custo fixo sem viagem é exatamente o que se quer ver.
+      const teveMovimento =
+        r.viagens > 0 ||
+        entrada.abastecimentos.length > 0 ||
+        entrada.pedagiosAvulsos.length > 0 ||
+        !new Prisma.Decimal(r.gastou).isZero();
+      if (!v.ativo && !teveMovimento) continue;
+
+      linhas.push({ veiculoId: v.id, placa: v.placa, modelo: v.modelo, ...r });
+    }
+
+    linhas.sort((a, b) => Number(a.sobrou) - Number(b.sobrou) || a.placa.localeCompare(b.placa));
+
+    return { periodo: { de: q.de, ate: q.ate }, veiculos: linhas, frota: totalizar(linhas) };
+  }
+
+  /**
+   * Busca e monta a entrada de cada caminhão. Separado da conta porque o
+   * resultado por obra (`relatorios-resultado-obra.service.ts`) parte
+   * EXATAMENTE destas entradas: se cada relatório buscasse do seu jeito, a obra
+   * e o caminhão contariam o mesmo dinheiro de dois jeitos.
+   *
+   * As viagens já vêm com a obra (cliente) e o pedágio repassado — o lucro
+   * ignora, o resultado por obra usa. A estadia fica com quem precisa dela.
+   */
+  async carregarCaminhoes(
+    q: RelatorioLucroQuery,
+    escopo: EscopoAdmin,
+  ): Promise<
+    {
+      veiculo: { id: string; placa: string; modelo: string | null; ativo: boolean };
+      entrada: EntradaLucroVeiculo & { viagens: ViagemParaResultado[] };
+    }[]
+  > {
     const veiculos = await this.prisma.veiculo.findMany({
       where: comEscopo(
         q.transportadoraId ? { transportadoraId: q.transportadoraId } : {},
@@ -84,7 +125,9 @@ export class RelatoriosLucroService {
             valorPedagioTotal: true,
             veiculoId: true,
             motoristaId: true,
-            valor: { select: { valorFrete: true, valorTotal: true } },
+            valor: { select: { valorFrete: true, valorTotal: true, valorPedagio: true } },
+            clienteId: true,
+            cliente: { select: { nome: true, empresaId: true, empresa: { select: { nome: true } } } },
             pedagios: { select: { id: true, valor: true } },
             itensAcerto: { where: { tipo: "FRETE" }, select: { valor: true } },
           },
@@ -251,9 +294,9 @@ export class RelatoriosLucroService {
     const titulosPor = porVeiculo(titulos);
     const custosPor = porVeiculo(custosFixos);
 
-    const linhas: LinhaLucroVeiculo[] = [];
+    const saida: Awaited<ReturnType<RelatoriosLucroService["carregarCaminhoes"]>> = [];
     for (const v of veiculos) {
-      const vs: ViagemParaLucro[] = (viagensPor.get(v.id) ?? [])
+      const vs: ViagemParaResultado[] = (viagensPor.get(v.id) ?? [])
         .filter((x): x is typeof x & { data: Date } => x.data != null)
         .map((x) => ({
           id: x.id,
@@ -269,6 +312,17 @@ export class RelatoriosLucroService {
           // pagaria duas vezes no relatório também. Vale o primeiro.
           freteAcertado: x.itensAcerto[0]?.valor ?? null,
           regra: reguaNoDia(x.motoristaId, x.data),
+          obra:
+            x.clienteId && x.cliente
+              ? {
+                  clienteId: x.clienteId,
+                  obra: x.cliente.nome,
+                  empresaId: x.cliente.empresaId,
+                  empresa: x.cliente.empresa.nome,
+                }
+              : null,
+          pedagioCobrado: x.valor?.valorPedagio ?? null,
+          estadia: null,
         }));
 
       const abs: AbastecimentoParaLucro[] = (abastPor.get(v.id) ?? []).map((a) => {
@@ -323,34 +377,23 @@ export class RelatoriosLucroService {
         vigenciaAte: c.vigenciaAte,
       }));
 
-      const r = calcularLucroVeiculo({
-        de: q.de,
-        ate: q.ate,
-        viagens: vs,
-        abastecimentos: abs,
-        pedagiosAvulsos: peds,
-        manutencoes: manut,
-        multas: mult,
-        outrasContas: outras,
-        custosFixos: fixos,
-        precoMedioLitro,
+      saida.push({
+        veiculo: v,
+        entrada: {
+          de: q.de,
+          ate: q.ate,
+          viagens: vs,
+          abastecimentos: abs,
+          pedagiosAvulsos: peds,
+          manutencoes: manut,
+          multas: mult,
+          outrasContas: outras,
+          custosFixos: fixos,
+          precoMedioLitro,
+        },
       });
-
-      // Caminhão desativado sem nenhum movimento não é linha: é cadastro velho.
-      // Ativo parado entra — custo fixo sem viagem é exatamente o que se quer ver.
-      const teveMovimento =
-        r.viagens > 0 ||
-        abs.length > 0 ||
-        peds.length > 0 ||
-        !new Prisma.Decimal(r.gastou).isZero();
-      if (!v.ativo && !teveMovimento) continue;
-
-      linhas.push({ veiculoId: v.id, placa: v.placa, modelo: v.modelo, ...r });
     }
-
-    linhas.sort((a, b) => Number(a.sobrou) - Number(b.sobrou) || a.placa.localeCompare(b.placa));
-
-    return { periodo: { de: q.de, ate: q.ate }, veiculos: linhas, frota: totalizar(linhas) };
+    return saida;
   }
 }
 

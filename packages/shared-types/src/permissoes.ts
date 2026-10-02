@@ -163,6 +163,9 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // é organização visual (a matriz segue o menu): é o que mantém a chave fora
   // do `PERMISSOES_OPERADOR`, que pega tudo de "Operação" e "Cadastros".
   { recurso: "lucro-caminhao", label: "Lucro por caminhão", modulo: "Sistema", acoes: ["ver", "exportar"] },
+  // A mesma conta do lucro, cortada por obra: receita e margem de cada
+  // cliente. Mesmo motivo do "Sistema" acima — fora do papel Operador.
+  { recurso: "resultado-obra", label: "Resultado por obra", modulo: "Sistema", acoes: ["ver", "exportar"] },
   // Manutenção, pneu, documento do veículo e multa — o que some do radar e vira
   // caminhão parado ou multa vencida.
   { recurso: "manutencao", label: "Manutenção e vencimentos do caminhão", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },

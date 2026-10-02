@@ -42,6 +42,7 @@ export * from "./relatorio";
 export * from "./relatorio-abastecimento";
 export * from "./relatorio-conferencia";
 export * from "./relatorio-lucro";
+export * from "./relatorio-resultado-obra";
 export * from "./km-atipico";
 export * from "./conferencia-diaria";
 export * from "./user";

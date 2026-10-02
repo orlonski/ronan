@@ -374,6 +374,24 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
+  "/resultado-obra": {
+    oQue:
+      "Quanto cada obra deu de dinheiro no período: o que ela rendeu menos o que " +
+      "custou levar a carga dela.",
+    faz: [
+      "Ver primeiro as obras com a pior margem (ou que deram prejuízo)",
+      "Filtrar pelo cliente que paga e comparar as obras dele",
+      "Abrir uma obra e ver de onde veio cada real: motorista, pedágio e a parte do caminhão",
+      "Achar as viagens sem preço, que pesam no custo e não entram na receita",
+      "Baixar em planilha ou PDF",
+    ],
+    naoEAqui: {
+      procurando: "ver quanto cada caminhão deu de lucro",
+      vaEm: "Lucro por caminhão",
+      href: "/lucro",
+    },
+  },
+
   "/financeiro": {
     oQue:
       "O dinheiro que ainda não entrou e o que ainda não saiu — quanto está " +

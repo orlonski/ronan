@@ -29,6 +29,7 @@ import {
   MapPin,
   MessageCircle,
   MessagesSquare,
+  PieChart,
   Package,
   PenLine,
   Radio,
@@ -237,6 +238,7 @@ export const GRUPOS: Grupo[] = [
       { href: "/financeiro", label: "Contas a pagar e receber", icon: Wallet, perm: "financeiro.ver" },
       { href: "/acertos", label: "Acertos com motorista", icon: HandCoins, perm: "acertos.ver" },
       { href: "/lucro", label: "Lucro por caminhão", icon: TrendingUp, perm: "lucro-caminhao.ver" },
+      { href: "/resultado-obra", label: "Resultado por obra", icon: PieChart, perm: "resultado-obra.ver" },
     ],
   },
   {

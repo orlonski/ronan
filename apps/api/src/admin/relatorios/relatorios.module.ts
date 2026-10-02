@@ -8,6 +8,8 @@ import { RelatoriosConferenciaService } from "./relatorios-conferencia.service";
 import { RelatoriosLucroService } from "./relatorios-lucro.service";
 import { RelatoriosCicloService } from "./relatorios-ciclo.service";
 import { RelatoriosLucroExportService } from "./relatorios-lucro-export.service";
+import { RelatoriosResultadoObraService } from "./relatorios-resultado-obra.service";
+import { RelatoriosResultadoObraExportService } from "./relatorios-resultado-obra-export.service";
 
 @Module({
   controllers: [RelatoriosController],
@@ -20,6 +22,8 @@ import { RelatoriosLucroExportService } from "./relatorios-lucro-export.service"
     RelatoriosLucroService,
     RelatoriosCicloService,
     RelatoriosLucroExportService,
+    RelatoriosResultadoObraService,
+    RelatoriosResultadoObraExportService,
   ],
 })
 export class RelatoriosModule {}

@@ -7,6 +7,9 @@ import {
   RelatorioConferenciaQuery,
   RelatorioLucroExportQuery,
   RelatorioLucroQuery,
+  RelatorioResultadoObraDetalheQuery,
+  RelatorioResultadoObraExportQuery,
+  RelatorioResultadoObraQuery,
   RelatorioViagensExportQuery,
   RelatorioViagensQuery,
 } from "@ronan/shared-types";
@@ -25,6 +28,8 @@ import { RelatoriosConferenciaService } from "./relatorios-conferencia.service";
 import { RelatoriosLucroService } from "./relatorios-lucro.service";
 import { RelatoriosCicloService } from "./relatorios-ciclo.service";
 import { RelatoriosLucroExportService } from "./relatorios-lucro-export.service";
+import { RelatoriosResultadoObraService } from "./relatorios-resultado-obra.service";
+import { RelatoriosResultadoObraExportService } from "./relatorios-resultado-obra-export.service";
 import { exigirComercialParaDimensao, podeVerComercial } from "./comercial-relatorio";
 import { exigirComercialParaFiltros } from "../viagens/comercial";
 
@@ -45,6 +50,8 @@ export class RelatoriosController {
     private readonly conferencia: RelatoriosConferenciaService,
     private readonly lucro: RelatoriosLucroService,
     private readonly exportarLucro: RelatoriosLucroExportService,
+    private readonly resultadoObra: RelatoriosResultadoObraService,
+    private readonly exportarResultadoObra: RelatoriosResultadoObraExportService,
     private readonly ciclo: RelatoriosCicloService,
   ) {}
 
@@ -202,6 +209,49 @@ export class RelatoriosController {
       ? await this.exportarLucro.pdf(relatorio)
       : await this.exportarLucro.xlsx(relatorio);
     responderArquivo(res, buffer, `lucro-por-caminhao-${query.de}_${query.ate}`, pdf);
+  }
+
+  /**
+   * Resultado por obra: o lucro por caminhão redistribuído entre as obras que
+   * cada caminhão atendeu. Chave própria (`resultado-obra`) pelo mesmo motivo
+   * do lucro: é a margem de cada cliente, conversa de dono. Escopo por
+   * VEÍCULO, igual ao lucro — senão os dois relatórios recortariam a frota de
+   * jeitos diferentes e a soma não fecharia.
+   */
+  @EscopoPor("veiculo")
+  @RequerPermissao("resultado-obra.ver")
+  @Get("resultado-obra")
+  resumoResultadoObra(
+    @Query(new ZodValidationPipe(RelatorioResultadoObraQuery)) query: RelatorioResultadoObraQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.resultadoObra.resumo(query, user.escopo);
+  }
+
+  @EscopoPor("veiculo")
+  @RequerPermissao("resultado-obra.ver")
+  @Get("resultado-obra/obra")
+  detalheResultadoObra(
+    @Query(new ZodValidationPipe(RelatorioResultadoObraDetalheQuery)) query: RelatorioResultadoObraDetalheQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.resultadoObra.detalhe(query, user.escopo);
+  }
+
+  @EscopoPor("veiculo")
+  @RequerPermissao("resultado-obra.exportar")
+  @Get("resultado-obra/exportar")
+  async exportarResultadoObraArquivo(
+    @Query(new ZodValidationPipe(RelatorioResultadoObraExportQuery)) query: RelatorioResultadoObraExportQuery,
+    @CurrentUser() user: AuthAdminUser,
+    @Res() res: Response,
+  ) {
+    const relatorio = await this.resultadoObra.completo(query, user.escopo);
+    const pdf = query.formato === "pdf";
+    const buffer = pdf
+      ? await this.exportarResultadoObra.pdf(relatorio)
+      : await this.exportarResultadoObra.xlsx(relatorio);
+    responderArquivo(res, buffer, `resultado-por-obra-${query.de}_${query.ate}`, pdf);
   }
 }
 

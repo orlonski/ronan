@@ -210,6 +210,45 @@ function itemDespesa(i: DespesaParaLucro): ItemDespesa {
   };
 }
 
+/**
+ * Quanto o motorista custou nesta viagem. Exportado porque o resultado por
+ * obra (`resultado-obra.ts`) precisa do mesmo número viagem a viagem: se cada
+ * relatório decidisse por conta própria, a obra e o caminhão contariam o mesmo
+ * motorista de jeitos diferentes.
+ *
+ * - EMPREGADO: salário, que entra como custo fixo do caminhão (valor 0 aqui).
+ * - ACERTADO: o que já foi pro acerto (congelado) vence a régua.
+ * - SEM_PRECO: percentual de frete numa viagem sem preço — é a MESMA falta da
+ *   viagem sem preço; contar de novo mandaria mexer na modalidade, que está certa.
+ * - SEM_REGUA: a régua não cobre a viagem.
+ */
+export function custoMotoristaDaViagem(v: ViagemParaLucro): {
+  valor: Prisma.Decimal;
+  situacao: "EMPREGADO" | "ACERTADO" | "REGUA" | "SEM_PRECO" | "SEM_REGUA";
+} {
+  if (v.regra == null) return { valor: ZERO(), situacao: "EMPREGADO" };
+  if (v.freteAcertado != null) return { valor: dec(v.freteAcertado), situacao: "ACERTADO" };
+  const r = remuneracaoDaViagem(v, v.regra);
+  if ("valor" in r) return { valor: r.valor, situacao: "REGUA" };
+  if (v.regra.tipo === "PERCENTUAL_FRETE" && v.valorTotal == null) {
+    return { valor: ZERO(), situacao: "SEM_PRECO" };
+  }
+  return { valor: ZERO(), situacao: "SEM_REGUA" };
+}
+
+/**
+ * O pedágio da viagem (UMA fonte, ver `pedagioDaViagem`) separado entre o que
+ * a empresa pagou e o que o parceiro pagou do bolso sem reembolso.
+ */
+export function pedagioDaViagemNaConta(v: ViagemParaLucro): {
+  empresa: Prisma.Decimal;
+  fora: Prisma.Decimal;
+} {
+  const { valor } = pedagioDaViagem(v);
+  if (v.regra == null || v.regra.reembolsaPedagio) return { empresa: valor, fora: ZERO() };
+  return { empresa: ZERO(), fora: valor };
+}
+
 export function calcularLucroVeiculo(e: EntradaLucroVeiculo): LucroVeiculo {
   let faturou = ZERO();
   let motorista = ZERO();
@@ -223,23 +262,14 @@ export function calcularLucroVeiculo(e: EntradaLucroVeiculo): LucroVeiculo {
     if (v.valorTotal == null) viagensSemPreco++;
     else faturou = faturou.add(dec(v.valorTotal));
 
-    if (v.regra == null) {
-      viagensEmpregado++;
-    } else if (v.freteAcertado != null) {
-      motorista = motorista.add(dec(v.freteAcertado));
-    } else {
-      const r = remuneracaoDaViagem(v, v.regra);
-      if ("valor" in r) motorista = motorista.add(r.valor);
-      // Percentual de frete sem preço é a MESMA falta da viagem sem preço:
-      // contar de novo mandaria a pessoa mexer na modalidade, que está certa.
-      else if (!(v.regra.tipo === "PERCENTUAL_FRETE" && v.valorTotal == null)) {
-        viagensSemCustoMotorista++;
-      }
-    }
+    const m = custoMotoristaDaViagem(v);
+    motorista = motorista.add(m.valor);
+    if (m.situacao === "EMPREGADO") viagensEmpregado++;
+    else if (m.situacao === "SEM_REGUA") viagensSemCustoMotorista++;
 
-    const { valor } = pedagioDaViagem(v);
-    if (v.regra == null || v.regra.reembolsaPedagio) pedagio = pedagio.add(valor);
-    else pedagioFora = pedagioFora.add(valor);
+    const p = pedagioDaViagemNaConta(v);
+    pedagio = pedagio.add(p.empresa);
+    pedagioFora = pedagioFora.add(p.fora);
   }
 
   for (const p of e.pedagiosAvulsos) {
