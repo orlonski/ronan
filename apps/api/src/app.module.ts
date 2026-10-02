@@ -35,6 +35,7 @@ import { TermosModule } from "./termos/termos.module";
 import { AssinaturasModule } from "./assinaturas/assinaturas.module";
 import { PontoModule } from "./ponto/ponto.module";
 import { AdmissaoModule } from "./admissao/admissao.module";
+import { EmailModule } from "./email/email.module";
 import { AppVersionInterceptor } from "./common/app-version.interceptor";
 import { AcessosVersaoInterceptor } from "./common/acesso-app/acessos-versao.interceptor";
 import { ContaMiddleware } from "./common/conta/conta.middleware";
@@ -76,6 +77,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     TermosModule,
     PontoModule,
     AdmissaoModule,
+    EmailModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: ErrorsExceptionFilter },

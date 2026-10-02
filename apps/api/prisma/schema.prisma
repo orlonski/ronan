@@ -599,6 +599,7 @@ model Conta {
   viagensMensagens               ViagemMensagem[]
   ticketFotos                    TicketFoto[]
   viagensCompartilhamentos       ViagemCompartilhamento[]
+  emailsEnviados                 EmailEnviado[]
   stories                        Story[]
   storyVisualizacoes             StoryVisualizacao[]
   storyReacoes                   StoryReacao[]
@@ -743,6 +744,7 @@ model User {
   whatsappConvites            WhatsappConvite[]
   compartilhamentosCriados    ViagemCompartilhamento[]           @relation("CompartilhouViagem")
   compartilhamentosRevogados  ViagemCompartilhamento[]           @relation("RevogouCompartilhamento")
+  emailsEnviadosTeste         EmailEnviado[]                     @relation("EmailTesteEnviadoPor")
 
   // Backreferences pra rastreamento "Cadastrado por": cada recurso admin
   // tem `criadoPorId` opcional → User. Listas inversas necessárias pelo Prisma.
@@ -2314,6 +2316,17 @@ model Empresa {
   titulosReceber     TituloReceber[]
   documentosExigidos DocumentoExigido[]
 
+  // --- ticket por e-mail ao cliente pagador ---
+  /// Endereços que recebem o ticket das viagens aprovadas. Vale pras obras
+  /// deste cliente que não tenham configuração própria (`Cliente.ticketEnvioModo` null).
+  ticketEmails     String[]        @default([])
+  /// NENHUM por padrão: ninguém passa a receber e-mail sem alguém ligar no painel.
+  ticketEnvioModo  ModoEnvioTicket @default(NENHUM)
+  /// Quando o envio foi ligado. Só viagem aprovada DEPOIS disto sai — ligar
+  /// não pode despejar o histórico inteiro na caixa do cliente.
+  ticketEnvioDesde DateTime?
+  emailsEnviados   EmailEnviado[]
+
   @@unique([contaId, cnpj])
   @@index([ativa])
   @@index([contaId])
@@ -2390,6 +2403,14 @@ model Cliente {
   uf                  String?
   telefone            String?
   email               String?
+
+  // --- ticket por e-mail (obra) ---
+  /// Null = segue a configuração do cliente pagador (Empresa). Preenchido = a
+  /// obra manda em si: inclusive NENHUM, pra calar uma obra de um pagador ligado.
+  ticketEnvioModo  ModoEnvioTicket?
+  ticketEmails     String[]         @default([])
+  ticketEnvioDesde DateTime?
+  emailsEnviados   EmailEnviado[]
 
   @@index([empresaId])
   @@index([ativa])
@@ -4491,6 +4512,69 @@ model ViagemCompartilhamento {
   @@index([expiraEm])
   @@index([contaId])
   @@map("viagem_compartilhamentos")
+}
+
+/// Como o ticket da viagem chega no e-mail do cliente.
+enum ModoEnvioTicket {
+  NENHUM
+  /// Um e-mail por viagem, assim que ela é aprovada (conferência manual, IA ou
+  /// material que dispensa conferência).
+  A_CADA_VIAGEM
+  /// Um e-mail por obra às 19h (São Paulo) com as viagens aprovadas no dia.
+  RESUMO_DIARIO
+}
+
+enum StatusEmailEnviado {
+  /// Reservado e ainda sem resposta do SMTP. Ficar aqui pra sempre = processo
+  /// morreu no meio; a varredura retoma depois de alguns minutos.
+  ENVIANDO
+  ENVIADO
+  FALHOU
+}
+
+/// Registro de todo e-mail que o sistema tentou mandar. É o que responde
+/// "mandei ou não mandei?" quando o cliente diz que não recebeu.
+///
+/// `chave` dá idempotência: a linha é criada ANTES do envio (reserva), e uma
+/// segunda tentativa de mandar o mesmo ticket bate no unique e desiste.
+model EmailEnviado {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  /// Qual mensagem é (TICKET_VIAGEM, TICKET_RESUMO_DIARIO, TESTE...).
+  tipo           String
+  para           String[]
+  assunto        String
+  status         StatusEmailEnviado @default(ENVIANDO)
+  erro           String?
+  tentativas     Int                @default(0)
+  /// Idempotência: `ticket-viagem:<viagemId>`, `ticket-resumo:<clienteId>:<dia>`.
+  chave          String?            @unique
+  /// O que gerou o e-mail ("Viagem", "Cliente"...) e o id dele.
+  referenciaTipo String?
+  referenciaId   String?
+  /// Id devolvido pelo servidor SMTP — o que o provedor pede pra rastrear.
+  messageId      String?
+
+  empresa     Empresa? @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+  empresaId   String?
+  cliente     Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteId   String?
+  criadoPor   User?    @relation("EmailTesteEnviadoPor", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId String?
+
+  criadoEm          DateTime  @default(now())
+  /// Última vez que alguém pegou esta linha pra mandar. Uma linha ENVIANDO com
+  /// isto antigo é processo que morreu no meio — a varredura retoma.
+  ultimaTentativaEm DateTime  @default(now())
+  enviadoEm         DateTime?
+
+  @@index([contaId, criadoEm])
+  @@index([empresaId, criadoEm])
+  @@index([clienteId, criadoEm])
+  @@index([status, criadoEm])
+  @@map("emails_enviados")
 }
 
 /// Story do motorista (estilo Instagram): foto do trecho que todos os

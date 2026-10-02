@@ -427,7 +427,7 @@ export class LinkIndisponivelException extends HttpException {
   }
 }
 
-function gerarToken(): string {
+export function gerarToken(): string {
   return randomBytes(TOKEN_BYTES).toString("base64url");
 }
 
