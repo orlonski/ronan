@@ -19,6 +19,13 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import type { AuthMotorista } from "../auth/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequerCapacidade } from "../common/acesso-app/capacidade.decorator";
+import {
+  inicioJanelaProgramacao,
+  paraMotorista,
+  STATUS_COM_ACESSO,
+} from "../admin/pedidos/anexos-pedido.service";
+
+const STATUS_COM_ANEXOS = new Set<string>(STATUS_COM_ACESSO);
 
 const ListQuery = z.object({
   /** "YYYY-MM-DD". Sem data, devolve de hoje em diante. */
@@ -64,11 +71,11 @@ export class ProgramacaoMotoristaController {
     await this.exigirAprovado(user.id);
 
     // Padrão: de ontem em diante. Ontem entra porque quem abre o app às 5h da
-    // manhã ainda está terminando o dia anterior.
-    const base = query.de
-      ? new Date(`${query.de}T00:00:00Z`)
-      : new Date(Date.now() - 86_400_000);
-    base.setUTCHours(0, 0, 0, 0);
+    // manhã ainda está terminando o dia anterior. "Ontem" no calendário de SP:
+    // `Date.now() - 1 dia` em UTC, depois das 21h, já era HOJE em Brasília e o
+    // dia anterior sumia da lista.
+    const janela = inicioJanelaProgramacao();
+    const base = query.de ? new Date(`${query.de}T00:00:00Z`) : janela;
 
     const linhas = await this.prisma.viagemPlanejada.findMany({
       where: {
@@ -83,6 +90,14 @@ export class ProgramacaoMotoristaController {
         veiculo: { select: { id: true, placa: true } },
         pedido: {
           select: {
+            id: true,
+            // Só o que o escritório deixou visível. Quem decide se ele PODE
+            // abrir é o endpoint do arquivo — aqui é só a lista.
+            anexos: {
+              where: { visivelMotorista: true },
+              orderBy: { criadoEm: "asc" },
+              select: { id: true, pedidoId: true, nome: true, mime: true, tamanho: true, criadoEm: true },
+            },
             material: { select: { id: true, nome: true } },
             cliente: { select: { id: true, nome: true } },
             localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
@@ -106,6 +121,13 @@ export class ProgramacaoMotoristaController {
       localCarga: p.pedido?.localCarga ?? null,
       localDescarga: p.pedido?.localDescarga ?? null,
       veiculo: p.veiculo,
+      pedidoId: p.pedido?.id ?? null,
+      // Mesma regra do endpoint do arquivo: documento listado que dá 404 ao
+      // tocar é pior que documento nenhum. Cancelada e fora da janela não levam.
+      anexos:
+        p.pedido && STATUS_COM_ANEXOS.has(p.status) && p.dataPrevista >= janela
+          ? p.pedido.anexos.map(paraMotorista)
+          : [],
     }));
   }
 

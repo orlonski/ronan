@@ -161,6 +161,49 @@ export const ResponderProgramacaoInput = z
   });
 export type ResponderProgramacaoInput = z.infer<typeof ResponderProgramacaoInput>;
 
+// ─────────────────────────── anexos do pedido ───────────────────────────
+
+/**
+ * O que pode ser anexado ao pedido. PDF e foto: é o que o escritório tem de
+ * papel (croqui escaneado, OS do cliente, print do mapa do bota-fora).
+ * 15 MB = o mesmo teto da OS de manutenção; o app mostra o tamanho antes de
+ * baixar, porque é o 4G do motorista que paga.
+ */
+export const LIMITE_ANEXO_PEDIDO = {
+  bytes: 15 * 1024 * 1024,
+  rotulo: "15 MB",
+  mimes: ["application/pdf", "image/jpeg", "image/jpg", "image/png"] as readonly string[],
+  /** Teto por pedido: mais que isso é pasta de projeto, não papel de portaria. */
+  porPedido: 20,
+} as const;
+
+/** O anexo como o painel vê. */
+export type AnexoPedidoAdmin = {
+  id: string;
+  pedidoId: string;
+  nome: string;
+  mime: string;
+  tamanho: number;
+  visivelMotorista: boolean;
+  criadoEm: string;
+  enviadoPor: { id: string; nome: string } | null;
+};
+
+/** O anexo como o motorista vê: só os visíveis, sem quem mandou. */
+export type AnexoPedidoMotorista = {
+  id: string;
+  pedidoId: string;
+  nome: string;
+  mime: string;
+  tamanho: number;
+  criadoEm: string;
+};
+
+export const AtualizarAnexoPedidoInput = z.object({
+  visivelMotorista: z.boolean(),
+});
+export type AtualizarAnexoPedidoInput = z.infer<typeof AtualizarAnexoPedidoInput>;
+
 /** O que o motorista vê no app: a viagem que programaram pra ele. */
 export type ViagemProgramada = {
   id: string;
@@ -175,4 +218,11 @@ export type ViagemProgramada = {
   localCarga: { id: string; nome: string; cidade: string | null; uf: string | null } | null;
   localDescarga: { id: string; nome: string; cidade: string | null; uf: string | null } | null;
   veiculo: { id: string; placa: string } | null;
+  /**
+   * Opcionais de propósito: o cache da programação gravado antes deste campo
+   * não tem nenhum dos dois, e quem lê usa `?? []` (compat on-read).
+   */
+  pedidoId?: string | null;
+  /** Os documentos do pedido que o escritório deixou visíveis pra ele. */
+  anexos?: AnexoPedidoMotorista[];
 };

@@ -64,6 +64,20 @@ export class UploadsService implements OnModuleInit {
     return key;
   }
 
+  /**
+   * Anexo do pedido (croqui, OS do cliente, autorização de entrada). Chave com
+   * uuid: o mesmo pedido acumula vários papéis, e trocar um é excluir e mandar
+   * de novo — nunca sobrescrever o que o motorista pode ter guardado offline.
+   */
+  async putPedidoAnexo(buffer: Buffer, mimetype: string, pedidoId: string): Promise<string> {
+    const ext = mimetype.includes("pdf") ? "pdf" : mimetype.includes("png") ? "png" : "jpg";
+    const key = `${contaIdAtual()}/pedidos/${pedidoId}/${randomUUID()}.${ext}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": mimetype,
+    });
+    return key;
+  }
+
   /** Foto do problema que o motorista avisou no caminhão. */
   async putProblemaVeiculoFoto(
     buffer: Buffer,

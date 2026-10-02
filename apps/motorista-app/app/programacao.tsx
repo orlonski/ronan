@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, MapPin, Package } from "lucide-react-native";
 import type { ViagemProgramada } from "@ronan/shared-types";
 import { ScreenHeader } from "@/components/screen-header";
@@ -12,6 +12,8 @@ import { EmptyState } from "@/components/empty-state";
 import { api } from "@/lib/api";
 import { hojeISO, somarDiasISO } from "@/lib/datetime";
 import { RequerCapacidade } from "@/components/requer-capacidade";
+import { DocumentosDoPedido } from "@/components/documentos-pedido";
+import { anexosDe, QUERY_PROGRAMACAO, useMinhaProgramacao } from "@/lib/anexos-pedido";
 
 /**
  * A programação: o que o escritório combinou que ele vai levar.
@@ -24,11 +26,9 @@ function ProgramacaoTela() {
   const queryClient = useQueryClient();
   const [atualizando, setAtualizando] = useState(false);
 
-  const lista = useQuery({
-    queryKey: ["m", "programacao"],
-    queryFn: () => api.minhaProgramacao(),
-    staleTime: 60_000,
-  });
+  // Cache-first: abre na hora com o que estava guardado (os documentos do
+  // pedido inclusos) e revalida quando houver sinal.
+  const lista = useMinhaProgramacao();
 
   const recarregar = useCallback(async () => {
     setAtualizando(true);
@@ -66,7 +66,7 @@ function ProgramacaoTela() {
               <ItemProgramado
                 key={p.id}
                 p={p}
-                onRespondeu={() => queryClient.invalidateQueries({ queryKey: ["m", "programacao"] })}
+                onRespondeu={() => queryClient.invalidateQueries({ queryKey: QUERY_PROGRAMACAO })}
               />
             ))}
           </View>
@@ -174,6 +174,9 @@ function ItemProgramado({ p, onRespondeu }: { p: ViagemProgramada; onRespondeu: 
       {p.observacao && (
         <Text className="mt-2 text-sm italic text-muted-foreground">{p.observacao}</Text>
       )}
+
+      {/* Antes dos botões: ele confere o croqui ANTES de dizer que vai. */}
+      <DocumentosDoPedido anexos={anexosDe(p)} compacto />
 
       {podeResponder && !recusando && (
         <View className="mt-3 flex-row gap-2">

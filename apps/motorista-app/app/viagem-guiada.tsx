@@ -44,6 +44,7 @@ import {
   type LifecycleLocal,
 } from "@/lib/lifecycle";
 import { useCatalogoEventos, useCatalogoOcorrencias, useCatalogos } from "@/lib/queries";
+import { DocumentosDaViagem } from "@/components/documentos-da-viagem";
 
 export default function ViagemGuiada() {
   const catalogo = useCatalogoEventos();
@@ -222,6 +223,9 @@ export default function ViagemGuiada() {
             </Text>
           </View>
         </View>
+
+        {/* Croqui/autorização do pedido que esta viagem cumpre, se houver. */}
+        <DocumentosDaViagem viagem={local} />
 
         {/* O que está correndo agora. Fica ANTES da timeline: a timeline conta
             o que já passou, e isto é o que ainda não acabou. */}

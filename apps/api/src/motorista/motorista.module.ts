@@ -50,6 +50,10 @@ import { VersaoAppMotoristaController } from "./versao-app.controller";
 import { LancamentosResgatadosMotoristaController } from "./lancamentos-resgatados.controller";
 import { AcertosMotoristaController } from "./acertos.controller";
 import { ProgramacaoMotoristaController } from "./programacao.controller";
+import {
+  AnexoPedidoPublicoController,
+  AnexosPedidoMotoristaController,
+} from "./anexos-pedido.controller";
 
 @Module({
   imports: [
@@ -92,6 +96,8 @@ import { ProgramacaoMotoristaController } from "./programacao.controller";
     LancamentosResgatadosMotoristaController,
     AcertosMotoristaController,
     ProgramacaoMotoristaController,
+    AnexosPedidoMotoristaController,
+    AnexoPedidoPublicoController,
   ],
   providers: [
     AcertoPdfService,

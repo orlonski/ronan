@@ -38,6 +38,7 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.checklist.fazer",
   "app.posicao.compartilhar",
   "app.programacao.ver",
+  "app.pedido.anexos",
   "app.acertos.ver",
   "app.pix.editar",
   "app.chat.usar",
@@ -330,6 +331,21 @@ const DEFS: CapacidadeAppDef[] = [
     tipo: "EMPRESA",
     vinculo: "MOTORISTA",
     modulo: "torre",
+    gate: "SERVIDOR",
+    aoPerder: "RECUSAR",
+  },
+  {
+    // Croqui de acesso, OS do cliente, autorização de entrada: o papel que
+    // vivia no grupo de WhatsApp e não chegava na portaria. Só aparece junto
+    // da programação ou da viagem guiada — é ali que ele precisa do papel.
+    chave: "app.pedido.anexos",
+    label: "Ver os documentos do pedido",
+    efeito: "Na programação e na viagem guiada: os arquivos que o escritório anexou ao pedido (croqui, autorização de entrada).",
+    grupo: "Operação",
+    tipo: "EMPRESA",
+    vinculo: "MOTORISTA",
+    modulo: "torre",
+    dependeDe: ["app.viagem.guiada", "app.programacao.ver"],
     gate: "SERVIDOR",
     aoPerder: "RECUSAR",
   },
