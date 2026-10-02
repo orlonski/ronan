@@ -331,3 +331,14 @@ export const AprovarMotoristaInput = z.object({
   status: z.enum(["APROVADO", "REJEITADO"]),
 });
 export type AprovarMotoristaInput = z.infer<typeof AprovarMotoristaInput>;
+
+/** O parceiro pedindo pra trocar a chave Pix pelo app (manda código no WhatsApp). */
+export const SolicitarTrocaPixInput = z.object({
+  chavePix: z.string().trim().min(3, "Informe a chave Pix.").max(140),
+});
+export type SolicitarTrocaPixInput = z.infer<typeof SolicitarTrocaPixInput>;
+
+export const ConfirmarTrocaPixInput = z.object({
+  codigo: z.string().trim().regex(/^\d{6}$/, "O código tem 6 números."),
+});
+export type ConfirmarTrocaPixInput = z.infer<typeof ConfirmarTrocaPixInput>;

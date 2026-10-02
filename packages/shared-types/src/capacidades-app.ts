@@ -39,6 +39,7 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.posicao.compartilhar",
   "app.programacao.ver",
   "app.acertos.ver",
+  "app.pix.editar",
   "app.chat.usar",
   "app.stories.ver",
   "app.stories.publicar",
@@ -343,6 +344,21 @@ const DEFS: CapacidadeAppDef[] = [
     modulo: "financeiro",
     gate: "SERVIDOR",
     aoPerder: "RECUSAR",
+  },
+  {
+    // O parceiro informa onde recebe, confirmando com código no WhatsApp
+    // (Repom/Pamcard fazem o mesmo). O escritório é avisado e o acerto mostra
+    // "chave alterada em DD/MM". Empregado recebe por folha: não se aplica.
+    chave: "app.pix.editar",
+    label: "Trocar a chave Pix pelo app",
+    efeito: "O parceiro troca a chave Pix onde recebe, confirmando com um código no WhatsApp; o escritório é avisado.",
+    grupo: "Dinheiro",
+    tipo: "EMPRESA",
+    vinculo: "MOTORISTA",
+    modulo: "operacao",
+    regimesProibidos: ["EMPREGADO"],
+    gate: "SERVIDOR",
+    aoPerder: "VALA",
   },
   {
     chave: "app.chat.usar",

@@ -35,6 +35,7 @@ const INCLUDE_DETALHE = {
       nome: true,
       cpf: true,
       chavePix: true,
+      chavePixAlteradaEm: true,
       modalidade: { select: { id: true, nome: true } },
     },
   },

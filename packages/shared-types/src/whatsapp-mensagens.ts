@@ -115,6 +115,15 @@ export const ROTAS_WHATSAPP = [
     escopo: "plataforma",
   },
   {
+    chave: "OTP_PIX",
+    rotulo: "Código pra trocar a chave Pix",
+    descricao: "Código que o parceiro digita no app pra confirmar a troca da chave Pix onde recebe.",
+    categoria: "authentication",
+    provedores: ["evolution", "meta"],
+    critica: true,
+    escopo: "plataforma",
+  },
+  {
     chave: "CONVITE_EMPRESA",
     rotulo: "Convite da empresa",
     descricao:
@@ -476,6 +485,16 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
     exemplo: ["482913", "10"],
   },
   OTP_SENHA: {
+    nome: "otp_senha",
+    idioma: "pt_BR",
+    corpo: [0],
+    botao: { tipo: "COPIAR_CODIGO", param: 0 },
+    textoAprovacao: "Seu código de verificação é {{1}}.\nPara sua segurança, não o compartilhe.",
+    exemplo: ["482913", "10"],
+  },
+  // Mesmo template aprovado do "esqueci a senha" (ver OTP_CONTA): o corpo de
+  // Autenticação é fixo pela Meta, e um template novo sairia idêntico.
+  OTP_PIX: {
     nome: "otp_senha",
     idioma: "pt_BR",
     corpo: [0],

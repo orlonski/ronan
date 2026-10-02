@@ -30,7 +30,7 @@ type Item = {
 
 type Acerto = {
   id: string;
-  motorista: { id: string; nome: string; cpf: string; chavePix: string | null };
+  motorista: { id: string; nome: string; cpf: string; chavePix: string | null; chavePixAlteradaEm?: string | null };
   periodoInicio: string;
   periodoFim: string;
   status: "ABERTO" | "FECHADO" | "PAGO";
@@ -191,7 +191,16 @@ function Conteudo({ id }: { id: string }) {
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 border-t pt-3 text-xs text-muted-foreground">
           <span>CPF {a.motorista.cpf}</span>
           {a.motorista.chavePix ? (
-            <span>PIX {a.motorista.chavePix}</span>
+            <span>
+              PIX {a.motorista.chavePix}
+              {/* Trocada pelo próprio motorista no app (com código no WhatsApp):
+                  confira antes de pagar se a troca é recente. */}
+              {a.motorista.chavePixAlteradaEm && (
+                <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900">
+                  chave alterada pelo motorista em {dataBR(a.motorista.chavePixAlteradaEm)}
+                </span>
+              )}
+            </span>
           ) : (
             <span className="text-amber-700">Sem chave PIX no cadastro</span>
           )}

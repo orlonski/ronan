@@ -9,6 +9,7 @@ import {
   Wrench,
   ClipboardCheck,
   HandCoins,
+  Landmark,
   ChevronRight,
   HelpCircle,
   KeyRound,
@@ -78,6 +79,7 @@ function PerfilDaEmpresa() {
   // Motorista CLT também avisa: quem corta é o acesso (mora no cadastro de motorista).
   const verAvisos = usePermite("app.problema.avisar");
   const verChecklist = usePermite("app.checklist.fazer");
+  const verPix = usePermite("app.pix.editar", !ehRegistrado);
   const salvarPrefs = useSalvarPreferenciasNotificacao();
   const [showChange, setShowChange] = useState(false);
   const [senhaAtual, setSenhaAtual] = useState("");
@@ -343,6 +345,16 @@ function PerfilDaEmpresa() {
                     icon={<Wrench size={20} color="#13316b" />}
                     title="Meus avisos do caminhão"
                     onPress={() => router.push("/meus-avisos")}
+                  />
+                </>
+              )}
+              {verPix && (
+                <>
+                  <View className="h-px bg-border" />
+                  <ActionRow
+                    icon={<Landmark size={20} color="#13316b" />}
+                    title="Onde recebo (Pix)"
+                    onPress={() => router.push("/meu-pix")}
                   />
                 </>
               )}

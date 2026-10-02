@@ -576,6 +576,7 @@ model Conta {
   itensModeloChecklist           ItemModeloChecklist[]
   checklistsVeiculo              ChecklistVeiculo[]
   respostasChecklist             RespostaChecklist[]
+  trocasPixPendentes             TrocaPixPendente[]
   manutencoesVeiculo             ManutencaoVeiculo[]
   problemasVeiculo               ProblemaVeiculo[]
   leiturasOdometro               LeituraOdometro[]
@@ -1587,6 +1588,9 @@ model Motorista {
   /// Pra onde o pagamento vai. Guardado como o motorista digitou (pode ser CPF,
   /// telefone, e-mail ou chave aleatória) — normalizar chave PIX é errar.
   chavePix                   String?
+  /// Quando o próprio motorista trocou a chave pelo app (com código no
+  /// WhatsApp). O acerto mostra "chave alterada em DD/MM" a partir daqui.
+  chavePixAlteradaEm         DateTime?
   /// Frota dona do motorista. Null = não classificado (invisível pros usuários
   /// restritos). Usado pra carimbar Viagem/Pedagio/Abastecimento na criação —
   /// mudar aqui NÃO reescreve o histórico já carimbado, de propósito.
@@ -8124,4 +8128,20 @@ model RespostaChecklist {
   @@index([checklistId])
   @@index([contaId])
   @@map("respostas_checklist")
+}
+
+/// Troca de chave Pix pelo app esperando o código do WhatsApp. Uma por
+/// motorista: pedir de novo substitui a anterior.
+model TrocaPixPendente {
+  contaId     String   @default("__SEM_CONTA__")
+  conta       Conta    @relation(fields: [contaId], references: [id])
+  motoristaId String   @id
+  chavePix    String
+  codigo      String
+  expiraEm    DateTime
+  tentativas  Int      @default(0)
+  enviadoEm   DateTime @default(now())
+
+  @@index([contaId])
+  @@map("trocas_pix_pendentes")
 }

@@ -1,3 +1,5 @@
+import { PixMotoristaController } from "./pix.controller";
+import { PixMotoristaService } from "./pix.service";
 import { Module } from "@nestjs/common";
 import { AuditoriaModule } from "../auditoria/auditoria.module";
 import { EventosModule } from "../eventos/eventos.module";
@@ -70,6 +72,7 @@ import { ProgramacaoMotoristaController } from "./programacao.controller";
     LocaisImagemModule,
   ],
   controllers: [
+    PixMotoristaController,
     MotoristaController,
     ViagensMotoristaController,
     ViagemLifecycleController,
@@ -90,6 +93,7 @@ import { ProgramacaoMotoristaController } from "./programacao.controller";
     ProgramacaoMotoristaController,
   ],
   providers: [
+    PixMotoristaService,
     MotoristaService,
     LembreteLancamentoService,
     ViagensMotoristaService,
