@@ -562,6 +562,8 @@ model Conta {
   acertosMotorista               AcertoMotorista[]
   itensAcerto                    ItemAcerto[]
   pedidos                        Pedido[]
+  orcamentos                     Orcamento[]
+  orcamentoItens                 OrcamentoItem[]
   viagensPlanejadas              ViagemPlanejada[]
   modulosContratados             ModuloContratado[]
   faturas                        Fatura[]
@@ -773,6 +775,7 @@ model User {
   itensAcertoCriados        ItemAcerto[]          @relation("CriouItemAcerto")
   pedidosCriados            Pedido[]              @relation("CriouPedido")
   anexosPedidoEnviados      AnexoPedido[]         @relation("EnviouAnexoPedido")
+  orcamentosCriados         Orcamento[]           @relation("CriouOrcamento")
   planejadasCriadas         ViagemPlanejada[]     @relation("CriouViagemPlanejada")
   encarregadosConvidados    EncarregadoObra[]     @relation("ConvidouEncarregado")
   solicitacoesRespondidas   SolicitacaoObra[]     @relation("RespondeuSolicitacaoObra")
@@ -2319,7 +2322,8 @@ model Empresa {
   criadoPor      User?                       @relation("CriouEmpresa", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId    String?
 
-  pedidos Pedido[]
+  pedidos    Pedido[]
+  orcamentos Orcamento[]
 
   faturas            Fatura[]
   titulosReceber     TituloReceber[]
@@ -2391,7 +2395,8 @@ model Cliente {
   criadoPor   User?          @relation("CriouCliente", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId String?
 
-  pedidos Pedido[]
+  pedidos    Pedido[]
+  orcamentos Orcamento[]
 
   /// Gente da obra (do cliente) que entra no portal /obra. Ver EncarregadoObra.
   encarregados     EncarregadoObra[]
@@ -2484,7 +2489,8 @@ model Material {
   criadoPor    User?         @relation("CriouMaterial", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId  String?
 
-  pedidos Pedido[]
+  pedidos        Pedido[]
+  orcamentoItens OrcamentoItem[]
 
   solicitacoesObra SolicitacaoObra[]
 
@@ -2537,7 +2543,8 @@ model TipoServico {
   viagens      Viagem[]
   tabelasPreco TabelaPreco[]
 
-  pedidos Pedido[]
+  pedidos        Pedido[]
+  orcamentoItens OrcamentoItem[]
 
   @@unique([contaId, slug])
   @@unique([contaId, nome])
@@ -2968,6 +2975,8 @@ model Pedido {
   solicitacoesObra SolicitacaoObra[]
 
   anexos AnexoPedido[]
+  /// O item de orçamento aprovado que virou este pedido (null = pedido feito à mão).
+  orcamentoItem OrcamentoItem?
 
   @@unique([contaId, numero])
   @@index([contaId, status])
@@ -3008,6 +3017,117 @@ model AnexoPedido {
   @@index([pedidoId])
   @@index([contaId])
   @@map("anexos_pedido")
+
+enum StatusOrcamento {
+  /// Sendo montado. Ninguém de fora viu.
+  RASCUNHO
+  /// O link/PDF saiu pro cliente. Continua editável (cliente pede ajuste).
+  ENVIADO
+  /// Virou pedido. Terminal: daqui em diante quem manda é o Pedido.
+  APROVADO
+  /// O cliente disse não. Terminal, com motivo — é o dado que ensina a vender.
+  RECUSADO
+  /// Passou da validade sem resposta. Prorrogar a validade traz de volta.
+  VENCIDO
+}
+
+/**
+ * A proposta comercial: o que a transportadora oferece a um cliente (que pode
+ * ainda nem estar cadastrado) e por quanto. Aprovada, cada item vira um
+ * `Pedido` — o orçamento é a porta de entrada do pedido, não um pedido em
+ * estado "proposta". Entidade separada pelo mesmo motivo da `ViagemPlanejada`:
+ * pedido com status de proposta vazaria pro saldo, pra programação e pra torre.
+ * O preço aqui é PROPOSTA, não faturamento: não passa pela `RegraMinimo` nem
+ * gera `ViagemValor`. Só vira preço de verdade se, ao aprovar, a pessoa marcar
+ * explicitamente "usar este preço na tabela do cliente" — aí nasce uma linha
+ * NOVA de `TabelaPreco`, vigente a partir do dia da aprovação.
+ */
+model Orcamento {
+  contaId          String          @default("__SEM_CONTA__")
+  conta            Conta           @relation(fields: [contaId], references: [id])
+  id               String          @id @default(uuid())
+  /// Sequencial POR CONTA, pra falar ao telefone ("o orçamento 12").
+  numero           Int
+  /// Cliente já cadastrado. Null = prospect (nome e contato livres abaixo).
+  empresa          Empresa?        @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+  empresaId        String?
+  /// A obra, quando o cliente já tem a dele cadastrada.
+  cliente          Cliente?        @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteId        String?
+  /// Quem ainda não é cliente. Também guarda o nome do cadastrado no momento
+  /// da proposta — o PDF de um orçamento antigo não muda se o cliente for renomeado.
+  prospectNome     String?
+  prospectContato  String?
+  /// Último dia em que a proposta vale (inclusivo). Passou, o cron marca VENCIDO.
+  validadeEm       DateTime        @db.Date
+  status           StatusOrcamento @default(RASCUNHO)
+  /// Condições comerciais e observações que saem no PDF.
+  condicoes        String?
+  /// Quando o serviço começaria e o prazo. Viram `inicioEm`/`prazoEm` dos pedidos.
+  inicioPrevistoEm DateTime?       @db.Date
+  prazoEm          DateTime?       @db.Date
+  enviadoEm        DateTime?
+  /// Só o id: a trilha de quem aprovou é esta coluna, e a relação com User não
+  /// acrescentaria nada que alguém consulte (mesmo padrão da sobretaxa).
+  aprovadoPorId    String?
+  aprovadoEm       DateTime?
+  recusadoEm       DateTime?
+  motivoRecusa     String?
+  vencidoEm        DateTime?
+  criadoPor        User?           @relation("CriouOrcamento", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId      String?
+  criadoEm         DateTime        @default(now())
+  alteradoEm       DateTime        @updatedAt
+
+  itens OrcamentoItem[]
+
+  @@unique([contaId, numero])
+  @@index([contaId, status])
+  @@index([empresaId])
+  @@index([contaId])
+  @@map("orcamentos")
+}
+
+/**
+ * Uma linha da proposta: um material, uma rota, uma quantidade e o preço.
+ * Preço e km ficam CONGELADOS aqui (como no `ViagemValor`): o PDF de amanhã
+ * mostra o que foi proposto, mesmo que a tabela ou a rota mudem.
+ */
+model OrcamentoItem {
+  contaId             String        @default("__SEM_CONTA__")
+  conta               Conta         @relation(fields: [contaId], references: [id])
+  id                  String        @id @default(uuid())
+  orcamento           Orcamento     @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+  orcamentoId         String
+  ordem               Int           @default(0)
+  material            Material?     @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  materialId          String?
+  tipoServico         TipoServico?  @relation(fields: [tipoServicoId], references: [id], onDelete: SetNull)
+  tipoServicoId       String?
+  localCarga          Local?        @relation("OrcamentoItemLocalCarga", fields: [localCargaId], references: [id], onDelete: SetNull)
+  localCargaId        String?
+  localDescarga       Local?        @relation("OrcamentoItemLocalDescarga", fields: [localDescargaId], references: [id], onDelete: SetNull)
+  localDescargaId     String?
+  /// Texto livre que sai no PDF (ex.: "brita 1 lavada, entrega parcelada").
+  descricao           String?
+  quantidade          Decimal       @db.Decimal(12, 3)
+  unidade             UnidadePedido
+  /// Em que unidade está o preço. Pode diferir da quantidade (pedido em m³,
+  /// preço por tonelada) — o total converte pela densidade do material.
+  base                BasePreco
+  precoUnitario       Decimal       @db.Decimal(10, 2)
+  /// Km carga→descarga pelo roteador no momento da proposta. Null = sem rota.
+  kmEstimado          Decimal?      @db.Decimal(10, 2)
+  /// O pedido que este item virou ao aprovar.
+  pedido              Pedido?       @relation(fields: [pedidoId], references: [id], onDelete: SetNull)
+  pedidoId            String?       @unique
+  /// A linha de TabelaPreco criada a partir deste item (só o id: é rastro).
+  tabelaPrecoCriadaId String?
+  criadoEm            DateTime      @default(now())
+
+  @@index([orcamentoId])
+  @@index([contaId])
+  @@map("orcamento_itens")
 }
 
 enum StatusViagemPlanejada {
@@ -3960,8 +4080,10 @@ model Local {
   criadoPor       User?            @relation("CriouLocal", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId     String?
 
-  pedidosComoCarga    Pedido[] @relation("PedidoLocalCarga")
-  pedidosComoDescarga Pedido[] @relation("PedidoLocalDescarga")
+  pedidosComoCarga           Pedido[]        @relation("PedidoLocalCarga")
+  pedidosComoDescarga        Pedido[]        @relation("PedidoLocalDescarga")
+  orcamentoItensComoCarga    OrcamentoItem[] @relation("OrcamentoItemLocalCarga")
+  orcamentoItensComoDescarga OrcamentoItem[] @relation("OrcamentoItemLocalDescarga")
 
   /// Código IBGE de 7 dígitos do município.
   ///
