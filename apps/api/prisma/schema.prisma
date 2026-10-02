@@ -2974,7 +2974,7 @@ model Pedido {
 
   solicitacoesObra SolicitacaoObra[]
 
-  anexos AnexoPedido[]
+  anexos        AnexoPedido[]
   /// O item de orçamento aprovado que virou este pedido (null = pedido feito à mão).
   orcamentoItem OrcamentoItem?
 
@@ -3017,6 +3017,7 @@ model AnexoPedido {
   @@index([pedidoId])
   @@index([contaId])
   @@map("anexos_pedido")
+}
 
 enum StatusOrcamento {
   /// Sendo montado. Ninguém de fora viu.
