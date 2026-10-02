@@ -1,4 +1,18 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import {
@@ -8,6 +22,8 @@ import {
   CriarViagemPlanejadaInput,
   PublicarProgramacaoInput,
   CopiarProgramacaoInput,
+  ExtrairPedidoTextoInput,
+  LIMITE_DOCUMENTO_PEDIDO,
   STATUS_PEDIDO,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -18,6 +34,7 @@ import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { EscopoPor } from "../../common/escopo/escopo.decorator";
 import type { AuthAdminUser } from "../../auth/types";
+import { PedidoDocumentoService } from "./pedido-documento.service";
 import { PedidosService } from "./pedidos.service";
 import { ProgramacaoService } from "./programacao.service";
 
@@ -40,7 +57,35 @@ type DiaQuery = z.infer<typeof DiaQuery>;
 @Roles("ADMIN_USER")
 @Controller("admin/pedidos")
 export class PedidosController {
-  constructor(private readonly service: PedidosService) {}
+  constructor(
+    private readonly service: PedidosService,
+    private readonly documento: PedidoDocumentoService,
+  ) {}
+
+  /**
+   * Lê um pedido de um documento (PDF, foto ou texto de e-mail colado) e
+   * devolve a SUGESTÃO pro formulário de novo pedido. Não grava nada: quem
+   * confere e salva é a pessoa, pelo `POST admin/pedidos` de sempre — por isso
+   * a chave é a de criar pedido, e não uma nova.
+   *
+   * Multipart: `arquivo` (opcional) e/ou `texto` (opcional); um dos dois.
+   * Declarado ANTES de `:id` por clareza — o verbo é outro, mas a leitura da
+   * rota fica óbvia.
+   */
+  @RequerPermissao("pedidos.criar")
+  @HttpCode(200)
+  @Post("extrair")
+  @UseInterceptors(
+    // O teto do Multer corta o upload no meio (413) em vez de deixar 50 MB
+    // inteiros chegarem à memória pra só então recusar.
+    FileInterceptor("arquivo", { limits: { fileSize: LIMITE_DOCUMENTO_PEDIDO.bytes, files: 1 } }),
+  )
+  extrair(
+    @Body(new ZodValidationPipe(ExtrairPedidoTextoInput)) body: ExtrairPedidoTextoInput,
+    @UploadedFile() arquivo?: Express.Multer.File,
+  ) {
+    return this.documento.extrair({ arquivo, texto: body.texto });
+  }
 
   @RequerPermissao("pedidos.ver")
   @Get()
