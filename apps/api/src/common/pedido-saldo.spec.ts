@@ -143,6 +143,35 @@ describe("calcularSaldoPedido — por m³", () => {
     expect(s.indisponivel).toMatch(/densidade/);
   });
 
+  it("viagem já faturada usa o m³ CONGELADO, não a densidade de hoje", () => {
+    // 2 viagens faturadas a 1,45 (20 m³ cada) + 1 sem valor, convertida pela
+    // densidade corrigida 1,6 (29 ÷ 1,6 = 18,125). Pedido e fatura batem.
+    const s = calcularSaldoPedido({
+      quantidadeAlvo: 100,
+      unidadeAlvo: "M3",
+      viagens: [
+        { toneladas: 29, m3Congelado: "20.000" },
+        { toneladas: 29, m3Congelado: "20.000" },
+        { toneladas: 29 },
+      ],
+      densidadeTonM3: "1.6",
+      hoje: HOJE,
+    });
+    expect(s.entregue).toBe("58.125");
+  });
+
+  it("sem densidade, mas tudo congelado: o saldo continua disponível", () => {
+    const s = calcularSaldoPedido({
+      quantidadeAlvo: 100,
+      unidadeAlvo: "M3",
+      viagens: [{ toneladas: 29, m3Congelado: "20.000" }],
+      densidadeTonM3: null,
+      hoje: HOJE,
+    });
+    expect(s.situacao).not.toBe("INDISPONIVEL");
+    expect(s.entregue).toBe("20.000");
+  });
+
   it("indisponível não é cumprido (não some da programação)", () => {
     const s = calcularSaldoPedido({
       quantidadeAlvo: 1,

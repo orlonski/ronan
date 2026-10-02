@@ -20,6 +20,12 @@ function dec(v: DecimalLike): Prisma.Decimal {
 export type ViagemAbatida = {
   /** Toneladas EFETIVAS (pós-mínimo). Em pedido por viagem, não é usado. */
   toneladas: DecimalLike;
+  /**
+   * m³ CONGELADO no valor da viagem (ViagemValor de base M3). Quando existe,
+   * vence a conversão pela densidade atual: corrigir a densidade depois não
+   * pode fazer o pedido dizer um volume e a fatura cobrar outro.
+   */
+  m3Congelado?: DecimalLike;
 };
 
 export type SaldoPedido = {
@@ -83,7 +89,8 @@ export function calcularSaldoPedido(args: {
     const toneladas = somaToneladas();
     const densidade = densidadeValida(args.densidadeTonM3);
     extrasM3 = { entregueToneladas: toneladas.toFixed(3), densidadeTonM3: densidade?.toFixed(3) ?? null };
-    if (!densidade) {
+    const temSemCongelado = args.viagens.some((v) => v.m3Congelado == null);
+    if (!densidade && temSemCongelado) {
       // Indisponível, nunca 0: "0 de 300 m³" num pedido com 40 viagens feitas
       // faria o supervisor programar caminhão pra carga que já foi entregue.
       return {
@@ -102,8 +109,9 @@ export function calcularSaldoPedido(args: {
     // Converte viagem a viagem, e não a soma: é o mesmo m³ (arredondado em 3
     // casas) que cada viagem leva pra fatura, então pedido e fatura batem.
     entregue = args.viagens.reduce((acc, v) => {
-      const r = toneladasParaM3(dec(v.toneladas), densidade);
-      return r.ok ? acc.add(r.valor) : acc;
+      if (v.m3Congelado != null) return acc.add(dec(v.m3Congelado));
+      const r = densidade ? toneladasParaM3(dec(v.toneladas), densidade) : null;
+      return r?.ok ? acc.add(r.valor) : acc;
     }, new Prisma.Decimal(0));
   } else {
     entregue =

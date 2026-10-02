@@ -205,6 +205,9 @@ export class PedidosService {
         motorista: { select: { id: true, nome: true } },
         veiculo: { select: { id: true, placa: true } },
         cliente: { select: { id: true, nome: true, empresaId: true } },
+        // m³ congelado no valor da viagem (base M3): o saldo usa o mesmo
+        // volume que a fatura cobra.
+        valor: { select: { base: true, quantidade: true } },
       },
       orderBy: { data: "desc" },
     });
@@ -248,7 +251,10 @@ export class PedidosService {
             ? (resolverRegraMinimo(regras, v.cliente.empresaId, v.materialId, v.km ?? 0) ??
               undefined)
             : undefined;
-        return { toneladas: aplicarMinimos(v, override).toneladasEfetiva };
+        return {
+          toneladas: aplicarMinimos(v, override).toneladasEfetiva,
+          m3Congelado: v.valor?.base === "M3" ? v.valor.quantidade : undefined,
+        };
       });
       mapa.set(
         p.id,
