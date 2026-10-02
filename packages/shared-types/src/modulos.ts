@@ -163,7 +163,9 @@ export const MODULOS: ModuloDef[] = [
     chave: "torre",
     nome: "Torre de controle",
     pitch: "Pedido do cliente, programação do dia e a viagem acompanhada ao vivo.",
-    recursos: ["pedidos", "programacao", "torre", "config-torre"],
+    // `encarregados` mora aqui e não no núcleo: o portal da obra mostra pedido
+    // e programação, que são deste módulo. Sem a torre, não há o que mostrar.
+    recursos: ["pedidos", "programacao", "torre", "config-torre", "encarregados"],
   },
   {
     chave: "fiscal",

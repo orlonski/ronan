@@ -108,6 +108,10 @@ const MODELS_GLOBAIS = new Set<string>([
   // escopadas, pra tela do cliente sair filtrada pela trava sem depender de
   // ninguém lembrar.
   "EventoGatewayPagamento",
+  // O código de entrada do portal da obra, por TELEFONE. O login acontece antes
+  // de saber de qual empresa a pessoa é — e o mesmo celular pode ser
+  // encarregado em duas transportadoras. Toda consulta cita o telefone.
+  "CodigoEncarregado",
 ]);
 
 /**

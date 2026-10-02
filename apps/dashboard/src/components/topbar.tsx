@@ -14,6 +14,7 @@ import {
   MapPin,
   PiggyBank,
   TriangleAlert,
+  Truck,
   UserPlus,
   Wrench,
 } from "lucide-react";
@@ -251,6 +252,8 @@ export function IconeTipo({ tipo }: { tipo: string }) {
     return <Wrench className={`${cls} text-amber-600`} />;
   if (tipo === "documento-vencendo")
     return <ClipboardCheck className={`${cls} text-amber-600`} />;
+  if (tipo === "pedido-obra")
+    return <Truck className={`${cls} text-blue-600`} />;
   if (tipo === "conferencia-diaria")
     return <ClipboardCheck className={`${cls} text-amber-600`} />;
   if (tipo === "conta-auto-cadastro" || tipo === "lead-novo" || tipo === "lead-precisa-humano")
@@ -308,6 +311,8 @@ export function rotaParaNotificacao(n: AdminNotificacao): string | null {
   if (n.tipo === "conferencia-diaria") return "/conferencia-diaria?aba=fila";
   // Pedido de correção se decide na tela "Acerto de ponto".
   if (n.tipo === "correcao-ponto") return "/ponto/correcoes";
+  // O pedido da obra se confirma (ou recusa) na Programação, no dia pedido.
+  if (n.tipo === "pedido-obra") return dados.data ? `/programacao?data=${dados.data}` : "/programacao";
   if (n.tipo === "nova-viagem" && dados.viagemId) {
     return `/viagens/${dados.viagemId}`;
   }

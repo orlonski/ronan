@@ -334,7 +334,11 @@ export const GRUPOS: Grupo[] = [
           { href: "/regras-minimo", perm: "regras-minimo.ver" },
         ],
         // As obras moram dentro da página de cada cliente.
-        partes: [{ perm: "clientes.ver", label: "Obras" }],
+        // Os encarregados (portal da obra) moram na ficha de cada obra.
+        partes: [
+          { perm: "clientes.ver", label: "Obras" },
+          { perm: "encarregados.ver", label: "Encarregados das obras" },
+        ],
       },
       { href: "/locais", label: "Locais", icon: MapPin, perm: "locais.ver", ou: [{ href: "/configuracoes/busca-locais", perm: "config-busca-locais.ver" }] },
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },

@@ -64,3 +64,4 @@ export * from "./matriz-por-menu";
 export * from "./divergencia";
 export * from "./checklist";
 export * from "./email-ticket";
+export * from "./encarregado";

@@ -36,7 +36,9 @@ export type TipoNotificacaoAdmin =
   // O funcionário pediu correção do ponto pelo app.
   | "correcao-ponto"
   // Resumo diário de documento do motorista/caminhão vencendo.
-  | "documento-vencendo";
+  | "documento-vencendo"
+  // O encarregado da obra pediu caminhão pelo portal.
+  | "pedido-obra";
 
 /**
  * As abas do filtro do sininho. Agrupa por ASSUNTO, não por tipo técnico:
@@ -63,6 +65,7 @@ export const CATEGORIAS_INBOX = [
       "local-em-validacao",
       "alerta-torre",
       "conferencia-diaria",
+      "pedido-obra",
     ],
   },
   { chave: "motoristas", label: "Motoristas", tipos: ["motorista-cadastro", "motorista-senha-reset"] },

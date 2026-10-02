@@ -13,6 +13,8 @@ export function PwaRegister() {
     // não é usuário do painel: instalar o service worker e oferecer "adicionar
     // à tela inicial" do Movatruck ali é invasivo e confuso.
     if (pathname?.startsWith("/v/")) return;
+    // O portal da obra também é do cliente: o SW do painel não tem o que fazer lá.
+    if (pathname === "/obra" || pathname?.startsWith("/obra/")) return;
     navigator.serviceWorker.register("/sw.js").catch(() => {
       // sem SW o painel funciona igual; só não fica "instalável"
     });

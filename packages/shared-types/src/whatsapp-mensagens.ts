@@ -124,6 +124,27 @@ export const ROTAS_WHATSAPP = [
     escopo: "plataforma",
   },
   {
+    chave: "OTP_ENCARREGADO",
+    rotulo: "Código de entrada do portal da obra",
+    descricao: "Código que o encarregado da obra digita pra entrar no portal da obra pelo celular.",
+    categoria: "authentication",
+    provedores: ["evolution", "meta"],
+    critica: true,
+    // Plataforma, como os outros códigos: o mesmo celular pode ser encarregado
+    // em duas transportadoras, e o código é um só pra pessoa.
+    escopo: "plataforma",
+  },
+  {
+    chave: "CONVITE_ENCARREGADO",
+    rotulo: "Convite pro portal da obra",
+    descricao: "Avisa o encarregado da obra que a transportadora liberou o acompanhamento da obra pelo celular.",
+    categoria: "utility",
+    provedores: ["evolution", "meta"],
+    // Se falhar, o escritório vê na hora e manda o link por outro caminho.
+    critica: false,
+    escopo: "empresa",
+  },
+  {
     chave: "CONVITE_EMPRESA",
     rotulo: "Convite da empresa",
     descricao:
@@ -501,6 +522,30 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
     botao: { tipo: "COPIAR_CODIGO", param: 0 },
     textoAprovacao: "Seu código de verificação é {{1}}.\nPara sua segurança, não o compartilhe.",
     exemplo: ["482913", "10"],
+  },
+  // Mesmo template aprovado do "esqueci a senha" (ver OTP_PIX): o corpo de
+  // Autenticação é fixo pela Meta, e um template novo sairia idêntico.
+  OTP_ENCARREGADO: {
+    nome: "otp_senha",
+    idioma: "pt_BR",
+    corpo: [0],
+    botao: { tipo: "COPIAR_CODIGO", param: 0 },
+    textoAprovacao: "Seu código de verificação é {{1}}.\nPara sua segurança, não o compartilhe.",
+    exemplo: ["482913", "10"],
+  },
+  // O link do portal mora no botão: a URL base (https://<painel>/{{1}}) é
+  // cadastrada no template, e o sufixo "obra" é o único param do botão.
+  CONVITE_ENCARREGADO: {
+    nome: "convite_encarregado_obra",
+    idioma: "pt_BR",
+    corpo: [0, 1, 2],
+    botao: { tipo: "URL", param: 3, texto: "Abrir o portal da obra" },
+    textoAprovacao: [
+      "Olá, {{1}}! A {{3}} liberou pra você o acompanhamento da obra {{2}} pelo celular: entregas do dia, programação e pedido de caminhão.",
+      "",
+      "Pra entrar, use este número de WhatsApp. O código de acesso chega aqui.",
+    ].join("\n"),
+    exemplo: ["Carlos", "Residencial Jardim Sul", "Transportes Exemplo", "obra"],
   },
   CONVITE_EMPRESA: {
     nome: "convite_empresa_v2",
