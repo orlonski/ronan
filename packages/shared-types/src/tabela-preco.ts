@@ -10,7 +10,7 @@ import { z } from "zod";
  * quando alguém reajusta a tabela.
  */
 
-export const BASES_PRECO = ["TONELADA", "KM", "VIAGEM"] as const;
+export const BASES_PRECO = ["TONELADA", "KM", "VIAGEM", "M3"] as const;
 export const BasePrecoSchema = z.enum(BASES_PRECO);
 export type BasePrecoTipo = z.infer<typeof BasePrecoSchema>;
 
@@ -19,6 +19,7 @@ export const BASE_PRECO_LABEL: Record<BasePrecoTipo, { nome: string; unidade: st
   TONELADA: { nome: "Por tonelada", unidade: "R$/t" },
   KM: { nome: "Por quilômetro", unidade: "R$/km" },
   VIAGEM: { nome: "Valor fechado por viagem", unidade: "R$/viagem" },
+  M3: { nome: "Por metro cúbico", unidade: "R$/m³" },
 };
 
 /** O que cada base precifica, em uma frase, pro formulário explicar a escolha. */
@@ -26,6 +27,7 @@ export const BASE_PRECO_AJUDA: Record<BasePrecoTipo, string> = {
   TONELADA: "Multiplica as toneladas efetivas da viagem.",
   KM: "Multiplica o km efetivo da viagem.",
   VIAGEM: "Valor fechado, não importa peso nem distância.",
+  M3: "Converte as toneladas efetivas em m³ pela densidade do material da viagem. Material sem densidade cadastrada deixa a viagem sem valor até alguém cadastrar.",
 };
 
 const DATA = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use uma data no formato AAAA-MM-DD.");
@@ -102,7 +104,12 @@ export type AlterarValorViagemInput = z.infer<typeof AlterarValorViagemInput>;
 export type ViagemValorDetalhe = {
   base: BasePrecoTipo;
   precoUnitario: string;
+  /** Na base M3, em m³; na TONELADA, t; na KM, km; na VIAGEM, 1. */
   quantidade: string;
+  /** Só na base M3: densidade (t/m³) congelada no cálculo. */
+  densidadeTonM3: string | null;
+  /** Só na base M3: as toneladas efetivas que viraram `quantidade` m³. */
+  toneladasConvertidas: string | null;
   valorFrete: string;
   valorPedagio: string;
   valorTotal: string;

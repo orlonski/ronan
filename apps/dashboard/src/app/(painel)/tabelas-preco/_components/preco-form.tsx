@@ -21,7 +21,7 @@ import { BarraDeAcao } from "@/components/barra-de-acao";
 import { hojeSP } from "@/lib/datetime-br";
 
 type Empresa = { id: string; nome: string };
-type Material = { id: string; nome: string };
+type Material = { id: string; nome: string; densidadeTonM3?: string | number | null };
 type TipoServico = { id: string; nome: string };
 
 export type Preco = {
@@ -211,6 +211,7 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
               ))}
             </Select>
             <p className="text-xs text-muted-foreground">{BASE_PRECO_AJUDA[form.base]}</p>
+            {form.base === "M3" && <AvisoDensidade material={materiais.data?.find((m) => m.id === form.materialId)} />}
           </div>
         </div>
 
@@ -300,5 +301,38 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
         </BarraDeAcao>
       </form>
     </Card>
+  );
+}
+
+/**
+ * Preço por m³ depende da densidade do material: avisa aqui, ao cadastrar, se
+ * ela falta — senão a pessoa só descobre quando as viagens aparecerem sem valor.
+ */
+function AvisoDensidade({ material }: { material: Material | undefined }) {
+  if (!material) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Valendo pra qualquer material, cada viagem converte pela densidade do material
+        dela. Material sem densidade deixa a viagem sem valor.
+      </p>
+    );
+  }
+  if (material.densidadeTonM3 == null) {
+    return (
+      <p className="text-xs text-amber-700">
+        {material.nome} ainda não tem densidade cadastrada: as viagens dele vão ficar sem
+        valor até alguém cadastrar em{" "}
+        <Link href={`/materiais/${material.id}`} className="underline">
+          Materiais
+        </Link>
+        .
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs text-muted-foreground">
+      Converte pela densidade de {material.nome}:{" "}
+      {Number(material.densidadeTonM3).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} t/m³.
+    </p>
   );
 }

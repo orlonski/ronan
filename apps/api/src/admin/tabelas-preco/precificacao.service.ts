@@ -50,6 +50,10 @@ export class PrecificacaoService {
         // Sem este select o mínimo por período volta a valer e a diária fatura
         // tonelada inventada. Mesma pegadinha documentada em viagem-minimos.
         materialId: true,
+        // Preço por m³ converte pela densidade do material da viagem. Lida no
+        // momento do cálculo e CONGELADA no ViagemValor — corrigir a densidade
+        // depois não mexe no que já tem valor.
+        material: { select: { densidadeTonM3: true } },
         cliente: { select: { empresaId: true } },
         valor: { select: { alteracaoMotivo: true } },
       },
@@ -86,6 +90,7 @@ export class PrecificacaoService {
       materialId: viagem.materialId,
       tabelas: tabelas as unknown as TabelaPrecoRow[],
       minimo,
+      densidadeTonM3: viagem.material?.densidadeTonM3 ?? null,
     });
 
     if (!r.valor) {
@@ -106,6 +111,8 @@ export class PrecificacaoService {
         base: v.base,
         precoUnitario: v.precoUnitario,
         quantidade: v.quantidade,
+        densidadeTonM3: v.densidadeTonM3,
+        toneladasConvertidas: v.toneladasConvertidas,
         valorFrete: v.valorFrete,
         valorPedagio: v.valorPedagio,
         valorTotal: v.valorTotal,
@@ -115,6 +122,8 @@ export class PrecificacaoService {
         base: v.base,
         precoUnitario: v.precoUnitario,
         quantidade: v.quantidade,
+        densidadeTonM3: v.densidadeTonM3,
+        toneladasConvertidas: v.toneladasConvertidas,
         valorFrete: v.valorFrete,
         valorPedagio: v.valorPedagio,
         valorTotal: v.valorTotal,
@@ -170,6 +179,40 @@ export class PrecificacaoService {
     this.log.log(
       `recálculo da empresa ${empresaId}: ${precificadas} de ${viagens.length} viagens com valor`,
     );
+    return { total: viagens.length, precificadas };
+  }
+
+  /**
+   * Precifica as viagens SEM valor de um material — chamado quando alguém
+   * cadastra ou corrige a densidade dele. São as viagens que ficaram paradas
+   * em "falta a densidade" no preço por m³; esperar o cron da madrugada
+   * deixaria a pessoa olhando a tela sem entender se funcionou.
+   *
+   * Só as SEM valor, pela mesma doutrina do cron: o que já tem valor está
+   * congelado com a densidade da época, e corrigir a densidade não reescreve
+   * fatura. Reprecificar de propósito é o botão de recálculo da tabela.
+   */
+  async precificarPendentesDoMaterial(materialId: string): Promise<{ total: number; precificadas: number }> {
+    const viagens = await this.prisma.viagem.findMany({
+      where: {
+        materialId,
+        status: { notIn: STATUS_FORA_FECHAMENTO },
+        valor: { is: null },
+        clienteId: { not: null },
+      },
+      select: { id: true },
+      orderBy: { data: "desc" },
+      take: 500,
+    });
+    let precificadas = 0;
+    for (const v of viagens) {
+      try {
+        const r = await this.recalcular(v.id);
+        if (r.valor) precificadas++;
+      } catch (e) {
+        this.log.error(`falha ao precificar viagem ${v.id}: ${(e as Error).message}`);
+      }
+    }
     return { total: viagens.length, precificadas };
   }
 

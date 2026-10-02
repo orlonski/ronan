@@ -4,12 +4,16 @@ import type { CriarMaterialInput, AtualizarMaterialInput } from "@ronan/shared-t
 import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
+import { PrecificacaoService } from "../tabelas-preco/precificacao.service";
 
 type ListMateriaisParams = PaginationQuery & { ativo?: "true" | "false" };
 
 @Injectable()
 export class MateriaisService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly precificacao: PrecificacaoService,
+  ) {}
 
   list(params: ListMateriaisParams) {
     const where: Prisma.MaterialWhereInput = {};
@@ -43,8 +47,17 @@ export class MateriaisService {
   }
 
   async update(id: string, data: AtualizarMaterialInput) {
-    await this.ensureExists(id);
-    return this.prisma.material.update({ where: { id }, data });
+    const antes = await this.ensureExists(id);
+    const material = await this.prisma.material.update({ where: { id }, data });
+
+    // Densidade nova destrava as viagens que o preço por m³ deixou sem valor.
+    // Não toca nas que já têm valor: lá a densidade da época está congelada.
+    const densidadeAntes = antes.densidadeTonM3?.toString() ?? null;
+    const densidadeDepois = material.densidadeTonM3?.toString() ?? null;
+    if (densidadeDepois != null && densidadeDepois !== densidadeAntes) {
+      await this.precificacao.precificarPendentesDoMaterial(id);
+    }
+    return material;
   }
 
   async remove(id: string) {

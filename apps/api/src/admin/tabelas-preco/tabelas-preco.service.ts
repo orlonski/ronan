@@ -7,7 +7,12 @@ import type {
 import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
-import { tabelaPrecoAplicada, type TabelaPrecoRow } from "../../common/viagem-preco";
+import {
+  SEM_PRECO_TEXTO,
+  tabelaPrecoAplicada,
+  type TabelaPrecoRow,
+} from "../../common/viagem-preco";
+import { toneladasParaM3 } from "../../common/volume-material";
 import { PrecificacaoService } from "./precificacao.service";
 
 type ListParams = PaginationQuery & {
@@ -20,7 +25,8 @@ type ListParams = PaginationQuery & {
 
 const INCLUDE = {
   empresa: { select: { id: true, nome: true } },
-  material: { select: { id: true, nome: true } },
+  // A densidade vai junto pra linha "por m³" mostrar com que número converte.
+  material: { select: { id: true, nome: true, densidadeTonM3: true } },
   tipoServico: { select: { id: true, nome: true } },
 } satisfies Prisma.TabelaPrecoInclude;
 
@@ -164,8 +170,32 @@ export class TabelasPrecoService {
       return { encontrou: false as const, motivo: "Nenhum preço cadastrado serve pra essa viagem." };
     }
 
-    const quantidade =
-      linha.base === "TONELADA" ? args.toneladas : linha.base === "KM" ? args.km : 1;
+    let quantidade: number;
+    let densidadeTonM3: string | null = null;
+    if (linha.base === "M3") {
+      // Mesma conversão da precificação de verdade: densidade do material
+      // informado na simulação. Sem material, ou material sem densidade, a
+      // simulação diz por que não dá — como a viagem real ficaria sem valor.
+      const material = args.materialId
+        ? await this.prisma.material.findUnique({
+            where: { id: args.materialId },
+            select: { densidadeTonM3: true },
+          })
+        : null;
+      const m3 = toneladasParaM3(args.toneladas, material?.densidadeTonM3 ?? null);
+      if (!m3.ok) {
+        return {
+          encontrou: false as const,
+          motivo: args.materialId
+            ? SEM_PRECO_TEXTO.SEM_DENSIDADE
+            : "O preço que serve é por m³: escolha o material pra converter o peso pela densidade dele.",
+        };
+      }
+      quantidade = m3.valor.toNumber();
+      densidadeTonM3 = Number(material!.densidadeTonM3).toFixed(3);
+    } else {
+      quantidade = linha.base === "TONELADA" ? args.toneladas : linha.base === "KM" ? args.km : 1;
+    }
     const valorFrete = Number(linha.precoUnitario) * quantidade;
     return {
       encontrou: true as const,
@@ -173,6 +203,7 @@ export class TabelasPrecoService {
       base: linha.base,
       precoUnitario: Number(linha.precoUnitario).toFixed(2),
       quantidade: quantidade.toFixed(3),
+      densidadeTonM3,
       valorFrete: valorFrete.toFixed(2),
       repassaPedagio: linha.repassaPedagio,
       // A simulação NÃO aplica mínimo: aqui o usuário está conferindo o preço,

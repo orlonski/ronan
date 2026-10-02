@@ -196,6 +196,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     faz: [
       "Cadastrar o combinado: cliente, obra, material, destino, quantidade e prazo",
       "Acompanhar quanto já entregou e quanto falta, somado das viagens que aconteceram de verdade",
+      "Combinar em viagens, toneladas ou m³ — em m³, o peso da balança vira volume pela densidade do material",
       "Ver quais pedidos estão apertados ou já passaram do prazo, e quanto precisa sair por dia",
     ],
     naoEAqui: {
@@ -308,8 +309,8 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
 
   "/tabelas-preco": {
     oQue:
-      "Quanto cada cliente paga pelo frete: por tonelada, por quilômetro ou por " +
-      "viagem fechada. Sem preço aqui, a viagem não tem valor.",
+      "Quanto cada cliente paga pelo frete: por tonelada, por m³, por quilômetro " +
+      "ou por viagem fechada. Sem preço aqui, a viagem não tem valor.",
     faz: [
       "Cadastrar o preço por cliente, material, modo de serviço e faixa de km rodado",
       "Marcar se o pedágio vem por fora do frete",
@@ -703,6 +704,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Dizer se o material tem número de ticket de balança pra informar — concreto, por exemplo, não tem",
       "Dispensar da conferência o material que não gera papel nenhum, pra a viagem já entrar aprovada",
       "Liberar o bota-fora: quando o motorista volta ao local de carga com a sobra, esse trecho entra no km",
+      "Informar a densidade (t por m³), que converte o peso da balança em volume pra quem vende por m³",
     ],
     naoEAqui: {
       procurando: "o mínimo de tonelada ou de km que se fatura por material",

@@ -1,4 +1,5 @@
 import { Prisma, type UnidadePedido } from "@prisma/client";
+import { SEM_CONVERSAO_TEXTO, densidadeValida, toneladasParaM3 } from "./volume-material";
 
 /**
  * Quanto do pedido já foi entregue, e se o ritmo dá pro prazo.
@@ -23,11 +24,22 @@ export type ViagemAbatida = {
 
 export type SaldoPedido = {
   alvo: string;
-  entregue: string;
-  restante: string;
-  /** 0 a 100, limitado em 100 mesmo quando entregou mais que o pedido. */
-  percentual: number;
+  /** Null só quando o saldo está INDISPONÍVEL (pedido em m³ sem densidade). */
+  entregue: string | null;
+  restante: string | null;
+  /** 0 a 100, limitado em 100 mesmo quando entregou mais que o pedido. Null = indisponível. */
+  percentual: number | null;
   viagens: number;
+  /**
+   * Pedido em m³: as toneladas efetivas que a balança registrou (o que foi
+   * convertido). Vem mesmo sem densidade — o peso entregue é fato, só o volume
+   * é que não dá pra afirmar.
+   */
+  entregueToneladas?: string;
+  /** Pedido em m³: a densidade (t/m³) usada na conversão. */
+  densidadeTonM3?: string | null;
+  /** Por que o saldo não pôde ser calculado, em texto pra tela. Null = calculado. */
+  indisponivel?: string | null;
   /** Dias corridos até o prazo, incluindo hoje. Null = sem prazo. */
   diasRestantes: number | null;
   /** Quanto por dia falta fazer pra cumprir. Null = sem prazo ou já cumprido. */
@@ -35,8 +47,10 @@ export type SaldoPedido = {
   /**
    * Como está: `NO_RITMO` dá pro prazo, `APERTADO` precisa de mais que a média
    * já praticada, `ESTOURADO` passou do prazo sem cumprir, `CUMPRIDO` acabou.
+   * `INDISPONIVEL` = pedido em m³ cujo material não tem densidade: não dá pra
+   * dizer quanto falta, e dizer "0 entregue" seria mentir.
    */
-  situacao: "CUMPRIDO" | "NO_RITMO" | "APERTADO" | "ESTOURADO" | "SEM_PRAZO";
+  situacao: "CUMPRIDO" | "NO_RITMO" | "APERTADO" | "ESTOURADO" | "SEM_PRAZO" | "INDISPONIVEL";
 };
 
 /** Dias corridos entre hoje e o prazo, contando hoje. Negativo = venceu. */
@@ -50,22 +64,61 @@ export function calcularSaldoPedido(args: {
   unidadeAlvo: UnidadePedido;
   viagens: ViagemAbatida[];
   prazoEm?: Date | null;
+  /**
+   * Densidade (t/m³) do material DO PEDIDO. Só usada em pedido em m³ — as
+   * viagens que abatem são filtradas pelo material do pedido, então a
+   * densidade dele é a delas.
+   */
+  densidadeTonM3?: DecimalLike;
   /** Injetável pro teste não depender do relógio. */
   hoje?: Date;
 }): SaldoPedido {
   const alvo = dec(args.quantidadeAlvo);
-  const entregue =
-    args.unidadeAlvo === "TONELADAS"
-      ? args.viagens.reduce((acc, v) => acc.add(dec(v.toneladas)), new Prisma.Decimal(0))
-      : new Prisma.Decimal(args.viagens.length);
+  const somaToneladas = () =>
+    args.viagens.reduce((acc, v) => acc.add(dec(v.toneladas)), new Prisma.Decimal(0));
+
+  let entregue: Prisma.Decimal;
+  let extrasM3: Pick<SaldoPedido, "entregueToneladas" | "densidadeTonM3"> = {};
+  if (args.unidadeAlvo === "M3") {
+    const toneladas = somaToneladas();
+    const densidade = densidadeValida(args.densidadeTonM3);
+    extrasM3 = { entregueToneladas: toneladas.toFixed(3), densidadeTonM3: densidade?.toFixed(3) ?? null };
+    if (!densidade) {
+      // Indisponível, nunca 0: "0 de 300 m³" num pedido com 40 viagens feitas
+      // faria o supervisor programar caminhão pra carga que já foi entregue.
+      return {
+        alvo: alvo.toFixed(3),
+        entregue: null,
+        restante: null,
+        percentual: null,
+        viagens: args.viagens.length,
+        ...extrasM3,
+        indisponivel: SEM_CONVERSAO_TEXTO.SEM_DENSIDADE,
+        diasRestantes: null,
+        ritmoNecessario: null,
+        situacao: "INDISPONIVEL",
+      };
+    }
+    // Converte viagem a viagem, e não a soma: é o mesmo m³ (arredondado em 3
+    // casas) que cada viagem leva pra fatura, então pedido e fatura batem.
+    entregue = args.viagens.reduce((acc, v) => {
+      const r = toneladasParaM3(dec(v.toneladas), densidade);
+      return r.ok ? acc.add(r.valor) : acc;
+    }, new Prisma.Decimal(0));
+  } else {
+    entregue =
+      args.unidadeAlvo === "TONELADAS" ? somaToneladas() : new Prisma.Decimal(args.viagens.length);
+  }
 
   const restante = alvo.sub(entregue);
   const percentual = alvo.lte(0)
     ? 100
     : Math.min(100, Math.round(entregue.div(alvo).mul(100).toNumber()));
 
-  const casas = args.unidadeAlvo === "TONELADAS" ? 3 : 0;
+  const casas = args.unidadeAlvo === "VIAGENS" ? 0 : 3;
   const base = {
+    ...extrasM3,
+    indisponivel: null,
     alvo: alvo.toFixed(casas),
     entregue: entregue.toFixed(casas),
     // Restante nunca é negativo na tela: entregar 22 de 20 é "cumprido", não
@@ -103,7 +156,7 @@ export function calcularSaldoPedido(args: {
   return {
     ...base,
     diasRestantes: dias,
-    ritmoNecessario: ritmo.toFixed(args.unidadeAlvo === "TONELADAS" ? 1 : 1),
+    ritmoNecessario: ritmo.toFixed(1),
     situacao: apertado ? "APERTADO" : "NO_RITMO",
   };
 }
@@ -114,6 +167,7 @@ export const SITUACAO_PEDIDO_TEXTO: Record<SaldoPedido["situacao"], string> = {
   APERTADO: "Ritmo apertado pro prazo",
   ESTOURADO: "Passou do prazo",
   SEM_PRAZO: "Sem prazo combinado",
+  INDISPONIVEL: "Saldo indisponível",
 };
 
 export type PlanejadaParaCasar = {

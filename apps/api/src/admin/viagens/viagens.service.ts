@@ -27,7 +27,13 @@ import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
-import { mudouInsumoDePreco } from "../../common/viagem-preco";
+import {
+  SEM_PRECO_TEXTO,
+  calcularValorViagem,
+  mudouInsumoDePreco,
+  type SemPrecoMotivo,
+  type TabelaPrecoRow,
+} from "../../common/viagem-preco";
 import { STATUS_FORA_FECHAMENTO, STATUS_PENDENTE_CONFERENCIA } from "../../common/viagem-status";
 import { lerChaveFiscal } from "../../common/chave-fiscal";
 import { resolverDivergenciasSupridas } from "../../common/divergencias";
@@ -397,8 +403,30 @@ export class ViagensAdminService {
         : null;
 
     const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
+
+    // Viagem sem valor: diz POR QUÊ. "Sem preço" e "o preço é por m³ e falta a
+    // densidade do material" pedem ações diferentes de quem está olhando, e um
+    // aviso genérico manda a pessoa cadastrar preço que já existe. Só roda pra
+    // quem vê o comercial e só quando falta valor — o caso comum não paga a
+    // consulta.
+    let semValor: { motivo: SemPrecoMotivo; texto: string } | null = null;
+    if (podeVerComercial && !viagem.valor) {
+      const empresaId = viagem.cliente?.empresaId ?? null;
+      const tabelas = empresaId
+        ? await this.prisma.tabelaPreco.findMany({ where: { empresaId, ativo: true } })
+        : [];
+      const r = calcularValorViagem(viagem, {
+        empresaId,
+        materialId: viagem.materialId,
+        tabelas: tabelas as unknown as TabelaPrecoRow[],
+        densidadeTonM3: viagem.material?.densidadeTonM3 ?? null,
+      });
+      semValor = r.motivo ? { motivo: r.motivo, texto: SEM_PRECO_TEXTO[r.motivo] } : null;
+    }
+
     const payload = {
       ...serializarViagemComMinimos(viagem, regras),
+      semValor,
       // Regra de mínimo por faixa que casou (empresa+material+faixa de km) — pro
       // painel mostrar CLARAMENTE por que o faturado ficou acima do informado.
       // Null quando nenhuma regra casa (aí o faturado = informado).
