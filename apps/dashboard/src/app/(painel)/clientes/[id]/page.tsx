@@ -5,6 +5,7 @@ import { RequerTela } from "@/components/requer-tela";
 import { FormPageHeader } from "@/components/form-page-header";
 import { useResourceItem } from "@/lib/client-api";
 import { ClienteForm, type Cliente } from "../_components/cliente-form";
+import { EnvioTicketEmail } from "@/components/envio-ticket-email";
 
 export default function EditarClientePage({
   params,
@@ -25,6 +26,7 @@ export default function EditarClientePage({
           <p className="text-sm text-muted-foreground">Carregando…</p>
         )}
         {item.data && <ClienteForm initial={item.data} />}
+        {item.data && <EnvioTicketEmail alvo="obras" id={item.data.id} />}
       </div>
     </RequerTela>
   );
