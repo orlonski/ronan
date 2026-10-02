@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { Prisma } from "@prisma/client";
 import type { AtualizarPedidoInput, CriarPedidoInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
@@ -46,7 +47,10 @@ function exigirMaterialEmM3(unidade: string | undefined, materialId: string | nu
 
 @Injectable()
 export class PedidosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploads: UploadsService,
+  ) {}
 
   async list(params: ListParams) {
     const where: Prisma.PedidoWhereInput = {};
@@ -153,7 +157,14 @@ export class PedidosService {
       await this.prisma.pedido.update({ where: { id }, data: { status: "CANCELADO" } });
       return { ok: true, cancelado: true, planejadas };
     }
+    // Os anexos saem do banco em cascata; o arquivo no bucket, não. Sem isto
+    // ficariam pra sempre no MinIO, pagos e sem registro que leve a eles.
+    const anexos = await this.prisma.anexoPedido.findMany({
+      where: { pedidoId: id },
+      select: { storageKey: true },
+    });
     await this.prisma.pedido.delete({ where: { id } });
+    for (const a of anexos) await this.uploads.removerObjeto(a.storageKey);
     return { ok: true, cancelado: false, planejadas: 0 };
   }
 

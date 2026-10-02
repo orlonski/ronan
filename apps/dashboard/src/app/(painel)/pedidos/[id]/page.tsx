@@ -5,6 +5,7 @@ import { RequerTela } from "@/components/requer-tela";
 import { FormPageHeader } from "@/components/form-page-header";
 import { useResourceItem } from "@/lib/client-api";
 import { PedidoForm, type Pedido } from "../_components/pedido-form";
+import { AnexosPedido } from "../_components/anexos-pedido";
 
 export default function EditarPedidoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -19,6 +20,7 @@ export default function EditarPedidoPage({ params }: { params: Promise<{ id: str
         />
         {item.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
         {item.data && <PedidoForm initial={item.data} />}
+        {item.data && <AnexosPedido pedidoId={item.data.id} />}
       </div>
     </RequerTela>
   );

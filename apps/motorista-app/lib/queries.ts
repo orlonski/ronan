@@ -427,7 +427,7 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
  * - `buscarRede` é responsável por buscar + normalizar + cachear (cachePut).
  * - `lerCache` reaplica a compat on-read no valor cacheado (default: identidade).
  */
-async function cacheFirst<T>(
+export async function cacheFirst<T>(
   queryKey: readonly unknown[],
   cacheKey: string,
   buscarRede: () => Promise<T>,

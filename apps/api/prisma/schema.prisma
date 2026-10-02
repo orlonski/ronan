@@ -581,6 +581,7 @@ model Conta {
   encarregadosObra               EncarregadoObra[]
   sessoesEncarregado             SessaoEncarregado[]
   solicitacoesObra               SolicitacaoObra[]
+  anexosPedido                   AnexoPedido[]
   manutencoesVeiculo             ManutencaoVeiculo[]
   problemasVeiculo               ProblemaVeiculo[]
   leiturasOdometro               LeituraOdometro[]
@@ -771,6 +772,7 @@ model User {
   acertosPagos              AcertoMotorista[]     @relation("PagouAcerto")
   itensAcertoCriados        ItemAcerto[]          @relation("CriouItemAcerto")
   pedidosCriados            Pedido[]              @relation("CriouPedido")
+  anexosPedidoEnviados      AnexoPedido[]         @relation("EnviouAnexoPedido")
   planejadasCriadas         ViagemPlanejada[]     @relation("CriouViagemPlanejada")
   encarregadosConvidados    EncarregadoObra[]     @relation("ConvidouEncarregado")
   solicitacoesRespondidas   SolicitacaoObra[]     @relation("RespondeuSolicitacaoObra")
@@ -2965,11 +2967,47 @@ model Pedido {
 
   solicitacoesObra SolicitacaoObra[]
 
+  anexos AnexoPedido[]
+
   @@unique([contaId, numero])
   @@index([contaId, status])
   @@index([empresaId, prazoEm])
   @@index([contaId])
   @@map("pedidos")
+}
+
+/**
+ * Papel que acompanha o pedido: croqui de acesso à obra, ordem de serviço do
+ * cliente, autorização de entrada, mapa do bota-fora.
+ * Existe porque esse papel vivia no grupo de WhatsApp e o motorista chegava na
+ * portaria sem ele. TABELA e não `String[]` como os anexos da OS de manutenção:
+ * aqui cada arquivo tem dono, nome que a pessoa reconhece e um interruptor
+ * próprio de "o motorista vê" — a proposta comercial com preço anexada ao
+ * mesmo pedido não pode ir parar no celular de quem dirige.
+ * O arquivo mora no MinIO (bucket privado) e só sai pela API: o painel com
+ * `pedidos.ver`, o motorista só se tiver programação desse pedido.
+ */
+model AnexoPedido {
+  contaId          String   @default("__SEM_CONTA__")
+  conta            Conta    @relation(fields: [contaId], references: [id])
+  id               String   @id @default(uuid())
+  pedido           Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  pedidoId         String
+  /// O nome do arquivo como a pessoa mandou ("croqui-obra-centro.pdf").
+  nome             String
+  mime             String
+  /// Bytes. Vai pra tela do motorista: 12 MB no 4G dele é decisão, não detalhe.
+  tamanho          Int
+  storageKey       String
+  /// Nasce visível: o caso comum é papel PRO motorista. Desligar é pra exceção.
+  visivelMotorista Boolean  @default(true)
+  enviadoPor       User?    @relation("EnviouAnexoPedido", fields: [enviadoPorId], references: [id], onDelete: SetNull)
+  enviadoPorId     String?
+  criadoEm         DateTime @default(now())
+
+  @@index([pedidoId])
+  @@index([contaId])
+  @@map("anexos_pedido")
 }
 
 enum StatusViagemPlanejada {

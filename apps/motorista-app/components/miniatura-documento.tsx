@@ -225,7 +225,7 @@ export function MiniaturaDocumento({
  * do provider do app não chegam lá — sem isto o título fica atrás da Dynamic
  * Island, que foi o que apareceu no iPhone.
  */
-function VerDePerto({
+export function VerDePerto({
   titulo,
   aberta,
   fechar,
