@@ -34,6 +34,7 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.pedagio.lancar",
   "app.abastecimento.lancar",
   "app.problema.avisar",
+  "app.checklist.fazer",
   "app.posicao.compartilhar",
   "app.programacao.ver",
   "app.acertos.ver",
@@ -273,6 +274,20 @@ const DEFS: CapacidadeAppDef[] = [
     chave: "app.problema.avisar",
     label: "Avisar problema no caminhão",
     efeito: "Botão no Início pra mandar foto e descrição de um problema no caminhão; o escritório decide em Manutenção.",
+    grupo: "Operação",
+    tipo: "EMPRESA",
+    vinculo: "MOTORISTA",
+    modulo: "manutencao",
+    gate: "SERVIDOR",
+    aoPerder: "VALA",
+  },
+  {
+    // Checklist do caminhão (concorrentes de frota têm todos). LEMBRADO, nunca
+    // obrigatório: o app lembra antes de iniciar a viagem e o painel mostra
+    // quem rodou sem. Nasce ligado; só existe onde a empresa tem Manutenção.
+    chave: "app.checklist.fazer",
+    label: "Checklist do caminhão",
+    efeito: "O motorista confere o caminhão (pneus, freios, luzes…) pelo app; item com problema vira aviso na Manutenção.",
     grupo: "Operação",
     tipo: "EMPRESA",
     vinculo: "MOTORISTA",

@@ -277,6 +277,7 @@ export const GRUPOS: Grupo[] = [
           { perm: "multas.ver", label: "Multas" },
           { perm: "documentos-veiculo.ver", label: "Documentos do caminhão" },
           { perm: "custos-manutencao.ver", label: "Custos" },
+          { perm: "checklists.ver", label: "Checklist do caminhão" },
         ],
       },
       { href: "/transportadoras", label: "Transportadoras", icon: Building, perm: "transportadoras.ver" },

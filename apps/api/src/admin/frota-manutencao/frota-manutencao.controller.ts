@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Res,
   UploadedFile,
@@ -53,6 +54,7 @@ import { UploadsService } from "../../uploads/uploads.service";
 import { FrotaManutencaoService, MAX_FOTOS_PROBLEMA } from "./frota-manutencao.service";
 import { CustosManutencaoService } from "./custos-manutencao.service";
 
+const ConfigManutencaoInput = z.object({ abreOsPreventiva: z.boolean() });
 const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data no formato AAAA-MM-DD.");
 /** Até 2 anos: o gráfico é por mês, e 24 barras ainda se leem. */
 const CustosQuery = z
@@ -90,6 +92,19 @@ export class ManutencaoController {
     private readonly uploads: UploadsService,
     private readonly custos: CustosManutencaoService,
   ) {}
+
+  /** Opção da empresa: revisão vencida abre a OS sozinha (desligada por padrão). */
+  @RequerPermissao("manutencao.ver")
+  @Get("config")
+  config() {
+    return this.service.configPreventiva();
+  }
+
+  @RequerPermissao("manutencao.editar")
+  @Put("config")
+  salvarConfig(@Body(new ZodValidationPipe(ConfigManutencaoInput)) body: z.infer<typeof ConfigManutencaoInput>) {
+    return this.service.salvarConfigPreventiva(body.abreOsPreventiva);
+  }
 
   /** Aba "Custos": por mês, por caminhão, pelo que mais se conserta e por oficina. */
   @EscopoPor("veiculo")

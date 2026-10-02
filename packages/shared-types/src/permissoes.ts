@@ -172,6 +172,9 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // Extrato do cartão combustível ao lado do que o motorista lançou. `importar`
   // à parte: subir (e desfazer) extrato é do escritório financeiro.
   { recurso: "cartao-combustivel", label: "Cartão combustível", modulo: "Operação", acoes: ["ver", "importar"] },
+  // Checklist do caminhão: montar o que se confere (editar) e ver o que os
+  // motoristas fizeram e quem rodou sem (ver). Mesmo público da Manutenção.
+  { recurso: "checklists", label: "Checklist do caminhão", modulo: "Operação", acoes: ["ver", "editar"] },
   { recurso: "custos-manutencao", label: "Custos da manutenção", modulo: "Operação", acoes: ["ver"] },
   { recurso: "pneus", label: "Pneus", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "multas", label: "Multas", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },

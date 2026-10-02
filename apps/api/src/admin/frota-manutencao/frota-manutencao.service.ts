@@ -15,6 +15,10 @@ import type {
   SalvarPneuInput,
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { Cron } from "@nestjs/schedule";
+import { comLockDeCron } from "../../common/cron-exclusivo";
+import { paraCadaConta } from "../../common/conta/para-cada-conta";
+import { contaIdAtual } from "../../common/conta/conta-context";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, SEM_ESCOPO, type EscopoAdmin } from "../../common/escopo/escopo";
 import { avaliarPlano, diasParaIndicar, situacaoPneu } from "../../common/manutencao";
@@ -626,6 +630,118 @@ export class FrotaManutencaoService {
           select: { id: true, status: true },
         });
         if (ganhou) return ganhou;
+      }
+      throw e;
+    }
+  }
+
+  // ------------------------------------------------ preventiva sozinha --
+
+  /** A opção da empresa (Conta é isenta da trava: o id vai na mão). */
+  async configPreventiva() {
+    const c = await this.prisma.conta.findUnique({
+      where: { id: contaIdAtual() },
+      select: { abreOsPreventiva: true },
+    });
+    return { abreOsPreventiva: c?.abreOsPreventiva ?? false };
+  }
+
+  async salvarConfigPreventiva(abreOsPreventiva: boolean) {
+    await this.prisma.conta.update({ where: { id: contaIdAtual() }, data: { abreOsPreventiva } });
+    return { abreOsPreventiva };
+  }
+
+  /**
+   * 6h30: revisão programada VENCIDA, sem OS aberta, vira OS ABERTA ligada ao
+   * plano — só nas empresas que ligaram a opção. Concluir a OS já zera o plano
+   * (zerarPlano), então o ciclo fecha sozinho.
+   */
+  @Cron("0 30 6 * * *", { name: "preventiva-abre-os", timeZone: "America/Sao_Paulo" })
+  async abrirOsDasPreventivasVencidas(): Promise<void> {
+    try {
+      await comLockDeCron(this.prisma, "preventiva-abre-os", async () => {
+        await paraCadaConta(this.prisma, async (contaId) => {
+          const c = await this.prisma.conta.findUnique({ where: { id: contaId }, select: { abreOsPreventiva: true } });
+          if (c?.abreOsPreventiva) await this.abrirOsVencidas();
+        });
+      });
+    } catch (e) {
+      this.log.error(`OS automática de preventiva falhou: ${(e as Error).message}`);
+    }
+  }
+
+  /** Abre as OS da conta atual. Devolve quantas abriu. */
+  async abrirOsVencidas(hoje = new Date()): Promise<number> {
+    const [planos, abertas] = await Promise.all([
+      this.prisma.planoManutencao.findMany({ where: { ativo: true, veiculo: { ativo: true } } }),
+      this.prisma.manutencaoVeiculo.findMany({
+        where: { planoId: { not: null }, status: { in: ["ABERTA", "EM_ANDAMENTO"] } },
+        select: { planoId: true },
+      }),
+    ]);
+    const comOs = new Set(abertas.map((a) => a.planoId));
+    const kms = await this.kmAtualDosVeiculos([...new Set(planos.map((p) => p.veiculoId))]);
+    const vencidos = planos.filter(
+      (p) =>
+        !comOs.has(p.id) &&
+        avaliarPlano(p, { odometro: kms.get(p.veiculoId)?.km ?? null, hoje }).situacao === "VENCIDO",
+    );
+    for (const p of vencidos) {
+      await this.prisma.manutencaoVeiculo.create({
+        data: {
+          veiculoId: p.veiculoId,
+          planoId: p.id,
+          tipo: "PREVENTIVA",
+          status: "ABERTA",
+          descricao: p.descricao,
+          observacao: "Aberta sozinha: a revisão programada venceu.",
+          previstaEm: new Date(`${hoje.toISOString().slice(0, 10)}T00:00:00Z`),
+        },
+      });
+    }
+    if (vencidos.length) this.log.log(`${vencidos.length} OS de preventiva aberta(s) sozinha(s)`);
+    return vencidos.length;
+  }
+
+  /**
+   * Aviso de problema aberto por um item REPROVADO do checklist do caminhão.
+   * Mesmo caminho do "avisar problema" (sininho, caixa de entrada), com a foto
+   * do item já enviada. Idempotente pelo `clientId` (reenvio da fila).
+   */
+  async abrirProblemaDoChecklist(args: {
+    clientId: string;
+    motoristaId: string;
+    veiculoId: string | null;
+    descricao: string;
+    fotoKey: string | null;
+    avisadoEm: Date;
+  }): Promise<string> {
+    const existente = await this.prisma.problemaVeiculo.findFirst({
+      where: { clientId: args.clientId },
+      select: { id: true },
+    });
+    if (existente) return existente.id;
+    try {
+      const novo = await this.prisma.problemaVeiculo.create({
+        data: {
+          clientId: args.clientId,
+          motoristaId: args.motoristaId,
+          veiculoId: args.veiculoId,
+          descricao: args.descricao,
+          fotos: args.fotoKey ? [args.fotoKey] : [],
+          avisadoEm: args.avisadoEm,
+        },
+        select: { id: true },
+      });
+      await this.avisarEscritorio(novo.id);
+      return novo.id;
+    } catch (e) {
+      if ((e as { code?: string }).code === "P2002") {
+        const ganhou = await this.prisma.problemaVeiculo.findFirst({
+          where: { clientId: args.clientId },
+          select: { id: true },
+        });
+        if (ganhou) return ganhou.id;
       }
       throw e;
     }

@@ -450,11 +450,15 @@ model Conta {
   /// Default `true` de propósito, ao contrário do irmão abaixo: o recurso já
   /// está no ar e desligá-lo por omissão numa migration seria tirar do ar em
   /// silêncio algo que hoje funciona.
-  iaLeituraTicket Boolean  @default(true)
+  iaLeituraTicket  Boolean  @default(true)
+  /// Revisão programada que vence abre a OS sozinha (cron das 6h30). Desligado
+  /// por padrão: hoje a revisão vencida espera decisão do gestor na caixa de
+  /// entrada, e ligar muda esse jeito de trabalhar.
+  abreOsPreventiva Boolean  @default(false)
   /// Capacidades do app em liberação gradual (`tipo: ROLLOUT` no catálogo)
   /// que valem NESTA empresa. É da plataforma, não da matriz do cliente — e só
   /// corta alguma coisa quando a camada PLATAFORMA sair da sombra na empresa.
-  rolloutsApp     String[] @default([])
+  rolloutsApp      String[] @default([])
 
   /// Conferência automática do ticket no backend: um worker lê a foto guardada
   /// e confere contra o que o motorista declarou.
@@ -568,6 +572,10 @@ model Conta {
   custosFixosVeiculo             CustoFixoVeiculo[]
   extratosCartao                 ExtratoCartao[]
   transacoesCartao               TransacaoCartao[]
+  modelosChecklist               ModeloChecklist[]
+  itensModeloChecklist           ItemModeloChecklist[]
+  checklistsVeiculo              ChecklistVeiculo[]
+  respostasChecklist             RespostaChecklist[]
   manutencoesVeiculo             ManutencaoVeiculo[]
   problemasVeiculo               ProblemaVeiculo[]
   leiturasOdometro               LeituraOdometro[]
@@ -1638,6 +1646,8 @@ model Motorista {
 
   assinaturasDocumento AssinaturaDocumento[]
 
+  checklists ChecklistVeiculo[]
+
   @@unique([contaId, cpf])
   @@index([ativo])
   @@index([status])
@@ -2179,6 +2189,7 @@ model Veiculo {
 
   manutencoes      ManutencaoVeiculo[]
   transacoesCartao TransacaoCartao[]
+  checklists       ChecklistVeiculo[]
   problemas        ProblemaVeiculo[]
   leiturasOdometro LeituraOdometro[]
   planosManutencao PlanoManutencao[]
@@ -8025,4 +8036,89 @@ model TransacaoCartao {
   @@index([veiculoId, data])
   @@index([extratoId])
   @@map("transacoes_cartao")
+}
+
+/// Modelo de checklist do caminhão que a empresa monta (pneus, freios, luzes…).
+/// O app usa o modelo ATIVO mais recente. Lembrado, nunca obrigatório.
+model ModeloChecklist {
+  contaId    String   @default("__SEM_CONTA__")
+  conta      Conta    @relation(fields: [contaId], references: [id])
+  id         String   @id @default(uuid())
+  nome       String
+  ativo      Boolean  @default(true)
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  itens      ItemModeloChecklist[]
+  checklists ChecklistVeiculo[]
+
+  @@index([contaId, ativo])
+  @@map("modelos_checklist")
+}
+
+model ItemModeloChecklist {
+  contaId        String          @default("__SEM_CONTA__")
+  conta          Conta           @relation(fields: [contaId], references: [id])
+  id             String          @id @default(uuid())
+  modelo         ModeloChecklist @relation(fields: [modeloId], references: [id], onDelete: Cascade)
+  modeloId       String
+  ordem          Int             @default(0)
+  texto          String
+  /// Item reprovado pede foto (o motorista pode seguir sem, com justificativa).
+  fotoSeReprovar Boolean         @default(true)
+  /// Item reprovado vira aviso de problema na Manutenção.
+  abreAviso      Boolean         @default(true)
+
+  respostas RespostaChecklist[]
+
+  @@index([modeloId, ordem])
+  @@map("itens_modelo_checklist")
+}
+
+/// Um checklist feito pelo motorista no app (pela fila offline: `clientId`).
+model ChecklistVeiculo {
+  contaId     String           @default("__SEM_CONTA__")
+  conta       Conta            @relation(fields: [contaId], references: [id])
+  id          String           @id @default(uuid())
+  clientId    String           @unique
+  motorista   Motorista        @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId String
+  veiculo     Veiculo?         @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
+  veiculoId   String?
+  modelo      ModeloChecklist? @relation(fields: [modeloId], references: [id], onDelete: SetNull)
+  modeloId    String?
+  /// Quando ele concluiu no aparelho (o envio pode ter esperado sinal).
+  feitoEm     DateTime
+  lat         Float?
+  lng         Float?
+  reprovados  Int              @default(0)
+  criadoEm    DateTime         @default(now())
+
+  respostas RespostaChecklist[]
+
+  @@index([contaId, feitoEm])
+  @@index([veiculoId, feitoEm])
+  @@index([motoristaId, feitoEm])
+  @@map("checklists_veiculo")
+}
+
+model RespostaChecklist {
+  contaId     String               @default("__SEM_CONTA__")
+  conta       Conta                @relation(fields: [contaId], references: [id])
+  id          String               @id @default(uuid())
+  checklist   ChecklistVeiculo     @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  checklistId String
+  item        ItemModeloChecklist? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  itemId      String?
+  /// Cópia do texto do item: mudar o modelo depois não reescreve o passado.
+  texto       String
+  ok          Boolean
+  observacao  String?
+  fotoKey     String?
+  /// O aviso de problema que este item reprovado abriu, quando abriu.
+  problemaId  String?
+
+  @@index([checklistId])
+  @@index([contaId])
+  @@map("respostas_checklist")
 }

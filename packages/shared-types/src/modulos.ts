@@ -157,7 +157,7 @@ export const MODULOS: ModuloDef[] = [
     nome: "Manutenção e vencimentos",
     pitch:
       "Revisão por km ou data, o aviso do motorista virando conserto, documentos e multas com prazo, e quanto custa cada caminhão.",
-    recursos: ["manutencao", "pneus", "multas", "documentos-veiculo", "custos-manutencao"],
+    recursos: ["manutencao", "pneus", "multas", "documentos-veiculo", "custos-manutencao", "checklists"],
   },
   {
     chave: "torre",
