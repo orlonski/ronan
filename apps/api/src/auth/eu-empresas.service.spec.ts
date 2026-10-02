@@ -21,9 +21,10 @@ function montar(over: { jaTem?: boolean; telefone?: string | null; contaAceita?:
     },
     motorista: { findFirst: vi.fn(async () => (over.jaTem ? { id: "m1" } : null)) },
   };
-  const cadastro = { criarVinculoPendente: vi.fn(async () => undefined) };
-  const svc = new EuService(prisma as never, {} as never, {} as never, {} as never, {} as never, cadastro as never);
-  return { svc, prisma, cadastro };
+  const cadastro = { criarVinculoPendente: vi.fn(async () => ({ id: "m1", contaId: "c1", status: "PENDENTE_APROVACAO", ativo: true, aceite: "ACEITO", ultimoLoginEm: null })) };
+  const auth = { abrirSessao: vi.fn(async (m: { id: string }) => ({ motoristaId: m.id, contaNome: "Freitas Transportes" })) };
+  const svc = new EuService(prisma as never, auth as never, {} as never, {} as never, {} as never, cadastro as never);
+  return { svc, prisma, cadastro, auth };
 }
 
 describe("EuService — busca de empresa e pedido de entrada", () => {
@@ -47,7 +48,7 @@ describe("EuService — busca de empresa e pedido de entrada", () => {
 
   it("pedir entrada cria o vínculo pendente", async () => {
     const { svc, cadastro } = montar();
-    await expect(svc.pedirEntrada("i4", "c1")).resolves.toMatchObject({ ok: true });
+    await expect(svc.pedirEntrada("i4", "c1")).resolves.toMatchObject({ motoristaId: "m1" });
     expect(cadastro.criarVinculoPendente).toHaveBeenCalledWith("c1", "i4", expect.objectContaining({ cpf: "11144477735" }));
   });
 

@@ -349,11 +349,11 @@ export class CadastroMotoristaService {
     contaId: string,
     identidadeId: string,
     dados: { cpf: string; nome: string; telefone: string; email: string | null; senhaHash: string; placas: unknown },
-  ): Promise<void> {
-    await comConta(contaId, async () => {
+  ) {
+    return comConta(contaId, async () => {
       // Alguém já cadastrou esse CPF nesta empresa no meio do caminho.
       const jaTem = await this.prisma.motorista.findFirst({ where: { cpf: dados.cpf } });
-      if (jaTem) return;
+      if (jaTem) return null;
       const motorista = await this.prisma.motorista.create({
         data: {
           identidadeId,
@@ -379,6 +379,7 @@ export class CadastroMotoristaService {
       } catch (e) {
         this.log.warn(`Falha ao notificar admins do cadastro: ${(e as Error).message}`);
       }
+      return motorista;
     });
   }
 

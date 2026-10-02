@@ -10,6 +10,7 @@ import { showAlert } from "@/lib/alert";
 import { api, humanizeApiError } from "@/lib/api";
 import { setAuthState } from "@/lib/auth-state";
 import { setCadastroStatus } from "@/lib/cadastro-status";
+import { gravarComoTrabalha } from "@/lib/como-trabalha";
 import { marcarEmpresaEscolhida, salvarSessoesDoLogin } from "@/lib/sessoes";
 
 const COOLDOWN_S = 60;
@@ -28,6 +29,8 @@ export default function SignupCodigoScreen() {
     /** Máscara do número pra onde o código foi de verdade (vem do backend). */
     destino?: string;
     reivindicacao?: string;
+    /** O que ele escolheu na 1ª tela: "empresa" ou "autonomo". */
+    como?: string;
   }>();
   const cpf = params.cpf ?? "";
   const celular = params.celular ?? "";
@@ -68,6 +71,8 @@ export default function SignupCodigoScreen() {
       }
       // Sem empresa nenhuma ele entra do mesmo jeito: a sessão da PESSOA já foi
       // guardada pelo cliente de API, e o app abre no modo sem empresa.
+      const como = params.como === "empresa" || params.como === "autonomo" ? params.como : null;
+      if (como) await gravarComoTrabalha(como);
       setAuthState(true);
       if (cadastros.length > 0 && reivindicacao) {
         void showAlert({
@@ -76,7 +81,13 @@ export default function SignupCodigoScreen() {
             "Você já tinha cadastro nessa empresa. Agora a senha é a que você acabou de escolher.",
         });
       }
-      router.replace("/");
+      // Disse que roda pra uma empresa e ainda não tem nenhuma: o próximo passo
+      // é achá-la, não cair numa home de autônomo.
+      if (cadastros.length === 0 && como === "empresa") {
+        router.replace({ pathname: "/buscar-empresa", params: { inicio: "1" } });
+      } else {
+        router.replace("/");
+      }
     } catch (err) {
       setErro(humanizeApiError(err));
     } finally {

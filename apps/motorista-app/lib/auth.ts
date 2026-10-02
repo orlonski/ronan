@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { esquecerComoTrabalha } from "./como-trabalha";
 import { esquecerVinculoRegistrado } from "./vinculo-registrado";
 import { esquecerAcessosApp } from "./acessos-app";
 import * as SecureStore from "expo-secure-store";
@@ -62,6 +63,7 @@ export async function clearTokens() {
   // Sem isto, quem entrasse depois neste aparelho herdava o vínculo do
   // anterior — e veria o nome da empresa de outra pessoa na tela dele.
   await esquecerVinculoRegistrado();
+  await esquecerComoTrabalha();
   await esquecerAcessosApp();
   await SecureStore.deleteItemAsync(KEY_LEGADA, KEYCHAIN_OPTS).catch(() => {});
 }

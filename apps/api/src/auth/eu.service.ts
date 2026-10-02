@@ -319,7 +319,7 @@ export class EuService {
     if (jaTem) {
       throw new ConflictException("Você já tem um cadastro ou um pedido nessa empresa.");
     }
-    await this.cadastro.criarVinculoPendente(conta.id, identidadeId, {
+    const vinculo = await this.cadastro.criarVinculoPendente(conta.id, identidadeId, {
       cpf: eu.cpf,
       nome: eu.nome,
       telefone: eu.telefone,
@@ -327,7 +327,10 @@ export class EuService {
       senhaHash: eu.senhaHash,
       placas: eu.placas,
     });
-    return { ok: true, contaNome: conta.nome };
+    if (!vinculo) throw new ConflictException("Você já tem um cadastro ou um pedido nessa empresa.");
+    // Já sai com a sessão daquela empresa aberta: ele cai na tela "em análise"
+    // em vez de ficar na casa do autônomo esperando a aprovação.
+    return this.auth.abrirSessao(vinculo);
   }
 
   /** Teto por pessoa: 40 buscas por hora (digitar vale uma, não uma por letra). */

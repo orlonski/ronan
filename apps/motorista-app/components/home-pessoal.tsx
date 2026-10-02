@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,6 +18,7 @@ import {
 import { ROTULO_DOCUMENTO_PESSOAL, type ResumoMesPessoal } from "@ronan/shared-types";
 import { Badge } from "@/components/ui/badge";
 import { api, type ConviteEmpresa } from "@/lib/api";
+import { lerComoTrabalha, type ComoTrabalha } from "@/lib/como-trabalha";
 import {
   cacheViagens,
   carregarResumo,
@@ -49,6 +50,11 @@ export function HomePessoal() {
   const [convites, setConvites] = useState<ConviteEmpresa[]>([]);
   const [docsAlerta, setDocsAlerta] = useState<{ nome: string; vencido: boolean } | null>(null);
   const [perfil, setPerfil] = useState<string | null>(null);
+  // O que ele disse no cadastro. Sem resposta, o app não rotula ninguém.
+  const [como, setComo] = useState<ComoTrabalha | null>(null);
+  useEffect(() => {
+    void lerComoTrabalha().then(setComo);
+  }, []);
   /**
    * SÓ o "puxar pra atualizar" acende a rodinha.
    *
@@ -135,7 +141,8 @@ export function HomePessoal() {
               {perfil ? primeiroNome(perfil) : "Por conta própria"}
             </Text>
           </View>
-          <Badge variant="success">Autônomo</Badge>
+          {como === "autonomo" && <Badge variant="success">Autônomo</Badge>}
+          {como === "empresa" && <Badge variant="warning">Sem empresa ainda</Badge>}
         </View>
       </SafeAreaView>
 
@@ -170,7 +177,7 @@ export function HomePessoal() {
           </Pressable>
         ))}
 
-        {convites.length === 0 && (
+        {convites.length === 0 && como !== "autonomo" && (
           <Pressable
             onPress={() => router.push("/buscar-empresa")}
             className="flex-row items-center gap-3 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"

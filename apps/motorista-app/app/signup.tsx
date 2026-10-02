@@ -2,12 +2,14 @@ import { useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Briefcase, Building2 } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { cpfDigits, telefoneDigits } from "@ronan/shared-types";
 import { api, apiErrorCode, humanizeApiError } from "@/lib/api";
+import type { ComoTrabalha } from "@/lib/como-trabalha";
 
 function maskCpf(input: string): string {
   const d = cpfDigits(input).slice(0, 11);
@@ -32,6 +34,7 @@ export default function SignupScreen() {
   // Pode chegar com o CPF já preenchido (ex: veio do "esqueci minha senha" que
   // detectou "CPF não cadastrado").
   const params = useLocalSearchParams<{ cpf?: string }>();
+  const [como, setComo] = useState<ComoTrabalha | null>(null);
   const [nome, setNome] = useState("");
   const [cpf, setCpf] = useState(() => (params.cpf ? maskCpf(params.cpf) : ""));
   const [celular, setCelular] = useState("");
@@ -68,6 +71,7 @@ export default function SignupScreen() {
     const celularDigitos = telefoneDigits(celular);
     const placasLimpa = placas.map((p) => p.trim()).filter(Boolean);
 
+    if (!como) return setErro("Escolha como você trabalha.");
     if (nome.trim().length < 2) return setErro("Informe seu nome completo.");
     if (cpfDigitos.length !== 11) return setErro("CPF precisa ter 11 dígitos.");
     if (celularDigitos.length < 10) return setErro("Informe um celular válido com DDD.");
@@ -95,6 +99,7 @@ export default function SignupScreen() {
           // cadastrado ele, vai pro número dela, não pro que ele digitou aqui.
           destino: res.destinoMascarado ?? "",
           reivindicacao: res.reivindicacao ? "1" : "",
+          como,
         },
       });
     } catch (err) {
@@ -130,6 +135,44 @@ export default function SignupScreen() {
           </View>
 
           <View className="flex-1 gap-5 px-6 py-7">
+            <View className="gap-2">
+              <Label>Como você trabalha?</Label>
+              {(
+                [
+                  {
+                    valor: "empresa",
+                    titulo: "Trabalho pra uma empresa",
+                    texto: "Você vai procurar a empresa depois de criar a conta.",
+                    Icone: Building2,
+                  },
+                  {
+                    valor: "autonomo",
+                    titulo: "Trabalho por conta própria",
+                    texto: "Faça a conta do frete e guarde seus gastos e viagens.",
+                    Icone: Briefcase,
+                  },
+                ] as const
+              ).map(({ valor, titulo, texto, Icone }) => {
+                const marcado = como === valor;
+                return (
+                  <Pressable
+                    key={valor}
+                    onPress={() => setComo(valor)}
+                    disabled={submitting}
+                    className={`flex-row items-center gap-3 rounded-2xl border-2 p-4 active:opacity-75 ${
+                      marcado ? "border-primary bg-primary/10" : "border-border bg-card"
+                    }`}
+                  >
+                    <Icone size={24} color={marcado ? "#13316b" : "#64748b"} />
+                    <View className="flex-1">
+                      <Text className="text-base font-bold text-foreground">{titulo}</Text>
+                      <Text className="text-sm text-muted-foreground">{texto}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
             <View className="gap-2">
               <Label>Nome completo</Label>
               <Input

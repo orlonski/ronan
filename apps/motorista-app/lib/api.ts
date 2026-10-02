@@ -731,9 +731,9 @@ export const api = {
     request<EmpresaBusca[]>("GET", `/m/eu/empresas/buscar?q=${encodeURIComponent(q)}`, {
       comoIdentidade: true,
     }),
-  /** Pede pra entrar numa empresa; ela aprova no painel. */
+  /** Pede pra entrar numa empresa; ela aprova no painel. Já devolve a sessão dela. */
   pedirEntradaEmpresa: (contaId: string) =>
-    request<{ ok: true; contaNome: string }>("POST", `/m/eu/empresas/${contaId}/pedir-entrada`, {
+    request<SessaoEmpresa>("POST", `/m/eu/empresas/${contaId}/pedir-entrada`, {
       comoIdentidade: true,
     }),
   meusConvites: () =>
