@@ -695,7 +695,7 @@ export class FrotaManutencaoService {
           status: "ABERTA",
           descricao: p.descricao,
           observacao: "Aberta sozinha: a revisão programada venceu.",
-          previstaEm: new Date(`${hoje.toISOString().slice(0, 10)}T00:00:00Z`),
+          previstaEm: inicioDoDiaData(hoje),
         },
       });
     }
