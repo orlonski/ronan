@@ -6,6 +6,8 @@ import type {
   DarBaixaInput,
   GerarFaturaInput,
   PreviaFaturaQuery,
+  PreviaSobretaxa,
+  SobretaxaCongelada,
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
@@ -13,6 +15,10 @@ import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { estadiasCobraveis } from "../../common/estadia-fatura";
+import { calcularSobretaxa, precoMedioDiesel, TIPOS_DIESEL } from "../../common/sobretaxa-combustivel";
+import { resolverRemuneracao } from "../../common/acerto-motorista";
+import { dentroDeEmprego, soDigitos } from "../../common/regime-vigente";
+import { inicioDoDiaBR } from "../../common/timezone";
 import {
   apurarTitulo,
   gerarParcelas,
@@ -69,9 +75,17 @@ export class FinanceiroService {
       : [];
     const viagemPorId = new Map(viagens.map((v) => [v.id, v]));
 
+    // Sobretaxa: recalculada aqui com a mesma função da prévia. Só entra com
+    // regra ligada, conta que deu valor e quem fatura sem ter desmarcado.
+    const sobretaxa = input.aplicarSobretaxa
+      ? await this.sobretaxaDe(empresa.id, input.periodoInicio, input.periodoFim, viagens, input.precoDiesel ?? null)
+      : null;
+    const linhaSobretaxa = sobretaxa?.aplica ? sobretaxa.calculo : null;
+
     const bruto = viagens
       .reduce((acc, v) => acc.add(new Prisma.Decimal(v.valor!.valorTotal)), new Prisma.Decimal(0))
-      .add(estadias.reduce((acc, e) => acc.add(e.valor), new Prisma.Decimal(0)));
+      .add(estadias.reduce((acc, e) => acc.add(e.valor), new Prisma.Decimal(0)))
+      .add(linhaSobretaxa ? new Prisma.Decimal(linhaSobretaxa.valor) : 0);
 
     const prazo = input.prazoDias ?? empresa.prazoPagamentoDias ?? null;
     const parcelas = gerarParcelas({
@@ -145,6 +159,20 @@ export class FinanceiroService {
         });
       }
 
+      if (linhaSobretaxa) {
+        const { descricao, ...numeros } = linhaSobretaxa;
+        await tx.faturaLinha.create({
+          data: {
+            faturaId: criada.id,
+            descricao,
+            quantidade: 1,
+            precoUnitario: numeros.valor,
+            valor: numeros.valor,
+            sobretaxa: numeros satisfies SobretaxaCongelada,
+          },
+        });
+      }
+
       await tx.tituloReceber.createMany({
         data: parcelas.map((p) => ({
           faturaId: criada.id,
@@ -195,7 +223,7 @@ export class FinanceiroService {
         cliente: { select: { nome: true } },
         material: { select: { nome: true } },
         valor: {
-          select: { quantidade: true, precoUnitario: true, valorTotal: true, base: true },
+          select: { quantidade: true, precoUnitario: true, valorFrete: true, valorTotal: true, base: true },
         },
       },
       orderBy: { data: "asc" },
@@ -231,6 +259,150 @@ export class FinanceiroService {
     );
   }
 
+  /**
+   * A sobretaxa de combustível que esta fatura leva (common/sobretaxa-combustivel.ts).
+   * Uma função só pra prévia e geração, pelo mesmo motivo de `viagensFaturaveis`.
+   *
+   * `null` = o cliente não tem regra ligada pro período: a fatura sai como
+   * sempre saiu, e a tela nem mostra o bloco.
+   */
+  private async sobretaxaDe(
+    empresaId: string,
+    periodoInicio: string,
+    periodoFim: string,
+    viagens: { valor: { valorFrete?: Prisma.Decimal } | null }[],
+    precoInformado: number | null,
+  ): Promise<PreviaSobretaxa | null> {
+    // Vale a regra cuja vigência cobre o ÚLTIMO dia faturado. Ligadas não se
+    // sobrepõem (o cadastro recusa), então há no máximo uma.
+    const fim = diaUtc(periodoFim);
+    const regra = await this.prisma.regraSobretaxaCombustivel.findFirst({
+      where: {
+        empresaId,
+        ativo: true,
+        vigenciaDe: { lte: fim },
+        OR: [{ vigenciaAte: null }, { vigenciaAte: { gte: fim } }],
+      },
+      orderBy: { vigenciaDe: "desc" },
+    });
+    if (!regra) return null;
+
+    const regraOut: PreviaSobretaxa["regra"] = {
+      id: regra.id,
+      dieselReferencia: regra.dieselReferencia.toFixed(3),
+      gatilho: regra.gatilho.toFixed(3),
+      percentualPorPasso: regra.percentualPorPasso.toFixed(3),
+      tetoPercentual: regra.tetoPercentual?.toFixed(3) ?? null,
+    };
+
+    const media = precoMedioDiesel(await this.dieselPagoPelaEmpresa(periodoInicio, periodoFim));
+    const mediaOut = media
+      ? { preco: media.preco.toFixed(3), litros: media.litros.toFixed(3), abastecimentos: media.abastecimentos }
+      : null;
+
+    const preco = precoInformado != null ? new Prisma.Decimal(precoInformado) : (media?.preco ?? null);
+    if (preco == null) {
+      const p = (d: string) => d.split("-").reverse().join("/");
+      return {
+        regra: regraOut,
+        aplica: false,
+        motivo:
+          `Nenhum abastecimento de diesel pago pela empresa entre ${p(periodoInicio)} e ${p(periodoFim)}: ` +
+          `sem preço médio, a sobretaxa não entra. Informe o preço do diesel à mão pra aplicar.`,
+        media: null,
+        calculo: null,
+      };
+    }
+
+    // Base = só o FRETE. `valorTotal` traz o pedágio repassado, que é reembolso
+    // de praça e não gasta diesel; a estadia nem passa por aqui.
+    const base = viagens.reduce(
+      (acc, v) => acc.add(v.valor?.valorFrete ?? 0),
+      new Prisma.Decimal(0),
+    );
+    const conta = calcularSobretaxa(regra, preco, base);
+    const calculo = {
+      ...conta,
+      regraId: regra.id,
+      origemPreco: precoInformado != null ? ("INFORMADO" as const) : ("MEDIA_ABASTECIMENTOS" as const),
+      litros: precoInformado == null && media ? media.litros.toFixed(3) : null,
+      abastecimentos: precoInformado == null && media ? media.abastecimentos : null,
+      // A descrição diz de onde veio o preço quando foi à mão: quem lê a fatura
+      // daqui a seis meses precisa saber que não foi média.
+      descricao: precoInformado != null ? conta.descricao.replace("diesel médio", "diesel informado") : conta.descricao,
+    };
+
+    let motivo: string | null = null;
+    if (base.lte(0)) motivo = "Nenhuma viagem com frete no período: não há sobre o que aplicar a sobretaxa.";
+    else if (conta.passos === 0)
+      motivo = "O diesel não subiu um passo inteiro acima da referência: sem sobretaxa nesta fatura.";
+
+    return { regra: regraOut, aplica: motivo == null, motivo, media: mediaOut, calculo };
+  }
+
+  /**
+   * Os abastecimentos de diesel do período que a EMPRESA pagou, de toda a frota
+   * da conta — o preço do diesel é um só, não importa o caminhão nem o cliente
+   * atendido. "Pagou" segue `common/lucro-veiculo.ts`: comboio, motorista
+   * empregado no dia, ou modalidade que reembolsa abastecimento. O diesel que o
+   * parceiro pagou do bolso sem reembolso não é custo da empresa e não serve
+   * pra cobrar sobretaxa em nome dela.
+   */
+  private async dieselPagoPelaEmpresa(periodoInicio: string, periodoFim: string) {
+    // Abastecimento é instante: o dia ancora em Brasília e o fim é o começo do
+    // dia seguinte, senão o que entrou depois das 21h do último dia some.
+    const abastecimentos = await this.prisma.abastecimento.findMany({
+      where: {
+        tipo: { in: [...TIPOS_DIESEL] },
+        data: {
+          gte: inicioDoDiaBR(periodoInicio),
+          lt: new Date(inicioDoDiaBR(periodoFim).getTime() + 86_400_000),
+        },
+        valorTotal: { not: null },
+      },
+      select: { motoristaId: true, data: true, litros: true, valorTotal: true, emComboio: true },
+    });
+    if (abastecimentos.length === 0) return [];
+
+    const motoristaIds = [...new Set(abastecimentos.filter((a) => !a.emComboio).map((a) => a.motoristaId))];
+    const motoristas = motoristaIds.length
+      ? await this.prisma.motorista.findMany({
+          where: { id: { in: motoristaIds } },
+          select: {
+            id: true,
+            cpf: true,
+            tipoRemuneracao: true,
+            percentualFrete: true,
+            valorPorViagem: true,
+            valorPorTonelada: true,
+            valorPorKm: true,
+            modalidade: true,
+          },
+        })
+      : [];
+    const cpfs = [...new Set(motoristas.map((m) => soDigitos(m.cpf ?? "")).filter((c) => c.length === 11))];
+    const regimes = cpfs.length
+      ? await this.prisma.regimeVigente.findMany({
+          where: { cpf: { in: cpfs }, regime: "EMPREGADO" },
+          select: { cpf: true, iniciouEm: true, encerradoEm: true },
+        })
+      : [];
+    const porId = new Map(motoristas.map((m) => [m.id, m]));
+
+    return abastecimentos.filter((a) => {
+      if (a.emComboio) return true; // diesel do caminhão-tanque é da empresa por definição
+      const m = porId.get(a.motoristaId);
+      // Motorista apagado: sem régua conhecida, cai no padrão (reembolsa).
+      if (!m) return true;
+      const cpf = soDigitos(m.cpf ?? "");
+      const emprego = regimes
+        .filter((r) => r.cpf === cpf)
+        .map((r) => ({ inicio: r.iniciouEm, fim: r.encerradoEm }));
+      if (dentroDeEmprego(emprego, a.data)) return true;
+      return resolverRemuneracao(m, m.modalidade).reembolsaAbastecimento;
+    });
+  }
+
   /** O que entraria na fatura, sem gravar: viagens, total, o que ficou sem preço e as estadias. */
   async previaFatura(q: PreviaFaturaQuery) {
     const inicio = diaUtc(q.periodoInicio);
@@ -248,7 +420,15 @@ export class FinanceiroService {
     ]);
     const estadias = await this.estadiasDe(viagens.map((v) => v.id));
     const viagemPorId = new Map(viagens.map((v) => [v.id, v]));
+    const sobretaxa = await this.sobretaxaDe(
+      q.empresaId,
+      q.periodoInicio,
+      q.periodoFim,
+      viagens,
+      q.precoDiesel ?? null,
+    );
     return {
+      sobretaxa,
       viagens: viagens.length,
       valorViagens: viagens
         .reduce((acc, v) => acc.add(new Prisma.Decimal(v.valor!.valorTotal)), new Prisma.Decimal(0))

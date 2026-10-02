@@ -87,6 +87,14 @@ export const GerarFaturaInput = z
      * prévia sugere todas as encerradas; quem fatura desmarca o que não cobra.
      */
     estadias: z.array(z.string().min(1).max(64)).max(500).default([]),
+    /**
+     * Sobretaxa de combustível (só existe com regra ligada no cliente). False =
+     * quem fatura decidiu não cobrar desta vez. O valor é sempre recalculado
+     * no servidor: o da tela é só o que a prévia mostrou.
+     */
+    aplicarSobretaxa: z.boolean().default(true),
+    /** R$/litro informado à mão: sobrepõe a média dos abastecimentos e fica registrado na linha. */
+    precoDiesel: z.number().positive().max(99.999).nullish(),
   })
   .refine((d) => d.periodoFim >= d.periodoInicio, {
     message: "O fim do período não pode ser antes do início.",
@@ -96,7 +104,13 @@ export type GerarFaturaInput = z.infer<typeof GerarFaturaInput>;
 
 /** O que entraria numa fatura: mesma regra do gerar, sem gravar nada. */
 export const PreviaFaturaQuery = z
-  .object({ empresaId: z.string().uuid(), periodoInicio: DATA, periodoFim: DATA })
+  .object({
+    empresaId: z.string().uuid(),
+    periodoInicio: DATA,
+    periodoFim: DATA,
+    /** Preço do diesel à mão, pra prévia mostrar a sobretaxa com ele. */
+    precoDiesel: z.coerce.number().positive().max(99.999).optional(),
+  })
   .refine((d) => d.periodoFim >= d.periodoInicio, {
     message: "O fim do período não pode ser antes do início.",
     path: ["periodoFim"],

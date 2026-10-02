@@ -7,6 +7,7 @@ import { useResourceItem } from "@/lib/client-api";
 import { EmpresaForm, type Empresa } from "../_components/empresa-form";
 import { ObrasDoCliente } from "../_components/obras-do-cliente";
 import { PrecoMinimoDoCliente } from "../_components/preco-minimo-do-cliente";
+import { SobretaxaCombustivelDoCliente } from "../_components/sobretaxa-combustivel-do-cliente";
 
 export default function EditarEmpresaPage({
   params,
@@ -29,6 +30,7 @@ export default function EditarEmpresaPage({
         {item.data && <EmpresaForm initial={item.data} />}
         {item.data && <ObrasDoCliente clienteId={item.data.id} nomeCliente={item.data.nome} />}
         {item.data && <PrecoMinimoDoCliente clienteId={item.data.id} />}
+        {item.data && <SobretaxaCombustivelDoCliente clienteId={item.data.id} />}
       </div>
     </RequerTela>
   );

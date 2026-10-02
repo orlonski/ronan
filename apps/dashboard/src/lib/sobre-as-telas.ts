@@ -670,6 +670,7 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
       "Ensinar o sistema a ler a planilha que ele te manda e a montar a planilha que você manda pra ele",
       "Na leitura da planilha dele, dizer quanta diferença de km e de tonelada é aceitável antes de a linha virar divergência",
       "Abrir um cliente pra ver as obras dele e o preço e o mínimo que valem pra ele",
+      "Cadastrar a sobretaxa de combustível do contrato: com ela ligada, quando o diesel sobe acima da referência a fatura dele ganha a linha a mais sozinha",
     ],
     naoEAqui: {
       procurando: "as donas dos caminhões que rodam pra você",

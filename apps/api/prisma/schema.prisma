@@ -557,6 +557,7 @@ model Conta {
   modalidadesMotorista           ModalidadeMotorista[]
   regrasMinimo                   RegraMinimo[]
   tabelasPreco                   TabelaPreco[]
+  regrasSobretaxaCombustivel     RegraSobretaxaCombustivel[]
   viagemValores                  ViagemValor[]
   acertosMotorista               AcertoMotorista[]
   itensAcerto                    ItemAcerto[]
@@ -2300,12 +2301,13 @@ model Empresa {
   clientes       Cliente[]
   regrasMinimo   RegraMinimo[]
   tabelasPreco   TabelaPreco[]
+  sobretaxas     RegraSobretaxaCombustivel[]
   fechamentos    Fechamento[]
   layoutsEnvio   LayoutEnvio[]
   layoutsImport  LayoutImportBloco[]
   enviosDiretos  EnvioFechamento[]
   abastecimentos Abastecimento[]
-  criadoPor      User?               @relation("CriouEmpresa", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPor      User?                       @relation("CriouEmpresa", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId    String?
 
   pedidos Pedido[]
@@ -2770,6 +2772,45 @@ model TabelaPreco {
 }
 
 /**
+ * Sobretaxa de combustível do cliente pagador: "a cada R$ 0,10 de alta no
+ * diesel acima de R$ 6,00, +0,5% no frete". A conta mora em
+ * `common/sobretaxa-combustivel.ts`; aqui só os números do contrato.
+ * Nasce DESLIGADA (`ativo` false): ligar uma regra muda o valor da próxima
+ * fatura do cliente, e isso só pode acontecer porque alguém decidiu — nunca
+ * porque a migration subiu.
+ * Diesel caindo não dá desconto (ver a regra pura). Vigência pelo dia: vale a
+ * regra ligada cuja vigência cobre o ÚLTIMO dia do período faturado.
+ */
+model RegraSobretaxaCombustivel {
+  contaId            String    @default("__SEM_CONTA__")
+  conta              Conta     @relation(fields: [contaId], references: [id])
+  id                 String    @id @default(uuid())
+  empresa            Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId          String
+  ativo              Boolean   @default(false)
+  /// R$/litro do diesel quando o frete foi combinado.
+  dieselReferencia   Decimal   @db.Decimal(6, 3)
+  /// De quanto em quanto R$/litro de alta conta um passo (ex.: 0,10).
+  gatilho            Decimal   @db.Decimal(6, 3)
+  /// Quantos % cada passo acrescenta ao frete (ex.: 1 = 1%).
+  percentualPorPasso Decimal   @db.Decimal(6, 3)
+  /// Limite do percentual total. Null = sem teto.
+  tetoPercentual     Decimal?  @db.Decimal(6, 3)
+  vigenciaDe         DateTime  @db.Date
+  /// null = vigente até segunda ordem.
+  vigenciaAte        DateTime? @db.Date
+  /// Só o id, sem relação: quem criou fica na auditoria, e a relação com User
+  /// não acrescentaria nada que alguém consulte.
+  criadoPorId        String?
+  criadoEm           DateTime  @default(now())
+  alteradoEm         DateTime  @updatedAt
+
+  @@index([empresaId, ativo])
+  @@index([contaId])
+  @@map("regras_sobretaxa_combustivel")
+}
+
+/**
  * Quanto ESTA viagem vale, congelado.
  * Tabela separada e não colunas na `Viagem` por dois motivos: a Viagem já passa
  * de 90 colunas, e o dinheiro precisa de auditoria própria — quem mexeu, quando
@@ -3065,6 +3106,10 @@ model FaturaLinha {
   eventoViagem   EventoViagem? @relation(fields: [eventoViagemId], references: [id], onDelete: SetNull)
   eventoViagemId String?
   descricao      String
+  /// Linha de SOBRETAXA DE COMBUSTÍVEL: os números da conta congelados na
+  /// emissão (diesel usado e de onde veio, referência, passos, percentual,
+  /// base). A descrição explica; isto é pra reconstituir sem recalcular.
+  sobretaxa      Json?
   quantidade     Decimal       @db.Decimal(12, 3)
   precoUnitario  Decimal       @db.Decimal(10, 2)
   valor          Decimal       @db.Decimal(12, 2)

@@ -31,6 +31,7 @@ export * from "./admissao";
 export * from "./tipo-servico";
 export * from "./regra-minimo";
 export * from "./tabela-preco";
+export * from "./sobretaxa-combustivel";
 export * from "./acerto-motorista";
 export * from "./pedido";
 export * from "./modulos";

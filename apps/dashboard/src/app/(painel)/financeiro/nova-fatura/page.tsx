@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 import { primeiroDiaDoMesSP, ultimoDiaDoMesSP } from "@/lib/datetime-br";
+import type { PreviaSobretaxa } from "@ronan/shared-types";
 
 /**
  * Gerar a fatura do cliente: as viagens com valor do período, e as estadias
@@ -20,6 +21,10 @@ import { primeiroDiaDoMesSP, ultimoDiaDoMesSP } from "@/lib/datetime-br";
  *
  * Dois passos: conferir (nada é gravado) e gerar. As estadias vêm marcadas;
  * quem fatura desmarca o que combinou não cobrar.
+ *
+ * A sobretaxa de combustível só aparece pra cliente com regra LIGADA (cadastro
+ * do cliente). A conta vem pronta da API; aqui dá pra trocar a média dos
+ * abastecimentos por um preço à mão e recalcular, ou não cobrar desta vez.
  */
 
 type Empresa = { id: string; nome: string };
@@ -38,10 +43,21 @@ type Previa = {
     data: string | null;
     ticket: string | null;
   }[];
+  sobretaxa: PreviaSobretaxa | null;
 };
 
 const brl = (v: string | number) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const dia = (iso: string | null) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—");
+const litro = (v: string) =>
+  `R$ ${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}`;
+
+/** "6,42" → 6.42; sem vírgula, o ponto é decimal. */
+function numeroBr(v: string): number | null {
+  const s = v.trim();
+  if (!s) return null;
+  const n = Number(s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 export default function NovaFaturaPage() {
   return (
@@ -65,22 +81,39 @@ function Conteudo() {
   const [marcadas, setMarcadas] = React.useState<Set<string>>(new Set());
   const [erro, setErro] = React.useState<string | null>(null);
   const [ocupado, setOcupado] = React.useState(false);
+  const [cobrarSobretaxa, setCobrarSobretaxa] = React.useState(true);
+  const [dieselManual, setDieselManual] = React.useState("");
+  /** O preço à mão que a prévia na tela usou. É ele que vai pro gerar, não o campo. */
+  const [dieselAplicado, setDieselAplicado] = React.useState<number | null>(null);
 
   // Mudou o que se fatura: a conferência anterior não vale mais.
-  React.useEffect(() => setPrevia(null), [empresaId, de, ate]);
+  React.useEffect(() => {
+    setPrevia(null);
+    setDieselAplicado(null);
+  }, [empresaId, de, ate]);
 
-  async function conferir() {
+  async function conferir(precoDiesel: number | null = dieselAplicado) {
     if (!token) return;
     if (!empresaId) return setErro("Escolha o cliente.");
     setErro(null);
     setOcupado(true);
     try {
       const p = await fetchApi<Previa>(
-        `/admin/financeiro/faturas/previa?${new URLSearchParams({ empresaId, periodoInicio: de, periodoFim: ate })}`,
+        `/admin/financeiro/faturas/previa?${new URLSearchParams({
+          empresaId,
+          periodoInicio: de,
+          periodoFim: ate,
+          ...(precoDiesel != null ? { precoDiesel: String(precoDiesel) } : {}),
+        })}`,
         { token },
       );
+      // Recalcular a sobretaxa não pode desfazer o que já foi desmarcado nas estadias.
+      if (!previa) {
+        setMarcadas(new Set(p.estadias.map((e) => e.eventoId)));
+        setCobrarSobretaxa(true);
+      }
       setPrevia(p);
-      setMarcadas(new Set(p.estadias.map((e) => e.eventoId)));
+      setDieselAplicado(precoDiesel);
     } catch (e) {
       setErro((e as Error).message);
     } finally {
@@ -104,6 +137,8 @@ function Conteudo() {
           prazoDias: prazo.trim() ? Number(prazo) : null,
           observacao: observacao.trim() || null,
           estadias: [...marcadas],
+          aplicarSobretaxa: cobrarSobretaxa,
+          precoDiesel: dieselAplicado,
         }),
       });
       router.push("/financeiro");
@@ -116,7 +151,9 @@ function Conteudo() {
   const valorEstadias = previa
     ? previa.estadias.filter((e) => marcadas.has(e.eventoId)).reduce((s, e) => s + Number(e.valor), 0)
     : 0;
-  const total = previa ? Number(previa.valorViagens) + valorEstadias : 0;
+  const st = previa?.sobretaxa ?? null;
+  const valorSobretaxa = st?.aplica && st.calculo && cobrarSobretaxa ? Number(st.calculo.valor) : 0;
+  const total = previa ? Number(previa.valorViagens) + valorEstadias + valorSobretaxa : 0;
 
   return (
     <div className="space-y-5">
@@ -145,7 +182,7 @@ function Conteudo() {
           </div>
         </div>
         {!previa && (
-          <Button onClick={conferir} disabled={ocupado}>
+          <Button onClick={() => conferir()} disabled={ocupado}>
             {ocupado ? "Conferindo…" : "Conferir o que entra"}
           </Button>
         )}
@@ -210,6 +247,91 @@ function Conteudo() {
             </Card>
           )}
 
+          {st && (
+            <Card className="space-y-3 p-5">
+              <div>
+                <h2 className="text-sm font-semibold">Sobretaxa de combustível</h2>
+                <p className="text-sm text-muted-foreground">
+                  Regra do cliente: referência {litro(st.regra.dieselReferencia)}/l, a cada {litro(st.regra.gatilho)}{" "}
+                  de alta soma {Number(st.regra.percentualPorPasso).toLocaleString("pt-BR")}% no frete
+                  {st.regra.tetoPercentual &&
+                    ` (teto ${Number(st.regra.tetoPercentual).toLocaleString("pt-BR")}%)`}
+                  . Pedágio e estadia ficam fora da base.
+                </p>
+              </div>
+
+              {st.media ? (
+                <p className="text-sm">
+                  Diesel médio do período: <strong>{litro(st.media.preco)}</strong>/l
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {st.media.abastecimentos} abastecimento(s) pagos pela empresa,{" "}
+                    {Number(st.media.litros).toLocaleString("pt-BR")} litros
+                  </span>
+                </p>
+              ) : null}
+
+              {st.calculo && (
+                <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1">{st.calculo.descricao}</span>
+                  <span className="tabular-nums font-medium">{brl(st.calculo.valor)}</span>
+                </div>
+              )}
+
+              {st.motivo && <p className="text-sm text-amber-800">{st.motivo}</p>}
+
+              {st.aplica && (
+                <label className="flex cursor-pointer items-center gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={cobrarSobretaxa}
+                    onChange={(e) => setCobrarSobretaxa(e.target.checked)}
+                  />
+                  Cobrar a sobretaxa nesta fatura
+                </label>
+              )}
+
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="fat-diesel">Preço do diesel à mão (R$/l, opcional)</Label>
+                  <Input
+                    id="fat-diesel"
+                    inputMode="decimal"
+                    className="w-44"
+                    placeholder={st.media ? litro(st.media.preco).replace("R$ ", "") : "6,42"}
+                    value={dieselManual}
+                    onChange={(e) => setDieselManual(e.target.value)}
+                  />
+                </div>
+                <Button
+                  variant="default"
+                  disabled={ocupado || numeroBr(dieselManual) == null}
+                  onClick={() => conferir(numeroBr(dieselManual))}
+                >
+                  Recalcular com este preço
+                </Button>
+                {dieselAplicado != null && (
+                  <Button
+                    variant="outline"
+                    disabled={ocupado}
+                    onClick={() => {
+                      setDieselManual("");
+                      conferir(null);
+                    }}
+                  >
+                    Voltar pra média
+                  </Button>
+                )}
+              </div>
+              {dieselAplicado != null && (
+                <p className="text-xs text-muted-foreground">
+                  Usando {litro(String(dieselAplicado))}/l informado à mão — fica registrado na linha da fatura.
+                </p>
+              )}
+            </Card>
+          )}
+
           <Card className="space-y-4 p-5">
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-1.5">
@@ -238,8 +360,18 @@ function Conteudo() {
             </div>
             <p className="text-base">
               Total da fatura: <strong className="tabular-nums">{brl(total)}</strong>
-              {valorEstadias > 0 && (
-                <span className="text-sm text-muted-foreground"> (inclui {brl(valorEstadias)} de estadia)</span>
+              {(valorEstadias > 0 || valorSobretaxa > 0) && (
+                <span className="text-sm text-muted-foreground">
+                  {" "}
+                  (inclui{" "}
+                  {[
+                    valorEstadias > 0 ? `${brl(valorEstadias)} de estadia` : null,
+                    valorSobretaxa > 0 ? `${brl(valorSobretaxa)} de sobretaxa de combustível` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" e ")}
+                  )
+                </span>
               )}
             </p>
           </Card>
