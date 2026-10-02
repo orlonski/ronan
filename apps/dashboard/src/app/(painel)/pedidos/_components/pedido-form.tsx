@@ -72,7 +72,9 @@ function localOption(l: (Nomeado & { cidade: string | null; uf: string | null })
 export function PedidoForm({ initial }: { initial?: Pedido }) {
   const router = useRouter();
   const empresas = useResourceOptions<Nomeado>("/admin/empresas");
-  const materiais = useResourceOptions<Nomeado>("/admin/materiais");
+  const materiais = useResourceOptions<Nomeado & { densidadeTonM3?: string | number | null }>(
+    "/admin/materiais",
+  );
   const tiposServico = useResourceOptions<Nomeado>("/admin/tipos-servico");
   const create = useCreateResource<Body, Pedido>(PATH, PATH);
   const update = useUpdateResource<Partial<Body>, Pedido>(PATH, PATH);
@@ -110,6 +112,9 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
     const qtd = Number(form.quantidadeAlvo.replace(/\./g, "").replace(",", "."));
     if (!form.empresaId) return setErro("Escolha o cliente.");
     if (!Number.isFinite(qtd) || qtd <= 0) return setErro("Informe quanto foi pedido.");
+    if (form.unidadeAlvo === "M3" && !form.materialId) {
+      return setErro("Pedido em m³ precisa do material: é a densidade dele que converte o peso em volume.");
+    }
     if (form.prazoEm && form.prazoEm < form.inicioEm) {
       return setErro("O prazo não pode ser antes do início.");
     }
@@ -139,6 +144,13 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
   }
 
   const saving = create.isPending || update.isPending;
+
+  // Pedido em m³: a balança pesa em tonelada, e quem converte é a densidade do
+  // material. Avisar AQUI, na hora de criar, poupa o supervisor de descobrir
+  // depois que o saldo ficou "indisponível".
+  const materialEscolhido = materiais.data?.find((m) => m.id === form.materialId);
+  const densidade =
+    materialEscolhido?.densidadeTonM3 != null ? Number(materialEscolhido.densidadeTonM3) : null;
 
   return (
     <Card className="p-6">
@@ -215,6 +227,30 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
             </Select>
           </div>
         </div>
+
+        {form.unidadeAlvo === "M3" &&
+          (!form.materialId ? (
+            <p className="text-xs text-amber-700">
+              Pedido em m³ precisa do material: a balança pesa em tonelada, e é a densidade
+              do material que converte o peso em volume.
+            </p>
+          ) : densidade == null ? (
+            <p className="text-xs text-amber-700">
+              {materialEscolhido?.nome ?? "Esse material"} ainda não tem densidade cadastrada.
+              O pedido salva, mas o saldo fica indisponível até alguém cadastrar a densidade
+              em{" "}
+              <Link href={`/materiais/${form.materialId}`} className="underline">
+                Materiais
+              </Link>
+              .
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              O saldo converte as toneladas das viagens pela densidade de{" "}
+              {materialEscolhido?.nome}:{" "}
+              {densidade.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} t/m³.
+            </p>
+          ))}
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">

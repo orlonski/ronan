@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+// Mesma faixa do schema e do CHECK no banco.
+import { DENSIDADE_MAX_T_M3, DENSIDADE_MIN_T_M3 } from "@ronan/shared-types";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,6 +26,7 @@ export type Material = {
   temComprovanteFoto: boolean;
   dispensaConferencia: boolean;
   valorReferenciaTonelada: number | string | null;
+  densidadeTonM3: number | string | null;
 };
 
 const PATH = "/admin/materiais";
@@ -39,12 +42,15 @@ type MaterialForm = {
   temComprovanteFoto: boolean;
   dispensaConferencia: boolean;
   valorReferenciaTonelada: string;
+  densidadeTonM3: string;
 };
 
 /** O que vai pra API: número de verdade, ou null quando em branco. */
-type MaterialBody = Omit<MaterialForm, "valorReferenciaTonelada"> & {
+type MaterialBody = Omit<MaterialForm, "valorReferenciaTonelada" | "densidadeTonM3"> & {
   valorReferenciaTonelada: number | null;
+  densidadeTonM3: number | null;
 };
+
 
 export function MaterialForm({ initial }: Props) {
   const router = useRouter();
@@ -59,7 +65,9 @@ export function MaterialForm({ initial }: Props) {
     dispensaConferencia: initial?.dispensaConferencia ?? false,
     valorReferenciaTonelada:
       initial?.valorReferenciaTonelada == null ? "" : String(initial.valorReferenciaTonelada),
+    densidadeTonM3: initial?.densidadeTonM3 == null ? "" : String(Number(initial.densidadeTonM3)),
   });
+  const [erroDensidade, setErroDensidade] = useState<string | null>(null);
 
   // Sair de um cadastro longo descartava tudo em silêncio.
   const sujo = useSujo(form);
@@ -67,8 +75,23 @@ export function MaterialForm({ initial }: Props) {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Vazio = não informada (null), nunca 0: densidade zero não é "leve", é
+    // divisão por zero na conversão.
+    const densidade = form.densidadeTonM3.trim() ? Number(form.densidadeTonM3) : null;
+    if (
+      densidade != null &&
+      (!Number.isFinite(densidade) || densidade < DENSIDADE_MIN_T_M3 || densidade > DENSIDADE_MAX_T_M3)
+    ) {
+      setErroDensidade(
+        `A densidade fica entre 0,3 e 3,5 t/m³ (brita ≈ 1,45). Confira se não digitou em kg/m³.`,
+      );
+      document.getElementById("densidadeTonM3")?.focus();
+      return;
+    }
+    setErroDensidade(null);
     const body = {
       ...form,
+      densidadeTonM3: densidade,
       // Vazio é "não informado", e precisa chegar como null. Mandar "" faria o
       // `z.coerce.number()` do schema virar 0 — e zero num campo de valor não
       // é ausência, é a afirmação de que a carga não vale nada.
@@ -147,6 +170,35 @@ export function MaterialForm({ initial }: Props) {
             a tabela de preços precifica o serviço de transporte, não a mercadoria.
             O valor da carga sai de <em>referência × toneladas</em>; quando a viagem
             trouxer o valor real da NF-e, ele vence esta referência.
+          </p>
+        </div>
+        {/* A ponte entre o que a balança pesa e o que o cliente compra. Fica
+            em branco até alguém saber o número de verdade: chutar uma média
+            erra o volume de toda viagem desse material. */}
+        <div className="space-y-2 rounded-lg border p-3">
+          <Label htmlFor="densidadeTonM3">Densidade (t por m³)</Label>
+          <Input
+            id="densidadeTonM3"
+            inputMode="decimal"
+            value={form.densidadeTonM3}
+            onChange={(e) => {
+              setErroDensidade(null);
+              setForm({ ...form, densidadeTonM3: e.target.value.replace(",", ".") });
+            }}
+            placeholder="ex: 1.45"
+            autoComplete="off"
+            aria-invalid={erroDensidade ? true : undefined}
+            className={erroDensidade ? "border-red-500" : undefined}
+          />
+          {erroDensidade && <p className="text-xs text-red-600">{erroDensidade}</p>}
+          <p className="text-xs text-muted-foreground">
+            Quantas toneladas cabem em 1 m³ desse material, solto na caçamba. Referências:
+            brita 1 ≈ 1,45 · areia ≈ 1,5 · pó de pedra ≈ 1,6 — o certo é o número da
+            pedreira ou de uma pesagem sua. Só precisa se você vende{" "}
+            <strong className="font-medium text-foreground">por m³</strong>: é ela que
+            converte o peso da balança em volume no pedido e no preço por m³. Em branco,
+            pedido e preço em m³ desse material ficam parados avisando que falta a
+            densidade.
           </p>
         </div>
         <div className="space-y-2 rounded-lg border p-3">

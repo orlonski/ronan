@@ -48,9 +48,13 @@ type Props = {
    * cadastrado — os dois casos aparecem diferente na tela.
    */
   valor?: {
-    base: "TONELADA" | "KM" | "VIAGEM";
+    base: "TONELADA" | "KM" | "VIAGEM" | "M3";
     precoUnitario: string;
+    /** Em m³ na base M3. */
     quantidade: string;
+    /** Base M3: a densidade e as toneladas congeladas no cálculo. */
+    densidadeTonM3?: string | null;
+    toneladasConvertidas?: string | null;
     valorFrete: string;
     valorPedagio: string;
     valorTotal: string;
@@ -59,12 +63,15 @@ type Props = {
   } | null;
   /** true = o usuário tem a chave comercial. Separa "sem preço" de "sem acesso". */
   podeVerValor?: boolean;
+  /** Por que está sem valor (sem preço, falta densidade, incompleta…). */
+  semValor?: { motivo: string; texto: string } | null;
 };
 
 const BASE_UNIDADE: Record<string, string> = {
   TONELADA: "por tonelada",
   KM: "por km",
   VIAGEM: "por viagem",
+  M3: "por m³",
 };
 
 function brl(v: string): string {
@@ -123,6 +130,15 @@ export function FaturamentoCard(p: Props) {
                 {p.valor.base === "TONELADA" || p.valor.base === "KM"
                   ? ` × ${fmtNum(p.valor.quantidade, 2)} ${p.valor.base === "TONELADA" ? "t" : "km"} faturados`
                   : ""}
+                {/* m³ com a conta à vista: o cliente compra volume, mas a
+                    balança pesou tonelada — sem a densidade na tela ninguém
+                    confere de onde saiu o número. */}
+                {p.valor.base === "M3"
+                  ? ` × ${fmtNum(p.valor.quantidade, 3)} m³ faturados` +
+                    (p.valor.toneladasConvertidas && p.valor.densidadeTonM3
+                      ? ` (${fmtNum(p.valor.toneladasConvertidas, 3)} t ÷ ${fmtNum(p.valor.densidadeTonM3, 3)} t/m³)`
+                      : "")
+                  : ""}
                 {Number(p.valor.valorPedagio) > 0
                   ? ` · pedágio ${brl(p.valor.valorPedagio)} por fora`
                   : ""}
@@ -139,11 +155,7 @@ export function FaturamentoCard(p: Props) {
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-muted-foreground/30 p-3 text-xs text-muted-foreground">
-              Sem valor: não há preço cadastrado que sirva pra esta viagem. Cadastre em{" "}
-              <a href="/tabelas-preco" className="underline">
-                Clientes › Preço
-              </a>
-              .
+              <SemValor semValor={p.semValor ?? null} />
             </div>
           )}
         </div>
@@ -256,6 +268,37 @@ export function FaturamentoCard(p: Props) {
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Por que a viagem está sem valor, com o atalho certo pra resolver. Preço por
+ * m³ sem densidade manda pra Materiais, não pra Preço — mandar cadastrar um
+ * preço que já existe é o caminho que faz a pessoa desistir.
+ */
+function SemValor({ semValor }: { semValor: { motivo: string; texto: string } | null }) {
+  if (semValor?.motivo === "SEM_DENSIDADE") {
+    return (
+      <span className="text-amber-800">
+        Sem valor. {semValor.texto} Cadastre a densidade em{" "}
+        <a href="/materiais" className="underline">
+          Materiais
+        </a>
+        .
+      </span>
+    );
+  }
+  if (semValor && semValor.motivo !== "SEM_TABELA") {
+    return <>Sem valor. {semValor.texto}</>;
+  }
+  return (
+    <>
+      Sem valor: não há preço cadastrado que sirva pra esta viagem. Cadastre em{" "}
+      <a href="/tabelas-preco" className="underline">
+        Clientes › Preço
+      </a>
+      .
+    </>
   );
 }
 

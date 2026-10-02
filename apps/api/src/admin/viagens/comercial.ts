@@ -27,6 +27,8 @@ const CAMPOS_COMERCIAIS = [
   // uma frota terceira confere o que os motoristas dele lançaram, e não tem por
   // que enxergar o preço que a transportadora negociou com o tomador.
   "valor",
+  // Por que a viagem está sem valor — denuncia se há preço e em que base.
+  "semValor",
 ] as const;
 
 /**

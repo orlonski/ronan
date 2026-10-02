@@ -10,13 +10,16 @@ import { z } from "zod";
 const DATA = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use uma data no formato AAAA-MM-DD.");
 const HORA = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use uma hora no formato HH:MM.");
 
-export const UNIDADES_PEDIDO = ["VIAGENS", "TONELADAS"] as const;
+// M3 converte as toneladas das viagens pela densidade do material do pedido —
+// a balança pesa em t, mas granel se vende em m³.
+export const UNIDADES_PEDIDO = ["VIAGENS", "TONELADAS", "M3"] as const;
 export const UnidadePedidoSchema = z.enum(UNIDADES_PEDIDO);
 export type UnidadePedidoTipo = z.infer<typeof UnidadePedidoSchema>;
 
 export const UNIDADE_PEDIDO_LABEL: Record<UnidadePedidoTipo, string> = {
   VIAGENS: "viagens",
   TONELADAS: "toneladas",
+  M3: "m³",
 };
 
 export const STATUS_PEDIDO = ["ABERTO", "EM_CURSO", "CUMPRIDO", "CANCELADO"] as const;

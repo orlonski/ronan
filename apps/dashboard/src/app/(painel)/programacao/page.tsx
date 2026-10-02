@@ -64,7 +64,8 @@ type PedidoAberto = {
   empresa: { nome: string };
   material: { nome: string } | null;
   localDescarga: { nome: string } | null;
-  saldo: { restante: string; situacao: string } | null;
+  /** `restante` null = saldo indisponível (pedido em m³ sem densidade). */
+  saldo: { restante: string | null; situacao: string } | null;
 };
 
 const CORES: Record<StatusViagemPlanejadaTipo, string> = {
@@ -250,11 +251,16 @@ function Conteudo() {
                       <p className="text-muted-foreground">
                         {[p.material?.nome, p.localDescarga?.nome].filter(Boolean).join(" · ")}
                       </p>
-                      {p.saldo && (
-                        <p className="mt-0.5 tabular-nums text-muted-foreground">
-                          faltam {p.saldo.restante}
-                        </p>
-                      )}
+                      {p.saldo &&
+                        (p.saldo.restante != null ? (
+                          <p className="mt-0.5 tabular-nums text-muted-foreground">
+                            faltam {p.saldo.restante}
+                          </p>
+                        ) : (
+                          <p className="mt-0.5 text-amber-700">
+                            saldo indisponível: falta a densidade do material
+                          </p>
+                        ))}
                     </li>
                   ))}
                 </ul>

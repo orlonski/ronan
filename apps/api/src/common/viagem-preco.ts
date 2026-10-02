@@ -1,6 +1,7 @@
 import { Prisma, StatusViagem, type BasePreco } from "@prisma/client";
 import { aplicarMinimos, type MinimoOverride, type ViagemBruta } from "./viagem-minimos";
 import { STATUS_FORA_FECHAMENTO } from "./viagem-status";
+import { toneladasParaM3 } from "./volume-material";
 
 /**
  * Quanto a viagem VALE.
@@ -51,6 +52,9 @@ export type ValorCalculado = {
   base: BasePreco;
   precoUnitario: string;
   quantidade: string;
+  /** Só na base M3: densidade usada e toneladas convertidas — congeladas. */
+  densidadeTonM3: string | null;
+  toneladasConvertidas: string | null;
   valorFrete: string;
   valorPedagio: string;
   valorTotal: string;
@@ -60,7 +64,8 @@ export type ValorCalculado = {
 export type SemPrecoMotivo =
   | "VIAGEM_INCOMPLETA"
   | "SEM_EMPRESA"
-  | "SEM_TABELA";
+  | "SEM_TABELA"
+  | "SEM_DENSIDADE";
 
 /**
  * Só a data importa pra vigência, nunca a hora. O container roda em UTC e a
@@ -144,6 +149,11 @@ export function calcularValorViagem(
     materialId: string | null;
     tabelas: TabelaPrecoRow[];
     minimo?: MinimoOverride;
+    /**
+     * Densidade (t/m³) do material DA VIAGEM. Só a base M3 lê; nas outras é
+     * ignorada. Ausente com preço por m³ = viagem sem valor, nunca chute.
+     */
+    densidadeTonM3?: DecimalLike | null;
   },
 ): { valor: ValorCalculado; motivo?: never } | { valor?: never; motivo: SemPrecoMotivo } {
   // Viagem incompleta não vale dinheiro. É a mesma trava do fechamento: uma
@@ -167,6 +177,8 @@ export function calcularValorViagem(
   const efetivo = aplicarMinimos(viagem, args.minimo);
 
   let quantidade: Prisma.Decimal;
+  let densidadeTonM3: string | null = null;
+  let toneladasConvertidas: string | null = null;
   switch (linha.base) {
     case "TONELADA":
       quantidade = dec(efetivo.toneladasEfetiva);
@@ -174,6 +186,19 @@ export function calcularValorViagem(
     case "KM":
       quantidade = dec(efetivo.kmEfetivo);
       break;
+    case "M3": {
+      // Mínimo conta, preço vale — e a conversão fica no meio: converte a
+      // tonelada EFETIVA (pós-mínimo), nunca a real. O m³ sai arredondado em 3
+      // casas e é ele que multiplica o preço, pra conta fechar com o que está
+      // gravado.
+      const toneladas = dec(efetivo.toneladasEfetiva);
+      const m3 = toneladasParaM3(toneladas, args.densidadeTonM3);
+      if (!m3.ok) return { motivo: m3.motivo };
+      quantidade = m3.valor;
+      densidadeTonM3 = dec(args.densidadeTonM3!).toFixed(3);
+      toneladasConvertidas = toneladas.toFixed(3);
+      break;
+    }
     // VIAGEM é valor fechado: a quantidade é 1 e fica gravada assim pra conta
     // ser reconstituível sem um `if` em cada lugar que lê.
     default:
@@ -190,6 +215,8 @@ export function calcularValorViagem(
       base: linha.base,
       precoUnitario: preco.toFixed(2),
       quantidade: quantidade.toFixed(3),
+      densidadeTonM3,
+      toneladasConvertidas,
       valorFrete: valorFrete.toFixed(2),
       valorPedagio: valorPedagio.toFixed(2),
       valorTotal: valorFrete.add(valorPedagio).toFixed(2),
@@ -202,6 +229,8 @@ export const SEM_PRECO_TEXTO: Record<SemPrecoMotivo, string> = {
   VIAGEM_INCOMPLETA: "Viagem ainda incompleta — só ganha valor quando fechar.",
   SEM_EMPRESA: "Viagem sem empresa tomadora, então não há de quem cobrar.",
   SEM_TABELA: "Nenhum preço cadastrado que sirva pra esta viagem.",
+  SEM_DENSIDADE:
+    "O preço que serve é por m³, e o material da viagem não tem densidade cadastrada — sem ela não dá pra converter o peso em volume.",
 };
 
 /**

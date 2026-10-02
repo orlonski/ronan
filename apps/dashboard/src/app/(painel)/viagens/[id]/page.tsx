@@ -100,15 +100,19 @@ type ViagemDetalhe = {
    * `null` = não há preço cadastrado que sirva. A tela trata os dois diferente.
    */
   valor?: {
-    base: "TONELADA" | "KM" | "VIAGEM";
+    base: "TONELADA" | "KM" | "VIAGEM" | "M3";
     precoUnitario: string;
     quantidade: string;
+    densidadeTonM3?: string | null;
+    toneladasConvertidas?: string | null;
     valorFrete: string;
     valorPedagio: string;
     valorTotal: string;
     alteracaoMotivo: string | null;
     alteradoPor?: { nome: string } | null;
   } | null;
+  /** Viagem sem valor: o porquê, em texto. Ausente pra quem não vê o comercial. */
+  semValor?: { motivo: string; texto: string } | null;
   id: string;
   data: string;
   toneladas: string;
@@ -889,6 +893,7 @@ export default function ViagemDetalhePage({
             <div className="flex flex-col gap-4 lg:col-span-2">
               <FaturamentoCard
                 valor={v.valor ?? null}
+                semValor={v.semValor ?? null}
                 // `kmEfetivo` só vem pra quem tem a chave comercial — usamos ele
                 // como sinal pra não mostrar "sem preço cadastrado" a quem, na
                 // verdade, não pode ver preço nenhum.

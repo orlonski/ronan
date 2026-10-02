@@ -18,7 +18,7 @@ type ListParams = PaginationQuery & {
 const INCLUDE = {
   empresa: { select: { id: true, nome: true } },
   cliente: { select: { id: true, nome: true } },
-  material: { select: { id: true, nome: true } },
+  material: { select: { id: true, nome: true, densidadeTonM3: true } },
   localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   tipoServico: { select: { id: true, nome: true } },
@@ -27,6 +27,21 @@ const INCLUDE = {
 
 function diaUtc(iso: string): Date {
   return new Date(`${iso}T00:00:00Z`);
+}
+
+/**
+ * Pedido em m³ precisa dizer o material: é a densidade DELE que transforma o
+ * peso da balança em volume. Sem material, as viagens de qualquer material
+ * abateriam o pedido, e não existe uma densidade que sirva pra todas.
+ * A densidade em si pode faltar — aí o saldo aparece indisponível até alguém
+ * cadastrar —, mas o material tem que estar lá desde o começo.
+ */
+function exigirMaterialEmM3(unidade: string | undefined, materialId: string | null | undefined) {
+  if (unidade === "M3" && !materialId) {
+    throw new BadRequestException(
+      "Pedido em m³ precisa do material: é a densidade dele que converte o peso da balança em volume.",
+    );
+  }
 }
 
 @Injectable()
@@ -81,6 +96,7 @@ export class PedidosService {
 
   async create(data: CriarPedidoInput, usuarioId: string) {
     await this.validarRefs(data);
+    exigirMaterialEmM3(data.unidadeAlvo, data.materialId);
 
     // Numeração sequencial por conta. `max + 1` dentro da transação: duas
     // criações simultâneas na mesma conta pegariam o mesmo número fora dela, e
@@ -102,8 +118,14 @@ export class PedidosService {
   }
 
   async update(id: string, data: AtualizarPedidoInput) {
-    await this.ensureExists(id);
+    const atual = await this.ensureExists(id);
     await this.validarRefs(data);
+    // Confere o estado FINAL: trocar só a unidade, ou só limpar o material,
+    // chega aqui com metade da informação no corpo.
+    exigirMaterialEmM3(
+      data.unidadeAlvo ?? atual.unidadeAlvo,
+      data.materialId !== undefined ? data.materialId : atual.materialId,
+    );
     return this.prisma.pedido.update({
       where: { id },
       data: {
@@ -206,6 +228,8 @@ export class PedidosService {
         prazoEm: true,
         quantidadeAlvo: true,
         unidadeAlvo: true,
+        // Pedido em m³ converte pela densidade do material dele.
+        material: { select: { densidadeTonM3: true } },
       },
     });
 
@@ -233,6 +257,7 @@ export class PedidosService {
           unidadeAlvo: p.unidadeAlvo,
           viagens: abatidas,
           prazoEm: p.prazoEm,
+          densidadeTonM3: p.material?.densidadeTonM3 ?? null,
         }),
       );
     }

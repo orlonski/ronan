@@ -20,13 +20,18 @@ import { usePaginatedList, useResourceOptions, useUpdateResource } from "@/lib/c
 
 type Saldo = {
   alvo: string;
-  entregue: string;
-  restante: string;
-  percentual: number;
+  /** Null = saldo indisponível (pedido em m³ sem densidade no material). */
+  entregue: string | null;
+  restante: string | null;
+  percentual: number | null;
   viagens: number;
+  /** Pedido em m³: as toneladas da balança que viraram o volume entregue. */
+  entregueToneladas?: string;
+  densidadeTonM3?: string | null;
+  indisponivel?: string | null;
   diasRestantes: number | null;
   ritmoNecessario: string | null;
-  situacao: "CUMPRIDO" | "NO_RITMO" | "APERTADO" | "ESTOURADO" | "SEM_PRAZO";
+  situacao: "CUMPRIDO" | "NO_RITMO" | "APERTADO" | "ESTOURADO" | "SEM_PRAZO" | "INDISPONIVEL";
 };
 
 type Pedido = {
@@ -52,6 +57,7 @@ const SITUACAO: Record<Saldo["situacao"], { label: string; cls: string; barra: s
   APERTADO: { label: "Ritmo apertado", cls: "bg-amber-100 text-amber-800", barra: "bg-amber-500" },
   ESTOURADO: { label: "Passou do prazo", cls: "bg-red-100 text-red-700", barra: "bg-red-500" },
   SEM_PRAZO: { label: "Sem prazo", cls: "bg-slate-100 text-slate-700", barra: "bg-slate-400" },
+  INDISPONIVEL: { label: "Falta densidade", cls: "bg-amber-100 text-amber-800", barra: "bg-amber-500" },
 };
 
 function dataBR(v: string | null): string {
@@ -61,24 +67,58 @@ function dataBR(v: string | null): string {
 }
 
 /** Barra de progresso com o número por cima — é a informação, não enfeite. */
+/** Número com vírgula e no máximo `casas` decimais ("80.000" → "80"). */
+function num(v: string | null | undefined, casas = 1): string {
+  if (v == null) return "—";
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toLocaleString("pt-BR", { maximumFractionDigits: casas }) : v;
+}
+
 function Progresso({ saldo, unidade }: { saldo: Saldo | null; unidade: UnidadePedidoTipo }) {
   if (!saldo) return <span className="text-muted-foreground">—</span>;
   const s = SITUACAO[saldo.situacao];
+
+  // Pedido em m³ sem densidade: dizer "0 entregue" seria mentir — já pode ter
+  // rodado metade. Mostra o peso (que é fato) e o que falta pra converter.
+  if (saldo.situacao === "INDISPONIVEL") {
+    return (
+      <div className="min-w-[160px] space-y-1">
+        <div className="flex items-baseline justify-between gap-2 text-sm tabular-nums">
+          <span className="font-medium">? / {num(saldo.alvo)}</span>
+          <span className="text-xs text-muted-foreground">{UNIDADE_PEDIDO_LABEL[unidade]}</span>
+        </div>
+        <p className="text-xs text-amber-700">
+          {saldo.indisponivel ?? "Cadastre a densidade do material."}
+          {saldo.entregueToneladas != null && saldo.viagens > 0
+            ? ` Já foram ${num(saldo.entregueToneladas)} t em ${saldo.viagens} ${saldo.viagens === 1 ? "viagem" : "viagens"}.`
+            : ""}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-w-[160px] space-y-1">
       <div className="flex items-baseline justify-between gap-2 text-sm tabular-nums">
         <span className="font-medium">
-          {saldo.entregue} / {saldo.alvo}
+          {unidade === "M3" ? `${num(saldo.entregue)} / ${num(saldo.alvo)}` : `${saldo.entregue} / ${saldo.alvo}`}
         </span>
         <span className="text-xs text-muted-foreground">{UNIDADE_PEDIDO_LABEL[unidade]}</span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div className={`h-full ${s.barra}`} style={{ width: `${saldo.percentual}%` }} />
+        <div className={`h-full ${s.barra}`} style={{ width: `${saldo.percentual ?? 0}%` }} />
       </div>
+      {/* Em m³, o peso da balança ao lado: é o número que o motorista e a
+          pedreira conhecem, e mostra com que densidade o volume foi feito. */}
+      {unidade === "M3" && saldo.entregueToneladas != null && saldo.densidadeTonM3 && (
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {num(saldo.entregueToneladas)} t pesadas · {num(saldo.densidadeTonM3, 3)} t/m³
+        </p>
+      )}
       {/* O que o supervisor precisa decidir agora: dá pro prazo? */}
       {saldo.ritmoNecessario && saldo.diasRestantes != null && (
         <p className="text-xs text-muted-foreground tabular-nums">
-          faltam {saldo.restante} em {saldo.diasRestantes}{" "}
+          faltam {unidade === "M3" ? `${num(saldo.restante)} m³` : saldo.restante} em {saldo.diasRestantes}{" "}
           {saldo.diasRestantes === 1 ? "dia" : "dias"} · {saldo.ritmoNecessario}/dia
         </p>
       )}

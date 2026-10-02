@@ -33,7 +33,7 @@ type Empresa = { id: string; nome: string };
 type Preco = {
   id: string;
   empresa: Empresa;
-  material: { id: string; nome: string } | null;
+  material: { id: string; nome: string; densidadeTonM3?: string | null } | null;
   tipoServico: { id: string; nome: string } | null;
   kmFaixaDe: string;
   kmFaixaAte: string | null;
@@ -127,6 +127,7 @@ export default function TabelasPrecoPage() {
             <span className="ml-1 text-xs font-normal text-muted-foreground">
               {BASE_PRECO_LABEL[row.original.base].unidade.replace("R$", "")}
             </span>
+            {row.original.base === "M3" && <DensidadeDaLinha material={row.original.material} />}
           </span>
         ),
       },
@@ -214,7 +215,7 @@ export default function TabelasPrecoPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Preço</h1>
           <p className="text-sm text-muted-foreground">
-            Quanto cada cliente paga por tonelada, km ou viagem. O preço multiplica a
+            Quanto cada cliente paga por tonelada, m³, km ou viagem. O preço multiplica a
             quantidade já com o mínimo aplicado.
           </p>
         </div>
@@ -275,6 +276,7 @@ export default function TabelasPrecoPage() {
                 {BASE_PRECO_LABEL[p.base].unidade.replace("R$", "")} · faixa {fmtNum(p.kmFaixaDe)}–
                 {p.kmFaixaAte ? fmtNum(p.kmFaixaAte) : "∞"} km
               </span>
+              {p.base === "M3" && <DensidadeDaLinha material={p.material} />}
             </div>
             <div className="text-xs text-muted-foreground">{vigencia(p)}</div>
             <div className="flex items-center gap-1">
@@ -364,5 +366,32 @@ function BotaoRecalcular({ empresaId, nomeEmpresa }: { empresaId?: string; nomeE
         {rodando ? "Refazendo…" : "Refazer preços"}
       </Button>
     </Permitido>
+  );
+}
+
+/**
+ * Na linha "por m³", com que densidade ela converte. Linha de material
+ * específico sem densidade é preço que nunca vai precificar nada — tem que
+ * saltar aos olhos, não ficar escondido no cadastro do material.
+ */
+function DensidadeDaLinha({ material }: { material: Preco["material"] }) {
+  if (!material) {
+    return (
+      <span className="block text-xs font-normal text-muted-foreground">
+        pela densidade de cada material
+      </span>
+    );
+  }
+  if (material.densidadeTonM3 == null) {
+    return (
+      <span className="block text-xs font-normal text-amber-700">
+        {material.nome} sem densidade: viagens ficam sem valor
+      </span>
+    );
+  }
+  return (
+    <span className="block text-xs font-normal text-muted-foreground">
+      {Number(material.densidadeTonM3).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} t/m³
+    </span>
   );
 }

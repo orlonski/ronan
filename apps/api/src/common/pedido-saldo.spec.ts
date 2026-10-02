@@ -105,6 +105,79 @@ describe("calcularSaldoPedido — por toneladas", () => {
   });
 });
 
+describe("calcularSaldoPedido — por m³", () => {
+  it("converte as toneladas das viagens pela densidade do material", () => {
+    // 4 viagens de 29 t a 1,45 t/m³ = 4 × 20 = 80 m³ de 200.
+    const s = calcularSaldoPedido({
+      quantidadeAlvo: 200,
+      unidadeAlvo: "M3",
+      viagens: viagens(4, 29),
+      densidadeTonM3: "1.45",
+      hoje: HOJE,
+    });
+    expect(s.entregue).toBe("80.000");
+    expect(s.restante).toBe("120.000");
+    expect(s.percentual).toBe(40);
+    expect(s.entregueToneladas).toBe("116.000");
+    expect(s.densidadeTonM3).toBe("1.450");
+    expect(s.situacao).toBe("SEM_PRAZO");
+    expect(s.indisponivel).toBeNull();
+  });
+
+  it("sem densidade o saldo fica INDISPONÍVEL — nunca 0 entregue", () => {
+    const s = calcularSaldoPedido({
+      quantidadeAlvo: 200,
+      unidadeAlvo: "M3",
+      viagens: viagens(4, 29),
+      densidadeTonM3: null,
+      prazoEm: new Date("2026-06-12T00:00:00Z"),
+      hoje: HOJE,
+    });
+    expect(s.situacao).toBe("INDISPONIVEL");
+    expect(s.entregue).toBeNull();
+    expect(s.restante).toBeNull();
+    expect(s.percentual).toBeNull();
+    expect(s.ritmoNecessario).toBeNull();
+    // O peso entregue é fato e segue visível; só o volume é que não dá.
+    expect(s.entregueToneladas).toBe("116.000");
+    expect(s.indisponivel).toMatch(/densidade/);
+  });
+
+  it("indisponível não é cumprido (não some da programação)", () => {
+    const s = calcularSaldoPedido({
+      quantidadeAlvo: 1,
+      unidadeAlvo: "M3",
+      viagens: viagens(10, 29),
+      hoje: HOJE,
+    });
+    expect(s.situacao).not.toBe("CUMPRIDO");
+  });
+
+  it("cumpre quando o volume passa do alvo", () => {
+    const s = calcularSaldoPedido({
+      quantidadeAlvo: 50,
+      unidadeAlvo: "M3",
+      viagens: viagens(3, 29),
+      densidadeTonM3: 1.45,
+      hoje: HOJE,
+    });
+    expect(s.situacao).toBe("CUMPRIDO");
+    expect(s.restante).toBe("0.000");
+  });
+
+  it("densidade não muda nada em pedido por tonelada", () => {
+    const s = calcularSaldoPedido({
+      quantidadeAlvo: 100,
+      unidadeAlvo: "TONELADAS",
+      viagens: viagens(2, 29),
+      densidadeTonM3: 1.45,
+      hoje: HOJE,
+    });
+    expect(s.entregue).toBe("58.000");
+    expect(s.entregueToneladas).toBeUndefined();
+  });
+});
+
 describe("casarPlanejada", () => {
   function plan(over: Partial<PlanejadaParaCasar> = {}): PlanejadaParaCasar {
     return {

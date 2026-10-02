@@ -218,3 +218,94 @@ describe("mudouInsumoDePreco", () => {
     expect(mudouInsumoDePreco({})).toBe(false);
   });
 });
+
+describe("calcularValorViagem — base M3", () => {
+  const viagem = {
+    toneladas: "29",
+    km: "50",
+    status: "OK" as const,
+    data: "2026-06-15",
+    valorPedagioTotal: "0",
+    tipoServicoId: null,
+  };
+  const porM3 = linha({ base: "M3", precoUnitario: 18 });
+
+  it("converte a tonelada efetiva em m³ pela densidade e multiplica o preço", () => {
+    // 29 t ÷ 1,45 t/m³ = 20 m³ × R$ 18 = R$ 360.
+    const r = calcularValorViagem(viagem, {
+      empresaId: EMPRESA,
+      materialId: BRITA,
+      tabelas: [porM3],
+      densidadeTonM3: "1.45",
+    });
+    expect(r.valor?.base).toBe("M3");
+    expect(r.valor?.quantidade).toBe("20.000");
+    expect(r.valor?.valorFrete).toBe("360.00");
+    // Congela a ponte da conta: densidade usada e toneladas convertidas.
+    expect(r.valor?.densidadeTonM3).toBe("1.450");
+    expect(r.valor?.toneladasConvertidas).toBe("29.000");
+  });
+
+  it("mínimo conta, preço vale: converte a tonelada do MÍNIMO, não a real", () => {
+    // 20 t reais, mínimo 29 t → 29 ÷ 1,45 = 20 m³ (e não 13,793).
+    const r = calcularValorViagem(
+      { ...viagem, toneladas: "20" },
+      {
+        empresaId: EMPRESA,
+        materialId: BRITA,
+        tabelas: [porM3],
+        minimo: { toneladasMinimo: 29 as never, kmMinimo: null },
+        densidadeTonM3: 1.45,
+      },
+    );
+    expect(r.valor?.toneladasConvertidas).toBe("29.000");
+    expect(r.valor?.quantidade).toBe("20.000");
+    expect(r.valor?.valorFrete).toBe("360.00");
+  });
+
+  it("o frete é o m³ GRAVADO (3 casas) vezes o preço — a conta reconstitui", () => {
+    // 10 t ÷ 1,5 = 6,667 m³ (arredondado) × R$ 30 = 200,01 — não 200,00.
+    const r = calcularValorViagem(
+      { ...viagem, toneladas: "10" },
+      {
+        empresaId: EMPRESA,
+        materialId: BRITA,
+        tabelas: [linha({ base: "M3", precoUnitario: 30 })],
+        densidadeTonM3: 1.5,
+      },
+    );
+    expect(r.valor?.quantidade).toBe("6.667");
+    expect(r.valor?.valorFrete).toBe("200.01");
+  });
+
+  it("sem densidade a viagem fica SEM valor, com motivo — nunca R$ 0", () => {
+    const r = calcularValorViagem(viagem, {
+      empresaId: EMPRESA,
+      materialId: BRITA,
+      tabelas: [porM3],
+      densidadeTonM3: null,
+    });
+    expect(r.valor).toBeUndefined();
+    expect(r.motivo).toBe("SEM_DENSIDADE");
+  });
+
+  it("densidade só importa na base M3", () => {
+    const r = calcularValorViagem(viagem, {
+      empresaId: EMPRESA,
+      materialId: BRITA,
+      tabelas: [linha({ precoUnitario: 10 })],
+      densidadeTonM3: null,
+    });
+    expect(r.valor?.valorFrete).toBe("290.00");
+    expect(r.valor?.densidadeTonM3).toBeNull();
+    expect(r.valor?.toneladasConvertidas).toBeNull();
+  });
+
+  it("viagem incompleta continua sem valor antes de olhar densidade", () => {
+    const r = calcularValorViagem(
+      { ...viagem, status: "AGUARDANDO_PESO" as never },
+      { empresaId: EMPRESA, materialId: BRITA, tabelas: [porM3], densidadeTonM3: 1.45 },
+    );
+    expect(r.motivo).toBe("VIAGEM_INCOMPLETA");
+  });
+});
