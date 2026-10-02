@@ -20,7 +20,10 @@ const config: ExpoConfig = {
   // home "Seu trabalho", frete guiado, "Vale a pena?", gastos, documentos,
   // apagar a conta pelo app e o link da política de privacidade. Tudo isso é
   // JS, mas nada disso chega à Apple por OTA — o que ela revisa é o binário.
-  version: "1.2.0",
+  // 1.2.1: o build de loja leva embutido o cadastro que pergunta "como você
+  // trabalha?" e a busca de empresa por nome, e espera até 3s pelo OTA no 1º
+  // arranque. Antes disso quem baixava da loja via o cadastro de 08/09.
+  version: "1.2.1",
   orientation: "portrait",
   platforms: ["ios", "android"],
   icon: "./assets/icon.png",
@@ -52,7 +55,7 @@ const config: ExpoConfig = {
     // o novo. É o desejado: a frota de iPhone migra à mão, e até o último migrar
     // quem ficou pra trás continua recebendo correção.
     bundleIdentifier: "br.com.movatruck.app",
-    buildNumber: "15",
+    buildNumber: "16",
     // Google Maps SDK for iOS — usa o MESMO motor do Android (que desenha a
     // polilinha perfeitamente), no lugar do Apple Maps (que é furado com linha).
     // Chave via EAS Secret GOOGLE_MAPS_IOS_KEY (precisa "Maps SDK for iOS"
@@ -75,7 +78,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: "br.com.schaba.motorista",
-    versionCode: 17,
+    versionCode: 18,
     // FCM v1 (push notifications): exige google-services.json do projeto Firebase
     // vinculado a este package. EAS Secret GOOGLE_SERVICES_JSON aponta pro arquivo
     // subido via `eas secret:create`; em dev local cai pro arquivo na raiz do app.
