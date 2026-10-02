@@ -165,7 +165,10 @@ export const MODULOS: ModuloDef[] = [
     pitch: "Pedido do cliente, programação do dia e a viagem acompanhada ao vivo.",
     // `encarregados` mora aqui e não no núcleo: o portal da obra mostra pedido
     // e programação, que são deste módulo. Sem a torre, não há o que mostrar.
-    recursos: ["pedidos", "programacao", "torre", "config-torre", "encarregados"],
+    // `orcamentos` mora com o pedido, e não no Comercial: o orçamento aprovado
+    // VIRA pedido. Num módulo separado, quem tivesse só o Comercial aprovaria
+    // propostas que gerariam pedidos numa tela que ele não enxerga.
+    recursos: ["pedidos", "orcamentos", "programacao", "torre", "config-torre", "encarregados"],
   },
   {
     chave: "fiscal",

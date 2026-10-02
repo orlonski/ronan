@@ -123,6 +123,12 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // do dia. `publicar` é à parte de `editar` pelo mesmo motivo que em marketing:
   // montar é rascunho, publicar avisa gente de fora e vira combinado.
   { recurso: "pedidos", label: "Pedidos do cliente", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
+  // A proposta que vem ANTES do pedido. Chave própria porque quem vende não é
+  // necessariamente quem toca o pedido. `editar` cobre o ciclo da proposta
+  // (mandar, aprovar, recusar); aprovar ainda exige `pedidos.criar`, e levar o
+  // preço pra tabela do cliente exige `tabelas-preco.criar` — o orçamento não
+  // é atalho pra quem não pode mexer nessas telas.
+  { recurso: "orcamentos", label: "Orçamentos (propostas ao cliente)", modulo: "Operação", acoes: ["ver", "criar", "editar"] },
   // A admissão: o que o contratante exige antes do caminhão entrar na obra, e
   // o link por onde esses papéis chegam. `coletas.criar` é separado de `ver`
   // porque gerar link é expor documento de alguém a quem tiver a URL — é ação

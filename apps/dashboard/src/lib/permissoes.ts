@@ -164,6 +164,7 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/cte", perm: "cte.ver" },
   { prefixo: "/configuracoes/cte", perm: "config-cte.ver" },
   { prefixo: "/pedidos", perm: "pedidos.ver" },
+  { prefixo: "/orcamentos", perm: "orcamentos.ver" },
   { prefixo: "/prospeccao", perm: "prospeccao.ver" },
   { prefixo: "/conferencias", perm: "conferencia-ticket.ver" },
   { prefixo: "/chat", perm: "chat.ver" },

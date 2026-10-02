@@ -8,6 +8,7 @@ import { RegrasMinimoModule } from "./regras-minimo/regras-minimo.module";
 import { TabelasPrecoModule } from "./tabelas-preco/tabelas-preco.module";
 import { AcertosModule } from "./acertos/acertos.module";
 import { PedidosModule } from "./pedidos/pedidos.module";
+import { OrcamentosModule } from "./orcamentos/orcamentos.module";
 import { FinanceiroModule } from "./financeiro/financeiro.module";
 import { FornecedoresModule } from "./fornecedores/fornecedores.module";
 import { FrotaManutencaoModule } from "./frota-manutencao/frota-manutencao.module";
@@ -60,6 +61,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     TabelasPrecoModule,
     AcertosModule,
     PedidosModule,
+    OrcamentosModule,
     FinanceiroModule,
     FornecedoresModule,
     FrotaManutencaoModule,

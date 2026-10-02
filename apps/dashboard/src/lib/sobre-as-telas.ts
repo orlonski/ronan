@@ -189,6 +189,23 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     ],
   },
 
+  "/orcamentos": {
+    oQue:
+      "A proposta que você manda pro cliente antes de fechar o serviço — material, rota, " +
+      "quantidade e preço — e que vira pedido quando ele aprova.",
+    faz: [
+      "Montar a proposta pra um cliente cadastrado ou pra alguém que ainda não é cliente",
+      "Ver a distância da rota e o preço que já está na tabela do cliente, pra não chutar",
+      "Mandar o PDF com a sua logo por link ou pelo WhatsApp",
+      "Aprovar e já criar os pedidos — e, se quiser, levar o preço pra tabela do cliente a partir de hoje",
+    ],
+    naoEAqui: {
+      procurando: "acompanhar quanto já foi entregue do que o cliente aprovou",
+      vaEm: "Pedidos do cliente",
+      href: "/pedidos",
+    },
+  },
+
   "/pedidos": {
     oQue:
       "O que o cliente combinou receber — quanto, pra onde e até quando — e " +
