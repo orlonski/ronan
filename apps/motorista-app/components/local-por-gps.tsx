@@ -357,7 +357,14 @@ export function LocalPorGps({
       buscaOffline,
       raioUsadoM,
     };
-    matchesVistosRef.current = matches;
+    // "Já visto" = o que aparece na tela. Carga lista todos os locais do cliente,
+    // mas só mostra os perto; no `direto` ele não vê lista nenhuma.
+    matchesVistosRef.current =
+      direto && permiteCriar
+        ? []
+        : lado === "carga"
+          ? matches.filter((m) => m.distanciaMetros <= cfg.raioAmpliadoM)
+          : matches;
     setMostrarTodos(false);
     if (direto && permiteCriar) {
       setEstado({ tipo: "sem_match", coords: cap });
@@ -644,7 +651,16 @@ export function LocalPorGps({
             </Pressable>
           ))}
           {lado === "carga" && cargaLonge > 0 && (
-            <Button variant="outline" onPress={() => setMostrarTodos(true)} className="mt-1">
+            <Button
+              variant="outline"
+              onPress={() => {
+                // Agora ele viu todos: entram no "já visto" (o teto de distância
+                // do ranqueador segura os de outra região).
+                matchesVistosRef.current = matchesEscolha;
+                setMostrarTodos(true);
+              }}
+              className="mt-1"
+            >
               <MapPin size={18} color="#0f172a" />
               <Text className="text-sm font-semibold text-foreground">
                 {cargaVisiveis.length === 0

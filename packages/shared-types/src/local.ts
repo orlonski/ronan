@@ -199,10 +199,16 @@ export type CandidatoRankeado = CandidatoDuplicata & {
   confianca: "alta" | "media" | "baixa";
 };
 
+// "Acabou de ver" só pesa pra lugar na mesma região. Sem teto, a lista da carga
+// (todos os locais do cliente) fez "Mercado Municipal" a 399 km virar "Opa! Já
+// tem um local aqui" pra quem cadastrava a própria rua (05/10/2026).
+const TETO_JA_VISTO_M = 5000;
+
 function confiancaDe(sim: number, distanciaM: number | null, jaVisto: boolean): "alta" | "media" | "baixa" {
   const d = distanciaM ?? Infinity;
+  const vistoPerto = jaVisto && d < TETO_JA_VISTO_M;
   if (d < 60 || sim >= 0.55 || (jaVisto && d < 200)) return "alta";
-  if (d < 150 || sim >= 0.4 || jaVisto) return "media";
+  if (d < 150 || sim >= 0.4 || vistoPerto) return "media";
   return "baixa";
 }
 
