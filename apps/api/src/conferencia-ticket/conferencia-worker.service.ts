@@ -202,9 +202,9 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
 
     const mime = job.storageKey.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
     const fotoBase64 = buffer.toString("base64");
-    // Cliente e material vão junto: é sobre eles que o modelo precisa julgar
-    // se "BRONZE PAVIMENTAÇÕES LTDA" e "Construtora Bronze" são a mesma
-    // empresa. Sem mandar, ele não teria contra o que comparar.
+    // Isto vai SÓ pra etapa de julgamento (texto), nunca junto da foto: o
+    // leitor transcreve o papel às cegas e só depois compara — ver o topo de
+    // `leitor-ticket.service.ts`.
     const paraOModelo = {
       numeroDocumento: declarado.ticket,
       toneladas: declarado.toneladas,

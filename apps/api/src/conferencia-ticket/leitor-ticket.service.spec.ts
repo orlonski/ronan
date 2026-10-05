@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { LeitorTicketService } from "./leitor-ticket.service";
+import { LeitorTicketService, escolherNumero, forcarSemLeitura } from "./leitor-ticket.service";
 import { ClienteIaFactory, ProvedorIaNaoConfigurado } from "../ia/cliente-ia";
 import type { UsoIaService } from "../ia/uso-ia.service";
 import type { ConfigService } from "@nestjs/config";
@@ -175,6 +175,142 @@ describe("INSTRUCOES — regras pagas com medição", () => {
 
   it("segue mandando usar o peso LÍQUIDO", async () => {
     expect(await prompt()).toMatch(/SEMPRE o LÍQUIDO/);
+  });
+});
+
+/**
+ * O caso que mudou o desenho (05/10/2026): com o lançado na mesma chamada da
+ * foto, o modelo devolveu "Obra: ARENA — confere" num ticket sem "ARENA"
+ * escrito. Ele copiou. A trava é ele não ver o lançado enquanto lê.
+ */
+describe("leitura às cegas", () => {
+  const DECLARADO = {
+    numeroDocumento: "46779",
+    toneladas: 39.85,
+    cliente: "ARENA",
+    material: "BICA CORRIDA",
+  };
+
+  function respostas(leitura: Record<string, unknown>, julgamento: Record<string, unknown>) {
+    const { leitor, create } = montarLeitor({ ANTHROPIC_API_KEY: "sk-ant-x" });
+    create
+      .mockResolvedValueOnce({
+        usage: { input_tokens: 1500, output_tokens: 120 },
+        content: [{ type: "text", text: JSON.stringify(leitura) }],
+      } as never)
+      .mockResolvedValueOnce({
+        usage: { input_tokens: 600, output_tokens: 150 },
+        content: [{ type: "text", text: JSON.stringify(julgamento) }],
+      } as never);
+    return { leitor, create };
+  }
+
+  const LEITURA_SEM_OBRA = {
+    tipoDocumento: "ticket_balanca",
+    legivel: true,
+    confidence: 0.92,
+    numeroDocumento: "46779",
+    toneladas: 39.85,
+    cliente: null,
+    material: "BICA CORRIDA",
+  };
+
+  it("a chamada com a foto NÃO leva nada do que foi lançado", async () => {
+    const { leitor, create } = respostas(LEITURA_SEM_OBRA, {});
+    await leitor.ler({ fotoBase64: "AAAA", mime: "image/jpeg", declarado: DECLARADO });
+
+    const req = create.mock.calls[0]![0];
+    const tudo = JSON.stringify(req);
+    expect(tudo).toContain('"type":"image"');
+    expect(tudo).not.toContain("ARENA");
+    expect(tudo).not.toContain("39.85");
+    expect(tudo).not.toContain("46779");
+  });
+
+  it("o julgamento é só texto: sem foto, com o lido e o lançado", async () => {
+    const { leitor, create } = respostas(LEITURA_SEM_OBRA, {});
+    await leitor.ler({ fotoBase64: "AAAA", mime: "image/jpeg", declarado: DECLARADO });
+
+    const req = create.mock.calls[1]![0];
+    const tudo = JSON.stringify(req);
+    expect(tudo).not.toContain('"type":"image"');
+    expect(tudo).toContain("LIDO:");
+    expect(tudo).toContain("ARENA");
+  });
+
+  it("campo que o papel não trouxe nunca sai 'confere', diga o julgamento o que disser", async () => {
+    const { leitor } = respostas(LEITURA_SEM_OBRA, {
+      cliente: { confere: "sim", porque: "bate" },
+      material: { confere: "sim", porque: "bate" },
+    });
+    const r = await leitor.ler({ fotoBase64: "AAAA", mime: "image/jpeg", declarado: DECLARADO });
+
+    expect(r.lido.clienteNome).toBeNull();
+    expect(r.julgamento.cliente?.confere).toBe("incerto");
+    expect(r.julgamento.material?.confere).toBe("sim");
+  });
+
+  it("soma o custo das duas etapas", async () => {
+    const duas = respostas(LEITURA_SEM_OBRA, {});
+    const r = await duas.leitor.ler({ fotoBase64: "AAAA", mime: "image/jpeg", declarado: DECLARADO });
+    // Mesma leitura, mas ilegível: só a etapa 1 é paga.
+    const uma = respostas({ ...LEITURA_SEM_OBRA, legivel: false }, {});
+    const r1 = await uma.leitor.ler({ fotoBase64: "AAAA", mime: "image/jpeg", declarado: DECLARADO });
+    expect(r1.custoUsd).toBeGreaterThan(0);
+    expect(r.custoUsd).toBeGreaterThan(r1.custoUsd);
+  });
+
+  it("foto ilegível não paga o julgamento", async () => {
+    const { leitor, create } = respostas({ legivel: false, confidence: 0 }, {});
+    const r = await leitor.ler({ fotoBase64: "AAAA", mime: "image/jpeg", declarado: DECLARADO });
+    expect(r.falha).toBe("foto-ilegivel");
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("julgamento fora do formato retenta, não vira foto ruim", async () => {
+    const { leitor, create } = montarLeitor({ ANTHROPIC_API_KEY: "sk-ant-x" });
+    create
+      .mockResolvedValueOnce({
+        usage: { input_tokens: 1500, output_tokens: 120 },
+        content: [{ type: "text", text: JSON.stringify(LEITURA_SEM_OBRA) }],
+      } as never)
+      .mockResolvedValueOnce({
+        usage: { input_tokens: 600, output_tokens: 3 },
+        content: [{ type: "text", text: "hmm" }],
+      } as never);
+    const r = await leitor.ler({ fotoBase64: "AAAA", mime: "image/jpeg", declarado: DECLARADO });
+    expect(r.falha).toBe("resposta-invalida");
+  });
+});
+
+describe("escolherNumero", () => {
+  it("prefere, entre os números LIDOS, o que bate com o lançado", () => {
+    expect(escolherNumero("998877", ["TKB-043625"], "43625")).toBe("TKB-043625");
+  });
+
+  it("sem nenhum lido batendo, fica o principal — o lançado nunca entra no lugar", () => {
+    expect(escolherNumero("998877", ["112233"], "43625")).toBe("998877");
+    expect(escolherNumero(null, [], "43625")).toBeNull();
+  });
+
+  it("série diferente dos dois lados é outro documento", () => {
+    expect(escolherNumero("998877", ["A-3174"], "B-3174")).toBe("998877");
+  });
+});
+
+describe("forcarSemLeitura", () => {
+  it("rebaixa 'sim' a 'incerto' quando o lido está vazio, e não mexe no resto", () => {
+    const j = forcarSemLeitura(
+      {
+        cliente: { confere: "sim", porque: "x" },
+        placa: { confere: "nao", porque: "y" },
+        toneladas: { confere: "sim", porque: "z" },
+      },
+      { confianca: 0.9, clienteNome: null, placa: null, toneladas: 30 },
+    );
+    expect(j.cliente).toEqual({ confere: "incerto", porque: "não aparece no documento" });
+    expect(j.placa?.confere).toBe("nao");
+    expect(j.toneladas?.confere).toBe("sim");
   });
 });
 

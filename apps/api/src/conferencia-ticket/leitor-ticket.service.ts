@@ -3,15 +3,32 @@ import { ClienteIaFactory } from "../ia/cliente-ia";
 import { UsoIaService } from "../ia/uso-ia.service";
 import { calcularUso } from "../common/ia/uso-ia";
 import { provedorDoModelo } from "../common/ia/provedor-ia";
-import type { Lido, JulgamentoIa } from "../common/conferencia-ticket";
+import {
+  nucleoNumericoTicket,
+  serieTicket,
+  type Lido,
+  type JulgamentoIa,
+} from "../common/conferencia-ticket";
 
 /**
- * Lê um ticket já sabendo o que o motorista declarou.
+ * Lê um ticket e diz se ele corresponde ao que o motorista lançou — em DUAS
+ * etapas, e a separação é a razão de ser deste arquivo.
  *
- * A diferença pro OCR do app não é de prompt, é de tarefa: lá o modelo extrai
- * do zero e precisa do catálogo pra reconhecer nomes; aqui ele **confere**
- * contra valores que já temos, então o catálogo não vai junto e a saída é curta.
- * É por isso que esta chamada é a mais barata das duas.
+ * 1. **Leitura às cegas.** A foto vai SEM o lançado. O modelo só transcreve o
+ *    que está no papel.
+ * 2. **Julgamento.** Uma chamada só de texto, sem imagem, recebe o lido e o
+ *    lançado e diz campo a campo se correspondem (razão social × nome curto,
+ *    nome técnico × comercial — semântica que regra de texto não cobre).
+ *
+ * Até 05/10/2026 era uma chamada só, com o lançado junto da foto. O modelo
+ * devolvia o "lido" e o "confere" na mesma resposta e, quando o papel não
+ * trazia um campo, COPIAVA o lançado pra coluna do lido: uma viagem saiu com
+ * "Obra: ARENA — confere" num ticket sem uma letra de "ARENA". Proibir chute no
+ * prompt não segura isso, porque não é chute, é cópia. O que segura é o modelo
+ * não ter de onde copiar. Vale pro peso, que é o que vira dinheiro, tanto
+ * quanto pra obra.
+ *
+ * O custo extra é a etapa 2, que não leva imagem e sai por uma fração da 1.
  */
 
 /**
@@ -29,12 +46,13 @@ const MODELO_PADRAO = "claude-haiku-4-5-20251001";
  * O prompt é o MESMO nos dois fornecedores de propósito: é isso que faz a
  * comparação entre eles valer alguma coisa. Ajustar o texto pra um deles
  * transformaria a medição numa comparação de prompt, não de modelo.
+ *
+ * ⚠️ Esta etapa NUNCA recebe o que o motorista lançou. Ver o topo do arquivo.
  */
-const INSTRUCOES = `Você confere documentos de carga (ticket de balança, romaneio, nota fiscal) contra o que o motorista lançou no sistema.
+const INSTRUCOES = `Você transcreve documentos de carga (ticket de balança, romaneio, nota fiscal) a partir de uma FOTO.
 
-Recebe a FOTO do documento e os dados LANÇADOS. Sua tarefa é dizer, campo a
-campo, se o que está no papel corresponde ao que foi lançado — usando bom senso
-de quem trabalha com transporte, não comparação de texto.
+Você NÃO sabe o que foi lançado no sistema e não deve tentar adivinhar. Sua
+única tarefa é dizer o que está ESCRITO no papel.
 
 Responda APENAS um JSON puro (sem markdown, sem texto em volta):
 {
@@ -43,43 +61,25 @@ Responda APENAS um JSON puro (sem markdown, sem texto em volta):
   "confidence": number,          // 0..1 — o quanto você confia na SUA LEITURA
 
   "numeroDocumento": "string ou null",   // o número que IDENTIFICA este documento
+  "outrosNumeros": ["string"],           // os demais números de documento impressos (pedido, ticket, romaneio, NF)
   "toneladas": number ou null,           // PESO LÍQUIDO em toneladas
   "data": "AAAA-MM-DD ou null",
   "placa": "string ou null",
-  "cliente": "string ou null",
-  "material": "string ou null",
-
-  "conferencia": {
-    "numeroDocumento": { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
-    "toneladas":       { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
-    "data":            { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
-    "placa":           { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
-    "cliente":         { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
-    "material":        { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" }
-  }
+  "cliente": "string ou null",           // obra / cliente / destinatário, como está escrito
+  "material": "string ou null"
 }
 
-QUAL NÚMERO COMPARAR — depende do documento:
+SÓ O QUE ESTÁ ESCRITO:
+Cada campo é uma transcrição do papel. Se o nome da obra, do cliente ou do
+material não aparece escrito no documento, o campo é null — não deduza pelo
+tipo de carga, pela pedreira ou pelo que "costuma ser".
+
+QUAL NÚMERO É O DO DOCUMENTO:
 - Ticket de balança: o número do ticket/romaneio/pesagem.
 - Nota fiscal: o número da NF. Não confunda com número de pedido, série, chave
   de acesso ou número do ticket que às vezes vem impresso junto.
-- Se o papel traz VÁRIOS números e um deles é igual ao lançado, é quase certo
-  que o motorista digitou aquele: responda "sim" e diga qual era.
-- Prefixo de série, ponto, hífen e zero à esquerda são jeito de imprimir:
-  "TKB-043625" e "043625" são o mesmo documento.
-
-CLIENTE E MATERIAL — julgue como gente, não como texto:
-- Razão social contra nome curto é a MESMA empresa: "BRONZE PAVIMENTAÇÕES LTDA"
-  e "Construtora Bronze" conferem. "CASTILHO" e "CONSTRUTORA CASTILHO" conferem.
-- Nome técnico contra nome comercial é o MESMO material: "C.B.U.Q. FAIXA C" e
-  "MASSA DE ASFALTO" conferem (CBUQ é concreto betuminoso usinado a quente, que
-  é massa asfáltica). "BGS" e "BRITA GRADUADA SIMPLES" conferem.
-- Faixa, tipo, graduação e granulometria qualificam o material, não mudam o que
-  ele é: "BRITA 1" e "BRITA" conferem.
-- O documento costuma trazer o nome da PEDREIRA, da OBRA ou do destino, que não
-  é o cliente do frete. Nesse caso responda "incerto", não "nao".
-- Só responda "nao" quando forem claramente coisas diferentes — areia contra
-  asfalto, uma construtora contra outra construtora sem nenhuma relação.
+- Se o papel traz vários números de documento, ponha o principal em
+  "numeroDocumento" e os demais em "outrosNumeros", como estão impressos.
 
 A FOTO PODE ESTAR EM QUALQUER POSIÇÃO:
 O motorista fotografa como dá, na beira da estrada — de pé, deitado, de cabeça
@@ -102,32 +102,98 @@ PESO — o erro mais caro:
 - Ponto é separador de MILHAR e vírgula é DECIMAL: "32.500 KG" = 32500 kg =
   32.5 toneladas. No JSON use ponto decimal, sem separador de milhar.
 - Caminhão carregado fica entre 5 e 50 toneladas. Fora disso, revise sua leitura.
-- Diferença de algumas dezenas de quilos é arredondamento de balança: "sim".
 
 CAMPO QUE VOCÊ NÃO CONSEGUE LER É null, NUNCA UM CHUTE:
 Faltou nitidez, o canto ficou fora do quadro, o carbono não marcou — responda
 null naquele campo e siga. Um null custa uma conferida humana; um número
 inventado com cara de certo entra no faturamento e ninguém revisa.
 
-DATA: formato brasileiro DD/MM/AAAA. Um dia de diferença é rotina (pesagem à
-noite, lançamento no dia seguinte): responda "sim". Havendo várias datas,
-prefira a da PESAGEM/SAÍDA.
+DATA: formato brasileiro DD/MM/AAAA. Havendo várias datas, prefira a da
+PESAGEM/SAÍDA.
+
+PLACA: transcreva como está impressa, sem hífen nem espaço. Havendo placa do
+cavalo e da carreta, prefira a do cavalo mecânico.`;
+
+/**
+ * A etapa 2: só texto. Recebe o que a etapa 1 transcreveu e o que o motorista
+ * lançou, e julga se correspondem.
+ *
+ * Ela não vê a foto, e por isso não pode "achar" no papel um valor que a
+ * leitura não achou: campo sem leitura é "incerto", e o código força isso de
+ * novo depois (ver `forcarSemLeitura`).
+ */
+const INSTRUCOES_JULGAMENTO = `Você confere se um documento de carga corresponde ao que o motorista lançou no sistema.
+
+Recebe dois blocos:
+- LIDO: o que outro leitor transcreveu da foto do documento. É tudo o que se sabe
+  do papel. Campo null = não aparece ou não deu pra ler.
+- LANÇADO: o que o motorista registrou.
+
+Responda APENAS um JSON puro (sem markdown, sem texto em volta):
+{
+  "numeroDocumento": { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
+  "toneladas":       { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
+  "data":            { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
+  "placa":           { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
+  "cliente":         { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
+  "material":        { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" }
+}
+
+CAMPO SEM LEITURA:
+Se o campo é null no LIDO, a resposta é "incerto" com o porquê "não aparece no
+documento". Nunca "sim": você não tem como saber o que está no papel além do
+que está no LIDO.
+
+NÚMERO DO DOCUMENTO:
+- Compare o lançado com "numeroDocumento" e com "outrosNumeros". Se bater com
+  qualquer um deles, é "sim".
+- Prefixo de série, ponto, hífen e zero à esquerda são jeito de imprimir:
+  "TKB-043625" e "043625" são o mesmo documento.
+
+CLIENTE E MATERIAL — julgue como gente, não como texto:
+- Razão social contra nome curto é a MESMA empresa: "BRONZE PAVIMENTAÇÕES LTDA"
+  e "Construtora Bronze" conferem. "CASTILHO" e "CONSTRUTORA CASTILHO" conferem.
+- Nome técnico contra nome comercial é o MESMO material: "C.B.U.Q. FAIXA C" e
+  "MASSA DE ASFALTO" conferem (CBUQ é concreto betuminoso usinado a quente, que
+  é massa asfáltica). "BGS" e "BRITA GRADUADA SIMPLES" conferem.
+- Faixa, tipo, graduação e granulometria qualificam o material, não mudam o que
+  ele é: "BRITA 1" e "BRITA" conferem.
+- O documento costuma trazer o nome da PEDREIRA, da OBRA ou do destino, que não
+  é o cliente do frete. Nesse caso responda "incerto", não "nao".
+- Só responda "nao" quando forem claramente coisas diferentes — areia contra
+  asfalto, uma construtora contra outra construtora sem nenhuma relação.
+
+PESO: diferença de algumas dezenas de quilos é arredondamento de balança: "sim".
+
+DATA: um dia de diferença é rotina (pesagem à noite, lançamento no dia
+seguinte): "sim".
 
 PLACA: ignore hífen e espaço. Dois formatos convivem hoje: o antigo (ABC-1234)
 e o Mercosul (ABC1D23), que só troca o 5º caractere por uma letra. Balança com
 sistema antigo imprime tudo no formato velho, e leitor de placa costuma trocar
 a letra pelo número parecido (B por 6 ou 8, G por 6, S por 5, I por 1, O por 0).
 Se as três letras e os três últimos dígitos batem e só o 5º caractere muda, é o
-MESMO caminhão: responda "sim". Se o documento traz a placa da CARRETA e o
-lançamento é do cavalo mecânico, responda "incerto" — não é caminhão errado.
+MESMO caminhão: "sim". Se a placa lida pode ser a da CARRETA e o lançamento é
+do cavalo mecânico, "incerto" — não é caminhão errado.
 
 REGRA QUE VALE MAIS QUE TODAS AS OUTRAS:
 Quem lê isto é um motorista parceiro, e ele pode estar certo mesmo quando o
 papel parece dizer outra coisa. Responda "nao" apenas quando tiver certeza de
-que o lançamento não corresponde ao documento. Na menor dúvida — foto ruim,
-campo cortado, nome que você não reconhece, número que aparece mais de uma vez —
-responda "incerto". Um "incerto" manda o caso pra um humano olhar, o que é
-barato. Um "nao" errado acusa alguém honesto, o que não é.`;
+que o lançamento não corresponde ao documento. Na menor dúvida responda
+"incerto". Um "incerto" manda o caso pra um humano olhar, o que é barato. Um
+"nao" errado acusa alguém honesto, o que não é.`;
+
+/** Campo do julgamento → campo do `Lido` que ele julga. */
+const CAMPO_LIDO: Record<keyof JulgamentoIa, keyof Lido> = {
+  numeroDocumento: "ticket",
+  toneladas: "toneladas",
+  data: "data",
+  placa: "placa",
+  cliente: "clienteNome",
+  material: "materialNome",
+};
+
+type FalhaLeitura = "resposta-invalida" | "foto-ilegivel" | null;
 
 @Injectable()
 export class LeitorTicketService {
@@ -151,7 +217,8 @@ export class LeitorTicketService {
   }
 
   /**
-   * Lê a foto. Devolve o que leu + o custo, ou lança se a chamada falhar (o
+   * Lê a foto às cegas e depois julga contra o lançado. Devolve o que leu, o
+   * parecer e o custo das duas etapas, ou lança se uma chamada falhar (o
    * worker distingue falha de infra de resultado ruim).
    */
   async ler(args: {
@@ -174,10 +241,103 @@ export class LeitorTicketService {
      * aproveitável (humano olha). Tratar as três como a mesma coisa deixava
      * todas paradas na fila de revisão sem ninguém saber o que fazer.
      */
-    falha: "resposta-invalida" | "foto-ilegivel" | null;
+    falha: FalhaLeitura;
   }> {
     const modelo = args.modelo || MODELO_PADRAO;
     const foto = await caberNoLimite(args.fotoBase64, args.mime, provedorDoModelo(modelo));
+
+    // ── etapa 1: a foto, e SÓ a foto ──
+    const leitura = await this.chamar(modelo, INSTRUCOES, [
+      {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: foto.mime as "image/jpeg" | "image/png" | "image/webp",
+          data: foto.base64,
+        },
+      },
+      { type: "text", text: "Transcreva o documento da foto e responda o JSON." },
+    ]);
+
+    if (!leitura.json) {
+      this.log.warn("Conferência: leitura sem JSON válido");
+      return {
+        lido: { confianca: 0 },
+        julgamento: {},
+        custoUsd: leitura.custoUsd,
+        modelo,
+        legivel: false,
+        // Não é foto ruim: o modelo respondeu algo que não é o JSON pedido.
+        // Isso é defeito de execução e merece outra tentativa, não uma
+        // cobrança de foto nova ao motorista.
+        falha: "resposta-invalida",
+      };
+    }
+
+    const parsed = leitura.json;
+    const legivel = parsed.legivel !== false;
+    const outrosNumeros = Array.isArray(parsed.outrosNumeros)
+      ? parsed.outrosNumeros.map(str).filter((n): n is string => !!n).slice(0, 10)
+      : [];
+    const numeroPrincipal = str(parsed.numeroDocumento) ?? str(parsed.ticket);
+    const lido: Lido = {
+      tipoDocumento: str(parsed.tipoDocumento),
+      ticket: escolherNumero(numeroPrincipal, outrosNumeros, args.declarado.numeroDocumento),
+      toneladas: num(parsed.toneladas),
+      data: str(parsed.data),
+      placa: str(parsed.placa),
+      clienteNome: str(parsed.cliente),
+      materialNome: str(parsed.material),
+      confianca: clamp01(parsed.confidence),
+    };
+
+    // Foto que não deu pra ler não tem o que julgar: economiza a etapa 2.
+    if (!legivel) {
+      return { falha: "foto-ilegivel", julgamento: {}, lido, custoUsd: leitura.custoUsd, modelo, legivel };
+    }
+
+    // ── etapa 2: o julgamento, só texto ──
+    const paraJulgar = {
+      numeroDocumento: lido.ticket ?? null,
+      outrosNumeros,
+      toneladas: lido.toneladas ?? null,
+      data: lido.data ?? null,
+      placa: lido.placa ?? null,
+      cliente: lido.clienteNome ?? null,
+      material: lido.materialNome ?? null,
+    };
+    const julgado = await this.chamar(modelo, INSTRUCOES_JULGAMENTO, [
+      {
+        type: "text",
+        text:
+          `LIDO: ${JSON.stringify(paraJulgar)}\n\n` +
+          `LANÇADO: ${JSON.stringify(args.declarado)}\n\n` +
+          "Responda o JSON.",
+      },
+    ]);
+    const custoUsd = leitura.custoUsd + julgado.custoUsd;
+
+    if (!julgado.json) {
+      this.log.warn("Conferência: julgamento sem JSON válido");
+      return { lido, julgamento: {}, custoUsd, modelo, legivel, falha: "resposta-invalida" };
+    }
+
+    return {
+      falha: null,
+      julgamento: forcarSemLeitura(lerJulgamento(julgado.json), lido),
+      lido,
+      custoUsd,
+      modelo,
+      legivel,
+    };
+  }
+
+  /** Uma chamada ao modelo: registra uso e devolve o JSON (ou null) e o custo. */
+  private async chamar(
+    modelo: string,
+    system: string,
+    content: Record<string, unknown>[],
+  ): Promise<{ json: Record<string, unknown> | null; custoUsd: number }> {
     // Lança `ProvedorIaNaoConfigurado` com nome quando falta a chave daquele
     // fornecedor — o worker trata como falha de infra e retenta.
     const cliente = this.clientes.para(modelo);
@@ -194,37 +354,17 @@ export class LeitorTicketService {
         // leitura duas vezes. Saída só é cobrada pelo que é gerado; folga não
         // custa nada.
         max_tokens: 800,
-        // `max_tokens: 400` só cabe porque a resposta é o JSON e nada mais. No
-        // MiniMax o raciocínio vem desligado por default, mas default é coisa
-        // que muda do lado deles: um dia de "thinking" ligado consumiria os 400
-        // tokens antes do JSON começar, e toda leitura viraria truncada. Pedir
-        // explicitamente fecha a porta. O parâmetro não existe assim na
-        // Anthropic, daí ser condicional.
+        // A resposta é o JSON e nada mais. No MiniMax o raciocínio vem
+        // desligado por default, mas default é coisa que muda do lado deles:
+        // um dia de "thinking" ligado consumiria os tokens antes do JSON
+        // começar, e toda leitura viraria truncada. Pedir explicitamente fecha
+        // a porta. O parâmetro não existe assim na Anthropic, daí ser
+        // condicional.
         ...(provedorDoModelo(modelo) === "minimax"
           ? ({ thinking: { type: "disabled" } } as unknown as Record<string, unknown>)
           : {}),
-        system: INSTRUCOES,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: foto.mime as "image/jpeg" | "image/png" | "image/webp",
-                  data: foto.base64,
-                },
-              },
-              {
-                type: "text",
-                text:
-                  `O motorista lançou: ${JSON.stringify(args.declarado)}\n\n` +
-                  "Leia o ticket da foto e responda o JSON.",
-              },
-            ],
-          },
-        ],
+        system,
+        messages: [{ role: "user", content: content as never }],
       });
 
       const uso = calcularUso(modelo, resp.usage);
@@ -239,40 +379,7 @@ export class LeitorTicketService {
         .filter((b) => b.type === "text")
         .map((b) => (b as { text: string }).text)
         .join("\n");
-      const parsed = extrairJson(texto);
-      if (!parsed) {
-        this.log.warn("Conferência: resposta sem JSON válido");
-        return {
-          lido: { confianca: 0 },
-          julgamento: {},
-          custoUsd: uso.custoUsd ?? 0,
-          modelo,
-          legivel: false,
-          // Não é foto ruim: o modelo respondeu algo que não é o JSON pedido.
-          // Isso é defeito de execução e merece outra tentativa, não uma
-          // cobrança de foto nova ao motorista.
-          falha: "resposta-invalida",
-        };
-      }
-
-      const legivel = parsed.legivel !== false;
-      return {
-        falha: legivel ? null : "foto-ilegivel",
-        julgamento: lerJulgamento(parsed.conferencia),
-        lido: {
-          tipoDocumento: str(parsed.tipoDocumento),
-          ticket: str(parsed.numeroDocumento) ?? str(parsed.ticket),
-          toneladas: num(parsed.toneladas),
-          data: str(parsed.data),
-          placa: str(parsed.placa),
-          clienteNome: str(parsed.cliente),
-          materialNome: str(parsed.material),
-          confianca: clamp01(parsed.confidence),
-        },
-        custoUsd: uso.custoUsd ?? 0,
-        modelo,
-        legivel,
-      };
+      return { json: extrairJson(texto), custoUsd: uso.custoUsd ?? 0 };
     } catch (err) {
       this.uso.registrar({
         escopo: "conferencia",
@@ -284,6 +391,49 @@ export class LeitorTicketService {
       throw err;
     }
   }
+}
+
+/**
+ * Qual número do papel vai pra coluna "No ticket".
+ *
+ * A leitura às cegas não sabe qual dos números impressos o motorista digitou;
+ * quando um dos que ela LEU bate com o lançado, é esse que se mostra e se
+ * compara. Continua sendo um número lido — o lançado só escolhe entre eles,
+ * nunca entra no lugar.
+ */
+export function escolherNumero(
+  principal: string | null,
+  outros: string[],
+  declarado: unknown,
+): string | null {
+  if (typeof declarado !== "string" || !declarado.trim()) return principal;
+  const nDec = nucleoNumericoTicket(declarado);
+  const sDec = serieTicket(declarado);
+  if (nDec.length < 3) return principal;
+  const bate = (n: string) => {
+    const s = serieTicket(n);
+    return nucleoNumericoTicket(n) === nDec && (!sDec || !s || s === sDec);
+  };
+  if (principal && bate(principal)) return principal;
+  return outros.find(bate) ?? principal;
+}
+
+/**
+ * Campo que a leitura não achou não pode sair "confere". O prompt do
+ * julgamento já manda responder "incerto", e isto garante no código — é a
+ * mesma promessa que motivou separar as etapas, e promessa de prompt não é
+ * trava.
+ */
+export function forcarSemLeitura(j: JulgamentoIa, lido: Lido): JulgamentoIa {
+  const saida: JulgamentoIa = { ...j };
+  for (const campo of Object.keys(CAMPO_LIDO) as (keyof JulgamentoIa)[]) {
+    const v = lido[CAMPO_LIDO[campo]];
+    const vazio = v == null || (typeof v === "string" && !v.trim());
+    if (vazio && saida[campo]?.confere === "sim") {
+      saida[campo] = { confere: "incerto", porque: "não aparece no documento" };
+    }
+  }
+  return saida;
 }
 
 const str = (v: unknown): string | null =>
