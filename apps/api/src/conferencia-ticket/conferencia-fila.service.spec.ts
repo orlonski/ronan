@@ -9,6 +9,12 @@ import { comConta } from "../common/conta/conta-context";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { ConferenciaConfig } from "./conferencia.config";
 
+/** Sem de/para cadastrado: só o nome idêntico ao cadastro confere. */
+const vinculosFake = {
+  contexto: async () => ({}),
+  daLeitura: async () => [],
+} as never;
+
 const config = { timeoutMs: 120_000 } as ConferenciaConfig;
 
 /** Viagem que pode ser conferida — base pra variar um atributo por vez. */
@@ -37,7 +43,7 @@ function montar(viagem: unknown, criarLanca?: unknown, liberada = true) {
     veiculo: { findMany: vi.fn().mockResolvedValue([{ placa: "AQF7758" }, { placa: "XYZ1234" }]) },
     conferenciaTicket: { create },
   } as unknown as PrismaService;
-  return { fila: new ConferenciaFilaService(prisma, config), create };
+  return { fila: new ConferenciaFilaService(prisma, config, vinculosFake), create };
 }
 
 const enfileirar = (viagem: unknown, erro?: unknown, liberada = true) => {
@@ -139,7 +145,7 @@ describe("finalizar", () => {
   const finalizar = async (dados: Record<string, unknown>) => {
     const update = vi.fn().mockResolvedValue({});
     const prisma = { conferenciaTicket: { update } } as unknown as PrismaService;
-    const fila = new ConferenciaFilaService(prisma, config);
+    const fila = new ConferenciaFilaService(prisma, config, vinculosFake);
     await fila.finalizar(
       { id: "j1", iniciadoEm: new Date(Date.now() - 3000), criadoEm: new Date() } as never,
       dados as never,
@@ -179,7 +185,7 @@ describe("ressuscitarFalhasDeInfra", () => {
     const prisma = {
       conferenciaTicket: { findMany, update },
     } as unknown as PrismaService;
-    return { fila: new ConferenciaFilaService(prisma, config), update, findMany };
+    return { fila: new ConferenciaFilaService(prisma, config, vinculosFake), update, findMany };
   }
 
   it("falha de conexão volta pra fila com o orçamento de tentativas cheio", async () => {
@@ -304,7 +310,7 @@ describe("recompararViagem — de graça, e desfazendo o que o robô fez", () =>
       viagemMensagem: { create: criarMensagem },
     } as unknown as PrismaService;
     return {
-      fila: new ConferenciaFilaService(prisma, config),
+      fila: new ConferenciaFilaService(prisma, config, vinculosFake),
       updateConferencia,
       updateManyConferencia,
       updateManyViagem,
@@ -394,7 +400,7 @@ describe("listar — o filtro que abre os grupos do diagnóstico", () => {
   function montarLista() {
     const findMany = vi.fn().mockResolvedValue([]);
     const prisma = { conferenciaTicket: { findMany } } as unknown as PrismaService;
-    return { fila: new ConferenciaFilaService(prisma, config), findMany };
+    return { fila: new ConferenciaFilaService(prisma, config, vinculosFake), findMany };
   }
 
   const whereDe = async (filtro: Parameters<ConferenciaFilaService["listar"]>[0]) => {

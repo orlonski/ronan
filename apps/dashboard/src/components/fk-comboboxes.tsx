@@ -181,6 +181,21 @@ export function ClienteCombobox(props: SingleProps) {
   );
 }
 
+type Material = { id: string; nome: string };
+
+export function MaterialCombobox(props: SingleProps) {
+  return (
+    <AsyncCombobox<Material>
+      {...props}
+      path="/admin/materiais"
+      mapOption={(m) => ({ value: m.id, label: m.nome })}
+      searchPlaceholder="Buscar por nome…"
+      emptyMessage="Nenhum material encontrado."
+      placeholder={props.placeholder ?? "Selecione"}
+    />
+  );
+}
+
 export function ClienteComboboxMulti({
   value,
   onChange,

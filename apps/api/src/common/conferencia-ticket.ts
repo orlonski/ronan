@@ -527,6 +527,30 @@ export function compararDeclaradoComLido(
 
 
 /**
+ * O de/para de um nome do papel: o que uma pessoa decidiu que ele É.
+ * Espelha `VinculoNomeTicket` (Prisma), sem depender dele.
+ */
+export type VinculoNome = {
+  tipo: "OBRA" | "MATERIAL" | "FORNECEDOR" | "DESTINO";
+  /** Id da obra (OBRA) ou do material (MATERIAL). null nos outros tipos. */
+  alvoId: string | null;
+  alvoNome: string | null;
+};
+
+/**
+ * O que se sabe, no cadastro, sobre os nomes da viagem — tudo decidido por
+ * gente, nada pela IA.
+ *
+ * `nomes` são o nome do registro lançado e os apelidos cadastrados nele: nome
+ * lido IDÊNTICO a um deles (sem acento, caixa e pontuação) é o mesmo registro,
+ * sem precisar de vínculo. `vinculo` é o de/para encontrado pro nome LIDO.
+ */
+export type ContextoNomes = {
+  cliente?: { id: string | null; nomes: string[]; vinculo?: VinculoNome | null };
+  material?: { id: string | null; nomes: string[]; vinculo?: VinculoNome | null };
+};
+
+/**
  * Decide a partir do parecer da IA, mantendo as travas que o código faz melhor.
  *
  * Divisão de trabalho: o modelo julga semântica (nome de empresa, nome de
@@ -549,6 +573,7 @@ export function conferirComJulgamento(
   declarado: Declarado,
   lido: Lido,
   julgamento: JulgamentoIa,
+  nomes: ContextoNomes = {},
   limiares: LimiaresConferencia = LIMIARES_PADRAO,
 ): ResultadoConferencia {
   const divergencias: Divergencia[] = [];
@@ -598,8 +623,6 @@ export function conferirComJulgamento(
     { campo: "ticket", chave: "numeroDocumento", dec: declarado.ticket, lid: lido.ticket, rotulo: "o número do ticket" },
     { campo: "placa", chave: "placa", dec: declarado.placa, lid: lido.placa, rotulo: "a placa" },
     { campo: "data", chave: "data", dec: declarado.data ? soDia(declarado.data) : null, lid: lido.data, rotulo: "a data" },
-    { campo: "cliente", chave: "cliente", dec: declarado.clienteNome, lid: lido.clienteNome, rotulo: "a obra/cliente" },
-    { campo: "material", chave: "material", dec: declarado.materialNome, lid: lido.materialNome, rotulo: "o material" },
   ];
 
   for (const { campo, chave, dec, lid, rotulo } of mapa) {
@@ -612,12 +635,6 @@ export function conferirComJulgamento(
     // isso — cliente em branco, número do ticket vazio, material que a balança
     // não imprime. Nenhum conferente resolve olhando a mesma foto.
     if (!temLido && parecer.confere !== "nao") continue;
-
-    // Obra em dúvida também não trava. O ticket de balança mostra quem VENDEU
-    // (a pedreira), "OUTROS", ou quem recebe no fim (a concessionária) — quase
-    // nunca a obra do contrato de frete. "nao" continua divergindo: aí a IA
-    // afirma que é outra obra.
-    if (campo === "cliente" && parecer.confere !== "nao") continue;
 
     conferidos.push(campo);
     if (parecer.confere === "sim") continue;
@@ -694,6 +711,9 @@ export function conferirComJulgamento(
     }
   }
 
+  // ── obra e material: só o cadastro decide, nunca a IA ──
+  conferirNomes(declarado, lido, nomes, { divergencias, incertezas, conferidos });
+
   return {
     veredito: decidirVeredito(divergencias, incertezas, conferidos, lido.confianca, limiares),
     divergencias,
@@ -704,6 +724,74 @@ export function conferirComJulgamento(
 
 /** Carga líquida acima disto não existe num caminhão — é digitação. */
 const PESO_LIQUIDO_MAXIMO = 50;
+
+/**
+ * Obra e material, conferidos SEM achismo (dono, 05/10/2026: "nunca devemos
+ * ter achismo, essa leitura envolve dinheiro" — a obra e o material decidem
+ * o preço da viagem).
+ *
+ * Até aqui quem dizia que "Construtora Bronze" é "BRONZE PAVIMENTAÇÕES LTDA"
+ * era a IA. Agora só três coisas fazem um nome do papel valer como prova, e
+ * as três foram decididas por gente:
+ *
+ *   1. ser IDÊNTICO ao nome do registro lançado ou a um apelido cadastrado nele;
+ *   2. ter um vínculo (de/para) apontando pro registro lançado;
+ *   3. ter um vínculo dizendo que o nome NÃO é obra (fornecedor, destino) —
+ *      aí o campo só não foi verificado, como papel que não traz a obra.
+ *
+ * Vínculo apontando pra OUTRO registro é divergência: uma pessoa já disse o
+ * que aquele nome é. Nome sem vínculo nenhum é dúvida, e dúvida vai pra quem
+ * confere — que resolve criando o vínculo, uma vez, pra todos os próximos.
+ * O parecer da IA continua guardado e aparece na tela como sugestão; aqui ele
+ * não pesa.
+ */
+function conferirNomes(
+  declarado: Declarado,
+  lido: Lido,
+  nomes: ContextoNomes,
+  saida: { divergencias: Divergencia[]; incertezas: Incerteza[]; conferidos: CampoConferido[] },
+): void {
+  const campos = [
+    { campo: "cliente" as const, dec: declarado.clienteNome, lid: lido.clienteNome, ctx: nomes.cliente, rotulo: "a obra" },
+    { campo: "material" as const, dec: declarado.materialNome, lid: lido.materialNome, ctx: nomes.material, rotulo: "o material" },
+  ];
+
+  for (const { campo, dec, lid, ctx, rotulo } of campos) {
+    if (!dec) continue;
+    // Papel que não traz o nome: não verificado, como sempre foi.
+    if (!lid || !lid.trim() || lid.trim() === "—") continue;
+
+    const lidoNorm = normalizarTexto(lid);
+    const conhecidos = [dec, ...(ctx?.nomes ?? [])].map(normalizarTexto).filter(Boolean);
+    if (conhecidos.includes(lidoNorm)) {
+      saida.conferidos.push(campo);
+      continue;
+    }
+
+    const v = ctx?.vinculo;
+    if (v && (v.tipo === "FORNECEDOR" || v.tipo === "DESTINO")) continue;
+
+    if (v && v.alvoId) {
+      saida.conferidos.push(campo);
+      if (ctx?.id && v.alvoId === ctx.id) continue;
+      saida.divergencias.push({
+        campo,
+        declarado: dec,
+        lido: lid,
+        gravidade: "ALTA",
+        detalhe: `No ticket, ${rotulo} é ${v.alvoNome ?? lid}, e a viagem foi lançada com ${dec}.`,
+      });
+      continue;
+    }
+
+    saida.incertezas.push({
+      campo,
+      declarado: dec,
+      lido: lid,
+      motivo: "sem vínculo",
+    });
+  }
+}
 
 /** Campos cuja dúvida invalida o veredito inteiro — ver `decidirVeredito`. */
 const CAMPOS_QUE_TRAVAM: CampoConferido[] = ["toneladas", "ticket"];

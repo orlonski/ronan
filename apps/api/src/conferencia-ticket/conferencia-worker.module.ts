@@ -10,6 +10,7 @@ import { ConferenciaWorkerService } from "./conferencia-worker.service";
 import { LeitorTicketService } from "./leitor-ticket.service";
 import { AplicarVereditoService } from "./aplicar-veredito.service";
 import { PreAprovacaoService } from "./pre-aprovacao.service";
+import { VinculosNomeService } from "./vinculos-nome.service";
 
 /**
  * Fila + worker. É este que faz o laço rodar.
@@ -27,6 +28,7 @@ import { PreAprovacaoService } from "./pre-aprovacao.service";
   providers: [
     ConferenciaConfig,
     ConferenciaFilaService,
+    VinculosNomeService,
     LeitorTicketService,
     PreAprovacaoService,
     AplicarVereditoService,

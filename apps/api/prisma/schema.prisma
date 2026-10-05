@@ -647,6 +647,7 @@ model Conta {
   denunciasMensagemChat          DenunciaMensagemChat[]
   usosIa                         UsoIa[]
   conferenciasTicket             ConferenciaTicket[]
+  vinculosNomeTicket             VinculoNomeTicket[]
   assinaturas                    Assinatura[]
   cobrancasAssinatura            CobrancaAssinatura[]
   aceitesTermo                   AceiteTermo[]
@@ -2382,22 +2383,23 @@ model LayoutImportBloco {
 }
 
 model Cliente {
-  contaId          String   @default("__SEM_CONTA__")
-  conta            Conta    @relation(fields: [contaId], references: [id])
-  id               String   @id @default(uuid())
-  nome             String
+  contaId            String              @default("__SEM_CONTA__")
+  conta              Conta               @relation(fields: [contaId], references: [id])
+  id                 String              @id @default(uuid())
+  nome               String
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp. Como o motorista
   /// chama no dia a dia (ex: "cliente do beto", "shopping novo").
-  apelidos         String[] @default([])
-  empresa          Empresa  @relation(fields: [empresaId], references: [id])
-  empresaId        String
-  ativa            Boolean  @default(true)
+  apelidos           String[]            @default([])
+  empresa            Empresa             @relation(fields: [empresaId], references: [id])
+  vinculosNomeTicket VinculoNomeTicket[]
+  empresaId          String
+  ativa              Boolean             @default(true)
   /// LEGADO (aposentado): mínimo agora é por RegraMinimo (empresa+material+faixa
   /// de km). Colunas mantidas dormentes; nada lê/grava. Não usar.
-  toneladasMinimas Decimal? @db.Decimal(10, 3)
-  kmMinimos        Decimal? @db.Decimal(10, 2)
-  criadoEm         DateTime @default(now())
-  alteradoEm       DateTime @updatedAt
+  toneladasMinimas   Decimal?            @db.Decimal(10, 3)
+  kmMinimos          Decimal?            @db.Decimal(10, 2)
+  criadoEm           DateTime            @default(now())
+  alteradoEm         DateTime            @updatedAt
 
   locais      LocalCliente[]
   viagens     Viagem[]
@@ -2446,20 +2448,21 @@ model Cliente {
 }
 
 model Material {
-  contaId                 String   @default("__SEM_CONTA__")
-  conta                   Conta    @relation(fields: [contaId], references: [id])
-  id                      String   @id @default(uuid())
+  contaId                 String              @default("__SEM_CONTA__")
+  conta                   Conta               @relation(fields: [contaId], references: [id])
+  id                      String              @id @default(uuid())
   nome                    String
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp.
-  apelidos                String[] @default([])
-  ativo                   Boolean  @default(true)
+  apelidos                String[]            @default([])
+  ativo                   Boolean             @default(true)
+  vinculosNomeTicket      VinculoNomeTicket[]
   /// Se false, viagens desse material não exigem número de ticket (ex: concreto,
   /// que não gera ticket de pesagem). Controlado pelo admin, nunca pelo motorista.
-  exigeTicket             Boolean  @default(true)
+  exigeTicket             Boolean             @default(true)
   /// Esse material gera algum papel que dá pra fotografar (ticket de pesagem,
   /// canhoto, nota). false = não gera nada (concreto): suprime a exigência de
   /// foto da empresa, porque não dá pra cobrar foto de comprovante inexistente.
-  temComprovanteFoto      Boolean  @default(true)
+  temComprovanteFoto      Boolean             @default(true)
   /// Material que não gera documento nenhum pra conferir: a viagem já entra
   /// APROVADA, sem passar pela fila de conferência.
   ///
@@ -2471,26 +2474,26 @@ model Material {
   /// Nasce DESLIGADA. Ligar num material que na verdade gera papel faria viagens
   /// entrarem no faturamento sem ninguém olhar — e ninguém revisa o que já está
   /// aprovado. Ver common/conferencia-dispensada.ts para as travas.
-  dispensaConferencia     Boolean  @default(false)
+  dispensaConferencia     Boolean             @default(false)
   /// Se true, o motorista pode marcar que precisou voltar pro bota-fora (limpeza):
   /// na última carga ele retorna ao local de carga pra descarregar a sobra. Isso
   /// adiciona a perna descarga→carga ao km faturável. Controlado pelo admin; o
   /// motorista só marca o fato. Ver Viagem.teveBotaFora.
-  permiteBotaFora         Boolean  @default(false)
+  permiteBotaFora         Boolean             @default(false)
   /// R$ por tonelada da MERCADORIA (não do frete — frete é TabelaPreco).
   /// O CT-e exige `vCarga` no modal rodoviário (rejeição 581), e o sistema não
   /// tem de onde saber quanto vale uma carga de brita. Aqui o contador informa
   /// uma referência por material e o valor sai de `referência × toneladas`.
   /// Quando o valor REAL é conhecido (veio da NF-e), a viagem manda nele.
-  valorReferenciaTonelada Decimal? @db.Decimal(12, 2)
+  valorReferenciaTonelada Decimal?            @db.Decimal(12, 2)
   /// Densidade a granel em t/m³ (brita 1 ≈ 1,45; areia ≈ 1,5). É a ponte entre
   /// o que a balança pesa (tonelada) e o que o cliente compra (m³): pedido em
   /// m³ e preço por m³ convertem as toneladas da viagem por ela. Null = não
   /// informada, e aí a conversão RECUSA — nunca chuta um valor médio. Ver
   /// common/volume-material.ts.
-  densidadeTonM3          Decimal? @db.Decimal(6, 3)
-  criadoEm                DateTime @default(now())
-  alteradoEm              DateTime @updatedAt
+  densidadeTonM3          Decimal?            @db.Decimal(6, 3)
+  criadoEm                DateTime            @default(now())
+  alteradoEm              DateTime            @updatedAt
 
   viagens      Viagem[]
   regrasMinimo RegraMinimo[]
@@ -8734,4 +8737,56 @@ model SolicitacaoObra {
   @@index([clienteId, criadoEm])
   @@index([contaId])
   @@map("solicitacoes_obra")
+}
+
+/// O que um nome impresso no ticket É — o de/para da conferência.
+///
+/// A leitura do ticket só transcreve o papel; ela não decide que "BICA CORR."
+/// é o material *Bica corrida* nem que "PEDREIRA GENARO" é a obra ARENA. Quem
+/// decide é uma pessoa, uma vez, na tela da viagem — e a decisão vale pros
+/// próximos tickets. Sem vínculo, o nome fica "sem vínculo" e a viagem espera
+/// alguém olhar: nada de achismo onde há dinheiro (dono, 05/10/2026).
+///
+/// `tipo` existe porque o nome no ticket quase nunca é a obra: é a pedreira que
+/// vendeu ou quem recebe no fim. Vincular "PEDREIRA X" como OBRA faria todo
+/// ticket dela casar com uma obra só; como FORNECEDOR, ele só deixa de pedir
+/// vínculo — não prova obra nenhuma.
+model VinculoNomeTicket {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  /// Em que campo da leitura o nome aparece: "cliente" (obra) | "material".
+  campo           String
+  /// Como estava no papel, pra mostrar.
+  nomeLido        String
+  /// `normalizarTexto(nomeLido)` — é por aqui que se casa.
+  nomeNormalizado String
+  tipo            TipoVinculoNome
+
+  /// Preenchido quando tipo = OBRA.
+  cliente    Cliente?  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId  String?
+  /// Preenchido quando tipo = MATERIAL.
+  material   Material? @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  materialId String?
+
+  /// Quem decidiu. Texto e id soltos (sem FK) pra a trilha sobreviver ao usuário.
+  criadoPorId    String?
+  criadoPorNome  String
+  /// A viagem em que a pessoa decidiu — só rastro, sem FK.
+  viagemOrigemId String?
+  criadoEm       DateTime @default(now())
+
+  @@unique([contaId, campo, nomeNormalizado])
+  @@map("vinculos_nome_ticket")
+}
+
+enum TipoVinculoNome {
+  OBRA
+  MATERIAL
+  /// Pedreira, usina, quem vendeu. Não prova obra.
+  FORNECEDOR
+  /// Quem recebe no fim (concessionária, prefeitura). Não prova obra.
+  DESTINO
 }

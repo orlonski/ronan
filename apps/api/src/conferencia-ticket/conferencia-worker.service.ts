@@ -7,6 +7,7 @@ import { UploadsService } from "../uploads/uploads.service";
 import { ConferenciaFilaService } from "./conferencia-fila.service";
 import { ConferenciaConfig } from "./conferencia.config";
 import { LeitorTicketService } from "./leitor-ticket.service";
+import { VinculosNomeService } from "./vinculos-nome.service";
 import { AplicarVereditoService } from "./aplicar-veredito.service";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { CachePorConta } from "../common/conta/cache-por-conta";
@@ -69,6 +70,7 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
     private readonly uploads: UploadsService,
     private readonly leitor: LeitorTicketService,
     private readonly aplicar: AplicarVereditoService,
+    private readonly vinculos: VinculosNomeService,
   ) {}
 
   onModuleInit(): void {
@@ -262,7 +264,12 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
         if (forte.legivel && forte.lido.confianca > 0) {
           // Era limitação do modelo pequeno, não da foto. Segue o fluxo normal
           // com a leitura boa — e ninguém precisa ser incomodado.
-          const r = conferirComJulgamento(declarado, forte.lido, forte.julgamento);
+          const r = conferirComJulgamento(
+            declarado,
+            forte.lido,
+            forte.julgamento,
+            await this.vinculos.contexto(job.viagemId, forte.lido),
+          );
           return {
             resultado: r,
             leitura: { ...forte.lido, julgamento: forte.julgamento },
@@ -305,7 +312,12 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
-    let resultado = conferirComJulgamento(declarado, primeira.lido, primeira.julgamento);
+    let resultado = conferirComJulgamento(
+      declarado,
+      primeira.lido,
+      primeira.julgamento,
+      await this.vinculos.contexto(job.viagemId, primeira.lido),
+    );
     let custo = primeira.custoUsd;
     let modelo = primeira.modelo;
     let passadas = 1;
@@ -339,7 +351,12 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
         passadas = 2;
         escalou = true;
 
-        const rSegunda = conferirComJulgamento(declarado, segunda.lido, segunda.julgamento);
+        const rSegunda = conferirComJulgamento(
+          declarado,
+          segunda.lido,
+          segunda.julgamento,
+          await this.vinculos.contexto(job.viagemId, segunda.lido),
+        );
         // Discordaram? Então nenhuma das duas é confiável o bastante pra
         // incomodar o motorista: humano decide.
         resultado =

@@ -31,7 +31,12 @@ export type Material = {
 
 const PATH = "/admin/materiais";
 
-type Props = { initial?: Material };
+type Props = {
+  initial?: Material;
+  /** Nome já preenchido — vindo do de/para da conferência do ticket. */
+  nomeInicial?: string;
+  voltarPara?: string;
+};
 
 /** O estado do formulário: o valor é TEXTO enquanto a pessoa digita. */
 type MaterialForm = {
@@ -52,12 +57,12 @@ type MaterialBody = Omit<MaterialForm, "valorReferenciaTonelada" | "densidadeTon
 };
 
 
-export function MaterialForm({ initial }: Props) {
+export function MaterialForm({ initial, nomeInicial, voltarPara = "/materiais" }: Props) {
   const router = useRouter();
   const create = useCreateResource<MaterialBody, Material>(PATH, PATH);
   const update = useUpdateResource<Partial<MaterialBody>, Material>(PATH, PATH);
   const [form, setForm] = useState<MaterialForm>({
-    nome: initial?.nome ?? "",
+    nome: initial?.nome ?? nomeInicial ?? "",
     apelidos: initial?.apelidos ?? [],
     exigeTicket: initial?.exigeTicket ?? true,
     permiteBotaFora: initial?.permiteBotaFora ?? false,
@@ -104,7 +109,7 @@ export function MaterialForm({ initial }: Props) {
     } else {
       await create.mutateAsync(body);
     }
-    router.push("/materiais");
+    router.push(voltarPara as never);
   }
 
   const saving = create.isPending || update.isPending;
@@ -261,7 +266,7 @@ export function MaterialForm({ initial }: Props) {
           </p>
         </div>
         <BarraDeAcao>
-          <BotaoCancelar href="/materiais" sujo={sujo} />
+          <BotaoCancelar href={voltarPara} sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

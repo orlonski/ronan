@@ -34,6 +34,7 @@ function montar(
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   const modeloDaConta = () =>
     (worker as unknown as { modeloDaConta: () => Promise<string> }).modeloDaConta();
@@ -83,6 +84,7 @@ describe("ConferenciaWorkerService.modeloDaConta", () => {
       prisma,
       {} as never,
       { modeloPadrao: "claude-haiku-4-5-20251001" } as unknown as ConferenciaConfig,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,

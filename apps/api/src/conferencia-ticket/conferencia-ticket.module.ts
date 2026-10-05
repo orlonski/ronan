@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { PrismaModule } from "../prisma/prisma.module";
 import { ConferenciaConfig } from "./conferencia.config";
 import { ConferenciaFilaService } from "./conferencia-fila.service";
+import { VinculosNomeService } from "./vinculos-nome.service";
 
 /**
  * Só a FILA — sem worker. É o que a API importa pra poder enfileirar do
@@ -13,7 +14,7 @@ import { ConferenciaFilaService } from "./conferencia-fila.service";
  */
 @Module({
   imports: [PrismaModule],
-  providers: [ConferenciaConfig, ConferenciaFilaService],
-  exports: [ConferenciaFilaService, ConferenciaConfig],
+  providers: [ConferenciaConfig, ConferenciaFilaService, VinculosNomeService],
+  exports: [ConferenciaFilaService, ConferenciaConfig, VinculosNomeService],
 })
 export class ConferenciaTicketModule {}

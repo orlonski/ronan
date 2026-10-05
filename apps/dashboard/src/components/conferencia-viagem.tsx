@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Clock, Eye, PlugZap, RefreshCw, ScanEye } from "lucide-react";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import { humanizarErroConferencia, rotuloStatusConferencia } from "@/lib/conferencia-erro";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
+import { ClienteCombobox, MaterialCombobox } from "@/components/fk-comboboxes";
 
 type Divergencia = {
   campo: string;
@@ -56,6 +60,22 @@ type Conferencia = {
     finalizadoEm: string | null;
   } | null;
   historico: Tentativa[];
+  /** O de/para que vale pros nomes desta leitura (ver `DeParaNome`). */
+  vinculos?: Vinculo[];
+};
+
+/** O que uma pessoa decidiu que um nome do papel É no cadastro. */
+type Vinculo = {
+  id: string;
+  campo: "cliente" | "material";
+  nomeLido: string;
+  tipo: "OBRA" | "MATERIAL" | "FORNECEDOR" | "DESTINO";
+  clienteId: string | null;
+  materialId: string | null;
+  cliente: { nome: string } | null;
+  material: { nome: string } | null;
+  criadoPorNome: string;
+  criadoEm: string;
 };
 
 const CAMPOS: { chave: string; leituraChave: string; rotulo: string }[] = [
@@ -221,6 +241,15 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
   }
 
   const divs = data.divergencias ?? [];
+  // Nome do papel vinculado como fornecedor/destino: aparece na coluna, mas
+  // não prova obra — sem a marca, o card verde parecia dizer que conferiu.
+  const naoProva = (chave: string, lid: string): string | null => {
+    if (chave !== "clienteNome") return null;
+    const v = (data.vinculos ?? []).find(
+      (x) => x.campo === "cliente" && normalizar(x.nomeLido) === normalizar(lid),
+    );
+    return v?.tipo === "FORNECEDOR" ? "fornecedor" : v?.tipo === "DESTINO" ? "destino" : null;
+  };
   const incs = data.incertezas ?? [];
   const declarado = data.declarado ?? {};
   const leitura = data.leitura ?? {};
@@ -324,6 +353,9 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
                   <td className={`py-1 tabular-nums ${cor}`}>
                     {lid}
                     {inc && <span className="ml-1 text-xs">({inc.motivo})</span>}
+                    {naoProva(chave, lid) && (
+                      <span className="ml-1 text-xs text-muted-foreground">({naoProva(chave, lid)} — não é a obra)</span>
+                    )}
                   </td>
                 </tr>
               );
@@ -331,6 +363,30 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
           </tbody>
         </table>
       </div>
+
+      {(["cliente", "material"] as const).map((campo) => {
+        const chave = campo === "cliente" ? "clienteNome" : "materialNome";
+        const nomeLido = leitura[chave];
+        if (typeof nomeLido !== "string" || !nomeLido.trim()) return null;
+        const vinculo = (data.vinculos ?? []).find(
+          (v) => v.campo === campo && normalizar(v.nomeLido) === normalizar(nomeLido),
+        );
+        const semVinculo = incs.some((i) => i.campo === campo && i.motivo === "sem vínculo");
+        if (!vinculo && !semVinculo) return null;
+        const julgamento = leitura.julgamento as Record<string, { confere?: string; porque?: string }> | undefined;
+        return (
+          <DeParaNome
+            key={campo}
+            viagemId={viagemId}
+            campo={campo}
+            nomeLido={nomeLido}
+            vinculo={vinculo ?? null}
+            sugestao={julgamento?.[campo] ?? null}
+            podeVincular={temPermissao("conferencia-ticket.vincular")}
+            onFeito={() => void refetch()}
+          />
+        );
+      })}
 
       {incs.length > 0 && (
         <p className="mt-2 text-xs text-muted-foreground">
@@ -394,6 +450,206 @@ function HistoricoLeituras({ tentativas }: { tentativas: Tentativa[] }) {
         })}
       </ul>
     </details>
+  );
+}
+
+const ROTULO_TIPO: Record<Vinculo["tipo"], string> = {
+  OBRA: "a obra",
+  MATERIAL: "o material",
+  FORNECEDOR: "o fornecedor (pedreira, usina)",
+  DESTINO: "o destino (quem recebe)",
+};
+
+/** O mesmo `normalizarTexto` da API: sem acento, caixa e pontuação. */
+function normalizar(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * O de/para de UM nome do papel: o que ele é no cadastro.
+ *
+ * A leitura só transcreve. Quem decide que "BICA CORR." é o material *Bica
+ * corrida* — ou que "PEDREIRA GENARO" é quem vendeu, e não a obra — é quem
+ * confere, aqui, uma vez; o vínculo vale pra todos os próximos tickets. O
+ * parecer da IA aparece como sugestão e não decide nada (dono, 05/10/2026:
+ * "ele pode até sugerir algo, mas não afirmar nada").
+ *
+ * Não achou o registro certo? Cadastra um novo — o formulário abre com o nome
+ * do papel e volta pra esta viagem ao salvar.
+ */
+function DeParaNome({
+  viagemId,
+  campo,
+  nomeLido,
+  vinculo,
+  sugestao,
+  podeVincular,
+  onFeito,
+}: {
+  viagemId: string;
+  campo: "cliente" | "material";
+  nomeLido: string;
+  vinculo: Vinculo | null;
+  sugestao: { confere?: string; porque?: string } | null;
+  podeVincular: boolean;
+  onFeito: () => void;
+}) {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const [editando, setEditando] = useState(!vinculo);
+  const [tipo, setTipo] = useState<Vinculo["tipo"]>(
+    vinculo?.tipo ?? (campo === "cliente" ? "OBRA" : "MATERIAL"),
+  );
+  const [alvo, setAlvo] = useState<string | undefined>(
+    vinculo?.clienteId ?? vinculo?.materialId ?? undefined,
+  );
+  const [salvando, setSalvando] = useState(false);
+
+  const rotuloCampo = campo === "cliente" ? "Obra" : "Material";
+  const precisaAlvo = tipo === "OBRA" || tipo === "MATERIAL";
+  const voltar = encodeURIComponent(`/viagens/${viagemId}`);
+  const cadastrarNovo =
+    campo === "cliente"
+      ? `/clientes/novo?nome=${encodeURIComponent(nomeLido)}&voltar=${voltar}`
+      : `/materiais/novo?nome=${encodeURIComponent(nomeLido)}&voltar=${voltar}`;
+
+  async function vincular() {
+    setSalvando(true);
+    try {
+      const r = await fetchApi<{ reavaliadas: number; destravadas: number }>(
+        `/admin/conferencias/viagem/${viagemId}/vincular`,
+        {
+          method: "POST",
+          token,
+          body: JSON.stringify({
+            campo,
+            nomeLido,
+            tipo,
+            clienteId: tipo === "OBRA" ? alvo : null,
+            materialId: tipo === "MATERIAL" ? alvo : null,
+          }),
+        },
+      );
+      const outras = r.reavaliadas - 1;
+      toast.success("Vínculo salvo", {
+        description:
+          outras > 0
+            ? `Vale pros próximos tickets. Reavaliei mais ${outras} viagem(ns) com esse nome.`
+            : "Vale pros próximos tickets com esse nome.",
+      });
+      setEditando(false);
+      onFeito();
+      // O vínculo pode ter tirado a viagem da revisão (status mudou no banco):
+      // o selo do topo e a lista têm que acompanhar, não só este card.
+      if (r.destravadas > 0) void qc.invalidateQueries();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não consegui salvar o vínculo.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded border border-current/20 bg-white/70 p-2 text-xs">
+      <p>
+        <span className="text-muted-foreground">{rotuloCampo} no papel:</span>{" "}
+        <strong>“{nomeLido}”</strong>
+        {vinculo && !editando && (
+          <>
+            {" "}
+            é {ROTULO_TIPO[vinculo.tipo]}
+            {(vinculo.cliente ?? vinculo.material) && (
+              <> <strong>{(vinculo.cliente ?? vinculo.material)!.nome}</strong></>
+            )}
+            <span className="text-muted-foreground">
+              {" "}
+              · vinculado por {vinculo.criadoPorNome} em {fmtDataHoraBR(vinculo.criadoEm)}
+            </span>
+            {podeVincular && (
+              <button
+                type="button"
+                onClick={() => setEditando(true)}
+                className="ml-2 underline hover:no-underline"
+              >
+                trocar
+              </button>
+            )}
+          </>
+        )}
+        {!vinculo && (
+          <span className="text-amber-800"> — sem vínculo no cadastro. Ninguém confirmou o que esse nome é.</span>
+        )}
+      </p>
+
+      {sugestao?.porque && editando && (
+        <p className="mt-1 text-muted-foreground">
+          Sugestão da leitura (não decide):{" "}
+          {sugestao.confere === "sim"
+            ? "parece ser o lançado"
+            : sugestao.confere === "nao"
+              ? "parece ser outro"
+              : "não soube dizer"}{" "}
+          — {sugestao.porque}
+        </p>
+      )}
+
+      {editando && !podeVincular && (
+        <p className="mt-1 text-muted-foreground">
+          Quem tem a permissão de vincular nomes do ticket precisa confirmar o que é.
+        </p>
+      )}
+
+      {editando && podeVincular && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {campo === "cliente" && (
+            <Select
+              value={tipo}
+              onChange={(e) => {
+                setTipo(e.target.value as Vinculo["tipo"]);
+                setAlvo(undefined);
+              }}
+              className="h-9 w-auto"
+            >
+              <option value="OBRA">É a obra…</option>
+              <option value="FORNECEDOR">É o fornecedor (pedreira, usina)</option>
+              <option value="DESTINO">É o destino (quem recebe)</option>
+            </Select>
+          )}
+          {precisaAlvo && (
+            <div className="min-w-[220px] flex-1">
+              {campo === "cliente" ? (
+                <ClienteCombobox value={alvo} onChange={setAlvo} placeholder="Qual obra?" />
+              ) : (
+                <MaterialCombobox value={alvo} onChange={setAlvo} placeholder="Qual material?" />
+              )}
+            </div>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="success"
+            disabled={salvando || (precisaAlvo && !alvo)}
+            onClick={() => void vincular()}
+          >
+            {salvando ? "Salvando…" : "Vincular"}
+          </Button>
+          {vinculo && (
+            <Button type="button" size="sm" variant="outline" onClick={() => setEditando(false)}>
+              Cancelar
+            </Button>
+          )}
+          {precisaAlvo && (
+            <a href={cadastrarNovo} className="underline hover:no-underline">
+              Não está na lista? Cadastrar {campo === "cliente" ? "nova obra" : "novo material"}
+            </a>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

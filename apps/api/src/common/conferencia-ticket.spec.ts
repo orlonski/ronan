@@ -11,6 +11,7 @@ import {
   equivalenciaPlaca,
   distanciaEdicao,
   LIMIARES_PADRAO,
+  type ContextoNomes,
   type Declarado,
   type Lido,
 } from "./conferencia-ticket";
@@ -536,22 +537,13 @@ describe("conferência guiada pelo parecer da IA", () => {
     ticket: "198398",
     placa: "AQF7758",
     data: "2026-08-22",
-    clienteNome: "Construtora Bronze",
-    materialNome: "C.B.U.Q. FAIXA C",
+    // Idênticos ao lançado: os testes deste bloco são sobre os outros campos.
+    // Obra e material têm bloco próprio ("só o cadastro decide").
+    clienteNome: "BRONZE PAVIMENTAÇÕES LTDA",
+    materialNome: "MASSA DE ASFALTO",
     confianca: 0.92,
   };
   const ok = { confere: "sim" as const, porque: "" };
-
-  it("razão social diferente que a IA reconhece como a mesma empresa: BATE", () => {
-    const r = conferirComJulgamento(declarado, lido, {
-      numeroDocumento: ok,
-      toneladas: ok,
-      cliente: { confere: "sim", porque: "Bronze Pavimentações e Construtora Bronze são a mesma" },
-      material: { confere: "sim", porque: "CBUQ é massa asfáltica" },
-    });
-    expect(r.divergencias).toHaveLength(0);
-    expect(r.veredito).toBe("BATE");
-  });
 
   it("placa Mercosul lida no formato antigo: o código vence o parecer da IA", () => {
     // A IA olhou "ATN3B14" contra "ATN-3614" e não se arriscou. Mas isso não é
@@ -641,14 +633,15 @@ describe("conferência guiada pelo parecer da IA", () => {
     expect(r.veredito).toBe("BATE");
   });
 
-  it("'nao' sem valor lido não vai pro motorista — ele não saberia o que corrigir", () => {
+  it("'nao' da IA em material que o papel não traz não pesa: não verificado", () => {
     const r = conferirComJulgamento(declarado, { ...lido, materialNome: null }, {
       numeroDocumento: ok,
       toneladas: ok,
       material: { confere: "nao", porque: "não parece" },
     });
     expect(r.divergencias).toHaveLength(0);
-    expect(r.veredito).toBe("INCERTO");
+    expect(r.conferidos).not.toContain("material");
+    expect(r.veredito).toBe("BATE");
   });
 
   it("mesmo dia e mês com ano diferente é relógio da balança", () => {
@@ -690,16 +683,6 @@ describe("conferência guiada pelo parecer da IA", () => {
     expect(r.veredito).toBe("DIVERGE");
   });
 
-  it("'nao' em material vira divergência", () => {
-    const r = conferirComJulgamento(declarado, lido, {
-      numeroDocumento: ok,
-      toneladas: ok,
-      material: { confere: "nao", porque: "é brita, não areia" },
-    });
-    expect(r.divergencias[0]).toMatchObject({ campo: "material" });
-    expect(r.veredito).toBe("DIVERGE");
-  });
-
   it("a IA sabendo qual número é o do documento resolve o formato certo", () => {
     // Nota fiscal traz número de NF, de pedido e às vezes do ticket. Qual deles
     // corresponde ao lançado é ela quem diz.
@@ -719,48 +702,6 @@ describe("conferência guiada pelo parecer da IA", () => {
     });
     expect(r.divergencias[0]).toMatchObject({ campo: "ticket", gravidade: "ALTA" });
     expect(r.veredito).toBe("DIVERGE");
-  });
-
-  it("'nao' em obra/cliente chega ao motorista", () => {
-    const r = conferirComJulgamento(declarado, lido, {
-      numeroDocumento: ok,
-      toneladas: ok,
-      cliente: { confere: "nao", porque: "empresas diferentes" },
-    });
-    expect(r.divergencias[0]).toMatchObject({ campo: "cliente", gravidade: "ALTA" });
-    expect(r.veredito).toBe("DIVERGE");
-  });
-
-  it("'incerto' em obra (ticket mostra a pedreira) fica não verificado, sem travar", () => {
-    const r = conferirComJulgamento(declarado, { ...lido, clienteNome: "PEDREIRA GENARO LTDA" }, {
-      numeroDocumento: ok,
-      toneladas: ok,
-      cliente: { confere: "incerto", porque: "ticket mostra o fornecedor" },
-    });
-    expect(r.incertezas).toHaveLength(0);
-    expect(r.conferidos).not.toContain("cliente");
-    expect(r.veredito).toBe("BATE");
-  });
-
-  it("lido idêntico ao lançado confere mesmo com a IA hesitando", () => {
-    const r = conferirComJulgamento({ ...declarado, materialNome: "CBUQ" }, { ...lido, materialNome: "C.B.U.Q" }, {
-      numeroDocumento: ok,
-      toneladas: ok,
-      material: { confere: "incerto", porque: "confere, mas…" },
-    });
-    expect(r.incertezas).toHaveLength(0);
-    expect(r.conferidos).toContain("material");
-    expect(r.veredito).toBe("BATE");
-  });
-
-  it("'incerto' em material COM valor lido segue na revisão (dúvida de verdade)", () => {
-    const r = conferirComJulgamento(declarado, { ...lido, materialNome: "PEDRA BRITADA 2" }, {
-      numeroDocumento: ok,
-      toneladas: ok,
-      material: { confere: "incerto", porque: "rachão ou brita 2?" },
-    });
-    expect(r.incertezas[0].campo).toBe("material");
-    expect(r.veredito).toBe("INCERTO");
   });
 
   it("o peso continua sendo julgado no número, não no parecer", () => {
@@ -829,7 +770,130 @@ describe("conferência guiada pelo parecer da IA", () => {
   it("sem parecer nenhum, não inventa conclusão", () => {
     const r = conferirComJulgamento(declarado, lido, {});
     expect(r.divergencias).toHaveLength(0);
-    // Só o peso foi conferível, e ele bate.
-    expect(r.conferidos).toEqual(["toneladas"]);
+    // Sem parecer, a IA não conclui nada: o peso confere pela conta, e obra e
+    // material pelo nome idêntico ao cadastro — nenhum dos dois é dela.
+    expect(r.conferidos).toEqual(["toneladas", "cliente", "material"]);
+  });
+});
+
+/**
+ * Obra e material decidem o preço da viagem, e a IA não decide mais nenhum dos
+ * dois (dono, 05/10/2026: "nunca devemos ter achismo"). Um nome do papel vale
+ * como prova só se for idêntico ao cadastro ou tiver vínculo (de/para) feito
+ * por gente. O parecer da IA fica como sugestão na tela.
+ */
+describe("obra e material: só o cadastro decide", () => {
+  const declarado: Declarado = {
+    toneladas: 35.14,
+    ticket: "198398",
+    clienteNome: "ARENA",
+    materialNome: "BICA CORRIDA",
+  };
+  const lido: Lido = { toneladas: 35.14, ticket: "198398", confianca: 0.92 };
+  const ok = { confere: "sim" as const, porque: "" };
+  const base = { numeroDocumento: ok, toneladas: ok };
+  const ctx = (extra: Partial<ContextoNomes> = {}): ContextoNomes => ({
+    cliente: { id: "obra-arena", nomes: ["ARENA", "Arena Multiuso"] },
+    material: { id: "mat-bica", nomes: ["BICA CORRIDA"] },
+    ...extra,
+  });
+
+  it("papel que não traz a obra: não verificada, sem travar", () => {
+    // O caso que abriu tudo: "ARENA" aparecia como lido num ticket sem ARENA.
+    const r = conferirComJulgamento(declarado, lido, base, ctx());
+    expect(r.conferidos).not.toContain("cliente");
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("nome idêntico ao cadastro (ou a um apelido) confere sem vínculo", () => {
+    const r = conferirComJulgamento(
+      declarado,
+      { ...lido, clienteNome: "arena multiuso", materialNome: "Bica Corrida" },
+      base,
+      ctx(),
+    );
+    expect(r.conferidos).toEqual(expect.arrayContaining(["cliente", "material"]));
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("'sim' da IA em nome diferente NÃO confere: sem vínculo, vai pra gente", () => {
+    const r = conferirComJulgamento(
+      declarado,
+      { ...lido, materialNome: "BICA CORR." },
+      { ...base, material: { confere: "sim", porque: "abreviação" } },
+      ctx(),
+    );
+    expect(r.incertezas[0]).toMatchObject({ campo: "material", motivo: "sem vínculo" });
+    expect(r.veredito).toBe("INCERTO");
+  });
+
+  it("'nao' da IA também não decide: sem vínculo é dúvida, não acusação", () => {
+    const r = conferirComJulgamento(
+      declarado,
+      { ...lido, materialNome: "AREIA MEDIA" },
+      { ...base, material: { confere: "nao", porque: "areia não é bica" } },
+      ctx(),
+    );
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.veredito).toBe("INCERTO");
+  });
+
+  it("vínculo pro registro lançado confere", () => {
+    const r = conferirComJulgamento(
+      declarado,
+      { ...lido, materialNome: "BICA CORR." },
+      base,
+      ctx({
+        material: {
+          id: "mat-bica",
+          nomes: ["BICA CORRIDA"],
+          vinculo: { tipo: "MATERIAL", alvoId: "mat-bica", alvoNome: "BICA CORRIDA" },
+        },
+      }),
+    );
+    expect(r.conferidos).toContain("material");
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("vínculo pra OUTRO registro é divergência, com o nome do cadastro na frase", () => {
+    const r = conferirComJulgamento(
+      declarado,
+      { ...lido, clienteNome: "CONSORCIO PONTE" },
+      base,
+      ctx({
+        cliente: {
+          id: "obra-arena",
+          nomes: ["ARENA"],
+          vinculo: { tipo: "OBRA", alvoId: "obra-ponte", alvoNome: "PONTE NOVA" },
+        },
+      }),
+    );
+    expect(r.divergencias[0]).toMatchObject({ campo: "cliente", gravidade: "ALTA" });
+    expect(r.divergencias[0].detalhe).toContain("PONTE NOVA");
+    expect(r.veredito).toBe("DIVERGE");
+  });
+
+  it("nome vinculado como FORNECEDOR não prova obra nem trava", () => {
+    // A pedreira no papel. Vinculada uma vez, nunca mais pede vínculo.
+    const r = conferirComJulgamento(
+      declarado,
+      { ...lido, clienteNome: "PEDREIRA GENARO LTDA" },
+      base,
+      ctx({
+        cliente: {
+          id: "obra-arena",
+          nomes: ["ARENA"],
+          vinculo: { tipo: "FORNECEDOR", alvoId: null, alvoNome: null },
+        },
+      }),
+    );
+    expect(r.conferidos).not.toContain("cliente");
+    expect(r.incertezas).toHaveLength(0);
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("sem contexto nenhum (script antigo), nome igual ao lançado ainda confere", () => {
+    const r = conferirComJulgamento(declarado, { ...lido, materialNome: "BICA CORRIDA" }, base);
+    expect(r.conferidos).toContain("material");
   });
 });

@@ -64,20 +64,22 @@ type Props = {
   initial?: Cliente;
   /** Obra nova criada de dentro da página de um cliente: já vem com ele. */
   empresaIdInicial?: string;
+  /** Nome já preenchido — vindo do de/para da conferência do ticket. */
+  nomeInicial?: string;
   /** Pra onde volta depois de salvar ou cancelar. */
   voltarPara?: string;
 };
 
 type ClienteBody = Record<string, unknown>;
 
-export function ClienteForm({ initial, empresaIdInicial, voltarPara = "/clientes" }: Props) {
+export function ClienteForm({ initial, empresaIdInicial, nomeInicial, voltarPara = "/clientes" }: Props) {
   const router = useRouter();
   const empresas = useResourceOptions<Empresa>(EMPRESAS_PATH);
   const create = useCreateResource<ClienteBody, Cliente>(PATH, PATH);
   const update = useUpdateResource<Partial<ClienteBody>, Cliente>(PATH, PATH);
 
   const [form, setForm] = useState({
-    nome: initial?.nome ?? "",
+    nome: initial?.nome ?? nomeInicial ?? "",
     empresaId: initial?.empresaId ?? empresaIdInicial ?? "",
     apelidos: initial?.apelidos ?? ([] as string[]),
   });

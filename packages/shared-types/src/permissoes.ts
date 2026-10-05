@@ -81,6 +81,9 @@ const ACAO_TITULO: Record<string, string> = {
  * OpenStreetMap.
  */
 const ACAO_TITULO_POR_RECURSO: Record<string, string> = {
+  // O de/para dos nomes do ticket: decide o que "PEDREIRA X" ou "BICA CORR."
+  // são no cadastro, e isso decide o preço da viagem. Chave própria por isso.
+  "conferencia-ticket.vincular": "Vincular nomes do ticket ao cadastro (de/para)",
   "pedagios.importar": "Importar praças de base pública (OSM)",
   "funcionarios.importar": "Importar funcionários por planilha",
   "prospeccao.importar": "Importar a base da ANTT",
@@ -299,7 +302,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
     recurso: "conferencia-ticket",
     label: "Conferência de ticket (IA)",
     modulo: "Sistema",
-    acoes: ["ver", "reprocessar"],
+    acoes: ["ver", "reprocessar", "vincular"],
   },
   { recurso: "config-agente", label: "Agente WhatsApp", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-campos-layout", label: "Fechamento com o cliente — como ler a planilha do cliente", modulo: "Sistema", acoes: ["ver", "editar"] },

@@ -9,6 +9,7 @@ import {
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { ConferenciaConfig } from "./conferencia.config";
+import { VinculosNomeService } from "./vinculos-nome.service";
 import { comoSistema, contaIdAtual } from "../common/conta/conta-context";
 import { STATUS_FORA_FECHAMENTO } from "../common/viagem-status";
 import {
@@ -116,6 +117,7 @@ export class ConferenciaFilaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConferenciaConfig,
+    private readonly vinculos: VinculosNomeService,
   ) {}
 
   /**
@@ -660,6 +662,11 @@ export class ConferenciaFilaService {
         ressuscitavel: falha.ressurreicoes === 0 && ERRO_TRANSITORIO.test(falha.erro ?? ""),
         finalizadoEm: falha.finalizadoEm,
       },
+      // O de/para que vale pros nomes desta leitura — a tela mostra quem
+      // decidiu, e oferece vincular onde ainda não há.
+      vinculos: await this.vinculos.daLeitura(
+        (concluida?.leitura as unknown as Pick<Lido, "clienteNome" | "materialNome"> | null) ?? null,
+      ),
       historico: historico.map((h) => ({
         id: h.id,
         status: h.status,
@@ -730,7 +737,10 @@ export class ConferenciaFilaService {
     // O julgamento da IA foi guardado junto da leitura, então recomparar
     // continua custando zero mesmo com a decisão sendo semântica.
     const julgamento = (lido as unknown as { julgamento?: JulgamentoIa }).julgamento ?? {};
-    const r = conferirComJulgamento(declarado, lido, julgamento);
+    // Obra e material só se resolvem pelo de/para cadastrado — que pode ter
+    // nascido depois da leitura. É o que faz o vínculo destravar a viagem.
+    const nomes = await this.vinculos.contexto(c.viagemId, lido);
+    const r = conferirComJulgamento(declarado, lido, julgamento, nomes);
     const mudou = r.veredito !== c.veredito;
 
     await this.prisma.conferenciaTicket.update({

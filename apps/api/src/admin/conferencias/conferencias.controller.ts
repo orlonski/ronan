@@ -6,6 +6,9 @@ import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { ConferenciaFilaService } from "../../conferencia-ticket/conferencia-fila.service";
+import { VinculosNomeService } from "../../conferencia-ticket/vinculos-nome.service";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
+import type { AuthAdminUser } from "../../auth/types";
 import { ConferenciaConfig } from "../../conferencia-ticket/conferencia.config";
 import type { VereditoConferencia } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -21,6 +24,14 @@ const VEREDITOS: VereditoConferencia[] = [
   "NAO_APLICAVEL",
 ];
 const CAMPOS = ["toneladas", "ticket", "placa", "data", "cliente", "material"];
+
+const VincularNomeInput = z.object({
+  campo: z.enum(["cliente", "material"]),
+  nomeLido: z.string().trim().min(1).max(200),
+  tipo: z.enum(["OBRA", "MATERIAL", "FORNECEDOR", "DESTINO"]),
+  clienteId: z.string().uuid().nullish(),
+  materialId: z.string().uuid().nullish(),
+});
 
 /**
  * O que a conferência automática andou fazendo. Leitura pura — quem decide
@@ -39,6 +50,7 @@ export class ConferenciasController {
     private readonly fila: ConferenciaFilaService,
     private readonly config: ConferenciaConfig,
     private readonly prisma: PrismaService,
+    private readonly vinculos: VinculosNomeService,
   ) {}
 
   /**
@@ -157,6 +169,36 @@ export class ConferenciasController {
   @RequerPermissao("conferencia-ticket.reprocessar")
   reler(@Param("viagemId") viagemId: string) {
     return this.fila.relerViagem(viagemId);
+  }
+
+  /**
+   * O de/para: uma pessoa diz o que um nome impresso no ticket É no cadastro.
+   *
+   * Depois de gravar, reavalia (sem gastar leitura) esta viagem e as outras
+   * que estavam paradas em dúvida por causa do MESMO nome — é o que faz um
+   * vínculo valer pra todas, e não só pra viagem onde foi feito.
+   */
+  @Post("viagem/:viagemId/vincular")
+  @RequerPermissao("conferencia-ticket.vincular")
+  async vincular(
+    @Param("viagemId") viagemId: string,
+    @Body(new ZodValidationPipe(VincularNomeInput)) body: z.infer<typeof VincularNomeInput>,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    const vinculo = await this.vinculos.vincular({
+      ...body,
+      viagemOrigemId: viagemId,
+      usuario: { id: user.id, nome: user.nome },
+    });
+    const outras = await this.vinculos.conferenciasComNome(body.campo, body.nomeLido);
+    const viagens = [...new Set([viagemId, ...outras])];
+    let destravadas = 0;
+    for (const id of viagens) {
+      const r = await this.fila.recompararViagem(id);
+      if (r.reverteu) destravadas++;
+    }
+    const desta = await this.fila.ultimaDaViagem(viagemId);
+    return { vinculo, reavaliadas: viagens.length, destravadas, veredito: desta?.veredito ?? null };
   }
 
   @Post("reprocessar")
