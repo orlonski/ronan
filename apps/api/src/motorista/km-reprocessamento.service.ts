@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { RoteamentoService } from "../roteamento/roteamento.service";
 import { PushService } from "../push/push.service";
 import { KmAtipicoService } from "../km-atipico/km-atipico.service";
+import { PrecificacaoService } from "../admin/tabelas-preco/precificacao.service";
 import { paraCadaConta } from "../common/conta/para-cada-conta";
 import { comLockDeCron } from "../common/cron-exclusivo";
 
@@ -33,6 +34,7 @@ export class KmReprocessamentoService {
     private readonly roteamento: RoteamentoService,
     private readonly push: PushService,
     private readonly kmAtipico: KmAtipicoService,
+    private readonly precificacao: PrecificacaoService,
   ) {}
 
   /** Reprocessa UMA viagem (chamado fire-and-forget após criar/finalizar). */
@@ -167,6 +169,10 @@ export class KmReprocessamentoService {
       // Km faturado mudou de haversine pro trajeto real → re-carimba o atípico
       // (o carimbo inicial no create foi sobre um km que não existe mais).
       void this.kmAtipico.avaliarViagem(v.id);
+      // E o valor: o km é insumo do preço (por km, e pela faixa do mínimo e da
+      // tabela). Sem isto a viagem offline ficava com o R$ da linha reta pra
+      // sempre — o cron de madrugada só precifica quem está SEM valor.
+      if (mudou) await this.precificacao.recalcularSeguro(v.id);
     } catch (err) {
       this.log.warn(`reprocessar(${viagemId}) falhou: ${(err as Error).message}`);
     }

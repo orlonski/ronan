@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { router, Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { usePreventRemove } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import { Check, Clock, MapPinOff, Search, Trash2, X } from "lucide-react-native";
+import { Check, Clock, MapPin, MapPinOff, Search, Trash2, X } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -25,6 +25,7 @@ import { FotoLocal } from "@/components/local-info";
 import { AvisoKmForaDoPadrao, SugestaoKmHistorico } from "@/components/sugestao-km-historico";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { BuscarLocalModal } from "@/components/buscar-local-modal";
+import { LocalPorGps, type SelecaoLocal } from "@/components/local-por-gps";
 import { useLigadaPelaEmpresa } from "@/lib/acessos-app";
 import { SeletorRotas } from "@/components/seletor-rotas";
 import { PerguntaBotaFora } from "@/components/pergunta-bota-fora";
@@ -53,6 +54,7 @@ import { pagadorSeDiferente } from "@/lib/utils";
 import {
   useCalcularRota,
   useCatalogos,
+  useCriarLocalRapido,
   useCriarViagem,
   useExtrairTicket,
   useMe,
@@ -180,6 +182,12 @@ export default function NovaViagem() {
   // Endereço novo no mapa pro local de carga (capacidade que nasce desligada).
   const podeBuscarEndereco = useLigadaPelaEmpresa("app.locais.buscarEndereco");
   const [buscaCarga, setBuscaCarga] = useState<{ texto: string } | null>(null);
+  // Cadastrar a carga onde ele está, pelo GPS (capacidade que nasce desligada).
+  // Offline-first: o local entra no outbox e sobe antes da viagem.
+  const podeCadastrarCarga = useLigadaPelaEmpresa("app.locais.cadastrarCarga");
+  const [cargaPorGps, setCargaPorGps] = useState(false);
+  const [erroCargaGps, setErroCargaGps] = useState<string | null>(null);
+  const criarLocal = useCriarLocalRapido();
   // GPS pré-aquecido em background — modulo carrega + permissao + fix
   // enquanto motorista preenche o form. Quando toca Salvar, usa o que ja tem.
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -630,8 +638,12 @@ export default function NovaViagem() {
     return merged
       .filter(
         (l) =>
-          (l.tipo === "CARGA" || l.tipo === "AMBOS") &&
-          (!clienteId || l.clienteIds.length === 0 || l.clienteIds.includes(clienteId)),
+          // O já escolhido fica sempre: pelo GPS ele pode ter apontado um local
+          // de outro cliente no mesmo lugar ("É este") — sumir da lista
+          // esvaziaria o campo sem ele ver.
+          l.id === form.localCargaId ||
+          ((l.tipo === "CARGA" || l.tipo === "AMBOS") &&
+            (!clienteId || l.clienteIds.length === 0 || l.clienteIds.includes(clienteId))),
       )
       .map((l) => ({
         l,
@@ -641,7 +653,7 @@ export default function NovaViagem() {
             : Infinity,
       }))
       .sort((a, b) => a.reta - b.reta);
-  }, [cat.data, form.clienteId, extraLocais, coords]);
+  }, [cat.data, form.clienteId, form.localCargaId, extraLocais, coords]);
 
   // Km pela estrada até cada local. "399 km" em linha reta ao lado do Mercado
   // Municipal de SP lia como o km da viagem, que pela estrada passa de 450.
@@ -1552,6 +1564,37 @@ export default function NovaViagem() {
     </View>
   );
 
+  // Carga achada/cadastrada pelo GPS. Lugar novo vira Local de verdade aqui
+  // (outbox, ligado ao cliente) — o LocalPorGps só devolve a seleção.
+  async function escolherCargaPorGps(sel: SelecaoLocal) {
+    setErroCargaGps(null);
+    let local: Local | null = null;
+    if (sel.criarOffline && sel.lat != null && sel.lng != null) {
+      try {
+        local = await criarLocal.mutateAsync({
+          nome: sel.nome,
+          lat: sel.lat,
+          lng: sel.lng,
+          precisao: sel.precisao ?? undefined,
+          fonte: sel.fonte,
+          tipo: "CARGA",
+          clienteIds: form.clienteId ? [form.clienteId] : undefined,
+        });
+      } catch (err) {
+        setErroCargaGps((err as Error).message || "Não deu pra cadastrar o local.");
+        return;
+      }
+    }
+    if (local) {
+      const novo = local;
+      setExtraLocais((prev) => (prev.some((x) => x.id === novo.id) ? prev : [...prev, novo]));
+    }
+    val.limpar();
+    update("localCargaId", local?.id ?? sel.id);
+    setCargaPorGps(false);
+    if (!tracking && form.localDescargaId) val.rolarAte("kmCard");
+  }
+
   const secaoCarga = (
     <View
       className="gap-2"
@@ -1592,33 +1635,66 @@ export default function NovaViagem() {
         }
         error={!!val.erroDe("localCarga")}
         rodape={
-          podeBuscarEndereco
+          podeBuscarEndereco || podeCadastrarCarga
             ? ({ query, fechar }) =>
                 !form.clienteId ? (
                   <Text className="mx-4 mt-4 text-center text-sm text-muted-foreground">
-                    Escolha o cliente primeiro pra buscar um endereço novo.
+                    Escolha o cliente primeiro pra cadastrar um local de carga novo.
                   </Text>
                 ) : (
-                <View className="mx-4 mt-4">
-                  <Button
-                    variant="outline"
-                    onPress={() => {
-                      fechar();
-                      // iOS não apresenta um Modal enquanto o anterior ainda
-                      // está saindo: espera a lista fechar antes de abrir a busca.
-                      setTimeout(() => setBuscaCarga({ texto: query }), 450);
-                    }}
-                  >
-                    <Search size={18} color="#0f172a" />
-                    <Text className="text-base font-semibold text-foreground">
-                      Não achou? Buscar endereço
-                    </Text>
-                  </Button>
+                <View className="mx-4 mt-4 gap-2">
+                  {podeCadastrarCarga && (
+                    <Button
+                      variant="outline"
+                      onPress={() => {
+                        fechar();
+                        setErroCargaGps(null);
+                        setCargaPorGps(true);
+                      }}
+                    >
+                      <MapPin size={18} color="#0f172a" />
+                      <Text className="text-base font-semibold text-foreground">
+                        Não está na lista? Cadastrar onde estou
+                      </Text>
+                    </Button>
+                  )}
+                  {podeBuscarEndereco && (
+                    <Button
+                      variant="outline"
+                      onPress={() => {
+                        fechar();
+                        // iOS não apresenta um Modal enquanto o anterior ainda
+                        // está saindo: espera a lista fechar antes de abrir a busca.
+                        setTimeout(() => setBuscaCarga({ texto: query }), 450);
+                      }}
+                    >
+                      <Search size={18} color="#0f172a" />
+                      <Text className="text-base font-semibold text-foreground">
+                        Não achou? Buscar endereço
+                      </Text>
+                    </Button>
+                  )}
                 </View>
               )
             : undefined
         }
       />
+      {podeCadastrarCarga && cargaPorGps && form.clienteId ? (
+        <View className="mt-2 gap-2">
+          <LocalPorGps
+            lado="carga"
+            ctaLabel="Estou no local de carga"
+            clienteId={form.clienteId}
+            autoIniciar
+            onSelect={(sel) => void escolherCargaPorGps(sel)}
+          />
+          {erroCargaGps ? <Text className="text-sm text-destructive">{erroCargaGps}</Text> : null}
+          <Button variant="outline" onPress={() => setCargaPorGps(false)}>
+            <X size={18} color="#0f172a" />
+            <Text className="text-sm font-medium text-foreground">Cancelar</Text>
+          </Button>
+        </View>
+      ) : null}
       {podeBuscarEndereco && (
         <BuscarLocalModal
           visible={buscaCarga != null}

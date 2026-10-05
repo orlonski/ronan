@@ -17,7 +17,12 @@ import { BuscarLocalModal } from "@/components/buscar-local-modal";
 import { useLigadaPelaEmpresa } from "@/lib/acessos-app";
 import { Button } from "@/components/ui/button";
 import type { FonteGps } from "@ronan/shared-types";
-import { marcoConflita, formatarNomeLocal } from "@ronan/shared-types";
+import {
+  formatarNomeLocal,
+  rankearCandidatosDuplicata,
+  type CandidatoDuplicata,
+  type CandidatoRankeado,
+} from "@ronan/shared-types";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
 import { formatarDistancia, haversineMetros, mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
@@ -40,9 +45,10 @@ function isNetworkError(err: unknown): boolean {
   return err instanceof TypeError;
 }
 
-// Raio (m) pro aviso "já existe um local aqui" ao cadastrar. Fixo, independente
-// da config de busca (re-scan do catálogo cacheado ao redor do GPS).
-const RAIO_AVISO_DUPLICATA_M = 150;
+// Raio (m) do scan anti-duplicata ao cadastrar. Amplo de propósito, como no
+// DescargaPorGps: quem decide o que é forte é o ranqueador (proximidade +
+// parecença de NOME + já-visto), não a distância sozinha.
+const RAIO_SCAN_DUPLICATA_M = 500;
 
 // Snapshot com precisão pra repassar na seleção final.
 type CoordsCap = {
@@ -119,6 +125,7 @@ export function LocalPorGps({
   value,
   onSelect,
   onLimpar,
+  autoIniciar,
 }: {
   lado: "carga" | "descarga";
   /** Texto do botão grande (ex: "Estou no local de carga"). */
@@ -128,6 +135,8 @@ export function LocalPorGps({
   value?: SelecaoLocal | null;
   onSelect: (sel: SelecaoLocal) => void;
   onLimpar?: () => void;
+  /** Dispara a captura do GPS já no mount (quem abriu já pediu "estou aqui"). */
+  autoIniciar?: boolean;
 }) {
   const [estado, setEstado] = useState<Estado>(() =>
     value ? { tipo: "selecionado", local: value } : { tipo: "vazio" },
@@ -138,6 +147,9 @@ export function LocalPorGps({
   const [nomeNovo, setNomeNovo] = useState("");
   // Local vizinho que disparou a confirmação anti-duplicata inline (sem pop-up).
   const [confirmarPerto, setConfirmarPerto] = useState<LocalProximo | null>(null);
+  // Locais que ele ACABOU de ver na lista: entram no ranqueador como "já visto"
+  // (quem passou pelo certo e mesmo assim foi cadastrar é o caso a pegar).
+  const matchesVistosRef = useRef<LocalProximo[]>([]);
 
   // Trocar de cliente invalida a lista/seleção (eram locais do cliente anterior).
   // O estado interno não segue `value`, então reseta ao mudar o clienteId — senão
@@ -158,9 +170,11 @@ export function LocalPorGps({
   const localDoCatalogo = (id: string) =>
     qc.getQueryData<Catalogos>(["catalogos"])?.locais.find((l) => l.id === id) ?? null;
 
-  // Carga é sempre um cadastro existente do cliente — o motorista NUNCA cria
-  // local de carga. Só descarga (obra do cliente) permite lugar novo.
-  const permiteCriar = lado === "descarga";
+  // Carga normalmente é um cadastro existente do cliente (pedreira, pátio): o
+  // motorista só cria local de carga se a empresa ligar (nasce desligado).
+  // Descarga (obra do cliente) sempre permite lugar novo.
+  const podeCadastrarCarga = useLigadaPelaEmpresa("app.locais.cadastrarCarga");
+  const permiteCriar = lado === "descarga" || podeCadastrarCarga;
 
   // Exceção que a empresa liga (nasce desligada): achar o endereço no mapa
   // quando o local não está cadastrado — inclusive o de carga. O local novo
@@ -192,6 +206,14 @@ export function LocalPorGps({
     onSelect(sel);
     setEstado({ tipo: "selecionado", local: sel });
   }
+
+  const autoIniciouRef = useRef(false);
+  useEffect(() => {
+    if (!autoIniciar || autoIniciouRef.current || estado.tipo !== "vazio") return;
+    autoIniciouRef.current = true;
+    void capturarEBuscar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoIniciar]);
 
   async function capturarEBuscar() {
     setErro(null);
@@ -325,6 +347,7 @@ export function LocalPorGps({
       buscaOffline,
       raioUsadoM,
     };
+    matchesVistosRef.current = matches;
     if (matches.length === 0) {
       if (permiteCriar) {
         setEstado({ tipo: "sem_match", coords: cap });
@@ -409,8 +432,10 @@ export function LocalPorGps({
     }
     setErro(null);
     // Trava anti-duplicata INLINE (o pop-up abria ATRÁS deste Modal de tela
-    // cheia): se tem local perto (marco-compatível), confirma na própria tela.
-    const perto = matchesProximos.find((m) => !marcoConflita(nome, m.nome));
+    // cheia): se o topo do rank é um candidato de confiança média/alta,
+    // confirma na própria tela. Nunca bloqueia.
+    const topo = candidatosDuplicata[0];
+    const perto = topo ? localPorId.get(topo.id) : undefined;
     if (perto) {
       setConfirmarPerto(perto);
       return;
@@ -426,23 +451,48 @@ export function LocalPorGps({
 
   const labelTexto = lado === "carga" ? "Local de carga" : "Local de descarga";
 
-  // Locais já cadastrados perto do GPS (re-scan do catálogo cacheado, offline,
-  // raio próprio de 150m) — base do aviso anti-duplicata ao cadastrar novo.
+  // Candidatos a "mesmo lugar" ao cadastrar novo: vizinhos no catálogo em cache
+  // (offline, raio amplo) + os que ele acabou de ver, ranqueados por
+  // proximidade + PARECENÇA DE NOME + já-visto + uso — a mesma régua do
+  // DescargaPorGps. Recomputa a cada tecla (o nome entra na similaridade).
   const semMatchCoords = estado.tipo === "sem_match" ? estado.coords : null;
-  let matchesProximos: LocalProximo[] = [];
+  const localPorId = new Map<string, LocalProximo>();
+  let candidatosDuplicata: CandidatoRankeado[] = [];
   if (semMatchCoords) {
     const catalogos = qc.getQueryData<Catalogos>(["catalogos"]);
-    if (catalogos) {
-      matchesProximos = buscarLocaisProximosOffline({
-        lat: semMatchCoords.lat,
-        lng: semMatchCoords.lng,
-        locais: catalogos.locais,
-        tipoUso: lado,
-        raioM: RAIO_AVISO_DUPLICATA_M,
-        limit: 5,
-      });
+    const geo = catalogos
+      ? buscarLocaisProximosOffline({
+          lat: semMatchCoords.lat,
+          lng: semMatchCoords.lng,
+          locais: catalogos.locais,
+          tipoUso: lado,
+          raioM: RAIO_SCAN_DUPLICATA_M,
+          limit: 8,
+        })
+      : [];
+    for (const m of geo) localPorId.set(m.id, m);
+    for (const m of matchesVistosRef.current) {
+      if (!localPorId.has(m.id)) localPorId.set(m.id, m);
     }
+    const candidatos: CandidatoDuplicata[] = [...localPorId.values()].map((m) => ({
+      id: m.id,
+      nome: m.nome,
+      distanciaM:
+        m.lat != null && m.lng != null
+          ? Math.round(haversineMetros(semMatchCoords.lat, semMatchCoords.lng, m.lat, m.lng))
+          : (m.distanciaMetros ?? null),
+      vezesUsado: m.vezesUsadoMotorista,
+      jaVisto: matchesVistosRef.current.some((v) => v.id === m.id),
+    }));
+    candidatosDuplicata = rankearCandidatosDuplicata({
+      nomeDigitado: nomeNovo,
+      candidatos,
+    }).filter((c) => c.confianca !== "baixa");
   }
+  const matchesProximos = candidatosDuplicata
+    .map((c) => localPorId.get(c.id))
+    .filter((m): m is LocalProximo => m != null)
+    .slice(0, 5);
 
   return (
     <View className="gap-2">
@@ -697,9 +747,20 @@ export function LocalPorGps({
                   <Text className="text-center text-lg font-bold text-amber-900">
                     {formatarNomeLocal(confirmarPerto.nome)}
                   </Text>
-                  <Text className="text-center text-base text-amber-800">
-                    fica a só {Math.round(confirmarPerto.distanciaMetros)} m de você
-                  </Text>
+                  {semMatchCoords && confirmarPerto.lat != null && confirmarPerto.lng != null && (
+                    <Text className="text-center text-base text-amber-800">
+                      fica a{" "}
+                      {formatarDistancia(
+                        haversineMetros(
+                          semMatchCoords.lat,
+                          semMatchCoords.lng,
+                          confirmarPerto.lat,
+                          confirmarPerto.lng,
+                        ),
+                      )}{" "}
+                      de você
+                    </Text>
+                  )}
                 </View>
                 <Text className="text-center text-base text-muted-foreground">
                   Provavelmente é esse mesmo. Tem certeza que quer criar um local
@@ -711,7 +772,7 @@ export function LocalPorGps({
               {matchesProximos.length > 0 && (
                 <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
                   <Text className="text-sm font-bold text-amber-900">
-                    ⚠️ Já tem local cadastrado bem aqui
+                    ⚠️ Pode já estar cadastrado
                   </Text>
                   <Text className="text-xs text-amber-800">
                     Confira se não é um destes antes de criar um novo:
@@ -726,9 +787,11 @@ export function LocalPorGps({
                         <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
                           {formatarNomeLocal(m.nome)}
                         </Text>
-                        <Text className="text-xs text-muted-foreground">
-                          a {Math.round(m.distanciaMetros)} m daqui
-                        </Text>
+                        {m.lat != null && m.lng != null && (
+                          <Text className="text-xs text-muted-foreground">
+                            a {formatarDistancia(haversineMetros(semMatchCoords!.lat, semMatchCoords!.lng, m.lat, m.lng))} daqui
+                          </Text>
+                        )}
                       </View>
                       <View className="rounded-full bg-primary px-3 py-1.5">
                         <Text className="text-xs font-bold text-primary-foreground">

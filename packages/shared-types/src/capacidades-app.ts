@@ -32,6 +32,7 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.km.referencia",
   "app.locais.verTodos",
   "app.locais.buscarEndereco",
+  "app.locais.cadastrarCarga",
   "app.pedagio.lancar",
   "app.abastecimento.lancar",
   "app.problema.avisar",
@@ -257,6 +258,26 @@ const DEFS: CapacidadeAppDef[] = [
     modulo: "operacao",
     gate: "SO_TELA",
     custa: true,
+    aoPerder: "VALA",
+    nasceDesligada: true,
+  },
+  {
+    // Pedido do dono (05/10/2026): o motorista cadastra o local de CARGA onde
+    // está, pelo GPS, como já faz na descarga — inclusive sem internet. Reabre
+    // a regra "motorista nunca cria carga" (6d910b47) só pra quem a empresa
+    // ligar. Separada do buscarEndereco: uma empresa pode querer o GPS no
+    // pátio e não a busca no mapa, ou o contrário. Só tela, como a de cima: o
+    // servidor nunca recusa o local (local offline recusado prende a viagem),
+    // ele nasce em RASCUNHO e o escritório confere em "Em validação".
+    chave: "app.locais.cadastrarCarga",
+    label: "Cadastrar local de carga",
+    efeito:
+      "Quando a carga não está na lista, ele cadastra o lugar onde está pelo GPS, mesmo sem internet. O local novo vai pra \"Em validação\".",
+    grupo: "Viagens",
+    tipo: "EMPRESA",
+    vinculo: "MOTORISTA",
+    modulo: "operacao",
+    gate: "SO_TELA",
     aoPerder: "VALA",
     nasceDesligada: true,
   },

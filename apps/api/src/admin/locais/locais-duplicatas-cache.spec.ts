@@ -3,6 +3,8 @@ import { LocaisService } from "./locais.service";
 import { comConta } from "../../common/conta/conta-context";
 import type { PrismaService } from "../../prisma/prisma.service";
 import type { AuditoriaService } from "../../auditoria/auditoria.service";
+import type { KmAtipicoService } from "../../km-atipico/km-atipico.service";
+import type { ProgramacaoService } from "../pedidos/programacao.service";
 
 /**
  * As duplicatas ficam guardadas por empresa. O que não pode acontecer: a
@@ -18,7 +20,12 @@ function montar() {
     viagem: { count: vi.fn(async () => 0) },
     trechoViagem: { count: vi.fn(async () => 0) },
   } as unknown as PrismaService;
-  const servico = new LocaisService(prisma, {} as AuditoriaService);
+  const servico = new LocaisService(
+    prisma,
+    {} as AuditoriaService,
+    {} as KmAtipicoService,
+    {} as ProgramacaoService,
+  );
   let rodada = 0;
   const calcular = vi
     .spyOn(servico as unknown as { calcularDuplicatas: () => Promise<unknown> }, "calcularDuplicatas")

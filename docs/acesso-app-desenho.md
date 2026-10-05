@@ -340,6 +340,7 @@ Legenda da coluna Gate: **S** = o servidor barra, **F** = o servidor filtra o da
 | `app.ponto.corrigir` | `/corrigir-ponto` | `POST`/`DELETE /m/ponto/correcoes*`, `ciencia` | Ponto | FUNCIONARIO · — · ponto | S | | nova |
 | `app.documentos.enviar` | "Meus documentos" (Perfil e HomeRegistrado), BlocoDocumentos, `/documentos-da-obra`, `/assinar-documento`, push `documento-recusado` | `m/admissao/*` para MOTORISTA e FUNCIONARIO. **Quais** documentos aparecem é definido por `DocumentoExigido.publicos × regime`, que é dado | Documentos | QUALQUER · — · admissao | S+F | | nova; backfill: todos |
 | `app.locais.buscarEndereco` *(nasce desligada)* | "Não achou? Buscar endereço" na lista de carga da nova viagem, "Buscar endereço" no `LocalPorGps` (lista e cliente sem local), endereço novo dentro do "Buscar local por nome" | nenhum novo: `GET /geocoding/*` + `POST /m/locais/rapido` com `endereco` (origem `MOTORISTA_ENDERECO`) | Viagens | MOTORISTA · — · operacao | S (só tela) | | nova; **ninguém recebe sozinho** — ver §8 item 4 |
+| `app.locais.cadastrarCarga` *(nasce desligada)* | "Não está na lista? Cadastrar onde estou" na lista de carga da nova viagem; "Nenhum é o certo — cadastrar novo lugar" no `LocalPorGps` de carga (iniciar viagem e evento de carga da guiada) | nenhum novo: `POST /m/locais/rapido` com `tipo: CARGA` + `clienteIds` do cliente da viagem (origem `MOTORISTA_RAPIDO`), offline pelo outbox | Viagens | MOTORISTA · — · operacao | S (só tela) | | nova (05/10/2026); reabre 6d910b47 só pra quem a empresa ligar |
 | `app.telemetria` *(PLATAFORMA)* | trilha `nv_*` | `POST /m/eventos` com `nv_*` | — | QUALQUER · — · plataforma | S | | podeTelemetria (sai da vista da empresa) |
 
 \* `torre` (guiada, programação) só passa a valer no app depois do relatório de sombra (§8 e §10).
@@ -629,7 +630,8 @@ A migration `2026092xxxxxx_acesso_app` cria as tabelas e o CHECK de documentos, 
    - `stories.publicar` igual a `stories.ver`;
    - `navegacao.aoVivo` igual a `podeIniciarViagem`.
 
-   **A exceção é `nasceDesligada`** (30/09/2026, `app.locais.buscarEndereco`):
+   **A exceção é `nasceDesligada`** (30/09/2026, `app.locais.buscarEndereco`;
+   depois `app.locais.cadastrarCarga`, 05/10/2026):
    coisa que ninguém usa ainda nasce fora de todo perfil, grupo e espelho de
    coluna — nascer desligado não tira nada de ninguém. A empresa liga no tipo
    de motorista (tabela) ou numa pessoa (exceção com motivo). No app ela usa

@@ -14,6 +14,8 @@ import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO, filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { contaIdAtual } from "../../common/conta/conta-context";
+import { KmAtipicoService } from "../../km-atipico/km-atipico.service";
+import { ProgramacaoService } from "../pedidos/programacao.service";
 
 type ListLocaisParams = PaginationQuery & {
   clienteId?: string;
@@ -107,6 +109,8 @@ export class LocaisService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditoria: AuditoriaService,
+    private readonly kmAtipico: KmAtipicoService,
+    private readonly programacao: ProgramacaoService,
   ) {}
 
   async list(params: ListLocaisParams) {
@@ -830,7 +834,12 @@ export class LocaisService {
   /**
    * Mescla local "origem" no "destino": move viagens (carga e descarga) pro
    * destino e apaga o origem. Útil pra eliminar duplicatas que escaparam do
-   * pre-check de 200m.
+   * pre-check de 200m — e é o fim natural do local que o motorista cadastrou
+   * pelo app (descarga, e carga quando a empresa liga).
+   *
+   * Tudo que aponta pro origem tem que ir junto: Pedido e OrcamentoItem são
+   * `onDelete: SetNull`, então apagar o origem sem repassar soltava a carga do
+   * pedido EM SILÊNCIO — e o saldo passava a contar viagem de qualquer carga.
    */
   async mesclar(origemId: string, destinoId: string, usuarioId?: string) {
     if (origemId === destinoId) {
@@ -858,6 +867,14 @@ export class LocaisService {
       .map((c) => c.clienteId)
       .filter((id) => !clientesDestino.has(id));
 
+    // Viagens que vão mudar de par carga→descarga: depois do merge o carimbo de
+    // atípico (referência é por par) e o casamento com a programação ficaram
+    // velhos. Lidas ANTES, porque depois não dá mais pra saber quem era do origem.
+    const viagensAfetadas = await this.prisma.viagem.findMany({
+      where: { OR: [{ localCargaId: origemId }, { localDescargaId: origemId }] },
+      select: { id: true },
+    });
+
     const results = await this.prisma.$transaction([
       this.prisma.viagem.updateMany({
         where: { localCargaId: origemId },
@@ -879,6 +896,27 @@ export class LocaisService {
         where: { localId: origemId },
         data: { localId: destinoId },
       }),
+      this.prisma.pedido.updateMany({
+        where: { localCargaId: origemId },
+        data: { localCargaId: destinoId },
+      }),
+      this.prisma.pedido.updateMany({
+        where: { localDescargaId: origemId },
+        data: { localDescargaId: destinoId },
+      }),
+      this.prisma.orcamentoItem.updateMany({
+        where: { localCargaId: origemId },
+        data: { localCargaId: destinoId },
+      }),
+      this.prisma.orcamentoItem.updateMany({
+        where: { localDescargaId: origemId },
+        data: { localDescargaId: destinoId },
+      }),
+      // Evidências de presença (cascade): são história do lugar, não do id.
+      this.prisma.localEvidencia.updateMany({
+        where: { localId: origemId },
+        data: { localId: destinoId },
+      }),
       this.prisma.local.update({
         where: { id: destinoId },
         data: { apelidos: apelidosFinais },
@@ -897,6 +935,15 @@ export class LocaisService {
     ]);
     const viagensMovidas =
       (results[0] as { count: number }).count + (results[1] as { count: number }).count;
+    const pedidosMovidos =
+      (results[4] as { count: number }).count + (results[5] as { count: number }).count;
+
+    // Best-effort e em segundo plano (merge de local muito usado move milhares
+    // de viagens): o merge já valeu. Preço não muda (não depende de local) e o
+    // km também não — o km do motorista é lei.
+    void this.reavaliarViagensMescladas(viagensAfetadas.map((v) => v.id)).catch(() => {
+      /* cada passo já é best-effort; não derruba o merge */
+    });
 
     await this.auditoria
       .log({
@@ -908,6 +955,7 @@ export class LocaisService {
         valorDepois: { id: destinoId, nome: destino.nome },
         metadata: {
           viagensMovidas,
+          pedidosMovidos,
           apelidosAdicionados: apelidosFinais.length - (destino.apelidos?.length ?? 0),
           clientesAdicionados: clientesFaltando.length,
         },
@@ -917,6 +965,26 @@ export class LocaisService {
       });
     this.esquecerDuplicatas();
     return { ok: true, viagensMovidas };
+  }
+
+  /**
+   * Depois do merge: o par carga→descarga das viagens mudou. Reavalia o km
+   * atípico (referência por par) e tenta casar com a programação quem ainda não
+   * casou — a viagem lançada com a carga duplicada não batia com o pedido, e o
+   * casamento só rodava uma vez, quando ela nasceu. Quem já casou fica: o
+   * casamento é decisão já tomada (e viagemId é único na planejada).
+   */
+  private async reavaliarViagensMescladas(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const jaCasadas = await this.prisma.viagemPlanejada.findMany({
+      where: { viagemId: { in: ids } },
+      select: { viagemId: true },
+    });
+    const casadas = new Set(jaCasadas.map((p) => p.viagemId));
+    for (const id of ids) {
+      await this.kmAtipico.avaliarViagem(id);
+      if (!casadas.has(id)) await this.programacao.casarComViagem(id);
+    }
   }
 
   private async algumMotoristaId(): Promise<string> {

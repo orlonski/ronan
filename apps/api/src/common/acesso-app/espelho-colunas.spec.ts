@@ -100,6 +100,7 @@ describe("espelho do cadastro", () => {
   it("capacidade marcada nasceDesligada não vem do espelho nem com a ficha toda ligada", () => {
     const desligadas = CAPACIDADES_APP.filter((d) => d.nasceDesligada).map((d) => d.chave);
     expect(desligadas).toContain("app.locais.buscarEndereco");
+    expect(desligadas).toContain("app.locais.cadastrarCarga");
     const caps = capacidadesDasColunas(todasColunas(true));
     for (const c of desligadas) expect(caps).not.toContain(c);
   });

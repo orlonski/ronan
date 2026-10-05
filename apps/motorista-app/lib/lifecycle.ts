@@ -376,8 +376,10 @@ export async function iniciarViagemGuiada(input: {
   const lc = input.localCarga;
 
   // Local de carga novo (lugar fora do cadastro): enfileira antes pro drain
-  // criar o Local antes da viagem (ordem locais → lifecycle). Raro — a carga
-  // normalmente já existe no cadastro.
+  // criar o Local antes da viagem (ordem locais → lifecycle). Só acontece com
+  // "Cadastrar local de carga" ligado pela empresa. Nasce ligado ao cliente da
+  // viagem: a lista de carga é filtrada por cliente, e local sem cliente vira
+  // genérico — apareceria pra todos os clientes.
   if (lc?.criarOffline && lc.lat != null && lc.lng != null) {
     await enqueueLocal({
       clientId: lc.id,
@@ -388,6 +390,7 @@ export async function iniciarViagemGuiada(input: {
         precisao: input.coords?.precisao,
         fonte: input.coords?.fonte,
         tipo: "CARGA",
+        ...(input.clienteId ? { clienteIds: [input.clienteId] } : {}),
       },
       status: "pending",
       attempts: 0,
@@ -479,6 +482,8 @@ export async function registrarEventoGuiado(input: {
         precisao: input.coords?.precisao,
         fonte: input.coords?.fonte,
         tipo: input.tipo.ehDescarga ? "DESCARGA" : input.tipo.ehCarga ? "CARGA" : "AMBOS",
+        // Ligado ao cliente da viagem, como o DescargaPorGps faz.
+        ...(atual.clienteId ? { clienteIds: [atual.clienteId] } : {}),
       },
       status: "pending",
       attempts: 0,

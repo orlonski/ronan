@@ -1270,6 +1270,9 @@ export class ViagensMotoristaService {
     lado: "carga" | "descarga";
     motoristaId: string;
     divs: Divergencias;
+    /** Cliente da viagem, já conferido: o local recriado nasce ligado a ele,
+     * como o app faria — local sem cliente vira genérico (aparece pra todos). */
+    clienteId?: string | null;
   }): Promise<string | null> {
     const existe = await this.prisma.local.findUnique({
       where: { id: args.id },
@@ -1302,6 +1305,7 @@ export class ViagensMotoristaService {
         criadoPorMotoristaId: args.motoristaId,
         nivelConfianca: "RASCUNHO",
         origemCadastro: "VIAGEM_OFFLINE",
+        clientes: args.clienteId ? { create: [{ clienteId: args.clienteId }] } : undefined,
       },
     });
     return args.id;
@@ -1518,6 +1522,7 @@ export class ViagensMotoristaService {
       lado: "carga",
       motoristaId,
       divs,
+      clienteId,
     });
     // Modo sem local de descarga
     // não tem o que resolver aqui.
@@ -1528,6 +1533,7 @@ export class ViagensMotoristaService {
           lado: "descarga",
           motoristaId,
           divs,
+          clienteId,
         })
       : null;
 
@@ -2102,6 +2108,7 @@ export class ViagensMotoristaService {
           lado: "carga",
           motoristaId,
           divs,
+          clienteId,
         })
       : null;
 
@@ -2169,7 +2176,7 @@ export class ViagensMotoristaService {
   async registrarEvento(motoristaId: string, clientId: string, input: RegistrarEventoInput) {
     const viagem = await this.prisma.viagem.findUnique({
       where: { clientId },
-      select: { id: true, motoristaId: true, status: true, iniciadoEm: true },
+      select: { id: true, motoristaId: true, status: true, iniciadoEm: true, clienteId: true },
     });
     if (!viagem) throw new NotFoundException("Viagem em andamento ainda não sincronizada.");
     if (viagem.motoristaId !== motoristaId) {
@@ -2202,6 +2209,7 @@ export class ViagensMotoristaService {
           lado: tipo.ehDescarga ? "descarga" : "carga",
           motoristaId,
           divs: divsEvento,
+          clienteId: viagem.clienteId,
         })
       : null;
     await aplicarDivergencias(this.prisma, viagem.id, divsEvento);
@@ -2422,6 +2430,7 @@ export class ViagensMotoristaService {
           lado: "descarga",
           motoristaId,
           divs,
+          clienteId: clienteIdEfetivo,
         })
       : null;
 
