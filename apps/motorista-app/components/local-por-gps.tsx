@@ -670,9 +670,9 @@ export function LocalPorGps({
             </Button>
           )}
           {podeBuscarEndereco && (
-            <Button variant="outline" onPress={() => setBuscaAberta(true)} className="mt-1">
+            <Button variant="warning" onPress={() => setBuscaAberta(true)} className="mt-1 h-14">
               <Search size={18} color="#0f172a" />
-              <Text className="text-sm font-semibold text-foreground">
+              <Text className="text-base font-bold text-warning-foreground">
                 Não está na lista? Buscar endereço
               </Text>
             </Button>

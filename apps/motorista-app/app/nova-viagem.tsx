@@ -1642,10 +1642,13 @@ export default function NovaViagem() {
                     Escolha o cliente primeiro pra cadastrar um local de carga novo.
                   </Text>
                 ) : (
+                // Amarelo = "criar novo (pode duplicar)", padrão de botões; contorno
+                // é só cancelar/voltar e lia como opção desligada.
                 <View className="mx-4 mt-4 gap-2">
                   {podeCadastrarCarga && (
                     <Button
-                      variant="outline"
+                      variant="warning"
+                      className="h-14"
                       onPress={() => {
                         fechar();
                         setErroCargaGps(null);
@@ -1653,14 +1656,15 @@ export default function NovaViagem() {
                       }}
                     >
                       <MapPin size={18} color="#0f172a" />
-                      <Text className="text-base font-semibold text-foreground">
+                      <Text className="text-base font-bold text-warning-foreground">
                         Não está na lista? Cadastrar onde estou
                       </Text>
                     </Button>
                   )}
                   {podeBuscarEndereco && (
                     <Button
-                      variant="outline"
+                      variant="warning"
+                      className="h-14"
                       onPress={() => {
                         fechar();
                         // iOS não apresenta um Modal enquanto o anterior ainda
@@ -1669,7 +1673,7 @@ export default function NovaViagem() {
                       }}
                     >
                       <Search size={18} color="#0f172a" />
-                      <Text className="text-base font-semibold text-foreground">
+                      <Text className="text-base font-bold text-warning-foreground">
                         Não achou? Buscar endereço
                       </Text>
                     </Button>
