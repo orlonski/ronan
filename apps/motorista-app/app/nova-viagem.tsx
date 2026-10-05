@@ -1686,6 +1686,8 @@ export default function NovaViagem() {
             ctaLabel="Estou no local de carga"
             clienteId={form.clienteId}
             autoIniciar
+            // Ele acabou de ver a lista e disse "não está": direto pro nome.
+            direto
             onSelect={(sel) => void escolherCargaPorGps(sel)}
           />
           {erroCargaGps ? <Text className="text-sm text-destructive">{erroCargaGps}</Text> : null}

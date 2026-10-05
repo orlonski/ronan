@@ -7,6 +7,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -750,7 +751,9 @@ export function DescargaPorGps({
       >
         <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background">
           <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            // Edge-to-edge (SDK 54): o Android não redimensiona a janela com o
+            // teclado — "height" deixava o campo e os botões por baixo dele.
+            behavior="padding"
             className="flex-1"
           >
             <View className="flex-row items-center justify-between border-b border-border p-4">
@@ -791,16 +794,43 @@ export function DescargaPorGps({
                 </Text>
               </View>
             ) : (
-            <View className="flex-1 gap-4 p-5">
+            // Nome PRIMEIRO, no topo: com a lista em cima, o teclado (autoFocus)
+            // cobria o campo. Sugestões embaixo, e a tela rola.
+            <ScrollView
+              className="flex-1"
+              contentContainerClassName="gap-4 p-5"
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text className="text-sm text-muted-foreground">
+                Não conheço esse lugar aqui — me ajuda dando um nome rápido.
+              </Text>
+
+              <View className="gap-2">
+                <Label>Nome do local</Label>
+                <TextInput
+                  value={nomeNovo}
+                  onChangeText={setNomeNovo}
+                  placeholder='ex: "Obra do shopping", "Construtora X"'
+                  placeholderTextColor="#94a3b8"
+                  autoFocus
+                  maxLength={120}
+                  returnKeyType="done"
+                  onSubmitEditing={salvarNomeNovo}
+                  className="rounded-xl border border-border bg-background px-3 py-4 text-base text-foreground"
+                />
+                <Text className="text-xs text-muted-foreground">
+                  Gravamos o GPS aqui. Endereço completo o escritório completa depois.
+                </Text>
+              </View>
+
+              {erro && <Text className="text-sm text-destructive">{erro}</Text>}
+
               {candidatosDuplicata.length > 0 && (
                 <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
                   <Text className="text-sm font-bold text-amber-900">
                     ⚠️ Talvez já exista — confira antes de criar
                   </Text>
-                  <Text className="text-xs text-amber-800">
-                    Estes parecem ser aqui. É algum deles?
-                  </Text>
-                  {candidatosDuplicata.slice(0, 4).map((c, i) => {
+                  {candidatosDuplicata.slice(0, 3).map((c, i) => {
                     const full = localPorId.get(c.id);
                     if (!full) return null;
                     return (
@@ -838,32 +868,7 @@ export function DescargaPorGps({
                 </View>
               )}
 
-              <Text className="text-sm text-muted-foreground">
-                {candidatosDuplicata.length > 0
-                  ? "Se for mesmo um lugar novo, dá um nome:"
-                  : "Não conheço esse lugar aqui — me ajuda dando um nome rápido."}
-              </Text>
-
-              <View className="gap-2">
-                <Label>Nome do local</Label>
-                <TextInput
-                  value={nomeNovo}
-                  onChangeText={setNomeNovo}
-                  placeholder='ex: "Obra do shopping", "Construtora X"'
-                  placeholderTextColor="#94a3b8"
-                  autoFocus
-                  maxLength={120}
-                  returnKeyType="done"
-                  onSubmitEditing={salvarNomeNovo}
-                  className="rounded-xl border border-border bg-background px-3 py-4 text-base text-foreground"
-                />
-                <Text className="text-xs text-muted-foreground">
-                  Gravamos o GPS aqui. Endereço completo o escritório completa depois.
-                </Text>
-              </View>
-
-              {erro && <Text className="text-sm text-destructive">{erro}</Text>}
-            </View>
+            </ScrollView>
             )}
 
             {confirmarPerto ? (

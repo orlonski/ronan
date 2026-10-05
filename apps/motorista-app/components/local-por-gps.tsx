@@ -7,6 +7,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -126,6 +127,7 @@ export function LocalPorGps({
   onSelect,
   onLimpar,
   autoIniciar,
+  direto,
 }: {
   lado: "carga" | "descarga";
   /** Texto do botão grande (ex: "Estou no local de carga"). */
@@ -137,6 +139,10 @@ export function LocalPorGps({
   onLimpar?: () => void;
   /** Dispara a captura do GPS já no mount (quem abriu já pediu "estou aqui"). */
   autoIniciar?: boolean;
+  /** Vai direto pro "Como chama esse lugar?" depois do GPS, sem a lista: quem
+   * abriu já viu a lista e disse que o local não está nela. Os que estão perto
+   * aparecem como "talvez já exista" embaixo do nome. Só com permiteCriar. */
+  direto?: boolean;
 }) {
   const [estado, setEstado] = useState<Estado>(() =>
     value ? { tipo: "selecionado", local: value } : { tipo: "vazio" },
@@ -150,6 +156,10 @@ export function LocalPorGps({
   // Locais que ele ACABOU de ver na lista: entram no ranqueador como "já visto"
   // (quem passou pelo certo e mesmo assim foi cadastrar é o caso a pegar).
   const matchesVistosRef = useRef<LocalProximo[]>([]);
+  // Carga: a lista abre só com os locais PERTO (raio ampliado do painel); os
+  // longe do mesmo cliente ficam atrás de um toque — 7 locais espalhados pela
+  // região poluíam a tela de quem está parado num deles.
+  const [mostrarTodos, setMostrarTodos] = useState(false);
 
   // Trocar de cliente invalida a lista/seleção (eram locais do cliente anterior).
   // O estado interno não segue `value`, então reseta ao mudar o clienteId — senão
@@ -348,7 +358,11 @@ export function LocalPorGps({
       raioUsadoM,
     };
     matchesVistosRef.current = matches;
-    if (matches.length === 0) {
+    setMostrarTodos(false);
+    if (direto && permiteCriar) {
+      setEstado({ tipo: "sem_match", coords: cap });
+      setNomeNovo("");
+    } else if (matches.length === 0) {
       if (permiteCriar) {
         setEstado({ tipo: "sem_match", coords: cap });
         setNomeNovo("");
@@ -489,6 +503,12 @@ export function LocalPorGps({
       candidatos,
     }).filter((c) => c.confianca !== "baixa");
   }
+  // Lista da carga: perto primeiro (raio ampliado), os longe sob demanda.
+  const matchesEscolha = estado.tipo === "escolha" ? estado.matches : [];
+  const cargaPerto = matchesEscolha.filter((m) => m.distanciaMetros <= cfg.raioAmpliadoM);
+  const cargaVisiveis = mostrarTodos ? matchesEscolha : cargaPerto;
+  const cargaLonge = matchesEscolha.length - cargaVisiveis.length;
+
   const matchesProximos = candidatosDuplicata
     .map((c) => localPorId.get(c.id))
     .filter((m): m is LocalProximo => m != null)
@@ -574,7 +594,11 @@ export function LocalPorGps({
         >
           {lado === "carga" ? (
             <Text className="text-sm font-medium text-foreground">
-              Locais de carga desse cliente — o mais perto de você primeiro. Toque no certo.
+              {cargaVisiveis.length === 0
+                ? "Nenhum local de carga desse cliente perto de você."
+                : cargaVisiveis.length === 1
+                  ? "Achei este perto de você. É ele?"
+                  : `Achei ${cargaVisiveis.length} perto de você. Qual é?`}
             </Text>
           ) : estado.ampliado ? (
             <Text className="text-sm font-medium text-foreground">
@@ -588,7 +612,7 @@ export function LocalPorGps({
             </Text>
           )}
           {estado.coords.buscaOffline && <AvisoListaCache />}
-          {estado.matches.map((m, i) => (
+          {(lado === "carga" ? cargaVisiveis : estado.matches).map((m, i) => (
             <Pressable
               key={m.id}
               onPress={() => escolherMatch(m)}
@@ -619,6 +643,16 @@ export function LocalPorGps({
               </View>
             </Pressable>
           ))}
+          {lado === "carga" && cargaLonge > 0 && (
+            <Button variant="outline" onPress={() => setMostrarTodos(true)} className="mt-1">
+              <MapPin size={18} color="#0f172a" />
+              <Text className="text-sm font-semibold text-foreground">
+                {cargaVisiveis.length === 0
+                  ? `Ver os ${cargaLonge} locais do cliente`
+                  : `Ver os outros ${cargaLonge} locais do cliente`}
+              </Text>
+            </Button>
+          )}
           {podeBuscarEndereco && (
             <Button variant="outline" onPress={() => setBuscaAberta(true)} className="mt-1">
               <Search size={18} color="#0f172a" />
@@ -719,7 +753,9 @@ export function LocalPorGps({
       >
         <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background">
           <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            // Edge-to-edge (SDK 54): o Android não redimensiona a janela com o
+            // teclado — "height" deixava o campo e os botões por baixo dele.
+            behavior="padding"
             className="flex-1"
           >
             <View className="flex-row items-center justify-between border-b border-border p-4">
@@ -768,45 +804,15 @@ export function LocalPorGps({
                 </Text>
               </View>
             ) : (
-            <View className="flex-1 gap-4 p-5">
-              {matchesProximos.length > 0 && (
-                <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
-                  <Text className="text-sm font-bold text-amber-900">
-                    ⚠️ Pode já estar cadastrado
-                  </Text>
-                  <Text className="text-xs text-amber-800">
-                    Confira se não é um destes antes de criar um novo:
-                  </Text>
-                  {matchesProximos.map((m) => (
-                    <Pressable
-                      key={m.id}
-                      onPress={() => escolherMatch(m)}
-                      className="flex-row items-center justify-between rounded-lg border border-amber-300 bg-background px-3 py-2.5"
-                    >
-                      <View className="flex-1 pr-2">
-                        <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
-                          {formatarNomeLocal(m.nome)}
-                        </Text>
-                        {m.lat != null && m.lng != null && (
-                          <Text className="text-xs text-muted-foreground">
-                            a {formatarDistancia(haversineMetros(semMatchCoords!.lat, semMatchCoords!.lng, m.lat, m.lng))} daqui
-                          </Text>
-                        )}
-                      </View>
-                      <View className="rounded-full bg-primary px-3 py-1.5">
-                        <Text className="text-xs font-bold text-primary-foreground">
-                          É este
-                        </Text>
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-
+            // Nome PRIMEIRO, no topo: com a lista em cima, o teclado (autoFocus)
+            // cobria o campo. Sugestões embaixo, e a tela rola.
+            <ScrollView
+              className="flex-1"
+              contentContainerClassName="gap-4 p-5"
+              keyboardShouldPersistTaps="handled"
+            >
               <Text className="text-sm text-muted-foreground">
-                {matchesProximos.length > 0
-                  ? "Se for mesmo um lugar novo, dá um nome:"
-                  : "Não conheço esse lugar aqui — me ajuda dando um nome rápido."}
+                Não conheço esse lugar aqui — me ajuda dando um nome rápido.
               </Text>
 
               <View className="gap-2">
@@ -832,7 +838,38 @@ export function LocalPorGps({
               </View>
 
               {erro && <Text className="text-sm text-destructive">{erro}</Text>}
-            </View>
+
+              {matchesProximos.length > 0 && (
+                <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                  <Text className="text-sm font-bold text-amber-900">
+                    ⚠️ Talvez já exista — confira antes de criar
+                  </Text>
+                  {matchesProximos.slice(0, 3).map((m) => (
+                    <Pressable
+                      key={m.id}
+                      onPress={() => escolherMatch(m)}
+                      className="flex-row items-center justify-between rounded-lg border border-amber-300 bg-background px-3 py-2.5"
+                    >
+                      <View className="flex-1 pr-2">
+                        <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
+                          {formatarNomeLocal(m.nome)}
+                        </Text>
+                        {m.lat != null && m.lng != null && (
+                          <Text className="text-xs text-muted-foreground">
+                            a {formatarDistancia(haversineMetros(semMatchCoords!.lat, semMatchCoords!.lng, m.lat, m.lng))} daqui
+                          </Text>
+                        )}
+                      </View>
+                      <View className="rounded-full bg-primary px-3 py-1.5">
+                        <Text className="text-xs font-bold text-primary-foreground">
+                          É este
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
             )}
 
             {confirmarPerto ? (
