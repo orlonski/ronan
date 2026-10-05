@@ -8,6 +8,7 @@ import { ConferenciaFilaService } from "./conferencia-fila.service";
 import { ConferenciaConfig } from "./conferencia.config";
 import { LeitorTicketService } from "./leitor-ticket.service";
 import { VinculosNomeService } from "./vinculos-nome.service";
+import { ORIGEM_AUDITORIA_CEGA } from "./auditoria-cega.service";
 import { AplicarVereditoService } from "./aplicar-veredito.service";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { CachePorConta } from "../common/conta/cache-por-conta";
@@ -121,7 +122,10 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
         this.conferir(job),
         this.estourarEm(this.config.timeoutMs),
       ]);
-      if (resultado) await this.aplicar.aplicar(job, resultado, this.config.modoSombra);
+      // A auditoria às cegas só registra: a viagem já foi decidida (e pode já
+      // estar faturada), e quem age sobre o que ela achar é gente.
+      const soRegistra = this.config.modoSombra || job.origem === ORIGEM_AUDITORIA_CEGA;
+      if (resultado) await this.aplicar.aplicar(job, resultado, soRegistra);
     } catch (err) {
       if (err instanceof Adiar) {
         await this.fila.adiar(job, err.message, ADIAR_SEM_COTA_MS);
@@ -182,8 +186,13 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!viagem) throw new Descartar("viagem não existe mais");
-    if (viagem.revisadoEm) throw new Descartar("um humano conferiu antes");
-    if (viagem._count.matchesFechamento > 0) throw new Descartar("viagem já entrou em fechamento");
+    // A auditoria às cegas existe justamente pra reler o que já foi decidido
+    // (inclusive pela IA) e o que já entrou em fechamento — e ela nunca age.
+    const auditoria = job.origem === ORIGEM_AUDITORIA_CEGA;
+    if (viagem.revisadoEm && !auditoria) throw new Descartar("um humano conferiu antes");
+    if (viagem._count.matchesFechamento > 0 && !auditoria) {
+      throw new Descartar("viagem já entrou em fechamento");
+    }
 
     const declarado = job.declarado as unknown as Declarado;
     const mudou =

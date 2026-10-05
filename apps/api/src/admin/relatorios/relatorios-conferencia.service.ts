@@ -218,6 +218,9 @@ export class RelatoriosConferenciaService {
       WHERE ct."contaId" = ${contaIdAtual()}
         AND v."contaId" = ${contaIdAtual()}
         AND ct."status" = 'CONCLUIDA'
+        -- A releitura às cegas do acervo (05/10/2026) é auditoria, não o
+        -- tempo de conferência do dia a dia.
+        AND ct."origem" <> 'auditoria-cega'
         AND ct."duracaoMs" IS NOT NULL
         AND ct."finalizadoEm" >= ${inicio}
         AND ct."finalizadoEm" < ${fim}

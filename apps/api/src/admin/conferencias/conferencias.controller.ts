@@ -7,6 +7,7 @@ import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { ConferenciaFilaService } from "../../conferencia-ticket/conferencia-fila.service";
 import { VinculosNomeService } from "../../conferencia-ticket/vinculos-nome.service";
+import { AuditoriaCegaService } from "../../conferencia-ticket/auditoria-cega.service";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { ConferenciaConfig } from "../../conferencia-ticket/conferencia.config";
@@ -51,6 +52,7 @@ export class ConferenciasController {
     private readonly config: ConferenciaConfig,
     private readonly prisma: PrismaService,
     private readonly vinculos: VinculosNomeService,
+    private readonly auditoria: AuditoriaCegaService,
   ) {}
 
   /**
@@ -199,6 +201,35 @@ export class ConferenciasController {
     }
     const desta = await this.fila.ultimaDaViagem(viagemId);
     return { vinculo, reavaliadas: viagens.length, destravadas, veredito: desta?.veredito ?? null };
+  }
+
+  /**
+   * Releitura às cegas do que a IA disse que conferia antes do conserto de
+   * 05/10/2026. A prévia não gasta nada; executar exige o total que a pessoa
+   * viu — o OK é pra aquele número e aquele custo.
+   */
+  @Get("auditoria-cega")
+  @RequerPermissao("conferencia-ticket.reprocessar")
+  async previaAuditoria() {
+    const p = await this.auditoria.previa();
+    if (await this.verCusto()) return p;
+    const { custoPorLeituraUsd: _a, custoEstimadoUsd: _b, ...semCusto } = p;
+    return semCusto;
+  }
+
+  @Post("auditoria-cega")
+  @RequerPermissao("conferencia-ticket.reprocessar")
+  executarAuditoria(
+    @Body(new ZodValidationPipe(z.object({ esperado: z.number().int().min(1) })))
+    body: { esperado: number },
+  ) {
+    return this.auditoria.executar(body.esperado);
+  }
+
+  @Get("auditoria-cega/resultado")
+  @RequerPermissao("conferencia-ticket.ver")
+  resultadoAuditoria() {
+    return this.auditoria.resultado();
   }
 
   @Post("reprocessar")

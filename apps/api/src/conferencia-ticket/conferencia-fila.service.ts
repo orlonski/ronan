@@ -44,7 +44,9 @@ export type OrigemConferencia =
   | "foto-divergente"
   | "reconferencia"
   /** O motorista corrigiu os dados que a conferência apontou. */
-  | "correcao-motorista";
+  | "correcao-motorista"
+  /** Releitura às cegas do que a IA aprovou antes de 05/10/2026 — só registra. */
+  | "auditoria-cega";
 
 /**
  * O recorte da lista do painel. `tipo` sozinho não filtra nada: os grupos do
@@ -70,7 +72,7 @@ export type ViagemParaDeclarado = {
 };
 
 /** O `select` que preenche `ViagemParaDeclarado`. */
-const SELECT_DECLARADO = {
+export const SELECT_DECLARADO = {
   status: true,
   ticket: true,
   toneladas: true,

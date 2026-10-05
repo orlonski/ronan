@@ -13,6 +13,7 @@ import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import { humanizarErroConferencia } from "@/lib/conferencia-erro";
 import { ErroCard } from "@/components/erro-estado";
 import { AbasDaTela } from "@/components/abas-da-tela";
+import { AuditoriaCega } from "./_components/auditoria-cega";
 
 type Divergencia = {
   campo: string;
@@ -232,6 +233,8 @@ export default function ConferenciasPage() {
           </Button>
         </Card>
       )}
+
+      <AuditoriaCega />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metrica titulo="Na fila" valor={r?.aguardando ?? 0} icone={<Clock className="h-4 w-4" />} />
