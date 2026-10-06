@@ -515,6 +515,80 @@ export type PendingMensagemChat = {
   errorPermanenteLocal?: boolean;
 };
 
+/**
+ * GASTO DE VIAGEM (módulo `despesas`) esperando subir.
+ *
+ * Um item só leva o gasto E as fotos dele, no molde do abastecimento: cada foto
+ * sobe em `/m/uploads/despesa` e ganha `fotoKey` ANTES do POST, persistida a
+ * cada passo — o que já subiu não sobe de novo. As fotos ficam em
+ * `documentDirectory` (nunca em `Caches/`, que o iOS esvazia).
+ *
+ * `payload` é o corpo do POST sem as fotoKeys (quem junta é o drain). O que a
+ * tela precisa pra se desenhar offline (nome do tipo, rótulo da viagem) vem em
+ * `resumo`, pra a lista e os Pendentes não dependerem do catálogo.
+ */
+export type FotoDespesaPendente = {
+  uri: string;
+  mime: string;
+  /** Preenchida depois do upload — é a marca de "não subir de novo". */
+  fotoKey?: string;
+};
+
+export type PendingDespesa = {
+  clientId: string;
+  payload: Record<string, unknown>;
+  fotos: FotoDespesaPendente[];
+  resumo: {
+    tipoNome: string;
+    tipoIcone?: string | null;
+    reembolsa: boolean;
+    viagemRotulo?: string | null;
+    /**
+     * A configuração de campos que ele VIU (CamposDoTipo). Serve pra corrigir
+     * o pendente mesmo se o tipo sair do catálogo enquanto espera sinal.
+     */
+    campos?: unknown;
+  };
+  /** O servidor recusou a FOTO (4xx no upload): a saída é tirar outra. */
+  fotoRecusada?: boolean;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
+};
+
+/**
+ * Ligar (ou soltar) um gasto JÁ ENVIADO a uma viagem. Gasto ainda na fila não
+ * vira item destes: edita-se o próprio pendente.
+ *
+ * A viagem pode ser conhecida só pelo `clientId` (ainda no celular): o servidor
+ * resolve quando ela subir. Drena DEPOIS das viagens e dos gastos.
+ */
+export type PendingVinculoGasto = {
+  /** UUID da operação (chave da fila). */
+  clientId: string;
+  /** Gastos JÁ ENVIADOS — id do servidor ou clientId do celular (o servidor aceita os dois). */
+  despesas: string[];
+  /** VIAGEM / FORA_DE_VIAGEM / DESFAZER (volta a "sem resposta"). */
+  acao: "VIAGEM" | "FORA_DE_VIAGEM" | "DESFAZER";
+  viagemId?: string | null;
+  viagemClientId?: string | null;
+  /** Pra tela de Pendentes e pra lista dizerem o que é, sem rede. */
+  resumo: { quantos: number; valor: number; viagemRotulo?: string | null };
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
+};
+
 // Sufixos (sem o prefixo do cadastro — quem monta a chave completa é `chave`).
 const VIAGENS_KEY = "outbox.viagens";
 const MENSAGENS_CHAT_KEY = "outbox.mensagens-chat";
@@ -532,6 +606,8 @@ const PONTO_KEY = "outbox.ponto";
 const DOCUMENTO_ADMISSAO_KEY = "outbox.documento-admissao";
 const PROBLEMAS_VEICULO_KEY = "outbox.problemas-veiculo";
 const CHECKLISTS_KEY = "outbox.checklists";
+const DESPESAS_KEY = "outbox.despesas";
+const VINCULOS_GASTO_KEY = "outbox.vinculos-gasto";
 
 /** Todos os sufixos do outbox — usado pela adoção/limpeza do storage legado. */
 const SUFIXOS_OUTBOX = [
@@ -553,6 +629,8 @@ const SUFIXOS_OUTBOX = [
   DOCUMENTO_ADMISSAO_KEY,
   PROBLEMAS_VEICULO_KEY,
   CHECKLISTS_KEY,
+  DESPESAS_KEY,
+  VINCULOS_GASTO_KEY,
 ];
 
 async function readList<T>(key: string): Promise<T[]> {
@@ -900,6 +978,49 @@ export async function deletePendingMensagemChat(clientId: string): Promise<void>
   const list = await listPendingMensagensChat();
   await writeList(
     MENSAGENS_CHAT_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+// ---- Gasto de viagem (módulo despesas) ----
+
+export async function listPendingDespesas(): Promise<PendingDespesa[]> {
+  return readList<PendingDespesa>(DESPESAS_KEY);
+}
+
+export async function upsertPendingDespesa(item: PendingDespesa): Promise<void> {
+  const list = await listPendingDespesas();
+  const i = list.findIndex((x) => x.clientId === item.clientId);
+  if (i >= 0) list[i] = item;
+  else list.push(item);
+  await writeList(DESPESAS_KEY, list);
+}
+
+export async function deletePendingDespesa(clientId: string): Promise<void> {
+  const list = await listPendingDespesas();
+  await writeList(
+    DESPESAS_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingVinculosGasto(): Promise<PendingVinculoGasto[]> {
+  return readList<PendingVinculoGasto>(VINCULOS_GASTO_KEY);
+}
+
+export async function upsertPendingVinculoGasto(item: PendingVinculoGasto): Promise<void> {
+  const list = await listPendingVinculosGasto();
+  const i = list.findIndex((x) => x.clientId === item.clientId);
+  if (i >= 0) list[i] = item;
+  // Append: a ordem importa (ligar e depois desfazer têm que subir nessa ordem).
+  else list.push(item);
+  await writeList(VINCULOS_GASTO_KEY, list);
+}
+
+export async function deletePendingVinculoGasto(clientId: string): Promise<void> {
+  const list = await listPendingVinculosGasto();
+  await writeList(
+    VINCULOS_GASTO_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }

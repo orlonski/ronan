@@ -134,6 +134,12 @@ export type Catalogos = {
   // Vazio/ausente = conta sem modo cadastrado ou cache antigo. Nos dois casos
   // o app se comporta como sempre.
   tiposServico?: TipoServico[];
+  /**
+   * Tipos de gasto de viagem (módulo `despesas`). Cru de propósito: quem lê é
+   * `lerTiposDespesa` (lib/despesas.ts), tolerante a cache antigo (ausente =
+   * lista vazia) e a config de campos com lixo. Nunca ler direto daqui.
+   */
+  tiposDespesa?: unknown;
   clientes: Cliente[];
   locais: Local[];
   empresas: Empresa[];
@@ -615,6 +621,9 @@ export async function forcarAtualizarDados(qc?: QueryClient): Promise<void> {
  * (prefetchQuery engole o erro) e o staleTime deduplica chamadas seguidas.
  */
 export async function prefetchDadosBase(qc: QueryClient): Promise<void> {
+  // O catálogo já traz os tipos de gasto de viagem (`tiposDespesa`, módulo
+  // `despesas`): baixá-los aqui é o que faz "O que você pagou?" abrir sem
+  // sinal. Lidos sempre por `lerTiposDespesa` (lib/despesas.ts).
   const cat = offlineCacheQuery<Catalogos>("catalogos", "/m/catalogos", {
     staleTime: 5 * 60_000,
     normalize: normalizarCatalogos,

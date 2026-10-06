@@ -27,6 +27,8 @@ import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-
 import { BuscarLocalModal } from "@/components/buscar-local-modal";
 import { LocalPorGps, type SelecaoLocal } from "@/components/local-por-gps";
 import { useLigadaPelaEmpresa } from "@/lib/acessos-app";
+import { useModuloDespesas } from "@/lib/gastos";
+import { GastosDaViagem } from "@/components/gastos";
 import { SeletorRotas } from "@/components/seletor-rotas";
 import { PerguntaBotaFora } from "@/components/pergunta-bota-fora";
 import { showAlert, showConfirm } from "@/lib/alert";
@@ -49,7 +51,7 @@ import { simplificarPontos } from "@/lib/polyline";
 import { listPendingViagens, type PendingViagem } from "@/db/database";
 import * as FileSystem from "expo-file-system/legacy";
 import type { ExtrairTicketResult } from "@ronan/shared-types";
-import { atualizarViagemPendente } from "@/lib/sync";
+import { atualizarViagemPendente, soltarGastosDaViagem } from "@/lib/sync";
 import { pagadorSeDiferente } from "@/lib/utils";
 import {
   useCalcularRota,
@@ -135,6 +137,7 @@ export default function NovaViagem() {
     cargaLng?: string;
   }>();
   const modoEdit = !!params.editarClientId;
+  const moduloGastos = useModuloDespesas();
 
   // Dados do tracking GPS, se motorista veio da tela "Viagem em andamento"
   const tracking = useMemo<TrackingPayload | null>(() => {
@@ -1155,6 +1158,7 @@ export default function NovaViagem() {
           foto: foto ?? undefined,
         });
       }
+      viagemSalvaRef.current = true;
       // Telemetria: registra estado da viagem no momento do salvar pra
       // investigação posterior no dashboard (fontes do KM, foto, OCR, GPS).
       void reportarEvento(
@@ -1189,6 +1193,15 @@ export default function NovaViagem() {
   }
 
   const saindoDePropositoRef = useRef(false);
+  // A viagem foi gravada (fila ou servidor)? Se a tela fechar sem isso, os
+  // gastos lançados aqui dentro não somem: viram "sem viagem".
+  const viagemSalvaRef = useRef(false);
+  useEffect(
+    () => () => {
+      if (!viagemSalvaRef.current && !modoEdit) void soltarGastosDaViagem(viagemClientId);
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // Tem coisa que o motorista perde se sair agora? Ignora o que já nasce
   // preenchido (placa default e data de hoje) pra não pedir confirmação à toa.
@@ -1865,6 +1878,29 @@ export default function NovaViagem() {
     </View>
   );
 
+  const nomeLocal = (id: string) =>
+    id
+      ? ([...(cat.data?.locais ?? []), ...extraLocais].find((l) => l.id === id)?.nome ?? null)
+      : null;
+  const cargaNome = nomeLocal(form.localCargaId);
+  const descargaNome = nomeLocal(form.localDescargaId);
+  const rotuloDaViagemGastos = cargaNome
+    ? descargaNome
+      ? `${cargaNome} → ${descargaNome}`
+      : cargaNome
+    : "Esta viagem";
+
+  // Gastos desta viagem (módulo `despesas`): compacto, nunca obrigatório.
+  // Amarrados ao clientId desta sessão — a viagem pode nem ter subido.
+  const secaoGastos = moduloGastos.lancar ? (
+    <GastosDaViagem
+      perguntaPonte
+      viagemClientId={viagemClientId}
+      viagemRotulo={rotuloDaViagemGastos}
+      veiculoId={form.veiculoId || null}
+    />
+  ) : null;
+
   const secaoBotaFora = permiteBotaFora ? (
     <PerguntaBotaFora
       valor={teveBotaFora}
@@ -2006,6 +2042,7 @@ export default function NovaViagem() {
                   {secaoKm}
                   {secaoBotaFora}
                 </Secao>
+                {secaoGastos}
                 <Secao titulo="Observação">{secaoObs}</Secao>
                 {erro ? <ErroCampo msg={erro} /> : null}
                 {secaoSalvar}
@@ -2045,6 +2082,7 @@ export default function NovaViagem() {
                     {secaoBotaFora}
                   </Secao>
                 </View>
+                {secaoGastos}
                 <Secao titulo="Observação">{secaoObs}</Secao>
                 {erro ? <ErroCampo msg={erro} /> : null}
                 {secaoSalvar}
