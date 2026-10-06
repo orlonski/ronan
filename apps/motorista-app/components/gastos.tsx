@@ -293,6 +293,10 @@ function fmtHoraLocal(ts: number): string {
 /**
  * Aviso, não tarefa: SOME quando não há nada (nem com R$ 0,00). Só "sem
  * viagem" e nada a receber (tipo que não devolve) → só a linha de ligar.
+ *
+ * Sem botão "Ver meus gastos" aqui dentro: a home já tem um logo abaixo do
+ * card "Gasto de viagem", sob a MESMA condição (`acompanhar`) em que este card
+ * aparece — eram dois iguais na tela. Tocar no valor continua abrindo Meus gastos.
  */
 export function CardPraReceber({ podeLigar }: { podeLigar: boolean }) {
   const { gastos, query } = useGastos();
@@ -332,15 +336,6 @@ export function CardPraReceber({ podeLigar }: { podeLigar: boolean }) {
             Ligar à viagem
           </BotaoAcao>
         </View>
-      ) : null}
-      {resumo.total > 0 ? (
-        <BotaoAcao
-          Icone={ListChecks}
-          className="mt-3"
-          onPress={() => router.push("/meus-reembolsos")}
-        >
-          Ver meus gastos
-        </BotaoAcao>
       ) : null}
     </View>
   );
