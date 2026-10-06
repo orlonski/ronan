@@ -308,6 +308,10 @@ export class TagProcessamentoService {
     });
     const veiculoDaPlaca = new Map<string, (typeof veiculos)[number]>();
     for (const v of veiculos) for (const variante of variantesDaPlaca(v.placa)) veiculoDaPlaca.set(variante, v);
+    // A fatura costuma subir ANTES de a frota estar cadastrada: a placa fica
+    // "sem cadastro" desde a importação. Caminhão cadastrado depois é ligado aqui,
+    // a cada processamento — senão o raio-x mentia "sem cadastro" pra sempre.
+    await this.religarPlacas(veiculoDaPlaca);
 
     const fisica = (p: PassagemCarregada): PassagemComFatos => {
       const dataLocal = new Date(p.ocorridoEm.getTime() + p.fusoOffsetMin * MIN).toISOString().slice(0, 10);
@@ -383,12 +387,16 @@ export class TagProcessamentoService {
           select: {
             id: true,
             veiculoId: true,
+            localCargaId: true,
+            localDescargaId: true,
+            rotaGeometria: true,
             data: true,
             iniciadoEm: true,
             eventosViagem: { select: { ocorridoEm: true }, orderBy: { ocorridoEm: "desc" }, take: 1 },
           },
         })
       : [];
+    await this.garantirRotas(viagensDb);
     const emOrdem = await this.pedagios.pracasEmOrdemDasViagens(viagensDb.map((v) => v.id));
     const chaveDoPonto = (lat: number, lng: number): string | null => {
       for (const r of pracas.values()) {
@@ -433,6 +441,45 @@ export class TagProcessamentoService {
     await this.gravarAchados(achados, veiculoDaPlaca);
     await this.prisma.extratoTag.updateMany({ where: { status: { not: "FALHOU" } }, data: { processadoEm: new Date() } });
     return { trechos: todosTrechos.length, achados: achados.length };
+  }
+
+  /** Liga ao cadastro as placas da fatura que ainda estão sem caminhão. */
+  private async religarPlacas(veiculoDaPlaca: Map<string, { id: string }>) {
+    const soltas = await this.prisma.extratoTagVeiculo.findMany({
+      where: { veiculoId: null },
+      select: { placaTexto: true },
+      distinct: ["placaTexto"],
+    });
+    for (const { placaTexto } of soltas) {
+      const v = veiculoDaPlaca.get(normalizarPlaca(placaTexto));
+      if (!v) continue;
+      await this.prisma.extratoTagVeiculo.updateMany({ where: { placaTexto, veiculoId: null }, data: { veiculoId: v.id } });
+      await this.prisma.passagemTag.updateMany({ where: { placaTexto, veiculoId: null }, data: { veiculoId: v.id } });
+    }
+  }
+
+  /**
+   * Viagem sem rota no cache não tem praça pra comparar e nunca vira candidata
+   * — é o caso da viagem importada, ou lançada sem sinal, antes de o cron de km
+   * passar por ela. Calcula aqui a rota que faltar (o cálculo grava no cache),
+   * em vez de dizer "sem viagem lançada" pra uma viagem que está lá.
+   */
+  private async garantirRotas(
+    viagens: Array<{ localCargaId: string | null; localDescargaId: string | null; rotaGeometria: string | null }>,
+  ) {
+    const pares = new Set<string>();
+    for (const v of viagens) {
+      if (v.rotaGeometria || !v.localCargaId || !v.localDescargaId) continue;
+      pares.add(`${v.localCargaId}>${v.localDescargaId}`);
+    }
+    for (const par of pares) {
+      const [a, b] = par.split(">") as [string, string];
+      try {
+        await this.roteamento.calcularKm(a, b);
+      } catch (err) {
+        this.log.warn(`rota ${par} falhou: ${(err as Error).message}`);
+      }
+    }
   }
 
   /** AUTO (só com a ligação automática ligada) vira ligação do sistema — nunca por cima de gente. */
