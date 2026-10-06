@@ -458,6 +458,9 @@ export class DespesasAdminService {
    */
   async vincular(id: string, viagemId: string | null, usuarioId: string, escopo: EscopoAdmin) {
     const d = await this.carregar(id, escopo);
+    // "Vincular viagem pode ser feito em qualquer status até o acerto fechar"
+    // (10-telas §10.2). A tela já esconde o botão; a API também fecha a porta.
+    this.exigirForaDeAcertoFechado(d);
     let veiculoId = d.veiculoId;
     if (viagemId) {
       const v = await this.prisma.viagem.findUnique({

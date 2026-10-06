@@ -468,7 +468,14 @@ export class DespesasMotoristaService {
 
   async vincular(motoristaId: string, input: VincularDespesasInput): Promise<{ itens: DespesaDoMotorista[] }> {
     const alvos = await this.prisma.despesa.findMany({
-      where: { motoristaId, OR: [{ id: { in: input.despesas } }, { clientId: { in: input.despesas } }] },
+      where: {
+        motoristaId,
+        OR: [{ id: { in: input.despesas } }, { clientId: { in: input.despesas } }],
+        // Gasto em acerto fechado/pago não muda mais de viagem. Fica de fora em
+        // silêncio (e volta como está): recusar o lote com 4xx mandaria o item
+        // inteiro pros Pendentes por causa de um gasto que já foi pago.
+        itensAcerto: { none: { acerto: { status: { in: ["FECHADO", "PAGO"] } } } },
+      },
       select: { id: true, veiculoId: true, marcas: true },
     });
     const v =
@@ -493,7 +500,7 @@ export class DespesasMotoristaService {
     }
     const periodos = await this.periodosEmprego(motoristaId);
     const itens = await this.prisma.despesa.findMany({
-      where: { id: { in: alvos.map((a) => a.id) } },
+      where: { motoristaId, OR: [{ id: { in: input.despesas } }, { clientId: { in: input.despesas } }] },
       include: DESPESA_INCLUDE_MOTORISTA,
       orderBy: { data: "desc" },
     });
