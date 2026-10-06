@@ -240,6 +240,25 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
+  "/tag-pedagio": {
+    oQue:
+      "A fatura do Sem Parar conferida: o sistema lê o PDF sem errar calado, liga cada passagem " +
+      "à viagem certa e mostra em reais o vale-pedágio que o contratante deixou de dar e o que dá " +
+      "pra contestar antes do prazo.",
+    faz: [
+      "Subir o PDF da fatura (vários meses de uma vez) e ver se ele foi lido e conferido",
+      "Ver o raio-x do mês: o que pode ser seu, o que contestar até a data e o que vale uma conversa",
+      "Dizer de quem era a carga de cada viagem sem vale-pedágio e tirar o relatório por cliente",
+      "Casar as passagens com as viagens por dia e por caminhão, aceitando as sugestões em lote",
+      "Confirmar a praça que o sistema não reconheceu sozinho",
+    ],
+    naoEAqui: {
+      procurando: "o pedágio que o motorista lançou",
+      vaEm: "Viagens",
+      href: "/viagens",
+    },
+  },
+
   "/abastecimentos": {
     oQue:
       "Todo o combustível que os motoristas registraram pelo app: litros, " +

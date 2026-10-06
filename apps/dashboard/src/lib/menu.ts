@@ -40,6 +40,7 @@ import {
   Target,
   TowerControl,
   TrafficCone,
+  Tag as TagIcon,
   TrendingUp,
   Truck,
   Upload,
@@ -225,6 +226,15 @@ export const GRUPOS: Grupo[] = [
           { href: "/gastos-viagem/todos", perm: "despesas.ver" },
           { href: "/gastos-viagem/tipos", perm: "tipos-despesa.ver" },
         ],
+      },
+      {
+        // Módulo `tag-pedagio` (vendido à parte): sem ele o item SOME
+        // (temModulo). Uma tela só, com abas internas: Faturas e raio-x,
+        // Casar passagens com viagens, Praças a confirmar e Caminhões.
+        href: "/tag-pedagio",
+        label: "Tag de pedágio",
+        icon: TagIcon,
+        perm: "tag.ver",
       },
     ],
   },

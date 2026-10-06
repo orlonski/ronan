@@ -136,6 +136,7 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/etapas-viagem", perm: "etapas-viagem.ver" },
   { prefixo: "/abastecimentos", perm: "abastecimentos.ver" },
   { prefixo: "/cartao-combustivel", perm: "cartao-combustivel.ver" },
+  { prefixo: "/tag-pedagio", perm: "tag.ver" },
   { prefixo: "/fechamentos", perm: "fechamentos.ver" },
   { prefixo: "/envios", perm: "envios.ver" },
   { prefixo: "/lancamentos-travados", perm: "lancamentos-resgatados.ver" },
