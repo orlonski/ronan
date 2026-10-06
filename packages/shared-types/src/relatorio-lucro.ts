@@ -43,6 +43,11 @@ export type AvisosLucro = {
   abastecimentosEstimados: number;
   abastecimentosSemPreco: number;
   manutencoesSemValor: number;
+  /**
+   * Viagem com frete em MAIS DE UM acerto. O lucro conta um só, mas isso quer
+   * dizer que o motorista pode ter recebido duas vezes — conferir os acertos.
+   */
+  viagensEmMaisDeUmAcerto: number;
 };
 
 export type ItemDespesaLucro = {

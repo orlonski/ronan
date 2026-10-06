@@ -21,8 +21,12 @@ function servico(estado: {
   /** Períodos de EMPREGO desta pessoa: [início, fim ou null]. */
   emprego?: { iniciouEm: Date; encerradoEm: Date | null }[];
   viagens?: { id: string; data: Date }[];
+  /** Linhas de acerto que já apontam pras viagens (de outros acertos). */
+  itensExistentes?: Record<string, unknown>[];
 }) {
   const criados: Record<string, unknown>[] = [];
+  const apagados: unknown[] = [];
+  let abastWhere: Record<string, unknown> | null = null;
   let vezesAcerto = 0;
 
   const viagem = (v: { id: string; data: Date }) => ({
@@ -62,16 +66,24 @@ function servico(estado: {
     },
     regimeVigente: { findMany: async () => estado.emprego ?? [] },
     viagem: { findMany: async () => (estado.viagens ?? []).map(viagem) },
-    abastecimento: { findMany: async () => [] },
+    abastecimento: {
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        abastWhere = where;
+        return [];
+      },
+    },
     pedagio: { findMany: async () => [] },
     registroPresenca: { findMany: async () => [] },
     itemAcerto: {
-      deleteMany: async () => ({ count: 0 }),
+      deleteMany: async ({ where }: { where: unknown }) => {
+        apagados.push(where);
+        return { count: 0 };
+      },
       createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
         criados.push(...data);
         return { count: data.length };
       },
-      findMany: async () => [],
+      findMany: async () => estado.itensExistentes ?? [],
     },
   } as Record<string, unknown>;
   prisma.$transaction = async (fn: (tx: unknown) => unknown) => fn(prisma);
@@ -81,6 +93,9 @@ function servico(estado: {
     s: new AcertosService(prisma as never, auditoria as never),
     /** Ids de viagem que viraram linha de acerto. */
     viagensPagas: () => criados.map((i) => i.viagemId).filter(Boolean),
+    criados,
+    apagados,
+    abastWhere: () => abastWhere,
   };
 }
 
@@ -124,5 +139,64 @@ describe("acerto não alcança dia de vínculo de emprego", () => {
       viagens: [{ id: "v1", data: em("2026-03-10") }],
     });
     await expect(s.gerar(periodo as never, "user1")).rejects.toThrow(/folha de pagamento/i);
+  });
+});
+
+describe("seleção nova do acerto (Onda 0c)", () => {
+  const acertoDe = (id: string, status: string) => ({
+    id,
+    status,
+    periodoInicio: em("2026-03-01"),
+    periodoFim: em("2026-03-15"),
+  });
+
+  it("viagem que já está em acerto FECHADO não entra de novo", async () => {
+    const { s, viagensPagas } = servico({
+      viagens: [{ id: "v1", data: em("2026-03-10") }, { id: "v2", data: em("2026-03-20") }],
+      itensExistentes: [
+        {
+          id: "x1",
+          tipo: "FRETE",
+          viagemId: "v1",
+          pedagioId: null,
+          abastecimentoId: null,
+          automatico: true,
+          puxadoDe: null,
+          acerto: acertoDe("fechado", "FECHADO"),
+        },
+      ],
+    });
+    await s.gerar(periodo as never, "user1");
+    expect(viagensPagas()).toEqual(["v2"]);
+  });
+
+  it("viagem de outro acerto ABERTO vem pra cá com aviso e sai de lá", async () => {
+    const { s, criados, apagados } = servico({
+      viagens: [{ id: "v1", data: em("2026-03-10") }],
+      itensExistentes: [
+        {
+          id: "x1",
+          tipo: "FRETE",
+          viagemId: "v1",
+          pedagioId: null,
+          abastecimentoId: null,
+          automatico: true,
+          puxadoDe: null,
+          acerto: acertoDe("esquecido", "ABERTO"),
+        },
+      ],
+    });
+    const r = await s.gerar(periodo as never, "user1");
+    expect(criados[0].puxadoDe).toBe("Este item saiu do acerto de 01/03 a 15/03.");
+    expect(apagados[0]).toMatchObject({ id: { in: ["x1"] }, acerto: { status: "ABERTO" } });
+    expect(r.puxados).toBe(1);
+  });
+
+  it("abastecimento busca pelo dia de São Paulo (03:00Z), não pela meia-noite UTC", async () => {
+    const { s, abastWhere } = servico({ viagens: [] });
+    await s.gerar(periodo as never, "user1");
+    const data = (abastWhere() as { data: { gte: Date; lt: Date } }).data;
+    expect(data.gte.toISOString()).toBe("2026-03-01T03:00:00.000Z");
+    expect(data.lt.toISOString()).toBe("2026-04-01T03:00:00.000Z");
   });
 });

@@ -83,7 +83,7 @@ function Conteudo() {
     setGerando(true);
     setResultado(null);
     try {
-      const r = await fetchApi<{ total: number; gerados: number }>(
+      const r = await fetchApi<{ total: number; gerados: number; puxados?: number }>(
         `${PATH}/gerar-lote`,
         {
           token,
@@ -95,6 +95,9 @@ function Conteudo() {
         `${r.gerados} de ${r.total} acertos gerados.` +
           (r.gerados < r.total
             ? " Os que faltaram já estavam fechados — reabra se quiser gerar de novo."
+            : "") +
+          (r.puxados
+            ? ` ${r.puxados} lançamento(s) saíram de outro acerto em aberto e vieram pra estes — está marcado em cada um.`
             : ""),
       );
       await queryClient.invalidateQueries({ queryKey: [PATH] });
@@ -236,6 +239,8 @@ function Conteudo() {
           <p className="text-xs text-muted-foreground">
             Gera pra todos os motoristas ativos de uma vez. Rodar de novo é seguro: só o que
             a regra calcula é refeito — adiantamento e desconto lançados à mão continuam lá.
+            Entra o que tem data dentro do período e ainda não está em acerto fechado ou pago;
+            o que é de antes aparece em cada acerto, em &quot;Ficou de fora&quot;, pra você marcar.
           </p>
           {resultado && <p className="text-sm">{resultado}</p>}
         </Card>

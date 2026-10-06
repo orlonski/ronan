@@ -45,6 +45,11 @@ export type ViagemParaLucro = ViagemParaAcerto & {
   /** Valor do item FRETE do acerto, quando a viagem já entrou num. Vence a régua. */
   freteAcertado: DecimalLike;
   /**
+   * Em quantos itens FRETE de acerto a viagem aparece. Mais de 1 = pode ter sido
+   * paga duas vezes: o lucro conta UM (o `freteAcertado`) e avisa.
+   */
+  itensDeFreteNoAcerto?: number;
+  /**
    * A régua do motorista. Null = ele era empregado registrado no dia da viagem:
    * o que ele recebe é salário, e salário entra como custo fixo do caminhão.
    */
@@ -140,6 +145,7 @@ export type LucroVeiculo = {
     /** Sem valor e sem preço médio pra estimar: não entrou. */
     abastecimentosSemPreco: number;
     manutencoesSemValor: number;
+    viagensEmMaisDeUmAcerto: number;
   };
   detalhe: {
     manutencoes: ItemDespesa[];
@@ -257,8 +263,10 @@ export function calcularLucroVeiculo(e: EntradaLucroVeiculo): LucroVeiculo {
   let viagensSemPreco = 0;
   let viagensSemCustoMotorista = 0;
   let viagensEmpregado = 0;
+  let viagensEmMaisDeUmAcerto = 0;
 
   for (const v of e.viagens) {
+    if ((v.itensDeFreteNoAcerto ?? 0) > 1) viagensEmMaisDeUmAcerto++;
     if (v.valorTotal == null) viagensSemPreco++;
     else faturou = faturou.add(dec(v.valorTotal));
 
@@ -378,6 +386,7 @@ export function calcularLucroVeiculo(e: EntradaLucroVeiculo): LucroVeiculo {
       abastecimentosEstimados,
       abastecimentosSemPreco,
       manutencoesSemValor: manut.semValor,
+      viagensEmMaisDeUmAcerto,
     },
     detalhe: {
       manutencoes: e.manutencoes.map(itemDespesa),

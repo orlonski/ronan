@@ -58,6 +58,11 @@ function ressalvas(r: RelatorioLucroResposta): string[] {
   if (a.manutencoesSemValor) {
     f.push(`${a.manutencoesSemValor} manutenção(ões) concluída(s) sem valor não entraram.`);
   }
+  if (a.viagensEmMaisDeUmAcerto) {
+    f.push(
+      `${a.viagensEmMaisDeUmAcerto} viagem(ns) aparecem em mais de um acerto do motorista — pode ter sido paga duas vezes. Aqui contou uma vez só.`,
+    );
+  }
   const fora = Number(r.frota.foraDaConta.combustivel) + Number(r.frota.foraDaConta.pedagio);
   if (fora > 0) {
     f.push(`${fmtBRL(String(fora))} de combustível e pedágio pagos pelo motorista sem reembolso ficaram fora da conta.`);

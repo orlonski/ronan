@@ -107,6 +107,14 @@ describe("calcularLucroVeiculo", () => {
     expect(r.custos.motorista).toBe("130.00");
   });
 
+  it("viagem em dois acertos conta UMA vez e avisa (pode ter sido paga em dobro)", () => {
+    const r = calcularLucroVeiculo(
+      entrada({ viagens: [viagem({ freteAcertado: 130, itensDeFreteNoAcerto: 2 })] }),
+    );
+    expect(r.custos.motorista).toBe("130.00");
+    expect(r.avisos.viagensEmMaisDeUmAcerto).toBe(1);
+  });
+
   it("régua que não cobre a viagem é avisada, não zerada em silêncio", () => {
     const r = calcularLucroVeiculo(
       entrada({ viagens: [viagem({ regra: regra({ tipo: "SEM_REMUNERACAO" }) })] }),

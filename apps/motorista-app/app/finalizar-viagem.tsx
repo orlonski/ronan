@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Flag } from "lucide-react-native";
@@ -32,6 +32,7 @@ import {
   finalizarViagemGuiada,
   getLifecycleLocal,
   salvarFinalizarDraft,
+  somarPedagiosMarcados,
   type LifecycleLocal,
 } from "@/lib/lifecycle";
 import {
@@ -74,6 +75,13 @@ export default function FinalizarViagem() {
   const [descargaNomeDraft, setDescargaNomeDraft] = useState<string | undefined>(undefined);
   const [descargaEm, setDescargaEm] = useState<string | undefined>(undefined);
   const [valorPedagio, setValorPedagio] = useState("");
+  // Mexeu no campo? Enquanto não, ele acompanha a soma dos "Paguei pedágio".
+  const [valorPedagioEditado, setValorPedagioEditado] = useState(false);
+  const pedagioEditadoRef = useRef(false);
+  // Soma dos "Paguei pedágio" marcados durante a viagem (0a).
+  const [pedagiosMarcados, setPedagiosMarcados] = useState<{ total: number; quantos: number } | null>(
+    null,
+  );
   const [observacao, setObservacao] = useState("");
   // Prova de entrega, opcional: quem recebeu e a assinatura no dedo.
   const pedeAssinatura = usePermite("app.viagem.assinatura");
@@ -93,7 +101,8 @@ export default function FinalizarViagem() {
 
   useEffect(() => {
     let alive = true;
-    void getLifecycleLocal().then((atual) => {
+    const fmt = (n: number) => n.toFixed(2).replace(".", ",");
+    void getLifecycleLocal().then(async (atual) => {
       if (!alive) return;
       if (!atual) {
         router.replace("/");
@@ -117,11 +126,34 @@ export default function FinalizarViagem() {
         if (d.rotaGeometria != null) setRotaGeometriaEscolhida(d.rotaGeometria);
         if (d.rotaIdx != null) setRotaIdx(d.rotaIdx);
         if (d.valorPedagio != null) setValorPedagio(d.valorPedagio);
+        if (d.valorPedagioEditado) {
+          pedagioEditadoRef.current = true;
+          setValorPedagioEditado(true);
+        }
         if (d.observacao != null) setObservacao(d.observacao);
         if (d.fotoUri && d.fotoMime) setFoto({ uri: d.fotoUri, mime: d.fotoMime });
       }
+      /**
+       * "Paguei pedágio" marcado na estrada vira o valor do campo Pedágio —
+       * senão o motorista acha que lançou e o valor nunca chegava ao acerto.
+       * Só preenche enquanto ele não mexeu no campo (e acompanha um pedágio
+       * marcado depois). Primeiro o que está no aparelho; o servidor só é
+       * consultado em segundo plano pra evento de versão antiga do app.
+       */
+      const soma = await somarPedagiosMarcados(atual);
+      if (!alive) return;
+      if (soma.quantos > 0) {
+        setPedagiosMarcados(soma);
+        if (!pedagioEditadoRef.current) setValorPedagio(fmt(soma.total));
+      }
       setHidratado(true);
       setCarregando(false);
+      if (soma.semValor > 0) {
+        const completa = await somarPedagiosMarcados(atual, { consultarServidor: true });
+        if (!alive || completa.quantos <= soma.quantos) return;
+        setPedagiosMarcados(completa);
+        if (!pedagioEditadoRef.current) setValorPedagio(fmt(completa.total));
+      }
     });
     return () => {
       alive = false;
@@ -143,7 +175,10 @@ export default function FinalizarViagem() {
     () => regrasDoModo(escolherModoDaLista(cat.data?.tiposServico, ciclo?.tipoServicoId)),
     [cat.data?.tiposServico, ciclo?.tipoServicoId],
   );
-  const { exigeMaterial, exigeLocalDescarga, exigeKm, mostraPedagio } = regras;
+  const { exigeMaterial, exigeLocalDescarga, exigeKm } = regras;
+  // O modo pode esconder o pedágio, mas se ele marcou "Paguei pedágio" com
+  // valor o campo aparece — senão o valor marcado não tinha pra onde ir (B5).
+  const mostraPedagio = regras.mostraPedagio || (pedagiosMarcados?.quantos ?? 0) > 0;
 
   /**
    * A transportadora exige a foto do comprovante? Roda offline (vem no bloco
@@ -339,6 +374,7 @@ export default function FinalizarViagem() {
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         rotaIdx,
         valorPedagio,
+        valorPedagioEditado,
         observacao,
         fotoUri: foto?.uri,
         fotoMime: foto?.mime,
@@ -360,6 +396,7 @@ export default function FinalizarViagem() {
     rotaGeometriaEscolhida,
     rotaIdx,
     valorPedagio,
+    valorPedagioEditado,
     observacao,
     foto,
   ]);
@@ -772,11 +809,20 @@ export default function FinalizarViagem() {
                       <Label>Pedágio (R$)</Label>
                       <Input
                         value={valorPedagio}
-                        onChangeText={setValorPedagio}
+                        onChangeText={(v) => {
+                          pedagioEditadoRef.current = true;
+                          setValorPedagioEditado(true);
+                          setValorPedagio(v);
+                        }}
                         keyboardType="decimal-pad"
                         placeholder="opcional"
                         maxLength={10}
                       />
+                      {pedagiosMarcados && pedagiosMarcados.quantos > 0 && !valorPedagioEditado ? (
+                        <Text className="text-xs text-muted-foreground">
+                          Somado dos pedágios que você marcou
+                        </Text>
+                      ) : null}
                     </View>
                   ) : null}
                 </View>

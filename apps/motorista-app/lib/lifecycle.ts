@@ -42,6 +42,12 @@ export type EventoLocal = {
   /** Ocorrência com duração: enquanto `terminouEm` for nulo, ela está correndo. */
   temDuracao?: boolean;
   terminouEm?: string | null;
+  /**
+   * Valor digitado no evento (ex.: "Paguei pedágio" R$ 23,40). Ausente em
+   * espelho gravado por versão antiga do app — ver `somarPedagiosMarcados`,
+   * que busca no outbox/servidor (compat on-read).
+   */
+  valor?: number;
 };
 
 /** Rascunho da tela de finalizar (persistido pra não perder ao voltar/sair). */
@@ -72,6 +78,11 @@ export type FinalizarDraft = {
   /** Índice da rota escolhida entre as alternativas (restaura o seletor). */
   rotaIdx?: number;
   valorPedagio?: string;
+  /**
+   * O motorista mexeu no campo Pedágio. Enquanto false, o campo acompanha a
+   * soma dos "Paguei pedágio" (que pode crescer se ele voltar e marcar outro).
+   */
+  valorPedagioEditado?: boolean;
   observacao?: string;
   fotoUri?: string;
   fotoMime?: string;
@@ -210,6 +221,8 @@ type ServerAndamento = {
       ocorridoEm: string;
       iniciouEm?: string | null;
       terminouEm?: string | null;
+      /** Decimal do Prisma chega como string no JSON. */
+      valor?: string | number | null;
     }[];
   } | null;
 };
@@ -286,6 +299,7 @@ export async function hidratarViagemDoServidor(): Promise<LifecycleLocal | null>
         // servidor que decide isso, a partir do tipo, e não o app.
         temDuracao: e.iniciouEm != null,
         terminouEm: e.terminouEm ?? null,
+        valor: numeroOuUndefined(e.valor),
       })),
     };
     await setLifecycleLocal(novo);
@@ -295,6 +309,80 @@ export async function hidratarViagemDoServidor(): Promise<LifecycleLocal | null>
     // "Retomar" legítimo nem ressuscitar nada). Reconcilia no próximo online.
     return atual;
   }
+}
+
+function numeroOuUndefined(v: unknown): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** O slug do evento "Paguei pedágio" (kit inicial). Só ele soma no finalizar. */
+export const SLUG_PAGUEI_PEDAGIO = "paguei-pedagio";
+
+/**
+ * Soma dos "Paguei pedágio" que o motorista marcou nesta viagem — vira o valor
+ * pré-preenchido do campo Pedágio no finalizar. UMA fonte só: o servidor não
+ * soma os eventos, quem leva o total é o campo do finalizar, que ele confere.
+ *
+ * Compat on-read: espelho gravado por versão antiga não tem `valor` no evento.
+ * Aí procura no outbox (o evento ainda não subiu) e, se `consultarServidor`,
+ * no /m/viagem/andamento (já subiu). O que não achar fica de fora da soma e
+ * conta em `semValor`.
+ */
+export async function somarPedagiosMarcados(
+  ciclo: LifecycleLocal,
+  opts: { consultarServidor?: boolean } = {},
+): Promise<{ total: number; quantos: number; semValor: number }> {
+  const marcados = ciclo.eventos.filter((e) => e.tipoSlug === SLUG_PAGUEI_PEDAGIO);
+  if (marcados.length === 0) return { total: 0, quantos: 0, semValor: 0 };
+
+  const valores = new Map<string, number>();
+  for (const e of marcados) if (e.valor != null) valores.set(e.id, e.valor);
+
+  if (valores.size < marcados.length) {
+    try {
+      const pendentes = await listPendingEventosViagem();
+      for (const p of pendentes) {
+        if (valores.has(p.clientId)) continue;
+        const v = numeroOuUndefined(p.payload?.valor);
+        if (v != null) valores.set(p.clientId, v);
+      }
+    } catch {
+      // Sem outbox legível: segue com o que tem.
+    }
+  }
+
+  if (valores.size < marcados.length && opts.consultarServidor) {
+    try {
+      const resp = await api.get<ServerAndamento>("/m/viagem/andamento");
+      const v = resp?.viagem;
+      if (v && v.clientId === ciclo.clientId) {
+        for (const e of v.eventosViagem ?? []) {
+          if (valores.has(e.id)) continue;
+          const n = numeroOuUndefined(e.valor);
+          if (n != null) valores.set(e.id, n);
+        }
+      }
+    } catch {
+      // Offline: o motorista digita, como sempre fez.
+    }
+  }
+
+  let total = 0;
+  let quantos = 0;
+  for (const e of marcados) {
+    const v = valores.get(e.id);
+    if (v != null && v > 0) {
+      total += v;
+      quantos++;
+    }
+  }
+  return {
+    total: Math.round(total * 100) / 100,
+    quantos,
+    semValor: marcados.filter((e) => !valores.has(e.id)).length,
+  };
 }
 
 // ---- Máquina de estados (puras) ----
@@ -529,6 +617,7 @@ export async function registrarEventoGuiado(input: {
       localNome: input.local?.nome,
       temDuracao: input.tipo.temDuracao,
       terminouEm: null,
+      valor: input.valor,
     },
   ];
   const patch: LifecycleLocal = { ...atual, eventos };

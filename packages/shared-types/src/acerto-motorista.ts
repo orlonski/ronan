@@ -133,6 +133,77 @@ export const MarcarAcertoPagoInput = z.object({
 });
 export type MarcarAcertoPagoInput = z.infer<typeof MarcarAcertoPagoInput>;
 
+/**
+ * Descarta um acerto ABERTO gerado errado (período trocado, lote rodado no mês
+ * errado). Solta os itens pra outro acerto pegar. FECHADO/PAGO não descarta.
+ */
+export const DescartarAcertoInput = z.object({
+  motivo: z.string().trim().min(10, "Escreva o motivo (pelo menos 10 letras).").max(500),
+});
+export type DescartarAcertoInput = z.infer<typeof DescartarAcertoInput>;
+
+/** A empresa marcou, na lista "Ficou de fora", o que entra neste acerto. */
+export const IncluirDeForaAcertoInput = z.object({
+  chaves: z.array(z.string().min(3).max(120)).min(1, "Marque pelo menos um lançamento.").max(500),
+});
+export type IncluirDeForaAcertoInput = z.infer<typeof IncluirDeForaAcertoInput>;
+
+export const DECISOES_PEDAGIO_DOBRO = ["MESMO_PEDAGIO", "PEDAGIOS_DIFERENTES"] as const;
+export type DecisaoPedagioDobro = (typeof DECISOES_PEDAGIO_DOBRO)[number];
+
+/** "É o mesmo pedágio" (o avulso sai deste acerto) ou "são pedágios diferentes". */
+export const DecidirPedagioDobroInput = z.object({
+  pedagioId: z.string().uuid(),
+  viagemId: z.string().uuid().optional(),
+  decisao: z.enum(DECISOES_PEDAGIO_DOBRO),
+});
+export type DecidirPedagioDobroInput = z.infer<typeof DecidirPedagioDobroInput>;
+
+/** O que a tela do acerto precisa conferir antes de fechar. Só leitura. */
+export type ConferenciaDoAcerto = {
+  /** Possível pedágio em dobro, por dia. */
+  pedagioEmDobro: Array<{
+    dia: string;
+    viagens: Array<{ itemId: string; viagemId: string; valor: string; descricao: string }>;
+    avulsos: Array<{
+      itemId: string;
+      pedagioId: string;
+      valor: string;
+      descricao: string;
+      decisao: {
+        decisao: DecisaoPedagioDobro;
+        decididoPor: string | null;
+        decididoEm: string;
+      } | null;
+    }>;
+    totalViagens: string;
+    totalAvulsos: string;
+    pendentes: number;
+  }>;
+  /** Avulsos que a empresa disse ser o mesmo pedágio da viagem: saíram deste acerto. */
+  pedagiosTirados: Array<{
+    pedagioId: string;
+    descricao: string;
+    valor: string;
+    decididoPor: string | null;
+    decididoEm: string;
+  }>;
+  /** Item de reembolso de abastecimento que casa com passada no cartão da empresa. */
+  pagoNoCartao: Array<{
+    itemId: string;
+    abastecimentoId: string;
+    transacao: { data: string; valor: number; posto: string | null; placa: string | null };
+  }>;
+  /** Lançamentos com data anterior ao período que não estão em acerto nenhum. */
+  ficouDeFora: Array<{
+    chave: string;
+    tipo: TipoItemAcertoTipo;
+    descricao: string;
+    valor: string;
+    data: string;
+  }>;
+};
+
 /** A régua de pagamento, usada no cadastro de modalidade e de motorista. */
 export const RemuneracaoInput = z.object({
   tipoRemuneracao: TipoRemuneracaoSchema.nullish(),

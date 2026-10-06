@@ -1,9 +1,13 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { AcaoAuditoria, Prisma } from "@prisma/client";
+import { AcaoAuditoria, Prisma, type TipoRemuneracao } from "@prisma/client";
 import type {
   AdicionarItemAcertoInput,
+  ConferenciaDoAcerto,
+  DecidirPedagioDobroInput,
+  DescartarAcertoInput,
   GerarAcertoInput,
   GerarAcertosEmLoteInput,
+  IncluirDeForaAcertoInput,
   MarcarAcertoPagoInput,
 } from "@ronan/shared-types";
 import { TIPOS_DEBITO_ACERTO } from "@ronan/shared-types";
@@ -13,13 +17,26 @@ import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, SEM_ESCOPO, type EscopoAdmin } from "../../common/escopo/escopo";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { dentroDeEmprego, periodosDeEmprego } from "../../common/regime-vigente";
+import { inicioDoDiaBR } from "../../common/timezone";
 import {
   calcularAcerto,
+  descricaoPedagioAvulso,
   resolverRemuneracao,
   totalizarAcerto,
   type AbastecimentoParaAcerto,
+  type ItemCalculado,
   type ViagemParaAcerto,
 } from "../../common/acerto-motorista";
+import {
+  chaveDoItem,
+  detectarPedagioEmDobro,
+  ficaramDeFora,
+  rotuloDoAcerto,
+  selecionarItensDoAcerto,
+  type DecisaoDobro,
+  type OcupacaoItem,
+} from "../../common/acerto-selecao";
+import { conciliarCartao } from "../../common/cartao-combustivel";
 
 type ListParams = PaginationQuery & {
   motoristaId?: string;
@@ -114,12 +131,208 @@ export class AcertosService {
   }
 
   /**
+   * O que a régua pagaria entre dois dias, pra um motorista — sem olhar se já
+   * está em algum acerto. Usado pelo gerar (o período) e pela lista "Ficou de
+   * fora" (o que é anterior ao período).
+   *
+   * As três buscas usam o dia civil de São Paulo: `Viagem.data` e
+   * `Pedagio.data` são @db.Date (o dia gravado), e `Abastecimento.data` é
+   * instante — a janela ancora em 03:00Z, senão o diesel das 21h às 23h59 do
+   * último dia caía no acerto seguinte.
+   */
+  private async calcularCandidatos(
+    motorista: {
+      id: string;
+      cpf: string | null;
+      tipoRemuneracao?: TipoRemuneracao | null;
+      percentualFrete?: Prisma.Decimal | null;
+      valorPorViagem?: Prisma.Decimal | null;
+      valorPorTonelada?: Prisma.Decimal | null;
+      valorPorKm?: Prisma.Decimal | null;
+      modalidade: Parameters<typeof resolverRemuneracao>[1];
+    },
+    deYmd: string,
+    ateYmd: string,
+  ) {
+    const de = diaUtc(deYmd);
+    const ate = diaUtc(ateYmd);
+    const regra = resolverRemuneracao(motorista, motorista.modalidade);
+
+    /**
+     * ⚠️ DIA EM QUE ELE ERA EMPREGADO NÃO ENTRA NO ACERTO. Nenhuma linha.
+     *
+     * O acerto É o documento de pagamento do PARCEIRO. O filtro de regime
+     * existia só nos dias de obra (o `regime: PARCEIRO` logo abaixo), e a
+     * busca de viagens não olhava regime nenhum — então quem fosse registrado
+     * em carteira e continuasse lançando viagem seguia gerando item de acerto
+     * por produção. Isso é pagamento por fora pra empregado (art. 457 §1º da
+     * CLT), e vinha com carimbo da nossa régua.
+     *
+     * A pergunta certa é por DATA, não "o que ele é hoje": quem foi parceiro
+     * até março e foi registrado em abril tem direito ao acerto de março.
+     */
+    const periodosEmprego = await periodosDeEmprego(this.prisma, motorista.cpf ?? "");
+    const foraDoEmprego = (data: Date | null) =>
+      data != null && !dentroDeEmprego(periodosEmprego, data);
+
+    const [viagens, abastecimentos, pedagiosAvulsos] = await Promise.all([
+      this.prisma.viagem.findMany({
+        where: {
+          motoristaId: motorista.id,
+          data: { gte: de, lte: ate },
+          // Viagem incompleta não entra no acerto pelo mesmo motivo que não
+          // entra no fechamento: pagar por uma viagem sem peso é pagar por um
+          // dado que ainda vai mudar.
+          status: { notIn: STATUS_FORA_FECHAMENTO },
+        },
+        select: {
+          id: true,
+          data: true,
+          ticket: true,
+          km: true,
+          toneladas: true,
+          valorPedagioTotal: true,
+          cliente: { select: { nome: true } },
+          valor: { select: { valorFrete: true } },
+          pedagios: { select: { id: true, valor: true, pracaPedagio: true } },
+        },
+        orderBy: { data: "asc" },
+      }),
+      this.prisma.abastecimento.findMany({
+        where: {
+          motoristaId: motorista.id,
+          data: {
+            gte: inicioDoDiaBR(deYmd),
+            lt: new Date(inicioDoDiaBR(ateYmd).getTime() + 86_400_000),
+          },
+        },
+        select: { id: true, data: true, valorTotal: true, postoNome: true, emComboio: true },
+        orderBy: { data: "asc" },
+      }),
+      this.prisma.pedagio.findMany({
+        where: {
+          motoristaId: motorista.id,
+          data: { gte: de, lte: ate },
+          viagemId: null,
+        },
+        select: { id: true, data: true, valor: true, pracaPedagio: true },
+        orderBy: { data: "asc" },
+      }),
+    ]);
+
+    // Avulso que a empresa disse ser o MESMO pedágio da viagem não volta a
+    // entrar ao regerar. Decisão de gente, com autor (0b).
+    const tirados = pedagiosAvulsos.length
+      ? await this.prisma.decisaoPedagioDobro.findMany({
+          where: { pedagioId: { in: pedagiosAvulsos.map((p) => p.id) }, decisao: "MESMO_PEDAGIO" },
+          select: { pedagioId: true },
+        })
+      : [];
+    const pedagiosTirados = new Set(tirados.map((t) => t.pedagioId));
+
+    const viagensParaAcerto: ViagemParaAcerto[] = viagens
+      // `Viagem.data` é nullable no schema (lifecycle abre sem data). O filtro
+      // de status já tira as incompletas, mas o tipo não sabe disso — e uma
+      // viagem sem data não tem como entrar num acerto POR PERÍODO.
+      .filter((v): v is typeof v & { data: Date } => v.data != null)
+      // Dia de vínculo fora — ver `periodosEmprego`.
+      .filter((v) => foraDoEmprego(v.data))
+      .map((v) => ({
+        id: v.id,
+        data: v.data,
+        ticket: v.ticket,
+        km: v.km,
+        toneladas: v.toneladas,
+        valorPedagioTotal: v.valorPedagioTotal,
+        valorFrete: v.valor?.valorFrete ?? null,
+        clienteNome: v.cliente?.nome ?? null,
+        pedagios: v.pedagios.map((p) => ({ id: p.id, valor: p.valor, praca: p.pracaPedagio })),
+      }));
+
+    const abastecimentosParaAcerto: AbastecimentoParaAcerto[] = abastecimentos
+      .filter((a) => foraDoEmprego(a.data))
+      .map((a) => ({
+        id: a.id,
+        data: a.data,
+        valorTotal: a.valorTotal,
+        postoNome: a.postoNome,
+        emComboio: a.emComboio,
+      }));
+
+    const avulsos = pedagiosAvulsos
+      .filter((p) => foraDoEmprego(p.data) && !pedagiosTirados.has(p.id))
+      .map((p) => ({ id: p.id, data: p.data, valor: p.valor, praca: p.pracaPedagio }));
+
+    const calculado = calcularAcerto({
+      viagens: viagensParaAcerto,
+      abastecimentos: abastecimentosParaAcerto,
+      pedagiosAvulsos: avulsos,
+      regra,
+    });
+
+    // A data de cada lançamento, pra lista "Ficou de fora" dizer de quando é.
+    const dataPorRef = new Map<string, Date>();
+    for (const v of viagensParaAcerto) dataPorRef.set(v.id, v.data);
+    for (const a of abastecimentosParaAcerto) dataPorRef.set(a.id, a.data);
+    for (const p of avulsos) dataPorRef.set(p.id, p.data);
+
+    return { calculado, regra, periodosEmprego, dataPorRef };
+  }
+
+  /** Todas as linhas de acerto (de qualquer acerto) que apontam pros lançamentos. */
+  private async ocupacoesDe(itens: ItemCalculado[]): Promise<OcupacaoItem[]> {
+    const viagemIds = [...new Set(itens.map((i) => i.viagemId).filter((x): x is string => !!x))];
+    const pedagioIds = [...new Set(itens.map((i) => i.pedagioId).filter((x): x is string => !!x))];
+    const abastIds = [
+      ...new Set(itens.map((i) => i.abastecimentoId).filter((x): x is string => !!x)),
+    ];
+    const ou: Prisma.ItemAcertoWhereInput[] = [];
+    if (viagemIds.length) ou.push({ viagemId: { in: viagemIds } });
+    if (pedagioIds.length) ou.push({ pedagioId: { in: pedagioIds } });
+    if (abastIds.length) ou.push({ abastecimentoId: { in: abastIds } });
+    if (ou.length === 0) return [];
+
+    const linhas = await this.prisma.itemAcerto.findMany({
+      where: { OR: ou },
+      select: {
+        id: true,
+        tipo: true,
+        viagemId: true,
+        pedagioId: true,
+        abastecimentoId: true,
+        automatico: true,
+        puxadoDe: true,
+        acerto: { select: { id: true, status: true, periodoInicio: true, periodoFim: true } },
+      },
+    });
+    const out: OcupacaoItem[] = [];
+    for (const l of linhas) {
+      const chave = chaveDoItem(l);
+      if (!chave) continue;
+      out.push({
+        itemId: l.id,
+        chave,
+        acertoId: l.acerto.id,
+        status: l.acerto.status,
+        periodoInicio: l.acerto.periodoInicio,
+        periodoFim: l.acerto.periodoFim,
+        automatico: l.automatico,
+        puxadoDe: l.puxadoDe,
+      });
+    }
+    return out;
+  }
+
+  /**
    * Gera ou REGENERA o acerto de um motorista no período.
    *
    * Regenerar é a operação normal, não a exceção: o operador abre o acerto no
    * dia 25, entram mais viagens até o 31, e ele gera de novo. Por isso só os
    * itens AUTOMÁTICOS são refeitos — o adiantamento que ele lançou à mão no dia
    * 25 tem que sobreviver, senão o trabalho dele se perde toda vez.
+   *
+   * O que entra: data dentro do período E fora de acerto FECHADO/PAGO. O que
+   * está em outro ABERTO vem pra cá com aviso. Ver common/acerto-selecao.ts.
    */
   async gerar(input: GerarAcertoInput, usuarioId: string) {
     const inicio = diaUtc(input.periodoInicio);
@@ -143,24 +356,11 @@ export class AcertosService {
       );
     }
 
-    const regra = resolverRemuneracao(motorista, motorista.modalidade);
-
-    /**
-     * ⚠️ DIA EM QUE ELE ERA EMPREGADO NÃO ENTRA NO ACERTO. Nenhuma linha.
-     *
-     * O acerto É o documento de pagamento do PARCEIRO. O filtro de regime
-     * existia só nos dias de obra (o `regime: PARCEIRO` logo abaixo), e a
-     * busca de viagens não olhava regime nenhum — então quem fosse registrado
-     * em carteira e continuasse lançando viagem seguia gerando item de acerto
-     * por produção. Isso é pagamento por fora pra empregado (art. 457 §1º da
-     * CLT), e vinha com carimbo da nossa régua.
-     *
-     * A pergunta certa é por DATA, não "o que ele é hoje": quem foi parceiro
-     * até março e foi registrado em abril tem direito ao acerto de março.
-     */
-    const periodosEmprego = await periodosDeEmprego(this.prisma, motorista.cpf ?? "");
-    const foraDoEmprego = (data: Date | null) =>
-      data != null && !dentroDeEmprego(periodosEmprego, data);
+    const { calculado, periodosEmprego } = await this.calcularCandidatos(
+      motorista,
+      input.periodoInicio,
+      input.periodoFim,
+    );
     // Período inteiro dentro do vínculo: não é acerto vazio, é acerto que não
     // existe. Vazio o operador leria como "ele não rodou".
     if (
@@ -176,91 +376,13 @@ export class AcertosService {
       );
     }
 
-    const [viagens, abastecimentos, pedagiosAvulsos] = await Promise.all([
-      this.prisma.viagem.findMany({
-        where: {
-          motoristaId: input.motoristaId,
-          data: { gte: inicio, lte: fim },
-          // Viagem incompleta não entra no acerto pelo mesmo motivo que não
-          // entra no fechamento: pagar por uma viagem sem peso é pagar por um
-          // dado que ainda vai mudar.
-          status: { notIn: STATUS_FORA_FECHAMENTO },
-        },
-        select: {
-          id: true,
-          data: true,
-          ticket: true,
-          km: true,
-          toneladas: true,
-          valorPedagioTotal: true,
-          cliente: { select: { nome: true } },
-          valor: { select: { valorFrete: true } },
-          pedagios: { select: { id: true, valor: true, pracaPedagio: true } },
-        },
-        orderBy: { data: "asc" },
-      }),
-      this.prisma.abastecimento.findMany({
-        where: {
-          motoristaId: input.motoristaId,
-          data: { gte: inicio, lt: new Date(fim.getTime() + 86_400_000) },
-        },
-        select: { id: true, data: true, valorTotal: true, postoNome: true, emComboio: true },
-        orderBy: { data: "asc" },
-      }),
-      this.prisma.pedagio.findMany({
-        where: {
-          motoristaId: input.motoristaId,
-          data: { gte: inicio, lte: fim },
-          viagemId: null,
-        },
-        select: { id: true, data: true, valor: true, pracaPedagio: true },
-        orderBy: { data: "asc" },
-      }),
-    ]);
-
-    const viagensParaAcerto: ViagemParaAcerto[] = viagens
-      // `Viagem.data` é nullable no schema (lifecycle abre sem data). O filtro
-      // de status já tira as incompletas, mas o tipo não sabe disso — e uma
-      // viagem sem data não tem como entrar num acerto POR PERÍODO.
-      .filter((v): v is typeof v & { data: Date } => v.data != null)
-      // Dia de vínculo fora — ver `periodosEmprego`.
-      .filter((v) => foraDoEmprego(v.data))
-      .map((v) => ({
-      id: v.id,
-      data: v.data,
-      ticket: v.ticket,
-      km: v.km,
-      toneladas: v.toneladas,
-      valorPedagioTotal: v.valorPedagioTotal,
-      valorFrete: v.valor?.valorFrete ?? null,
-      clienteNome: v.cliente?.nome ?? null,
-      pedagios: v.pedagios.map((p) => ({ id: p.id, valor: p.valor, praca: p.pracaPedagio })),
-    }));
-
-    const abastecimentosParaAcerto: AbastecimentoParaAcerto[] = abastecimentos
-      .filter((a) => foraDoEmprego(a.data))
-      .map((a) => ({
-        id: a.id,
-        data: a.data,
-        valorTotal: a.valorTotal,
-        postoNome: a.postoNome,
-        emComboio: a.emComboio,
-      }));
-
-    const calculado = calcularAcerto({
-      viagens: viagensParaAcerto,
-      abastecimentos: abastecimentosParaAcerto,
-      pedagiosAvulsos: pedagiosAvulsos
-        .filter((p) => foraDoEmprego(p.data))
-        .map((p) => ({
-          id: p.id,
-          data: p.data,
-          valor: p.valor,
-          praca: p.pracaPedagio,
-        })),
-      regra,
+    const selecao = selecionarItensDoAcerto({
+      candidatos: calculado.itens,
+      acertoAtualId: existente?.id ?? null,
+      ocupacoes: await this.ocupacoesDe(calculado.itens),
     });
 
+    const atual = { periodoInicio: inicio, periodoFim: fim };
     const acertoId = await this.prisma.$transaction(async (tx) => {
       const acerto = existente
         ? await tx.acertoMotorista.update({
@@ -275,12 +397,25 @@ export class AcertosService {
             },
           });
 
+      // O item que estava em outro acerto ABERTO sai de lá (e o total de lá é
+      // refeito). Nunca de FECHADO/PAGO — a seleção já não puxa desses.
+      const origens = [...new Set(selecao.puxar.map((p) => p.acertoId))];
+      if (selecao.puxar.length > 0) {
+        await tx.itemAcerto.deleteMany({
+          where: {
+            id: { in: selecao.puxar.map((p) => p.itemId) },
+            acerto: { status: "ABERTO" },
+          },
+        });
+        for (const origem of origens) await this.recalcularTotais(tx, origem);
+      }
+
       // Só o automático é varrido. Ver o comentário do método.
       await tx.itemAcerto.deleteMany({ where: { acertoId: acerto.id, automatico: true } });
 
-      if (calculado.itens.length > 0) {
+      if (selecao.entram.length > 0) {
         await tx.itemAcerto.createMany({
-          data: calculado.itens.map((i) => ({
+          data: selecao.entram.map((i) => ({
             acertoId: acerto.id,
             tipo: i.tipo,
             viagemId: i.viagemId ?? null,
@@ -289,6 +424,7 @@ export class AcertosService {
             descricao: i.descricao,
             valor: i.valor,
             automatico: true,
+            puxadoDe: i.puxadoDe,
           })),
         });
       }
@@ -304,9 +440,27 @@ export class AcertosService {
       acao: AcaoAuditoria.UPDATE,
       motivo: existente ? "Acerto regerado" : "Acerto gerado",
     });
+    // O acerto que perdeu o item precisa contar a história também: senão o
+    // número dele muda e ninguém sabe por quê.
+    for (const origem of [...new Set(selecao.puxar.map((p) => p.acertoId))]) {
+      const n = selecao.puxar.filter((p) => p.acertoId === origem).length;
+      await this.auditoria.log({
+        usuarioId,
+        entidade: "AcertoMotorista",
+        entidadeId: origem,
+        acao: AcaoAuditoria.UPDATE,
+        campo: "itens",
+        motivo: `${n} item(ns) saíram deste acerto pro ${rotuloDoAcerto(atual)}`,
+      });
+    }
 
     const detalhe = await this.detalhe(acertoId, null);
-    return { ...detalhe, semRemuneracao: calculado.semRemuneracao };
+    return {
+      ...detalhe,
+      semRemuneracao: calculado.semRemuneracao,
+      puxados: selecao.puxar.length,
+      jaFechados: selecao.jaFechados.length + selecao.aMaoEmOutro.length,
+    };
   }
 
   /**
@@ -327,10 +481,16 @@ export class AcertosService {
           select: { id: true, nome: true },
         });
 
-    const resultados: { motoristaId: string; nome: string; ok: boolean; erro?: string }[] = [];
+    const resultados: {
+      motoristaId: string;
+      nome: string;
+      ok: boolean;
+      erro?: string;
+      puxados?: number;
+    }[] = [];
     for (const m of motoristas) {
       try {
-        await this.gerar(
+        const r = await this.gerar(
           {
             motoristaId: m.id,
             periodoInicio: input.periodoInicio,
@@ -338,7 +498,7 @@ export class AcertosService {
           },
           usuarioId,
         );
-        resultados.push({ motoristaId: m.id, nome: m.nome, ok: true });
+        resultados.push({ motoristaId: m.id, nome: m.nome, ok: true, puxados: r.puxados });
       } catch (e) {
         // Um motorista com acerto já fechado não pode derrubar a geração dos
         // outros 30 — o operador quer o lote, não a primeira exceção.
@@ -353,6 +513,8 @@ export class AcertosService {
     return {
       total: resultados.length,
       gerados: resultados.filter((r) => r.ok).length,
+      /** Itens que saíram de outro acerto ABERTO pros gerados agora. */
+      puxados: resultados.reduce((s, r) => s + (r.puxados ?? 0), 0),
       resultados,
     };
   }
@@ -429,17 +591,66 @@ export class AcertosService {
     }
 
     const totais = totalizarAcerto(itens);
-    await this.prisma.acertoMotorista.update({
-      where: { id },
-      data: {
-        status: "FECHADO",
-        fechadoEm: new Date(),
-        fechadoPorId: usuarioId,
-        valorCreditos: totais.creditos,
-        valorDebitos: totais.debitos,
-        valorLiquido: totais.liquido,
-      },
-    });
+
+    // A trava: o mesmo lançamento não pode estar em dois acertos FECHADO/PAGO.
+    // Confere antes pra dizer QUAL item e EM QUAL acerto; o unique do banco
+    // (`chaveFechada`) segura a corrida entre dois fechamentos ao mesmo tempo.
+    const comChave = itens
+      .map((i) => ({ id: i.id, descricao: i.descricao, chave: chaveDoItem(i) }))
+      .filter((i): i is { id: string; descricao: string; chave: string } => i.chave != null);
+    const repetidoAqui = comChave.find(
+      (i, idx) => comChave.findIndex((j) => j.chave === i.chave) !== idx,
+    );
+    if (repetidoAqui) {
+      throw new ConflictException(
+        `"${repetidoAqui.descricao}" aparece duas vezes neste acerto. Remova uma das linhas antes de fechar.`,
+      );
+    }
+    if (comChave.length > 0) {
+      const conflitos = await this.prisma.itemAcerto.findMany({
+        where: { chaveFechada: { in: comChave.map((i) => i.chave) }, acertoId: { not: id } },
+        select: {
+          chaveFechada: true,
+          acerto: { select: { periodoInicio: true, periodoFim: true, status: true } },
+        },
+        take: 5,
+      });
+      if (conflitos.length > 0) throw this.erroItemJaFechado(conflitos, comChave);
+    }
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.acertoMotorista.update({
+          where: { id },
+          data: {
+            status: "FECHADO",
+            fechadoEm: new Date(),
+            fechadoPorId: usuarioId,
+            valorCreditos: totais.creditos,
+            valorDebitos: totais.debitos,
+            valorLiquido: totais.liquido,
+          },
+        });
+        for (const i of comChave) {
+          await tx.itemAcerto.update({ where: { id: i.id }, data: { chaveFechada: i.chave } });
+        }
+      });
+    } catch (e) {
+      // Outro fechamento pegou o mesmo item entre a conferência e aqui. 409
+      // legível, nunca 500.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        const conflitos = await this.prisma.itemAcerto.findMany({
+          where: { chaveFechada: { in: comChave.map((i) => i.chave) }, acertoId: { not: id } },
+          select: {
+            chaveFechada: true,
+            acerto: { select: { periodoInicio: true, periodoFim: true, status: true } },
+          },
+          take: 5,
+        });
+        throw this.erroItemJaFechado(conflitos, comChave);
+      }
+      throw e;
+    }
     // Fechar o acerto cria a CONTA A PAGAR. É o que liga o que foi apurado ao
     // dinheiro que sai: sem isso o acerto seria mais um número na tela e o
     // pagamento continuaria sendo lembrado de cabeça.
@@ -497,9 +708,14 @@ export class AcertosService {
       );
     }
 
-    await this.prisma.acertoMotorista.update({
-      where: { id },
-      data: { status: "ABERTO", fechadoEm: null, fechadoPorId: null },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.acertoMotorista.update({
+        where: { id },
+        data: { status: "ABERTO", fechadoEm: null, fechadoPorId: null },
+      });
+      // Aberto não trava item: solta a chave pra que regerar (ou outro acerto)
+      // possa mexer de novo. Volta a travar no próximo fechamento.
+      await tx.itemAcerto.updateMany({ where: { acertoId: id }, data: { chaveFechada: null } });
     });
     await this.auditoria.log({
       usuarioId,
@@ -543,6 +759,481 @@ export class AcertosService {
       motivo: `Pago via ${input.meio}`,
     });
     return this.detalhe(id, null);
+  }
+
+  private erroItemJaFechado(
+    conflitos: {
+      chaveFechada: string | null;
+      acerto: { periodoInicio: Date; periodoFim: Date; status: string };
+    }[],
+    itens: { chave: string; descricao: string }[],
+  ): ConflictException {
+    const frases = conflitos.map((c) => {
+      const item = itens.find((i) => i.chave === c.chaveFechada);
+      const estado = c.acerto.status === "PAGO" ? "pago" : "fechado";
+      return `"${item?.descricao ?? "lançamento"}" já está no ${rotuloDoAcerto(c.acerto)} (${estado})`;
+    });
+    return new ConflictException(
+      `${frases.join("; ")}. O mesmo lançamento não pode ser pago em dois acertos — ` +
+        "gere este acerto de novo (o que já está fechado sai sozinho) e feche outra vez.",
+    );
+  }
+
+  /**
+   * Descarta um acerto ABERTO gerado errado (período trocado, lote no mês
+   * errado). Os itens dele ficam livres pra outro acerto pegar. Fica a
+   * auditoria com o que ele tinha e o motivo.
+   *
+   * FECHADO/PAGO não descarta: é combinado com o motorista (e o pago já saiu
+   * do caixa). Pra mexer, reabre — e pago nem isso.
+   */
+  async descartar(id: string, input: DescartarAcertoInput, usuarioId: string) {
+    const acerto = await this.prisma.acertoMotorista.findUnique({
+      where: { id },
+      include: {
+        motorista: { select: { nome: true } },
+        itens: { select: { tipo: true, descricao: true, valor: true, automatico: true } },
+      },
+    });
+    if (!acerto) throw new NotFoundException("Acerto não encontrado");
+    if (acerto.status !== "ABERTO") {
+      throw new ConflictException(
+        acerto.status === "PAGO"
+          ? "Acerto pago não se descarta: o dinheiro já saiu. Se algo saiu errado, lance um ajuste no próximo acerto."
+          : "Acerto fechado não se descarta. Reabra antes, se precisar mesmo descartar.",
+      );
+    }
+    // Acerto que já foi fechado uma vez e reaberto pode ter conta a pagar viva.
+    const titulo = await this.prisma.tituloPagar.findFirst({
+      where: { acertoId: id, status: { not: "CANCELADO" } },
+      select: { id: true },
+    });
+    if (titulo) {
+      throw new ConflictException(
+        "Este acerto já gerou uma conta a pagar. Cancele a conta a pagar antes de descartar o acerto.",
+      );
+    }
+
+    await this.prisma.acertoMotorista.delete({ where: { id } });
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "AcertoMotorista",
+      entidadeId: id,
+      acao: AcaoAuditoria.DELETE,
+      campo: "acerto",
+      valorAntes: {
+        motorista: acerto.motorista.nome,
+        motoristaId: acerto.motoristaId,
+        periodoInicio: acerto.periodoInicio.toISOString().slice(0, 10),
+        periodoFim: acerto.periodoFim.toISOString().slice(0, 10),
+        liquido: acerto.valorLiquido.toString(),
+        itens: acerto.itens.map((i) => ({
+          tipo: i.tipo,
+          descricao: i.descricao,
+          valor: i.valor.toString(),
+          automatico: i.automatico,
+        })),
+      },
+      motivo: input.motivo,
+    });
+    return { ok: true };
+  }
+
+  /**
+   * O que conferir antes de fechar: possível pedágio em dobro (0b), reembolso
+   * de diesel que passou no cartão da empresa (0d) e o que ficou de fora de
+   * acertos anteriores (0c). Só leitura — nada entra nem sai daqui.
+   */
+  async conferencia(id: string): Promise<ConferenciaDoAcerto> {
+    const acerto = await this.prisma.acertoMotorista.findUnique({
+      where: { id },
+      include: {
+        itens: {
+          select: {
+            id: true,
+            tipo: true,
+            viagemId: true,
+            pedagioId: true,
+            abastecimentoId: true,
+            descricao: true,
+            valor: true,
+          },
+        },
+      },
+    });
+    if (!acerto) throw new NotFoundException("Acerto não encontrado");
+
+    const [pedagio, cartao, deFora] = await Promise.all([
+      this.conferirPedagioEmDobro(acerto.id, acerto.itens),
+      this.conferirCartao(acerto.itens),
+      acerto.status === "ABERTO" ? this.listarDeFora(acerto) : Promise.resolve([]),
+    ]);
+
+    return {
+      pedagioEmDobro: pedagio.grupos.map((g) => ({
+        ...g,
+        avulsos: g.avulsos.map((a) => ({
+          ...a,
+          decisao: a.decisao
+            ? {
+                decisao: a.decisao.decisao,
+                decididoPor: a.decisao.decididoPor,
+                decididoEm: a.decisao.decididoEm.toISOString(),
+              }
+            : null,
+        })),
+      })),
+      pedagiosTirados: pedagio.tirados,
+      pagoNoCartao: cartao,
+      ficouDeFora: deFora.map((i) => ({
+        chave: i.chave,
+        tipo: i.tipo,
+        descricao: i.descricao,
+        valor: i.valor,
+        data: i.data.toISOString(),
+      })),
+    };
+  }
+
+  private async conferirPedagioEmDobro(
+    acertoId: string,
+    itens: {
+      id: string;
+      tipo: string;
+      viagemId: string | null;
+      pedagioId: string | null;
+      descricao: string;
+      valor: Prisma.Decimal;
+    }[],
+  ) {
+    const daViagem = itens.filter((i) => i.tipo === "REEMBOLSO_PEDAGIO" && i.viagemId);
+    const avulsos = itens.filter((i) => i.tipo === "REEMBOLSO_PEDAGIO" && !i.viagemId && i.pedagioId);
+
+    const [viagens, pedagios, decisoes] = await Promise.all([
+      daViagem.length && avulsos.length
+        ? this.prisma.viagem.findMany({
+            where: { id: { in: daViagem.map((i) => i.viagemId!) } },
+            select: { id: true, data: true, valorPedagioTotal: true },
+          })
+        : Promise.resolve([]),
+      avulsos.length
+        ? this.prisma.pedagio.findMany({
+            where: { id: { in: avulsos.map((i) => i.pedagioId!) } },
+            select: { id: true, data: true },
+          })
+        : Promise.resolve([]),
+      this.prisma.decisaoPedagioDobro.findMany({
+        where: {
+          OR: [
+            { pedagioId: { in: avulsos.map((i) => i.pedagioId!) } },
+            { acertoId, decisao: "MESMO_PEDAGIO" },
+          ],
+        },
+        include: {
+          decididoPor: { select: { nome: true } },
+          pedagio: { select: { data: true, valor: true, pracaPedagio: true } },
+        },
+      }),
+    ]);
+
+    const viagemPorId = new Map(viagens.map((v) => [v.id, v]));
+    const pedagioPorId = new Map(pedagios.map((p) => [p.id, p]));
+    const mapaDecisoes = new Map<string, DecisaoDobro>(
+      decisoes.map((d) => [
+        d.pedagioId,
+        { decisao: d.decisao, decididoPor: d.decididoPor?.nome ?? null, decididoEm: d.decididoEm },
+      ]),
+    );
+
+    const grupos = detectarPedagioEmDobro({
+      viagens: daViagem.flatMap((i) => {
+        const v = viagemPorId.get(i.viagemId!);
+        if (!v?.data) return [];
+        return [
+          {
+            itemId: i.id,
+            viagemId: v.id,
+            dia: v.data.toISOString().slice(0, 10),
+            valorPedagioTotal: v.valorPedagioTotal,
+            valor: i.valor,
+            descricao: i.descricao,
+          },
+        ];
+      }),
+      avulsos: avulsos.flatMap((i) => {
+        const p = pedagioPorId.get(i.pedagioId!);
+        if (!p) return [];
+        return [
+          {
+            itemId: i.id,
+            pedagioId: p.id,
+            dia: p.data.toISOString().slice(0, 10),
+            valor: i.valor,
+            descricao: i.descricao,
+          },
+        ];
+      }),
+      decisoes: mapaDecisoes,
+    });
+
+    const tirados = decisoes
+      .filter((d) => d.decisao === "MESMO_PEDAGIO" && d.acertoId === acertoId)
+      .map((d) => ({
+        pedagioId: d.pedagioId,
+        descricao: descricaoPedagioAvulso({ data: d.pedagio.data, praca: d.pedagio.pracaPedagio }),
+        valor: d.pedagio.valor.toFixed(2),
+        decididoPor: d.decididoPor?.nome ?? null,
+        decididoEm: d.decididoEm.toISOString(),
+      }));
+
+    return { grupos, tirados };
+  }
+
+  /**
+   * Reembolso de abastecimento que casa com passada no cartão-combustível da
+   * empresa. Usa a MESMA conciliação da tela do cartão (dia vizinho + placa),
+   * calculada agora. Não corta nada: a empresa decide.
+   */
+  private async conferirCartao(
+    itens: { id: string; tipo: string; abastecimentoId: string | null }[],
+  ): Promise<ConferenciaDoAcerto["pagoNoCartao"]> {
+    const doAcerto = itens.filter((i) => i.tipo === "REEMBOLSO_ABASTECIMENTO" && i.abastecimentoId);
+    if (doAcerto.length === 0) return [];
+
+    const meus = await this.prisma.abastecimento.findMany({
+      where: { id: { in: doAcerto.map((i) => i.abastecimentoId!) } },
+      select: { id: true, veiculoId: true, data: true },
+    });
+    if (meus.length === 0) return [];
+    const veiculoIds = [...new Set(meus.map((a) => a.veiculoId))];
+    const t0 = Math.min(...meus.map((a) => a.data.getTime()));
+    const t1 = Math.max(...meus.map((a) => a.data.getTime()));
+    // Folga de 2 dias: o casamento aceita o dia vizinho, e a transação vizinha
+    // pode estar disputando com outro abastecimento do mesmo caminhão.
+    const de = new Date(t0 - 2 * 86_400_000);
+    const ate = new Date(t1 + 2 * 86_400_000);
+
+    const transacoes = await this.prisma.transacaoCartao.findMany({
+      where: { veiculoId: { in: veiculoIds }, data: { gte: de, lte: ate } },
+      select: { id: true, data: true, placa: true, veiculoId: true, litros: true, valor: true, posto: true },
+    });
+    if (transacoes.length === 0) return [];
+
+    // Os outros abastecimentos do caminhão na janela entram na disputa, igual
+    // na tela do cartão — senão o deste acerto "roubava" a passada de outro.
+    const todos = await this.prisma.abastecimento.findMany({
+      where: { veiculoId: { in: veiculoIds }, data: { gte: de, lte: ate } },
+      select: { id: true, veiculoId: true, data: true, litros: true, valorTotal: true, emComboio: true },
+    });
+    const { itens: casados } = conciliarCartao(
+      transacoes.map((t) => ({
+        id: t.id,
+        data: t.data,
+        placa: t.placa,
+        veiculoId: t.veiculoId,
+        litros: t.litros != null ? Number(t.litros) : null,
+        valor: Number(t.valor),
+      })),
+      todos.map((a) => ({
+        id: a.id,
+        veiculoId: a.veiculoId,
+        data: a.data,
+        litros: Number(a.litros),
+        valorTotal: a.valorTotal != null ? Number(a.valorTotal) : null,
+        emComboio: a.emComboio,
+      })),
+    );
+    const transacaoPorAbast = new Map<string, (typeof transacoes)[number]>();
+    const tPorId = new Map(transacoes.map((t) => [t.id, t]));
+    for (const c of casados) {
+      if (c.abastecimentoId) transacaoPorAbast.set(c.abastecimentoId, tPorId.get(c.transacaoId)!);
+    }
+
+    return doAcerto.flatMap((i) => {
+      const t = transacaoPorAbast.get(i.abastecimentoId!);
+      if (!t) return [];
+      return [
+        {
+          itemId: i.id,
+          abastecimentoId: i.abastecimentoId!,
+          transacao: {
+            data: t.data.toISOString(),
+            valor: Number(t.valor),
+            posto: t.posto,
+            placa: t.placa,
+          },
+        },
+      ];
+    });
+  }
+
+  /**
+   * "Ficou de fora de acertos anteriores": o que tem data ANTERIOR ao período
+   * deste acerto, a régua pagaria, e não está em acerto nenhum. Nada daqui
+   * entra sozinho (D3) — a empresa marca.
+   *
+   * O piso é o início do PRIMEIRO acerto do motorista: antes dele a empresa
+   * pagava fora do sistema, e listar o histórico inteiro seria só ruído.
+   */
+  private async listarDeFora(acerto: {
+    id: string;
+    motoristaId: string;
+    periodoInicio: Date;
+  }) {
+    const primeiro = await this.prisma.acertoMotorista.findFirst({
+      where: { motoristaId: acerto.motoristaId },
+      orderBy: { periodoInicio: "asc" },
+      select: { periodoInicio: true },
+    });
+    if (!primeiro || primeiro.periodoInicio.getTime() >= acerto.periodoInicio.getTime()) return [];
+
+    const motorista = await this.prisma.motorista.findUnique({
+      where: { id: acerto.motoristaId },
+      include: { modalidade: true },
+    });
+    if (!motorista) return [];
+
+    const deYmd = primeiro.periodoInicio.toISOString().slice(0, 10);
+    const ateYmd = new Date(acerto.periodoInicio.getTime() - 86_400_000).toISOString().slice(0, 10);
+    const { calculado, dataPorRef } = await this.calcularCandidatos(motorista, deYmd, ateYmd);
+    const ocupadas = new Set((await this.ocupacoesDe(calculado.itens)).map((o) => o.chave));
+
+    return ficaramDeFora(calculado.itens, ocupadas).map((i) => ({
+      ...i,
+      data:
+        dataPorRef.get(i.viagemId ?? i.pedagioId ?? i.abastecimentoId ?? "") ?? acerto.periodoInicio,
+    }));
+  }
+
+  /** A empresa marcou o que entra da lista "Ficou de fora". */
+  async incluirDeFora(id: string, input: IncluirDeForaAcertoInput, usuarioId: string) {
+    const acerto = await this.exigirAberto(id);
+    const lista = await this.listarDeFora(acerto);
+    const pedidas = new Set(input.chaves);
+    const escolhidas = lista.filter((i) => pedidas.has(i.chave));
+    if (escolhidas.length === 0) {
+      throw new ConflictException(
+        "Esses lançamentos não estão mais de fora — outro acerto já pegou. Recarregue a tela.",
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.itemAcerto.createMany({
+        data: escolhidas.map((i) => ({
+          acertoId: id,
+          tipo: i.tipo,
+          viagemId: i.viagemId ?? null,
+          pedagioId: i.pedagioId ?? null,
+          abastecimentoId: i.abastecimentoId ?? null,
+          descricao: i.descricao,
+          valor: i.valor,
+          // À mão: é decisão da empresa, sobrevive a regerar, e sai pela lixeira.
+          automatico: false,
+          motivo: "Ficou de fora de acerto anterior — incluído pela empresa.",
+          criadoPorId: usuarioId,
+        })),
+      });
+      await this.recalcularTotais(tx, id);
+    });
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "AcertoMotorista",
+      entidadeId: id,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "itens",
+      valorDepois: escolhidas.map((i) => ({ descricao: i.descricao, valor: i.valor })),
+      motivo: `Incluiu ${escolhidas.length} lançamento(s) que tinham ficado de fora`,
+    });
+    return this.detalhe(id, null);
+  }
+
+  /**
+   * "É o mesmo pedágio" tira o avulso deste acerto (e de qualquer regeração);
+   * "são pedágios diferentes" só cala o aviso. Decisão de gente, com autor.
+   */
+  async decidirPedagioDobro(id: string, input: DecidirPedagioDobroInput, usuarioId: string) {
+    const acerto = await this.exigirAberto(id);
+    const pedagio = await this.prisma.pedagio.findFirst({
+      where: { id: input.pedagioId, motoristaId: acerto.motoristaId, viagemId: null },
+      select: { id: true },
+    });
+    if (!pedagio) throw new NotFoundException("Pedágio avulso não encontrado neste acerto.");
+
+    const anterior = await this.prisma.decisaoPedagioDobro.findFirst({
+      where: { pedagioId: input.pedagioId },
+      select: { id: true, decisao: true },
+    });
+    await this.prisma.$transaction(async (tx) => {
+      const dados = {
+        viagemId: input.viagemId ?? null,
+        acertoId: id,
+        decisao: input.decisao,
+        decididoPorId: usuarioId,
+        decididoEm: new Date(),
+      };
+      if (anterior) {
+        await tx.decisaoPedagioDobro.update({ where: { id: anterior.id }, data: dados });
+      } else {
+        await tx.decisaoPedagioDobro.create({ data: { pedagioId: input.pedagioId, ...dados } });
+      }
+      if (input.decisao === "MESMO_PEDAGIO") {
+        await tx.itemAcerto.deleteMany({
+          where: {
+            acertoId: id,
+            tipo: "REEMBOLSO_PEDAGIO",
+            pedagioId: input.pedagioId,
+            viagemId: null,
+          },
+        });
+        await this.recalcularTotais(tx, id);
+      }
+    });
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "AcertoMotorista",
+      entidadeId: id,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "pedagioEmDobro",
+      valorAntes: anterior?.decisao ?? null,
+      valorDepois: { pedagioId: input.pedagioId, viagemId: input.viagemId, decisao: input.decisao },
+      motivo:
+        input.decisao === "MESMO_PEDAGIO"
+          ? "É o mesmo pedágio da viagem: o avulso saiu do acerto"
+          : "São pedágios diferentes: os dois ficam",
+    });
+    return this.conferencia(id);
+  }
+
+  /** Volta atrás numa decisão. Se o avulso tinha saído, o acerto é regerado e ele volta. */
+  async desfazerDecisaoPedagio(id: string, pedagioId: string, usuarioId: string) {
+    const acerto = await this.exigirAberto(id);
+    const d = await this.prisma.decisaoPedagioDobro.findFirst({
+      where: { pedagioId },
+      select: { id: true, decisao: true },
+    });
+    if (!d) throw new NotFoundException("Não há decisão sobre esse pedágio.");
+    await this.prisma.decisaoPedagioDobro.delete({ where: { id: d.id } });
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "AcertoMotorista",
+      entidadeId: id,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "pedagioEmDobro",
+      valorAntes: { pedagioId, decisao: d.decisao },
+      valorDepois: null,
+      motivo: "Desfez a decisão sobre possível pedágio em dobro",
+    });
+    if (d.decisao === "MESMO_PEDAGIO") {
+      await this.gerar(
+        {
+          motoristaId: acerto.motoristaId,
+          periodoInicio: acerto.periodoInicio.toISOString().slice(0, 10),
+          periodoFim: acerto.periodoFim.toISOString().slice(0, 10),
+        },
+        usuarioId,
+      );
+    }
+    return this.conferencia(id);
   }
 
   private async exigirAberto(id: string) {

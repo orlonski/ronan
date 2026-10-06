@@ -309,8 +309,10 @@ export class RelatoriosLucroService {
           pedagios: x.pedagios,
           valorTotal: x.valor?.valorTotal ?? null,
           // Uma viagem pode estar em mais de um acerto só por erro; somar
-          // pagaria duas vezes no relatório também. Vale o primeiro.
+          // pagaria duas vezes no relatório também. Vale o primeiro — e a
+          // tela AVISA, porque o erro aqui é dinheiro que saiu duas vezes.
           freteAcertado: x.itensAcerto[0]?.valor ?? null,
+          itensDeFreteNoAcerto: x.itensAcerto.length,
           regra: reguaNoDia(x.motoristaId, x.data),
           obra:
             x.clienteId && x.cliente
@@ -419,6 +421,7 @@ function totalizar(linhas: LinhaLucroVeiculo[]): RelatorioLucroResposta["frota"]
     "abastecimentosEstimados",
     "abastecimentosSemPreco",
     "manutencoesSemValor",
+    "viagensEmMaisDeUmAcerto",
   ];
   const avisos = Object.fromEntries(
     chavesAviso.map((k) => [k, linhas.reduce((s, l) => s + l.avisos[k], 0)]),

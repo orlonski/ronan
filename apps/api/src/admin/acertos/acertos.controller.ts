@@ -4,8 +4,11 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import {
   AdicionarItemAcertoInput,
+  DecidirPedagioDobroInput,
+  DescartarAcertoInput,
   GerarAcertoInput,
   GerarAcertosEmLoteInput,
+  IncluirDeForaAcertoInput,
   MarcarAcertoPagoInput,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -63,6 +66,18 @@ export class AcertosController {
   @Get(":id")
   detalhe(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.detalhe(id, user.escopo);
+  }
+
+  /**
+   * O que conferir antes de fechar: possível pedágio em dobro, diesel que
+   * passou no cartão da empresa e o que ficou de fora de acertos anteriores.
+   */
+  @EscopoPor("motorista")
+  @RequerPermissao("acertos.ver")
+  @Get(":id/conferencia")
+  async conferencia(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    await this.service.detalhe(id, user.escopo);
+    return this.service.conferencia(id);
   }
 
   /** O extrato em PDF (o detalhe antes garante o escopo de frota). */
@@ -124,6 +139,57 @@ export class AcertosController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.service.removerItem(id, itemId, user.id);
+  }
+
+  /** Descarta um acerto ABERTO gerado errado. Motivo obrigatório; FECHADO/PAGO não. */
+  @EscopoPor("motorista")
+  @RequerPermissao("acertos.gerar")
+  @Post(":id/descartar")
+  async descartar(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(DescartarAcertoInput)) body: DescartarAcertoInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    await this.service.detalhe(id, user.escopo);
+    return this.service.descartar(id, body, user.id);
+  }
+
+  /** Inclui o que a empresa marcou na lista "Ficou de fora de acertos anteriores". */
+  @EscopoPor("motorista")
+  @RequerPermissao("acertos.gerar")
+  @Post(":id/incluir-de-fora")
+  async incluirDeFora(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(IncluirDeForaAcertoInput)) body: IncluirDeForaAcertoInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    await this.service.detalhe(id, user.escopo);
+    return this.service.incluirDeFora(id, body, user.id);
+  }
+
+  /** "É o mesmo pedágio" / "São pedágios diferentes" — decisão com autor. */
+  @EscopoPor("motorista")
+  @RequerPermissao("acertos.gerar")
+  @Post(":id/pedagio-dobro")
+  async decidirPedagioDobro(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(DecidirPedagioDobroInput)) body: DecidirPedagioDobroInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    await this.service.detalhe(id, user.escopo);
+    return this.service.decidirPedagioDobro(id, body, user.id);
+  }
+
+  @EscopoPor("motorista")
+  @RequerPermissao("acertos.gerar")
+  @Delete(":id/pedagio-dobro/:pedagioId")
+  async desfazerDecisaoPedagio(
+    @Param("id") id: string,
+    @Param("pedagioId") pedagioId: string,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    await this.service.detalhe(id, user.escopo);
+    return this.service.desfazerDecisaoPedagio(id, pedagioId, user.id);
   }
 
   // Fechar e pagar são chaves próprias, separadas de `gerar`: montar o acerto é

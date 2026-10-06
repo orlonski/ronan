@@ -1,4 +1,5 @@
 import { Prisma, type TipoRemuneracao } from "@prisma/client";
+import { dataBRDeInstante } from "./acerto-selecao";
 
 /**
  * Quanto a empresa deve ao motorista no período.
@@ -132,10 +133,16 @@ export function pedagioDaViagem(v: Pick<ViagemParaAcerto, "valorPedagioTotal" | 
   return { valor: soma, pedagioIds: v.pedagios.map((p) => p.id) };
 }
 
+/** Pra colunas @db.Date (viagem, pedágio): a meia-noite UTC É o dia gravado. */
 function fmtData(d: Date): string {
   const iso = d.toISOString().slice(0, 10);
   const [a, m, dia] = iso.split("-");
   return `${dia}/${m}/${a}`;
+}
+
+/** O texto da linha de um pedágio avulso — o mesmo no gerar e no "desfazer". */
+export function descricaoPedagioAvulso(p: { data: Date; praca?: string | null }): string {
+  return `Pedágio ${fmtData(p.data)}${p.praca ? ` · ${p.praca}` : ""}`;
 }
 
 /** Quanto o motorista ganha por UMA viagem, pela régua. Null = a régua não cobre. */
@@ -232,7 +239,7 @@ export function calcularAcerto(args: {
       itens.push({
         tipo: "REEMBOLSO_PEDAGIO",
         pedagioId: p.id,
-        descricao: `Pedágio ${fmtData(p.data)}${p.praca ? ` · ${p.praca}` : ""}`,
+        descricao: descricaoPedagioAvulso(p),
         valor: valor.toFixed(2),
       });
     }
@@ -248,7 +255,9 @@ export function calcularAcerto(args: {
       itens.push({
         tipo: "REEMBOLSO_ABASTECIMENTO",
         abastecimentoId: a.id,
-        descricao: `Abastecimento ${fmtData(a.data)}${a.postoNome ? ` · ${a.postoNome}` : ""}`,
+        // Abastecimento é instante (timestamp): o dia é o de São Paulo. Pelo
+        // UTC, o das 21h às 23h59 saía com a data do dia seguinte.
+        descricao: `Abastecimento ${dataBRDeInstante(a.data)}${a.postoNome ? ` · ${a.postoNome}` : ""}`,
         valor: valor.toFixed(2),
       });
     }

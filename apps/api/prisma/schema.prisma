@@ -565,6 +565,7 @@ model Conta {
   viagemValores                  ViagemValor[]
   acertosMotorista               AcertoMotorista[]
   itensAcerto                    ItemAcerto[]
+  decisoesPedagioDobro           DecisaoPedagioDobro[]
   pedidos                        Pedido[]
   orcamentos                     Orcamento[]
   orcamentoItens                 OrcamentoItem[]
@@ -783,6 +784,7 @@ model User {
   acertosFechados           AcertoMotorista[]     @relation("FechouAcerto")
   acertosPagos              AcertoMotorista[]     @relation("PagouAcerto")
   itensAcertoCriados        ItemAcerto[]          @relation("CriouItemAcerto")
+  decisoesPedagioDobro      DecisaoPedagioDobro[] @relation("DecidiuPedagioDobro")
   pedidosCriados            Pedido[]              @relation("CriouPedido")
   anexosPedidoEnviados      AnexoPedido[]         @relation("EnviouAnexoPedido")
   orcamentosCriados         Orcamento[]           @relation("CriouOrcamento")
@@ -2705,11 +2707,51 @@ model ItemAcerto {
   criadoPor       User?           @relation("CriouItemAcerto", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId     String?
   criadoEm        DateTime        @default(now())
+  /// "Este item saiu do acerto de 01/09 a 15/09": o item estava em outro acerto
+  /// ABERTO e foi puxado pra este ao gerar. Texto pra tela, não regra.
+  puxadoDe        String?
+  /// A trava contra pagar o mesmo lançamento duas vezes. Preenchida SÓ quando o
+  /// acerto fecha (e limpa ao reabrir): "FRETE:<viagemId>", "PEDAGIO:<id>"…
+  /// (ver `chaveDoItem` em common/acerto-selecao.ts). O unique faz o banco
+  /// recusar o mesmo lançamento em dois acertos FECHADO/PAGO.
+  chaveFechada    String?
 
+  @@unique([contaId, chaveFechada])
   @@index([acertoId])
   @@index([viagemId])
+  @@index([pedagioId])
+  @@index([abastecimentoId])
   @@index([contaId])
   @@map("itens_acerto")
+}
+
+/// Decisão humana sobre um possível pedágio em dobro: o avulso (sem viagem) caiu
+/// no mesmo dia de uma viagem que já tem pedágio total. Ninguém decide sozinho —
+/// a empresa diz se é o mesmo pedágio (o avulso sai do acerto) ou se são
+/// pedágios diferentes (o aviso some). Uma decisão por pedágio avulso.
+enum DecisaoPedagioDobroTipo {
+  MESMO_PEDAGIO
+  PEDAGIOS_DIFERENTES
+}
+
+model DecisaoPedagioDobro {
+  contaId       String                  @default("__SEM_CONTA__")
+  conta         Conta                   @relation(fields: [contaId], references: [id])
+  id            String                  @id @default(uuid())
+  pedagio       Pedagio                 @relation(fields: [pedagioId], references: [id], onDelete: Cascade)
+  pedagioId     String
+  /// A viagem com que foi comparado (o que estava lado a lado na tela).
+  viagemId      String?
+  /// Em que acerto a decisão foi tomada (rastro, não regra).
+  acertoId      String?
+  decisao       DecisaoPedagioDobroTipo
+  decididoPor   User?                   @relation("DecidiuPedagioDobro", fields: [decididoPorId], references: [id], onDelete: SetNull)
+  decididoPorId String?
+  decididoEm    DateTime                @default(now())
+
+  @@unique([contaId, pedagioId])
+  @@index([contaId])
+  @@map("decisoes_pedagio_dobro")
 }
 
 model ModalidadeMotorista {
@@ -5140,7 +5182,8 @@ model Pedagio {
 
   fechamentoLinhas FechamentoLinha[]
 
-  itensAcerto ItemAcerto[]
+  itensAcerto   ItemAcerto[]
+  decisoesDobro DecisaoPedagioDobro[]
 
   @@index([veiculoId, data])
   @@index([viagemId])

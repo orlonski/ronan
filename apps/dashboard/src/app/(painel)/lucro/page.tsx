@@ -102,6 +102,13 @@ function frasesDeAviso(a: AvisosLucro): { texto: string; href?: string; acao?: s
       acao: "Abrir manutenção",
     });
   }
+  if (a.viagensEmMaisDeUmAcerto) {
+    f.push({
+      texto: `${a.viagensEmMaisDeUmAcerto} viagem(ns) aparecem em mais de um acerto do motorista — pode ter sido paga duas vezes. Aqui contou uma vez só.`,
+      href: "/acertos",
+      acao: "Conferir acertos",
+    });
+  }
   return f;
 }
 
