@@ -1,6 +1,7 @@
 "use client";
 
 import { GastosDaViagem } from "../../gastos-viagem/_components/cartoes";
+import { DocumentosDaViagem } from "../../etapas-viagem/_components/documentos-da-viagem";
 import Link from "next/link";
 import { ConferenciaViagemCard } from "@/components/conferencia-viagem";
 import {
@@ -1371,6 +1372,8 @@ export default function ViagemDetalhePage({
           )}
 
           <PainelCte viagemId={id} />
+
+          <DocumentosDaViagem viagemId={id} />
 
           <GastosDaViagem viagemId={id} />
 

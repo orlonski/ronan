@@ -16,6 +16,7 @@ import {
   Clock,
   Copy,
   ExternalLink,
+  FileWarning,
   Package,
   Route,
   Ticket,
@@ -90,6 +91,11 @@ type Viagem = {
   criadoOfflineEm: string | null;
   /** Quando o registro chegou/sincronizou no backend — fallback de criadoOfflineEm. */
   sincronizadoEm: string;
+  /**
+   * Documentos de etapa (módulo `etapas`) que faltam nesta viagem. Selo
+   * PRÓPRIO — não é divergência da conferência de ticket. API antiga: ausente.
+   */
+  documentosFaltando?: number;
 };
 
 /** Instante em que a viagem foi criada: offline (device) tem prioridade sobre a sincronização. */
@@ -143,6 +149,20 @@ function AlertasBadges({ v }: { v: Viagem }) {
       <DivergenciasBadge key="divergencias" divergencias={v.divergencias} />,
     );
   }
+  // Documento de etapa faltando (CT-e, MDF-e, canhoto…). Selo separado das
+  // pendências de propósito: documento atrasado não é divergência pro
+  // conferente de ticket, e não segura o faturamento.
+  if ((v.documentosFaltando ?? 0) > 0) {
+    badges.push(
+      <Badge
+        key="documento-faltando"
+        className="gap-1 border-amber-300 bg-amber-50 text-amber-900"
+        title="Falta documento da viagem (abra a viagem, seção Documentos)"
+      >
+        <FileWarning className="h-3 w-3" /> Documento faltando
+      </Badge>,
+    );
+  }
   return <>{badges}</>;
 }
 
@@ -156,8 +176,9 @@ export default function ViagensPage() {
   const { viewMode, setViewMode } = useListViewMode("viagens");
   // Cliente/empresa e valores faturados só aparecem com `viagens.ver-comercial`
   // — o backend já omite do payload, isto só evita coluna e filtro vazios.
-  const { temPermissao } = usePermissoes();
+  const { temPermissao, temModulo } = usePermissoes();
   const verComercial = temPermissao("viagens.ver-comercial");
+  const verDocumentos = temPermissao("etapas-respostas.ver") && temModulo("etapas-respostas.ver");
 
   const columns = useMemo<ColumnDef<Viagem>[]>(
     () => [
@@ -456,6 +477,17 @@ export default function ViagensPage() {
                   showSearch={false}
                   options={[{ value: "true", label: "Só com pendência" }]}
                 />
+                {/* Documento de etapa faltando (módulo `etapas`): filtro PRÓPRIO,
+                    separado das pendências da conferência. */}
+                {verDocumentos && (
+                  <Combobox
+                    value={tableState.filters.documentoFaltando}
+                    onChange={(v) => tableState.setFilter("documentoFaltando", v)}
+                    placeholder="Documentos"
+                    showSearch={false}
+                    options={[{ value: "true", label: "Só com documento faltando" }]}
+                  />
+                )}
                 <MotoristaCombobox
                   value={tableState.filters.motoristaId}
                   onChange={(v) => tableState.setFilter("motoristaId", v)}
