@@ -9,6 +9,8 @@ export * from "./viagem-lifecycle";
 export * from "./lancamento-resgatado";
 export * from "./pedagio";
 export * from "./abastecimento";
+export * from "./despesa";
+export * from "./despesa-vinculo";
 export * from "./story";
 export * from "./chat";
 export * from "./cpf";
