@@ -153,6 +153,8 @@ export type Catalogos = {
   config?: {
     exigeFotoViagem?: boolean;
     exigeFotoAbastecimento?: boolean;
+    /** Módulo `despesas` contratado (Gasto de viagem). Ausente = não. */
+    despesas?: boolean;
   };
 };
 

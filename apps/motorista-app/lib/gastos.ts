@@ -51,9 +51,22 @@ import {
  * sem o módulo a home fica EXATAMENTE como sempre foi.
  */
 export function useModuloDespesas(): { lancar: boolean; acompanhar: boolean } {
-  const lancar = useCapacidadeNova(CAP_DESPESA_LANCAR);
-  const acompanhar = useCapacidadeNova(CAP_DESPESA_ACOMPANHAR);
-  return { lancar, acompanhar };
+  const capLancar = useCapacidadeNova(CAP_DESPESA_LANCAR);
+  const capAcompanhar = useCapacidadeNova(CAP_DESPESA_ACOMPANHAR);
+  // A capacidade sozinha NÃO basta: o corte de CONTRATO do acesso ao app nasce
+  // em sombra, então o efetivo traz `app.despesa.*` até pra empresa que não
+  // contratou. Quem diz se o módulo vale é o catálogo (`config.despesas`, o
+  // mesmo `modulosDaConta` do servidor). Catálogo antigo, sem o campo = não.
+  const cat = useCatalogos();
+  const contratado = cat.data?.config?.despesas === true;
+  // Acompanhar sobrevive ao cancelamento: sem o módulo, "Meus reembolsos" só
+  // aparece pra quem tem gasto lançado (o GET não exige o módulo).
+  const historico = useMinhasDespesas(capAcompanhar && !contratado && !!cat.data);
+  const temHistorico = (historico.data?.length ?? 0) > 0;
+  return {
+    lancar: capLancar && contratado,
+    acompanhar: capAcompanhar && (contratado || temHistorico),
+  };
 }
 
 // ---------------------------------------------------------------------------
