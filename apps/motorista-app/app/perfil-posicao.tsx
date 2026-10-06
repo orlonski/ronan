@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { showAlert, showConfirm } from "@/lib/alert";
 import {
-  iniciarCapturaPeriodica,
   pararCapturaPeriodica,
   setConfigLocal,
   statusPermissaoLocalizacao,
@@ -28,12 +27,18 @@ import {
   type PosicaoConfig,
 } from "@/lib/queries";
 import { RequerCapacidade } from "@/components/requer-capacidade";
+import {
+  JANELA_SUGERIDA,
+  POSICAO_DESLIGADA,
+  useAplicarPosicaoConfig,
+} from "@/lib/posicao-ativar";
 
 const HORAS = Array.from({ length: 24 }, (_, i) => i);
 
 function PerfilPosicaoScreenTela() {
   const cfg = usePosicaoConfig();
   const salvar = useSalvarPosicaoConfig();
+  const { aplicar, salvando } = useAplicarPosicaoConfig();
 
   const [ativada, setAtivada] = useState(false);
   const [vinteQuatroHoras, setVinteQuatroHoras] = useState(true);
@@ -79,8 +84,8 @@ function PerfilPosicaoScreenTela() {
       // Primeiro acesso (não-ativado, sem janela): sugere 8-18 como horário
       // comercial padrão. Motorista pode ligar 24h se preferir.
       setVinteQuatroHoras(false);
-      setHorarioInicio(8);
-      setHorarioFim(18);
+      setHorarioInicio(JANELA_SUGERIDA.inicio);
+      setHorarioFim(JANELA_SUGERIDA.fim);
     }
   }, [cfg.data]);
 
@@ -90,11 +95,10 @@ function PerfilPosicaoScreenTela() {
   async function alternarAtivada(v: boolean) {
     setAtivada(v);
     if (v) return;
-    const desativado: PosicaoConfig = { ativada: false, horarioInicio: null, horarioFim: null };
     await pararCapturaPeriodica();
-    await setConfigLocal(desativado);
+    await setConfigLocal(POSICAO_DESLIGADA);
     try {
-      await salvar.mutateAsync(desativado);
+      await salvar.mutateAsync(POSICAO_DESLIGADA);
     } catch {
       /* offline — serviço já parado + cache local off; sincroniza depois */
     }
@@ -107,35 +111,19 @@ function PerfilPosicaoScreenTela() {
       horarioFim: vinteQuatroHoras || !ativada ? null : horarioFim,
     };
     try {
-      await salvar.mutateAsync(payload);
-      // Cache local: task background lê isso pra decidir se enfileira ou
-      // não. Janela horária é avaliada client-side a cada captura.
-      await setConfigLocal(payload);
-      if (payload.ativada) {
-        // Pre-prompt + permission + start task. Espelha o padrão do
-        // tracking de viagem (prePromptBackgroundLocation em tracking.ts).
-        const ok = await iniciarCapturaPeriodica();
-        if (!ok) {
-          // Usuário negou permissão. Reverte estado salvo pra desativado
-          // pra UI não mentir.
-          const desativado = {
-            ativada: false,
-            horarioInicio: null,
-            horarioFim: null,
-          };
-          await salvar.mutateAsync(desativado);
-          await setConfigLocal(desativado);
-          setAtivada(false);
-          await showAlert({
-            title: "Permissão não concedida",
-            message:
-              "Sem permissão de localização em segundo plano, a captura periódica não funciona. Configuração revertida.",
-            variant: "warning",
-          });
-          return;
-        }
-      } else {
-        await pararCapturaPeriodica();
+      // Mesma rotina do convite no "Começar viagem" (lib/posicao-ativar.ts):
+      // salva, guarda a cópia local e liga/desliga a captura. Se o celular não
+      // liberar a localização, ela já desfaz — aqui só falta a UI não mentir.
+      const r = await aplicar(payload);
+      if (r === "permissao-negada") {
+        setAtivada(false);
+        await showAlert({
+          title: "Permissão não concedida",
+          message:
+            "Sem permissão de localização em segundo plano, a captura periódica não funciona. Configuração revertida.",
+          variant: "warning",
+        });
+        return;
       }
       await showAlert({
         title: "Salvo",
@@ -316,7 +304,7 @@ function PerfilPosicaoScreenTela() {
           </Card>
         )}
 
-        <Button onPress={persistir} loading={salvar.isPending} size="lg">
+        <Button onPress={persistir} loading={salvando} size="lg">
           <Check size={20} color="#fff" />
           <Text className="text-base font-bold text-primary-foreground">
             Salvar configuração

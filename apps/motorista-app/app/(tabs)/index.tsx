@@ -12,9 +12,7 @@ import {
   Fuel,
   ReceiptText,
   Wrench,
-  MapPin,
   Play,
-  ClipboardCheck,
   Plus,
   Receipt,
   RotateCw,
@@ -24,7 +22,6 @@ import {
   Truck,
   WifiOff,
 } from "lucide-react-native";
-import { useChecklistDeHoje } from "@/lib/checklist";
 import { HomePessoal } from "@/components/home-pessoal";
 import { HomeRegistrado } from "@/components/home-registrado";
 import { BlocoDocumentos } from "@/components/bloco-documentos";
@@ -54,7 +51,6 @@ import { StoriesBar } from "@/components/stories-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePending } from "@/hooks/use-pending";
-import { usePosicaoConfig } from "@/lib/queries";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import {
@@ -135,15 +131,13 @@ function HomeDaEmpresa() {
   // O aviso dele em andamento aparece no Início: sem isso a resposta do
   // escritório só era vista por quem abrisse o Perfil (squad de 24/09/2026).
   const meusProblemas = useMeusProblemas({ enabled: podeAvisarProblema });
-  // Lembrete, nunca trava: só aparece se a empresa montou o checklist e ele
-  // ainda não fez hoje (feito sem sinal, na fila, já conta).
-  // Qualquer caminhão: daqui não dá pra saber com qual ele vai sair hoje.
-  const checklistHoje = useChecklistDeHoje(null);
+  // Checklist do caminhão e convite de posição SAÍRAM daqui (decisão do dono,
+  // 06/10/2026: home poluída). Os dois aparecem no "Começar viagem", na hora
+  // em que fazem sentido, e moram no Perfil pra quem não usa a viagem guiada.
   const avisoEmAndamento = avisoPraMostrar(meusProblemas.data ?? []);
   const pending = usePending();
   const aguardandoPeso = useViagensAguardandoPeso();
   const nAguardandoPeso = aguardandoPeso.data?.length ?? 0;
-  const posicaoConfig = usePosicaoConfig();
   const excluir = useExcluirViagem();
   const updates = Updates.useUpdates();
   const updateReady = updates.isUpdatePending || updates.isUpdateAvailable;
@@ -156,7 +150,6 @@ function HomeDaEmpresa() {
   const [temLifecycle, setTemLifecycle] = useState<boolean | null>(null);
   const podeLifecycle = me.data?.podeViagemLifecycle ?? false;
   const podeChat = me.data?.podeChat ?? false;
-  const verPosicao = usePermite("app.posicao.compartilhar");
   // Gasto de viagem (módulo `despesas`): só com o módulo contratado E a
   // capacidade ligada. Sem ele a home fica EXATAMENTE como sempre foi.
   const modulo = useModuloDespesas();
@@ -445,28 +438,6 @@ function HomeDaEmpresa() {
               </Pressable>
             )}
 
-            {/* Banner: convite pra ativar compartilhamento de posição.
-                Aparece enquanto config.ativada=false. Some assim que
-                motorista ativa em /perfil-posicao. */}
-            {verPosicao && posicaoConfig.data && !posicaoConfig.data.ativada && (
-              <Pressable
-                onPress={() => router.push("/perfil-posicao")}
-                className="flex-row items-center gap-3 rounded-2xl border-2 border-brand/30 bg-brand/10 p-4 active:opacity-75"
-              >
-                <View className="h-12 w-12 items-center justify-center rounded-full bg-brand">
-                  <MapPin size={22} color="white" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-base font-bold text-foreground">
-                    Compartilhar sua posição
-                  </Text>
-                  <Text className="text-sm text-muted-foreground">
-                    Ajuda quando cliente liga perguntando onde tá o material
-                  </Text>
-                </View>
-              </Pressable>
-            )}
-
             {/* Banner de update OTA disponível */}
             {updateReady && (
               <Pressable
@@ -543,21 +514,6 @@ function HomeDaEmpresa() {
                   </Text>
                   <Text className="text-sm text-muted-foreground">
                     Toque pra completar o peso e o romaneio
-                  </Text>
-                </View>
-              </Pressable>
-            )}
-
-            {checklistHoje.devoLembrar && (
-              <Pressable
-                onPress={() => router.push("/checklist")}
-                className="flex-row items-center gap-3 rounded-2xl border-2 border-warning bg-warning/10 p-4 active:opacity-85"
-              >
-                <ClipboardCheck size={26} color="#B4501A" />
-                <View className="flex-1">
-                  <Text className="text-base font-bold text-foreground">Checklist do caminhão</Text>
-                  <Text className="text-sm text-muted-foreground">
-                    Dá uma olhada antes de sair. Leva um minuto.
                   </Text>
                 </View>
               </Pressable>

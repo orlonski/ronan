@@ -43,7 +43,8 @@ import { desregistrarPushToken } from "@/lib/notifications";
 import { sessaoAtivaSync, sessoesSync } from "@/lib/sessoes";
 import { clearCadastroStatus } from "@/lib/cadastro-status";
 import { setAuthState } from "@/lib/auth-state";
-import { useMe, useSalvarPreferenciasNotificacao } from "@/lib/queries";
+import { useMe, usePosicaoConfig, useSalvarPreferenciasNotificacao } from "@/lib/queries";
+import { useChecklistDeHoje } from "@/lib/checklist";
 import { PerfilPessoal } from "@/components/perfil-pessoal";
 import { useVisao } from "@/lib/visao";
 import { useEhFuncionario } from "@/hooks/use-eh-funcionario";
@@ -85,7 +86,13 @@ function PerfilDaEmpresa() {
   const verDocumentos = usePermite("app.documentos.enviar");
   // Motorista CLT também avisa: quem corta é o acesso (mora no cadastro de motorista).
   const verAvisos = usePermite("app.problema.avisar");
-  const verChecklist = usePermite("app.checklist.fazer");
+  // O checklist e o compartilhar posição saíram da home (06/10/2026): o
+  // Perfil é a porta fixa deles — inclusive de quem só lança viagem feita e
+  // nunca passa pelo "Começar viagem". Checklist só com modelo montado: sem
+  // ele a tela abre vazia ("a empresa ainda não montou").
+  const checklistHoje = useChecklistDeHoje(null);
+  const verChecklist = usePermite("app.checklist.fazer") && checklistHoje.temModelo;
+  const posicaoConfig = usePosicaoConfig({ enabled: verPosicao });
   const verPix = usePermite("app.pix.editar", !ehRegistrado);
   const salvarPrefs = useSalvarPreferenciasNotificacao();
   const [showChange, setShowChange] = useState(false);
@@ -293,6 +300,13 @@ function PerfilDaEmpresa() {
                   <ActionRow
                     icon={<MapPin size={20} color="#13316b" />}
                     title="Compartilhar posição"
+                    subtitle={
+                      posicaoConfig.data
+                        ? posicaoConfig.data.ativada
+                          ? "Ligado"
+                          : "Desligado — ajuda quando o cliente pergunta do material"
+                        : undefined
+                    }
                     onPress={() => router.push("/perfil-posicao")}
                   />
                 </>
@@ -399,6 +413,7 @@ function PerfilDaEmpresa() {
                   <ActionRow
                     icon={<ClipboardCheck size={20} color="#13316b" />}
                     title="Checklist do caminhão"
+                    subtitle={checklistHoje.feito ? "Feito hoje" : "Ainda não fez hoje"}
                     onPress={() => router.push("/checklist")}
                   />
                 </>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { router, Stack } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -43,7 +43,10 @@ function Conteudo() {
   const q = useMeuChecklist();
   const queryClient = useQueryClient();
   const val = useValidacaoGuiada();
-  const [veiculoId, setVeiculoId] = useState("");
+  // Vindo do "Começar viagem", chega com a placa que ele escolheu lá.
+  const params = useLocalSearchParams<{ veiculoId?: string }>();
+  const veiculoDaViagem = typeof params.veiculoId === "string" ? params.veiculoId : "";
+  const [veiculoId, setVeiculoId] = useState(veiculoDaViagem);
   const [respostas, setRespostas] = useState<Record<string, Resposta>>({});
   const [enviando, setEnviando] = useState(false);
   // Já fez hoje? A tela abre mostrando o que foi feito; o formulário em branco
@@ -69,7 +72,11 @@ function Conteudo() {
   const hoje = hojeISO();
   const deHoje = feitos.filter((f) => diaBR(f.feitoEm) === hoje);
   const anteriores = feitos.filter((f) => diaBR(f.feitoEm) !== hoje);
-  const mostrarFormulario = fazendoNovo || deHoje.length === 0;
+  // Do "Começar viagem" com outro caminhão: o de hoje é de outra placa, então
+  // abre direto o formulário em branco (o lembrete era deste caminhão).
+  const desteCaminhaoFeito = deHoje.some((f) => f.veiculoId === veiculoDaViagem);
+  const mostrarFormulario =
+    fazendoNovo || deHoje.length === 0 || (!!veiculoDaViagem && !desteCaminhaoFeito);
 
   useEffect(() => {
     if (me.data?.veiculoDefaultId && !veiculoId) setVeiculoId(me.data.veiculoDefaultId);

@@ -2,11 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { CheckCircle2, ClipboardCheck } from "lucide-react-native";
+import { CheckCircle2, ClipboardCheck, SkipForward } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Pressable,
   ScrollView,
   Text,
   View,
@@ -30,6 +29,7 @@ import { registrarViagemComEtapas } from "@/lib/etapas-local";
 import { BarreiraEtapas } from "@/components/etapas/barreira-etapas";
 import { useChecklistDeHoje } from "@/lib/checklist";
 import { pagadorSeDiferente } from "@/lib/utils";
+import { ConvitePosicao } from "@/components/convite-posicao";
 import { escolherModoDaLista } from "@ronan/shared-types";
 
 /**
@@ -45,6 +45,10 @@ export default function IniciarViagem() {
   // Lembrete do checklist pro caminhão escolhido. Só lembra — começar a
   // viagem sem ele continua liberado.
   const checklistHoje = useChecklistDeHoje(veiculoId || null);
+  // "Pular" vale pra esta viagem (esta tela): não pergunta de novo até ele
+  // começar outra.
+  const [pulouChecklist, setPulouChecklist] = useState(false);
+  const [abriuChecklist, setAbriuChecklist] = useState(false);
   const [clienteId, setClienteId] = useState("");
   // Modo de serviço escolhido. "" = o padrão da conta (o caso de quem tem um
   // modo só, que nem vê a pergunta).
@@ -203,17 +207,8 @@ export default function IniciarViagem() {
         >
           <BarreiraEtapas acao="INICIAR" onLiberado={setLiberadoEtapas} />
 
-          {checklistHoje.devoLembrar && veiculoId ? (
-            <Pressable
-              onPress={() => router.push("/checklist")}
-              className="flex-row items-center gap-3 rounded-xl border-2 border-warning bg-warning/10 p-3 active:opacity-85"
-            >
-              <ClipboardCheck size={22} color="#B4501A" />
-              <Text className="flex-1 text-sm text-foreground">
-                Ainda não fez o checklist deste caminhão hoje. Toque pra fazer agora — ou siga, se preferir.
-              </Text>
-            </Pressable>
-          ) : null}
+          {/* Convite discreto (saiu da home): some se ele já compartilha. */}
+          <ConvitePosicao />
 
           <View className="gap-2" onLayout={v.onLayoutCampo("placa")}>
             <Label error={!!v.erroDe("placa")}>Placa</Label>
@@ -310,6 +305,49 @@ export default function IniciarViagem() {
               Escolha o cliente pra marcar o local de carga.
             </Text>
           )}
+
+          {/* Checklist do caminhão: na 1ª viagem do dia DESTE caminhão, logo
+              antes do "Confirmar carga". Saiu da home (decisão do dono,
+              06/10/2026). Lembrete, nunca trava: "Pular" some com o cartão
+              nesta viagem e o painel segue vendo quem rodou sem. */}
+          {checklistHoje.devoLembrar && veiculoId && !pulouChecklist ? (
+            <View className="gap-3 rounded-2xl border-2 border-border bg-card p-4">
+              <View className="flex-row items-start gap-3">
+                <ClipboardCheck size={24} color="#B4501A" />
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-foreground">
+                    Checklist do caminhão — leva um minuto
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Dá uma olhada no caminhão antes de sair. O que tiver problema vai pro escritório.
+                  </Text>
+                </View>
+              </View>
+              <View className="flex-row gap-2">
+                <Button
+                  className="flex-1"
+                  onPress={() => {
+                    setAbriuChecklist(true);
+                    // push (não replace): ao concluir, o checklist volta pra
+                    // cá com placa, cliente e carga do jeito que ele deixou.
+                    router.push({ pathname: "/checklist", params: { veiculoId } });
+                  }}
+                >
+                  <ClipboardCheck size={20} color="white" />
+                  <Text className="text-base font-semibold text-primary-foreground">Fazer checklist</Text>
+                </Button>
+                <Button variant="outline" onPress={() => setPulouChecklist(true)}>
+                  <SkipForward size={20} color="#0f172a" />
+                  <Text className="text-base font-semibold text-foreground">Pular</Text>
+                </Button>
+              </View>
+            </View>
+          ) : abriuChecklist && checklistHoje.feito ? (
+            <View className="flex-row items-center gap-3 rounded-xl border-2 border-success bg-success/10 p-3">
+              <CheckCircle2 size={22} color="#16a34a" />
+              <Text className="flex-1 text-base font-semibold text-foreground">Checklist feito</Text>
+            </View>
+          ) : null}
 
           {erro ? <ErroCampo msg={erro} /> : null}
 

@@ -1347,11 +1347,12 @@ export type PosicaoConfig = {
   horarioFim: number | null;
 };
 
-export function usePosicaoConfig() {
+export function usePosicaoConfig(opts: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ["posicao-config"],
     queryFn: () => api.get<PosicaoConfig>("/m/posicao-config"),
     staleTime: 60_000,
+    enabled: opts.enabled ?? true,
   });
 }
 
