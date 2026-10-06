@@ -1,5 +1,6 @@
 "use client";
 
+import { GastosDaViagem } from "../../gastos-viagem/_components/cartoes";
 import Link from "next/link";
 import { ConferenciaViagemCard } from "@/components/conferencia-viagem";
 import {
@@ -1357,6 +1358,8 @@ export default function ViagemDetalhePage({
           )}
 
           <PainelCte viagemId={id} />
+
+          <GastosDaViagem viagemId={id} />
 
           {(v.matchesFechamento?.length ?? 0) > 0 && (
             <Card className="p-4 sm:p-5">

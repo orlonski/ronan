@@ -91,6 +91,21 @@ export const ABAS = {
     { href: "/abastecimentos", label: "Abastecimentos", perm: "abastecimentos.ver" },
     { href: "/cartao-combustivel", label: "Cartão combustível", perm: "cartao-combustivel.ver" },
   ],
+  // Gasto de viagem (módulo `despesas`): uma permissão por aba. A fila vem
+  // primeiro porque é o trabalho do dia; "Tipos de gasto" é ajuste.
+  "gastos-viagem": [
+    {
+      href: "/gastos-viagem/conferir",
+      label: "Conferir",
+      perm: "conferencia-despesas.ver",
+      contador: {
+        path: "/admin/despesas/conferir",
+        ler: (d) => (d && typeof d === "object" && "total" in d ? Number((d as { total: number }).total) : 0),
+      },
+    },
+    { href: "/gastos-viagem/todos", label: "Todos", perm: "despesas.ver" },
+    { href: "/gastos-viagem/tipos", label: "Tipos de gasto", perm: "tipos-despesa.ver", config: true },
+  ],
   viagens: [
     { href: "/viagens", label: "Viagens", perm: "viagens.ver" },
     { href: "/conferencias", label: "Conferir tickets", perm: "conferencia-ticket.ver" },

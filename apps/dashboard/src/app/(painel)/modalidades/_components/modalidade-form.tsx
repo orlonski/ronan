@@ -18,6 +18,7 @@ import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 import { BarraDeAcao } from "@/components/barra-de-acao";
+import { usePermissoes } from "@/lib/permissoes";
 
 export type Modalidade = {
   id: string;
@@ -35,6 +36,7 @@ export type Modalidade = {
   valorPorKm: string | null;
   reembolsaPedagio: boolean;
   reembolsaAbastecimento: boolean;
+  reembolsaDespesa?: boolean;
 };
 
 const PATH = "/admin/modalidades";
@@ -52,6 +54,7 @@ type Body = {
   valorPorKm: number | null;
   reembolsaPedagio: boolean;
   reembolsaAbastecimento: boolean;
+  reembolsaDespesa?: boolean;
 };
 
 /** "12,5" → 12.5. Vazio ou inválido → null. */
@@ -79,7 +82,11 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
     valorPorKm: initial?.valorPorKm ?? "",
     reembolsaPedagio: initial?.reembolsaPedagio ?? true,
     reembolsaAbastecimento: initial?.reembolsaAbastecimento ?? true,
+    reembolsaDespesa: initial?.reembolsaDespesa ?? true,
   });
+  // Terceiro interruptor só aparece pra quem contratou o Gasto de viagem.
+  const { temModulo } = usePermissoes();
+  const temGastos = temModulo("despesas.ver");
 
   // Sair de um cadastro longo descartava tudo em silêncio.
   const sujo = useSujo(form);
@@ -102,6 +109,7 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
       valorPorKm: form.tipoRemuneracao === "VALOR_POR_KM" ? parseValor(form.valorPorKm) : null,
       reembolsaPedagio: form.reembolsaPedagio,
       reembolsaAbastecimento: form.reembolsaAbastecimento,
+      ...(temGastos ? { reembolsaDespesa: form.reembolsaDespesa } : {}),
     };
     if (initial) await update.mutateAsync({ id: initial.id, body });
     else await create.mutateAsync(body);
@@ -248,6 +256,14 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
               active={form.reembolsaAbastecimento}
               onChange={(v) => setForm({ ...form, reembolsaAbastecimento: v })}
             />
+            {temGastos && (
+              <LinhaFlag
+                titulo="Devolve gastos de viagem"
+                hint="Almoço, borracharia, chapa… que o escritório aprovar entram como crédito no acerto — se o tipo de gasto também devolve."
+                active={form.reembolsaDespesa}
+                onChange={(v) => setForm({ ...form, reembolsaDespesa: v })}
+              />
+            )}
           </div>
         </div>
 

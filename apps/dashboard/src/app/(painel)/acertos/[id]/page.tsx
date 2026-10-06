@@ -1,5 +1,6 @@
 "use client";
 
+import { GastosNoAcerto } from "../../gastos-viagem/_components/cartoes";
 import { use, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, FileDown, Lock, LockOpen, MessageCircle, Plus, Trash2, Wallet } from "lucide-react";
@@ -273,6 +274,14 @@ function Conteudo({ id }: { id: string }) {
           onMudou={() => queryClient.invalidateQueries({ queryKey: ["acerto", id] })}
         />
       </div>
+
+      <GastosNoAcerto
+        motoristaId={a.motorista.id}
+        periodoInicio={a.periodoInicio}
+        periodoFim={a.periodoFim}
+        itens={a.itens}
+        aberto={aberto}
+      />
 
       {aberto && (
         <Permitido chave="acertos.gerar">

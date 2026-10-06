@@ -41,7 +41,7 @@ type RotacaoInput = z.infer<typeof RotacaoInput>;
 export class TiposDespesaController {
   constructor(private readonly service: TiposDespesaService) {}
 
-  @RequerPermissao("tipos-despesa.ver", "despesas.ver", "despesas.conferir")
+  @RequerPermissao("tipos-despesa.ver", "despesas.ver", "conferencia-despesas.ver")
   @Get()
   list() {
     return this.service.list();
@@ -74,8 +74,9 @@ export class TiposDespesaController {
 }
 
 /**
- * Gastos de viagem (módulo `despesas`). Uma chave por aba: `despesas.conferir`
- * (fila + decisões), `despesas.ver` (Todos, só leitura). `@EscopoPor
+ * Gastos de viagem (módulo `despesas`). Um recurso por aba:
+ * `conferencia-despesas` (fila; `decidir` pras decisões) e `despesas` (Todos,
+ * só leitura). `@EscopoPor
  * ("motorista")`: o recorte de frota vem do motorista, como no acerto.
  */
 @ApiTags("admin/despesas")
@@ -87,7 +88,7 @@ export class DespesasAdminController {
   constructor(private readonly service: DespesasAdminService) {}
 
   @EscopoPor("motorista")
-  @RequerPermissao("despesas.conferir")
+  @RequerPermissao("conferencia-despesas.ver")
   @Get("conferir")
   fila(
     @Query(new ZodValidationPipe(ListarDespesasAdminQuery)) q: ListarDespesasAdminQuery,
@@ -115,14 +116,14 @@ export class DespesasAdminController {
 
   /** Cartão "Gastos desta viagem" da ficha da viagem. */
   @EscopoPor("motorista")
-  @RequerPermissao("despesas.ver", "despesas.conferir")
+  @RequerPermissao("despesas.ver", "conferencia-despesas.ver")
   @Get("viagem/:viagemId")
   daViagem(@Param("viagemId") viagemId: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.daViagem(viagemId, user.escopo);
   }
 
   @EscopoPor("motorista")
-  @RequerPermissao("despesas.conferir")
+  @RequerPermissao("conferencia-despesas.decidir")
   @Post("aprovar-lote")
   aprovarLote(
     @Body(new ZodValidationPipe(AprovarDespesasLoteInput)) body: AprovarDespesasLoteInput,
@@ -132,14 +133,14 @@ export class DespesasAdminController {
   }
 
   @EscopoPor("motorista")
-  @RequerPermissao("despesas.ver", "despesas.conferir")
+  @RequerPermissao("despesas.ver", "conferencia-despesas.ver")
   @Get(":id")
   detalhe(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.detalhe(id, user.escopo);
   }
 
   @EscopoPor("motorista")
-  @RequerPermissao("despesas.conferir")
+  @RequerPermissao("conferencia-despesas.decidir")
   @Post(":id/aprovar")
   aprovar(
     @Param("id") id: string,
@@ -150,7 +151,7 @@ export class DespesasAdminController {
   }
 
   @EscopoPor("motorista")
-  @RequerPermissao("despesas.conferir")
+  @RequerPermissao("conferencia-despesas.decidir")
   @Post(":id/nao-reembolsar")
   naoReembolsar(
     @Param("id") id: string,
@@ -161,14 +162,14 @@ export class DespesasAdminController {
   }
 
   @EscopoPor("motorista")
-  @RequerPermissao("despesas.conferir")
+  @RequerPermissao("conferencia-despesas.decidir")
   @Post(":id/desfazer")
   desfazer(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.desfazer(id, user.id, user.escopo);
   }
 
   @EscopoPor("motorista")
-  @RequerPermissao("despesas.conferir")
+  @RequerPermissao("conferencia-despesas.decidir")
   @Patch(":id/viagem")
   vincular(
     @Param("id") id: string,
@@ -180,7 +181,7 @@ export class DespesasAdminController {
 
   /** A foto, pela API (o bucket nunca tem domínio público). */
   @EscopoPor("motorista")
-  @RequerPermissao("despesas.ver", "despesas.conferir")
+  @RequerPermissao("despesas.ver", "conferencia-despesas.ver")
   @Get(":id/fotos/:fotoId")
   async foto(
     @Param("id") id: string,
@@ -196,7 +197,7 @@ export class DespesasAdminController {
   }
 
   @EscopoPor("motorista")
-  @RequerPermissao("despesas.conferir")
+  @RequerPermissao("conferencia-despesas.decidir")
   @Patch(":id/fotos/:fotoId")
   girarFoto(
     @Param("id") id: string,

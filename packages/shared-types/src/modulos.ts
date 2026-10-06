@@ -232,7 +232,7 @@ export const MODULOS: ModuloDef[] = [
       "O motorista lança o gasto da estrada com a foto do papel, mesmo sem sinal; o escritório confere com a foto do lado; e o dinheiro volta pra ele sozinho no acerto.",
     adicional: true,
     dependeDe: ["financeiro"],
-    recursos: ["despesas", "tipos-despesa"],
+    recursos: ["despesas", "conferencia-despesas", "tipos-despesa"],
   },
   {
     chave: "plataforma",

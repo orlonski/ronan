@@ -152,6 +152,10 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/regras-minimo", perm: "regras-minimo.ver" },
   { prefixo: "/tabelas-preco", perm: "tabelas-preco.ver" },
   { prefixo: "/acertos", perm: "acertos.ver" },
+  // Gasto de viagem: uma chave por aba.
+  { prefixo: "/gastos-viagem/conferir", perm: "conferencia-despesas.ver" },
+  { prefixo: "/gastos-viagem/todos", perm: "despesas.ver" },
+  { prefixo: "/gastos-viagem/tipos", perm: "tipos-despesa.ver" },
   { prefixo: "/lucro", perm: "lucro-caminhao.ver" },
   { prefixo: "/resultado-obra", perm: "resultado-obra.ver" },
   // Mais específico antes: a conexão com o Asaas é do dono, não de quem vê o financeiro.

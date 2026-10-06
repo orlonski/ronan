@@ -94,7 +94,7 @@ const ACAO_TITULO_POR_RECURSO: Record<string, string> = {
   "config-conferencia-diaria.editar": "Mudar a regra da conferência diária",
   "config-cte.editar": "Configurar emissor, certificado e emitir teste",
   "despesas.ver": "Ver todos os gastos (aba Todos)",
-  "despesas.conferir": "Conferir e decidir o reembolso (aba Conferir)",
+  "conferencia-despesas.decidir": "Aprovar, aprovar outro valor ou não reembolsar",
 };
 
 type ResourceDef = { recurso: string; label: string; modulo: string; acoes: string[] };
@@ -123,11 +123,12 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // combinado (fechar) e que o dinheiro saiu (pagar) é decisão de quem responde
   // pelo caixa, e raramente é a mesma pessoa.
   { recurso: "acertos", label: "Acertos com motorista", modulo: "Operação", acoes: ["ver", "gerar", "fechar", "pagar"] },
-  // Gasto de viagem (módulo `despesas`, vendido à parte). Uma chave por aba:
-  // `ver` abre "Todos" (só leitura), `conferir` abre a fila "Conferir" e
-  // decide (aprovar, aprovar outro valor, não reembolsar, ligar à viagem).
-  // Conferir é decidir dinheiro de parceiro — por isso não vem junto do ver.
-  { recurso: "despesas", label: "Gastos de viagem", modulo: "Operação", acoes: ["ver", "conferir"] },
+  // Gasto de viagem (módulo `despesas`, vendido à parte). Um recurso por aba
+  // (uma permissão por tela): "Todos" é só leitura; "Conferir" é a fila, e
+  // `decidir` (aprovar, outro valor, não reembolsar, ligar à viagem) é à parte
+  // de `ver` porque decidir dinheiro de parceiro não vem junto de olhar.
+  { recurso: "despesas", label: "Gastos de viagem — todos", modulo: "Operação", acoes: ["ver"] },
+  { recurso: "conferencia-despesas", label: "Gastos de viagem — conferir", modulo: "Operação", acoes: ["ver", "decidir"] },
   // A aba "Tipos de gasto": o que o celular pede e o que a empresa devolve.
   { recurso: "tipos-despesa", label: "Gastos de viagem — tipos de gasto", modulo: "Cadastros", acoes: ["ver", "criar", "editar"] },
   // O que o cliente pediu, e o quadro de quem leva o quê. Recursos separados
