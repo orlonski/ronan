@@ -3,6 +3,8 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { inicioDoDiaData, inicioDiasAtras } from "../common/timezone";
 import { comoSistema, contaIdAtual } from "../common/conta/conta-context";
+import { contaTemModuloDespesas } from "../common/despesa-acesso";
+import type { TipoDespesaCatalogo } from "@ronan/shared-types";
 
 export type CatalogoTipo = "material" | "cliente" | "local" | "veiculo";
 
@@ -1102,6 +1104,31 @@ export class MotoristaService {
         select: { veiculoId: true, odometro: true },
       }),
     ]);
+    // Gasto de viagem: só com o módulo `despesas` contratado. Sem ele, lista
+    // vazia e o app fica exatamente como hoje (D5). Só tipos ATIVOS, na ordem
+    // do painel; o app lê `campos` SEMPRE por `resolverCamposDoTipo`.
+    const temDespesas = await contaTemModuloDespesas(this.prisma, contaIdAtual());
+    const tiposDespesa: TipoDespesaCatalogo[] = temDespesas
+      ? (
+          await this.prisma.tipoDespesa.findMany({
+            where: { ativo: true },
+            select: {
+              id: true,
+              slug: true,
+              nome: true,
+              icone: true,
+              ordem: true,
+              devolve: true,
+              devolveNoMaximo: true,
+              manutencao: true,
+              campos: true,
+              camposVersao: true,
+            },
+            orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+          })
+        ).map((t) => ({ ...t, devolveNoMaximo: t.devolveNoMaximo ? t.devolveNoMaximo.toFixed(2) : null }))
+      : [];
+
     const odometroMap = new Map(ultimosAbast.map((a) => [a.veiculoId, a.odometro]));
     const veiculosComOdometro = veiculos.map((v) => ({
       ...v,
@@ -1115,12 +1142,14 @@ export class MotoristaService {
       veiculos: veiculosComOdometro,
       materiais,
       tiposServico,
+      tiposDespesa,
       clientes,
       locais: locaisFlat,
       empresas,
       config: {
         exigeFotoViagem: conta?.exigeFotoViagem === true,
         exigeFotoAbastecimento: conta?.exigeFotoAbastecimento === true,
+        despesas: temDespesas,
       },
     };
   }

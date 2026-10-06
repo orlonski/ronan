@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Client as MinioClient } from "minio";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { contaIdAtual } from "../common/conta/conta-context";
 import { chaveParaStorage } from "../common/chave-documento";
@@ -103,6 +103,29 @@ export class UploadsService implements OnModuleInit {
       "Content-Type": mimetype,
     });
     return key;
+  }
+
+  /**
+   * Foto do comprovante de um GASTO DE VIAGEM.
+   *
+   * O sha256 dos bytes vai NO NOME do arquivo: é calculado aqui, no servidor,
+   * e serve pra marcar foto reaproveitada (a mesma foto da galeria em dois
+   * gastos). Como o gasto chega depois, por outra rota, o nome é o jeito de o
+   * hash viajar sem confiar no que o celular disser. O prefixo com conta e
+   * motorista é o que o POST /m/despesas confere pra ninguém anexar foto alheia.
+   */
+  async putDespesaFoto(
+    buffer: Buffer,
+    mimetype: string,
+    motoristaId: string,
+  ): Promise<{ storageKey: string; sha256: string }> {
+    const ext = mimetype.includes("png") ? "png" : "jpg";
+    const sha256 = createHash("sha256").update(buffer).digest("hex");
+    const key = `${contaIdAtual()}/despesas/${diaBR()}/${motoristaId}/${sha256}_${randomUUID()}.${ext}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": mimetype,
+    });
+    return { storageKey: key, sha256 };
   }
 
   /**

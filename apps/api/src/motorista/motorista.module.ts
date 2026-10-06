@@ -49,6 +49,9 @@ import { StoriesCleanupService } from "./stories-cleanup.service";
 import { VersaoAppMotoristaController } from "./versao-app.controller";
 import { LancamentosResgatadosMotoristaController } from "./lancamentos-resgatados.controller";
 import { AcertosMotoristaController } from "./acertos.controller";
+import { DespesasMotoristaController } from "./despesas.controller";
+import { DespesasMotoristaService } from "./despesas.service";
+import { DespesasNucleoModule } from "../despesas/despesas-nucleo.module";
 import { ProgramacaoMotoristaController } from "./programacao.controller";
 import {
   AnexoPedidoPublicoController,
@@ -75,6 +78,7 @@ import {
     PedidosModule,
     ViagemMensagensModule,
     LocaisImagemModule,
+    DespesasNucleoModule,
   ],
   controllers: [
     PixMotoristaController,
@@ -95,6 +99,7 @@ import {
     VersaoAppMotoristaController,
     LancamentosResgatadosMotoristaController,
     AcertosMotoristaController,
+    DespesasMotoristaController,
     ProgramacaoMotoristaController,
     AnexosPedidoMotoristaController,
     AnexoPedidoPublicoController,
@@ -114,6 +119,7 @@ import {
     AvisoPesoService,
     StoriesMotoristaService,
     StoriesCleanupService,
+    DespesasMotoristaService,
   ],
   exports: [
     MotoristaService,

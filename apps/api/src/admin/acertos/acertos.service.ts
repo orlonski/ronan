@@ -13,8 +13,11 @@ import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, SEM_ESCOPO, type EscopoAdmin } from "../../common/escopo/escopo";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { dentroDeEmprego, periodosDeEmprego } from "../../common/regime-vigente";
+import { inicioDoDiaBR } from "../../common/timezone";
+import { diaSP } from "../../common/despesa-regras";
 import {
   calcularAcerto,
+  itensReembolsoDespesa,
   resolverRemuneracao,
   totalizarAcerto,
   type AbastecimentoParaAcerto,
@@ -261,6 +264,15 @@ export class AcertosService {
       regra,
     });
 
+    // ── Gasto de viagem (módulo `despesas`) — bloco isolado, ver
+    // `itensReembolsoDespesa` e `despesasParaAcerto`.
+    calculado.itens.push(
+      ...itensReembolsoDespesa(
+        await this.despesasParaAcerto(input, existente?.id ?? null, foraDoEmprego),
+        regra,
+      ),
+    );
+
     const acertoId = await this.prisma.$transaction(async (tx) => {
       const acerto = existente
         ? await tx.acertoMotorista.update({
@@ -286,6 +298,7 @@ export class AcertosService {
             viagemId: i.viagemId ?? null,
             pedagioId: i.pedagioId ?? null,
             abastecimentoId: i.abastecimentoId ?? null,
+            despesaId: i.despesaId ?? null,
             descricao: i.descricao,
             valor: i.valor,
             automatico: true,
@@ -307,6 +320,37 @@ export class AcertosService {
 
     const detalhe = await this.detalhe(acertoId, null);
     return { ...detalhe, semRemuneracao: calculado.semRemuneracao };
+  }
+
+  /**
+   * Gastos de viagem que entram neste acerto: APROVADOS, de tipo que devolve,
+   * com DATA (dia civil de SP) dentro do período, fora de dia de emprego CLT
+   * (o mesmo `foraDoEmprego` de viagem/diesel/pedágio — B10) e que não estão
+   * em NENHUM outro acerto. Com ou sem viagem: o vínculo nunca decide pagamento.
+   *
+   * "Nenhum outro acerto" cobre FECHADO/PAGO (nunca paga duas vezes) e também
+   * outro ABERTO (não aparece em dois rascunhos). A Onda 0c vai trocar isso por
+   * "puxar do ABERTO esquecido" junto com as outras três buscas.
+   */
+  private async despesasParaAcerto(
+    input: GerarAcertoInput,
+    acertoAtualId: string | null,
+    foraDoEmprego: (data: Date | null) => boolean,
+  ) {
+    const de = inicioDoDiaBR(input.periodoInicio);
+    const ate = new Date(inicioDoDiaBR(input.periodoFim).getTime() + 86_400_000);
+    const despesas = await this.prisma.despesa.findMany({
+      where: {
+        motoristaId: input.motoristaId,
+        status: "APROVADA",
+        tipoDespesa: { devolve: true },
+        data: { gte: de, lt: ate },
+        itensAcerto: { none: acertoAtualId ? { acertoId: { not: acertoAtualId } } : {} },
+      },
+      select: { id: true, data: true, tipoNome: true, valorAprovado: true, descricao: true },
+      orderBy: { data: "asc" },
+    });
+    return despesas.filter((d) => foraDoEmprego(diaUtc(diaSP(d.data))));
   }
 
   /**
