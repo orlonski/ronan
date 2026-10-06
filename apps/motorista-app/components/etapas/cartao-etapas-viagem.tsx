@@ -10,8 +10,32 @@ export function abrirEtapa(viagemClientId: string, modeloId: string): void {
   router.push({ pathname: "/etapa", params: { viagemClientId, modeloId } });
 }
 
-/** Um formulário da viagem: "Documentos da carga — 5 de 7", o que falta e o botão. */
-export function CartaoEtapa({ e }: { e: EtapaAberta }) {
+/** O formulário está fechado: tudo feito, ou concluído com "mandar o resto depois". */
+export function etapaConcluida(e: EtapaAberta): boolean {
+  const { feitos, total, faltando } = e.contagem;
+  return (faltando.length === 0 && feitos === total) || !!e.rascunho?.concluidaEm;
+}
+
+/**
+ * Um formulário da viagem: "Documentos da carga — 5 de 7", o que falta e o botão.
+ *
+ * `botao` muda só o peso do botão, nunca o que ele faz:
+ * - "principal": é o próximo passo da viagem guiada (cartão "Agora") — botão
+ *   grande laranja. Rótulo curto de propósito: "Preencher documentos" cabe numa
+ *   linha num Android de 360dp; o nome do formulário já está no título.
+ * - "contorno": está na tela, mas outro passo vem antes.
+ * - omitido: como sempre foi (detalhe da viagem).
+ */
+export function CartaoEtapa({
+  e,
+  botao,
+  destaque,
+}: {
+  e: EtapaAberta;
+  botao?: "principal" | "contorno";
+  /** Borda laranja: é o "Agora" da viagem guiada. */
+  destaque?: boolean;
+}) {
   const { feitos, total, faltando } = e.contagem;
   const completo = faltando.length === 0 && (feitos === total || !!e.rascunho?.concluidaEm);
   const naoSeguir = faltando.filter((i) => i.seFaltar === "NAO_SEGUIR");
@@ -21,7 +45,11 @@ export function CartaoEtapa({ e }: { e: EtapaAberta }) {
   return (
     <View
       className={`gap-3 rounded-2xl border-2 p-4 ${
-        naoSeguir.length > 0 ? "border-warning bg-warning/10" : "border-border bg-card"
+        naoSeguir.length > 0
+          ? "border-warning bg-warning/10"
+          : destaque
+            ? "border-primary/40 bg-card"
+            : "border-border bg-card"
       }`}
     >
       <View className="flex-row items-center gap-2">
@@ -53,6 +81,25 @@ export function CartaoEtapa({ e }: { e: EtapaAberta }) {
         <Button variant="outline" onPress={() => abrirEtapa(e.viagem.viagemClientId, e.modelo.id)}>
           <FileText size={20} color="#0f172a" />
           <Text className="text-base font-semibold text-foreground">Ver documentos</Text>
+        </Button>
+      ) : botao === "principal" ? (
+        <Button size="lg" onPress={() => abrirEtapa(e.viagem.viagemClientId, e.modelo.id)}>
+          <FileText size={22} color="white" />
+          <Text
+            className="shrink text-lg font-bold text-primary-foreground"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+          >
+            {nunca ? "Preencher documentos" : "Continuar documentos"}
+          </Text>
+        </Button>
+      ) : botao === "contorno" ? (
+        <Button variant="outline" onPress={() => abrirEtapa(e.viagem.viagemClientId, e.modelo.id)}>
+          <FileText size={20} color="#0f172a" />
+          <Text className="shrink text-base font-semibold text-foreground" numberOfLines={1}>
+            {nunca ? "Preencher documentos" : "Continuar documentos"}
+          </Text>
         </Button>
       ) : (
         <Button onPress={() => abrirEtapa(e.viagem.viagemClientId, e.modelo.id)}>

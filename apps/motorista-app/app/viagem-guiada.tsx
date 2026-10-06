@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   AlertTriangle,
-  ArrowRight,
   Check,
   CheckCircle2,
   Circle,
+  CirclePlus,
+  FileText,
   Flag,
   MapPin,
   Trash2,
@@ -30,7 +31,6 @@ import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import type { FonteGps } from "@ronan/shared-types";
 import { mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
@@ -44,28 +44,58 @@ import {
   type LifecycleLocal,
 } from "@/lib/lifecycle";
 import { useCatalogoEventos, useCatalogoOcorrencias, useCatalogos, useModelosEtapa } from "@/lib/queries";
+import { storage } from "@/lib/storage";
 import { DocumentosDaViagem } from "@/components/documentos-da-viagem";
 import { GastosDaViagem } from "@/components/gastos";
 import { useModuloDespesas } from "@/lib/gastos";
 import { useCapacidadeNova } from "@/lib/acessos-app";
 import { CAP_ETAPAS } from "@/lib/etapas";
-import { lerEstadoEtapas, registrarViagemComEtapas } from "@/lib/etapas-local";
-import { abrirEtapa, CartaoEtapasViagem } from "@/components/etapas/cartao-etapas-viagem";
+import {
+  etapasAbertas,
+  lerEstadoEtapas,
+  registrarViagemComEtapas,
+  useEstadoEtapas,
+} from "@/lib/etapas-local";
+import { abrirEtapa, CartaoEtapa, etapaConcluida } from "@/components/etapas/cartao-etapas-viagem";
+
+/**
+ * Lembrete dos documentos da carga: aparece UMA vez por viagem. Guarda o
+ * clientId da última viagem lembrada (só existe uma viagem guiada aberta por
+ * vez, então uma chave basta — e não acumula lixo).
+ */
+const CHAVE_LEMBRETE_CARGA = "viagemGuiada.lembreteCarga";
+
+/** Onde o lembrete aparece: junto do botão que ele tocou. */
+type OndeLembrete = "principal" | "problema" | "outros";
 
 export default function ViagemGuiada() {
   const catalogo = useCatalogoEventos();
   const ocorrencias = useCatalogoOcorrencias();
   const catalogos = useCatalogos();
   const [local, setLocal] = useState<LifecycleLocal | null>(null);
-  // Documentos da viagem: "Começar viagem" manda abrir os da carga logo depois.
-  const params = useLocalSearchParams<{ abrirEtapa?: string }>();
-  const jaAbriuEtapa = useRef(false);
+  // "Confirmar carga" chega aqui com `iniciou`: liga a faixa "Viagem começou
+  // às HH:MM". A tela NÃO abre nada sozinha — os documentos da carga ficam no
+  // cartão "Agora" e ele toca quando quiser (o salto automático piscava 3
+  // telas em menos de um segundo).
+  const params = useLocalSearchParams<{ iniciou?: string }>();
   const etapasLigado = useCapacidadeNova(CAP_ETAPAS);
   const modelosEtapa = useModelosEtapa(etapasLigado);
+  const estadoEtapas = useEstadoEtapas();
   // Gasto de viagem (módulo `despesas`): sem o módulo a tela fica como sempre.
   const moduloGastos = useModuloDespesas();
   const [carregando, setCarregando] = useState(true);
   const [sheetTipo, setSheetTipo] = useState<TipoEventoViagem | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  // Registro sem duração ("Parada", "Pesagem") não vira cartão aberto: sem
+  // esta faixa ele toca e não vê nada mudar — e registra de novo.
+  const [ultimoRegistro, setUltimoRegistro] = useState<{ nome: string; em: string } | null>(null);
+  // Lembrete dos documentos da carga (inline, uma vez): a ação que ele pediu
+  // fica guardada e segue no "Depois".
+  const [lembrete, setLembrete] = useState<{ onde: OndeLembrete; seguir: () => void } | null>(
+    null,
+  );
+  const [jaLembrou, setJaLembrou] = useState(true);
+  const [confirmandoDescarte, setConfirmandoDescarte] = useState(false);
 
   // Recarrega o espelho local sempre que a tela ganha foco (volta do sheet,
   // do finalizar etc). Se não há viagem, volta pra home.
@@ -87,12 +117,19 @@ export default function ViagemGuiada() {
 
   useFocusEffect(recarregar);
 
-  // Abre os documentos da carga uma vez, logo depois de "Começar viagem".
+  // Já lembrou dos documentos da carga nesta viagem?
+  const clientId = local?.clientId;
   useEffect(() => {
-    if (!local || jaAbriuEtapa.current || !params.abrirEtapa) return;
-    jaAbriuEtapa.current = true;
-    abrirEtapa(local.clientId, params.abrirEtapa);
-  }, [local, params.abrirEtapa]);
+    if (!clientId) return;
+    let vivo = true;
+    void storage
+      .getItem(CHAVE_LEMBRETE_CARGA)
+      .then((v) => vivo && setJaLembrou(v === clientId))
+      .catch(() => vivo && setJaLembrou(false));
+    return () => {
+      vivo = false;
+    };
+  }, [clientId]);
 
   // Viagem retomada do servidor (outro celular, app reinstalado) com a função
   // ligada: anota com os formulários de agora, pra o cartão e a barreira
@@ -134,6 +171,28 @@ export default function ViagemGuiada() {
     () => (local?.eventos ?? []).filter((e) => e.temDuracao && !e.terminouEm),
     [local?.eventos],
   );
+
+  // Documentos da viagem (só com a função ligada). "Agora" = os da carga ainda
+  // por fazer: só dá pra fazer no pátio, então ficam no topo. O resto (carga
+  // concluída, acerto do frete) desce pra lista de documentos.
+  const etapas = useMemo(
+    () => (etapasLigado && estadoEtapas && local ? etapasAbertas(estadoEtapas, local.clientId) : []),
+    [etapasLigado, estadoEtapas, local],
+  );
+  const etapasAgora = useMemo(
+    () => etapas.filter((e) => e.modelo.momento === "INICIO" && !etapaConcluida(e)),
+    [etapas],
+  );
+  const etapasOutras = useMemo(
+    () => etapas.filter((e) => !etapasAgora.includes(e)),
+    [etapas, etapasAgora],
+  );
+  // Os documentos só viram O botão principal quando não há passo da empresa
+  // antes (ex.: "Pesagem" obrigatória: o ticket que o documento pede só existe
+  // depois dela). Senão ficam no "Agora" como botão contorno.
+  const docsPrincipal = etapasAgora.length > 0 && !proximo;
+  // Lembrete: documentos da carga ainda intocados (0 de N).
+  const cargaIntocada = etapasAgora.find((e) => e.contagem.feitos === 0) ?? null;
 
   // Relógio da ocorrência aberta. Sem isto o tempo só mudaria quando a tela
   // recebesse foco de novo — e o motorista na fila fica olhando pra ela parada.
@@ -178,25 +237,79 @@ export default function ViagemGuiada() {
     if (d.valorPedagio?.trim()) itens.push({ label: "Pedágio", valor: `R$ ${d.valorPedagio}` });
     return itens;
   }, [local?.finalizarDraft, catalogos.data?.materiais]);
+  // Já começou a fechar? O botão diz "Continuar o fechamento" — "Finalizar
+  // viagem" com a descarga já marcada logo abaixo seriam dois sinais opostos.
+  const fechamentoComecado = !!descargaNome || resumoCampos.length > 0;
+
+  /**
+   * Toda ação da tela que não é "preencher os documentos" passa por aqui: com
+   * os documentos da carga em 0 de N, lembra UMA vez (inline, sem pop-up) que
+   * eles só dá pra fazer no pátio. "Depois" segue a ação que ele pediu.
+   */
+  function comLembrete(onde: OndeLembrete, acao: () => void) {
+    if (!cargaIntocada || jaLembrou) {
+      setLembrete(null);
+      acao();
+      return;
+    }
+    setJaLembrou(true);
+    if (local) void storage.setItem(CHAVE_LEMBRETE_CARGA, local.clientId).catch(() => {});
+    setLembrete({ onde, seguir: acao });
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  }
+
+  function renderLembrete(onde: OndeLembrete) {
+    if (!lembrete || lembrete.onde !== onde || !cargaIntocada) return null;
+    return (
+      <View className="gap-3 rounded-2xl border-2 border-warning bg-warning/10 p-4">
+        <View className="flex-row items-start gap-2">
+          <AlertTriangle size={20} color="#b45309" style={{ marginTop: 2 }} />
+          <Text className="flex-1 text-base font-bold text-foreground">
+            Os documentos da carga só dá pra fazer aqui no pátio. Preencher agora?
+          </Text>
+        </View>
+        <Button
+          onPress={() => {
+            setLembrete(null);
+            abrirEtapa(cargaIntocada.viagem.viagemClientId, cargaIntocada.modelo.id);
+          }}
+        >
+          <FileText size={20} color="white" />
+          <Text className="text-base font-semibold text-primary-foreground">Preencher agora</Text>
+        </Button>
+        <Button
+          variant="outline"
+          onPress={() => {
+            const seguir = lembrete.seguir;
+            setLembrete(null);
+            seguir();
+          }}
+        >
+          <Text className="text-base font-semibold text-foreground">Depois</Text>
+        </Button>
+      </View>
+    );
+  }
 
   async function onEventoRegistrado() {
+    const nome = sheetTipo?.nome ?? null;
     setSheetTipo(null);
     const atual = await getLifecycleLocal();
     setLocal(atual);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // O que fica aberto (fila, quebra) já aparece como cartão no topo; o resto
+    // ganha a faixa "X registrada às HH:MM" — e a tela sobe até ela.
+    const ultimo = atual?.eventos[atual.eventos.length - 1];
+    if (ultimo && !(ultimo.temDuracao && !ultimo.terminouEm)) {
+      setUltimoRegistro({ nome: ultimo.nome ?? nome ?? "Registro", em: ultimo.ocorridoEm });
+    } else {
+      setUltimoRegistro(null);
+    }
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
   }
 
   async function descartar() {
     if (!local) return;
-    const ok = await showConfirm({
-      title: "Descartar esta viagem?",
-      message:
-        "Os passos registrados neste celular serão apagados. Isso não dá pra desfazer.",
-      confirmLabel: "Descartar",
-      cancelLabel: "Não",
-      destructive: true,
-    });
-    if (!ok) return;
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     // Limpa a fila local E cancela no servidor (idempotente, enfileirado).
     await descartarViagemGuiada(local.clientId);
@@ -204,13 +317,15 @@ export default function ViagemGuiada() {
   }
 
   if (carregando || catalogo.isLoading) {
+    // Mesmo cabeçalho da tela pronta: chegando do "Confirmar carga", o que
+    // troca é só o miolo, não a tela inteira.
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-background">
+      <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ActivityIndicator />
-        <Text className="mt-3 text-base text-muted-foreground">
-          Carregando viagem…
-        </Text>
+        <ScreenHeader title="Viagem em andamento" />
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator />
+        </View>
       </SafeAreaView>
     );
   }
@@ -218,30 +333,39 @@ export default function ViagemGuiada() {
   if (!local) return null; // recarregar já redirecionou
 
   const clienteIdCarga = null; // lifecycle não amarra cliente até finalizar
+  const acabouDeComecar = params.iniciou === "1";
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScreenHeader title="Viagem em andamento" />
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}>
-        {/* Cabeçalho: placa + local de carga + quando carregou */}
-        <View className="rounded-2xl border-2 border-primary/30 bg-primary/10 p-5">
-          <View className="flex-row items-center gap-2">
-            <MapPin size={18} color="#ea580c" />
-            <Text className="text-xs font-bold uppercase tracking-wider text-primary">
-              Viagem em andamento
-            </Text>
-          </View>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
+      >
+        {/* Resposta ao toque: a viagem começou. Fica — nada some sozinho. */}
+        {acabouDeComecar ? (
+          <FaixaOk texto={`Viagem começou às ${fmtHora(local.iniciadoEm)}`} />
+        ) : null}
+        {ultimoRegistro ? (
+          <FaixaOk
+            texto={`${ultimoRegistro.nome} ${registradoA(ultimoRegistro.nome)} às ${fmtHora(ultimoRegistro.em)}`}
+          />
+        ) : null}
+
+        {/* Resumo: placa + cliente + local de carga + quando carregou. O nome
+            da tela já está no cabeçalho — não repete aqui. */}
+        <View className="rounded-2xl border-2 border-primary/30 bg-primary/10 p-4">
           {placa ? (
             <Text
-              className="mt-2 text-3xl font-extrabold text-foreground"
+              className="text-2xl font-extrabold text-foreground"
               style={{ fontVariant: ["tabular-nums"] }}
             >
               {placa}
             </Text>
           ) : null}
-          <View className="mt-3 gap-1.5">
+          <View className={placa ? "mt-2 gap-1.5" : "gap-1.5"}>
             {local.clienteNome ? (
               <View className="flex-row items-start gap-2">
                 <User size={16} color="#64748b" style={{ marginTop: 2 }} />
@@ -257,16 +381,12 @@ export default function ViagemGuiada() {
               </Text>
             </View>
             <Text className="text-sm text-muted-foreground">
-              Carregou {fmtDataHora(local.iniciadoEm)} · começou {tempoDesde(local.iniciadoEm)}
+              Carregou {fmtDataHora(local.iniciadoEm)} · {tempoDesde(local.iniciadoEm)}
             </Text>
           </View>
         </View>
 
-        {/* Croqui/autorização do pedido que esta viagem cumpre, se houver. */}
-        <DocumentosDaViagem viagem={local} />
-
-        {/* O que está correndo agora. Fica ANTES da timeline: a timeline conta
-            o que já passou, e isto é o que ainda não acabou. */}
+        {/* O que está correndo agora (fila, quebra): exige ação já. */}
         {abertas.map((e) => (
           <View
             key={e.id}
@@ -286,81 +406,87 @@ export default function ViagemGuiada() {
                 </Text>
               </View>
             </View>
-            <Button className="bg-success" onPress={() => void encerrar(e.id)}>
+            <Button variant="success" onPress={() => void encerrar(e.id)}>
               <CheckCircle2 size={20} color="white" />
-              <Text className="text-lg font-bold text-primary-foreground">
+              <Text className="text-base font-semibold text-success-foreground">
                 Já resolveu
               </Text>
             </Button>
           </View>
         ))}
 
-        {/* Timeline: o marco da carga (do espelho) + os extras registrados */}
-        <View className="gap-3 rounded-2xl border-2 border-border bg-card p-4">
-          <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            O que já foi feito
-          </Text>
-          <View className="flex-row items-start gap-3">
-            <View className="mt-0.5">
-              <CheckCircle2 size={20} color="#16a34a" />
-            </View>
-            <View className="flex-1">
-              <Text className="text-base font-semibold text-foreground">
-                Carga{local.localCargaNome ? ` · ${local.localCargaNome}` : ""}
-              </Text>
-              <Text
-                className="text-xs text-muted-foreground"
-                style={{ fontVariant: ["tabular-nums"] }}
-              >
-                {fmtDataHora(local.iniciadoEm)}
-              </Text>
-            </View>
+        {/* AGORA: documentos da carga ainda por fazer (só dá no pátio). */}
+        {etapasAgora.length > 0 ? (
+          <View className="gap-3">
+            <Text className="text-xs font-bold uppercase tracking-wider text-primary">
+              Agora
+            </Text>
+            {etapasAgora.map((e, i) => (
+              <CartaoEtapa
+                key={e.modelo.id}
+                e={e}
+                destaque
+                botao={docsPrincipal && i === 0 ? "principal" : "contorno"}
+              />
+            ))}
           </View>
-          {local.eventos.map((e) => (
-            <View key={e.id} className="flex-row items-start gap-3">
-              <View className="mt-0.5">
-                <CheckCircle2 size={20} color="#16a34a" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-base font-semibold text-foreground">
-                  {e.nome}
-                  {e.localNome ? ` · ${e.localNome}` : ""}
-                </Text>
-                <Text
-                  className="text-xs text-muted-foreground"
-                  style={{ fontVariant: ["tabular-nums"] }}
-                >
-                  {fmtHora(e.ocorridoEm)}
-                </Text>
-              </View>
-            </View>
-          ))}
+        ) : null}
 
-          {/* Descarga (marco, se já marcada no fechamento) */}
-          {descargaNome ? (
-            <View className="flex-row items-start gap-3">
-              <View className="mt-0.5">
-                <CheckCircle2 size={20} color="#16a34a" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-base font-semibold text-foreground">
-                  Descarga · {descargaNome}
-                </Text>
-                {local.finalizarDraft?.descargaEm ? (
-                  <Text
-                    className="text-xs text-muted-foreground"
-                    style={{ fontVariant: ["tabular-nums"] }}
-                  >
-                    {fmtDataHora(local.finalizarDraft.descargaEm)}
+        {/* Próximo passo: passo obrigatório da empresa, ou fechar a viagem.
+            Tamanho padrão (lg), um ícone — é o mesmo botão das outras telas. */}
+        <View className="gap-3">
+          {proximo ? (
+            <Button
+              size="lg"
+              onPress={() => comLembrete("principal", () => setSheetTipo(proximo))}
+            >
+              <Circle size={22} color="white" strokeWidth={2.5} />
+              <Text
+                className="shrink text-lg font-bold text-primary-foreground"
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
+                {rotuloPrimario(proximo)}
+              </Text>
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              variant={docsPrincipal ? "outline" : "success"}
+              onPress={() => comLembrete("principal", () => router.push("/finalizar-viagem"))}
+            >
+              <Flag size={22} color={docsPrincipal ? "#0f172a" : "white"} />
+              <Text
+                className={`shrink text-lg font-bold ${
+                  docsPrincipal ? "text-foreground" : "text-success-foreground"
+                }`}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
+                {fechamentoComecado ? "Continuar o fechamento" : "Finalizar viagem"}
+              </Text>
+            </Button>
+          )}
+
+          {renderLembrete("principal")}
+
+          {/* O que já foi preenchido no fechamento: perto do botão, pra ele
+              ver que já começou a finalizar. */}
+          {fechamentoComecado ? (
+            <View className="gap-1.5 rounded-2xl border-2 border-border bg-card p-4">
+              <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Já preenchido no fechamento
+              </Text>
+              {descargaNome ? (
+                <View className="flex-row items-start gap-2">
+                  <CheckCircle2 size={18} color="#16a34a" style={{ marginTop: 1 }} />
+                  <Text className="flex-1 text-base font-semibold text-foreground">
+                    Descarga · {descargaNome}
                   </Text>
-                ) : null}
-              </View>
-            </View>
-          ) : null}
-
-          {/* Resumo do fechamento (rascunho) — campos já preenchidos */}
-          {resumoCampos.length > 0 ? (
-            <View className="mt-1 gap-1.5 border-t border-border pt-3">
+                </View>
+              ) : null}
               {resumoCampos.map((r) => (
                 <View key={r.label} className="flex-row justify-between gap-3">
                   <Text className="text-sm text-muted-foreground">{r.label}</Text>
@@ -376,85 +502,62 @@ export default function ViagemGuiada() {
           ) : null}
         </View>
 
-        {/* Documentos da viagem (carga, acerto do frete): entre o que já foi
-            feito e o botão grande — sem roubar o botão, que continua sendo o
-            próximo passo. Sem a função ligada, não desenha nada. */}
-        <CartaoEtapasViagem viagemClientId={local.clientId} />
+        {/* Croqui/autorização do pedido que esta viagem cumpre, se houver.
+            Depois do "Agora" e do próximo passo — nunca empurrando os dois. */}
+        <DocumentosDaViagem viagem={local} />
 
-        {/* BOTÃO PRIMÁRIO GRANDE = próximo passo obrigatório, ou Finalizar */}
-        {proximo ? (
-          <Button
-            size="lg"
-            className="h-24"
-            onPress={() => setSheetTipo(proximo)}
-          >
-            <Circle size={26} color="white" strokeWidth={2.5} />
-            <Text className="text-2xl font-extrabold text-primary-foreground">
-              {rotuloPrimario(proximo)}
-            </Text>
-          </Button>
-        ) : (
-          <Button
-            size="lg"
-            className="h-24 bg-success"
-            onPress={() => router.push("/finalizar-viagem")}
-          >
-            <Flag size={26} color="white" strokeWidth={2.5} />
-            <Text className="text-2xl font-extrabold text-primary-foreground">
-              Finalizar viagem
-            </Text>
-            <ArrowRight size={24} color="white" />
-          </Button>
-        )}
-
-        {/* Botões secundários = eventos opcionais/repetíveis */}
-        {opcionais.length > 0 && (
-          <View className="gap-2">
+        {/* Os outros documentos da viagem (carga já concluída, acerto do frete). */}
+        {etapasOutras.length > 0 ? (
+          <View className="gap-3">
             <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Outros registros
+              Documentos da viagem
             </Text>
-            <View className="flex-row flex-wrap gap-2">
-              {opcionais.map((t) => (
-                <Button
-                  key={t.id}
-                  variant="outline"
-                  className="grow"
-                  onPress={() => setSheetTipo(t)}
-                >
-                  <Text className="text-base font-semibold text-foreground">
-                    + {t.nome}
-                  </Text>
-                </Button>
-              ))}
-            </View>
+            {etapasOutras.map((e) => (
+              <CartaoEtapa key={e.modelo.id} e={e} botao="contorno" />
+            ))}
           </View>
-        )}
+        ) : null}
 
         {/* Deu problema. Separado dos "outros registros" de propósito: fila,
             quebra e carga recusada não são passos da viagem, são o contrário —
-            e é isso que a transportadora precisa saber na hora, não no fim. */}
+            e é isso que a transportadora precisa saber na hora, não no fim.
+            Coluna de botões iguais: os nomes vêm do catálogo de cada empresa,
+            e linha a linha cada um ocupa sempre o mesmo lugar. */}
         {tiposOcorrencia.length > 0 && (
           <View className="gap-2">
             <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Deu problema?
             </Text>
             <Text className="text-sm text-muted-foreground">
-              Avisa aqui que o escritório já fica sabendo. Fila e espera contam o tempo
-              — é assim que a parada vira conversa com o cliente em vez de prejuízo seu.
+              O escritório fica sabendo na hora. Fila e espera contam o tempo.
             </Text>
-            <View className="flex-row flex-wrap gap-2">
-              {tiposOcorrencia.map((t) => (
-                <Button
-                  key={t.id}
-                  variant="outline"
-                  className="grow border-warning"
-                  onPress={() => setSheetTipo(t)}
-                >
-                  <AlertTriangle size={16} color="#b45309" />
-                  <Text className="text-base font-semibold text-foreground">{t.nome}</Text>
-                </Button>
-              ))}
-            </View>
+            {renderLembrete("problema")}
+            {tiposOcorrencia.map((t) => (
+              <BotaoLinha
+                key={t.id}
+                icone={<AlertTriangle size={22} color="#b45309" />}
+                nome={t.nome}
+                onPress={() => comLembrete("problema", () => setSheetTipo(t))}
+              />
+            ))}
+          </View>
+        )}
+
+        {/* Outros registros = eventos opcionais/repetíveis. */}
+        {opcionais.length > 0 && (
+          <View className="gap-2">
+            <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Outros registros
+            </Text>
+            {renderLembrete("outros")}
+            {opcionais.map((t) => (
+              <BotaoLinha
+                key={t.id}
+                icone={<CirclePlus size={22} color="#0f172a" />}
+                nome={t.nome}
+                onPress={() => comLembrete("outros", () => setSheetTipo(t))}
+              />
+            ))}
           </View>
         )}
 
@@ -468,13 +571,63 @@ export default function ViagemGuiada() {
           />
         ) : null}
 
-        {/* Descartar — discreto */}
-        <Button variant="ghost" onPress={descartar}>
-          <Trash2 size={18} color="#dc2626" />
-          <Text className="text-sm font-medium text-destructive">
-            Descartar viagem
+        {/* Linha do tempo: consulta, não ação — por isso fica embaixo. */}
+        <View className="gap-3 rounded-2xl border-2 border-border bg-card p-4">
+          <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            O que já foi feito
           </Text>
-        </Button>
+          <LinhaFeito
+            titulo={`Carga${local.localCargaNome ? ` · ${local.localCargaNome}` : ""}`}
+            quando={fmtDataHora(local.iniciadoEm)}
+          />
+          {local.eventos.map((e) => (
+            <LinhaFeito
+              key={e.id}
+              titulo={`${e.nome}${e.localNome ? ` · ${e.localNome}` : ""}`}
+              quando={fmtHora(e.ocorridoEm)}
+            />
+          ))}
+          {descargaNome ? (
+            <LinhaFeito
+              titulo={`Descarga · ${descargaNome}`}
+              quando={
+                local.finalizarDraft?.descargaEm
+                  ? fmtDataHora(local.finalizarDraft.descargaEm)
+                  : null
+              }
+            />
+          ) : null}
+        </View>
+
+        {/* Descartar — discreto, com confirmação na própria tela (sem pop-up). */}
+        {confirmandoDescarte ? (
+          <View className="gap-3 rounded-2xl border-2 border-destructive/40 bg-destructive/5 p-4">
+            <Text className="text-base font-bold text-foreground">Descartar esta viagem?</Text>
+            <Text className="text-sm text-muted-foreground">
+              Os passos registrados neste celular serão apagados. Isso não dá pra desfazer.
+            </Text>
+            <Button variant="destructive" onPress={() => void descartar()}>
+              <Trash2 size={20} color="white" />
+              <Text className="text-base font-semibold text-destructive-foreground">
+                Descartar viagem
+              </Text>
+            </Button>
+            <Button variant="outline" onPress={() => setConfirmandoDescarte(false)}>
+              <Text className="text-base font-semibold text-foreground">Manter viagem</Text>
+            </Button>
+          </View>
+        ) : (
+          <Button
+            variant="ghost"
+            onPress={() => {
+              setConfirmandoDescarte(true);
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+            }}
+          >
+            <Trash2 size={18} color="#dc2626" />
+            <Text className="text-sm font-medium text-destructive">Descartar viagem</Text>
+          </Button>
+        )}
       </ScrollView>
 
       {/* Sheet de coleta do evento */}
@@ -488,6 +641,72 @@ export default function ViagemGuiada() {
     </SafeAreaView>
   );
 }
+
+/** Faixa verde de confirmação ("Viagem começou às 10:12"). */
+function FaixaOk({ texto }: { texto: string }) {
+  return (
+    <View className="flex-row items-center gap-3 rounded-2xl border-2 border-success/40 bg-success/15 px-4 py-3">
+      <CheckCircle2 size={22} color="#16a34a" />
+      <Text className="flex-1 text-base font-bold text-foreground">{texto}</Text>
+    </View>
+  );
+}
+
+/**
+ * Uma ação de "Deu problema"/"Outros registros": botão contorno de largura
+ * cheia, tamanho padrão, ícone + nome. Todos iguais — sem grade, sem esticar.
+ */
+function BotaoLinha({
+  icone,
+  nome,
+  onPress,
+}: {
+  icone: ReactNode;
+  nome: string;
+  onPress: () => void;
+}) {
+  return (
+    <Button variant="outline" className="w-full justify-start" onPress={onPress}>
+      {icone}
+      <Text className="flex-1 text-base font-semibold text-foreground" numberOfLines={1}>
+        {nome}
+      </Text>
+    </Button>
+  );
+}
+
+function LinhaFeito({ titulo, quando }: { titulo: string; quando: string | null }) {
+  return (
+    <View className="flex-row items-start gap-3">
+      <View className="mt-0.5">
+        <CheckCircle2 size={20} color="#16a34a" />
+      </View>
+      <View className="flex-1">
+        <Text className="text-base font-semibold text-foreground">{titulo}</Text>
+        {quando ? (
+          <Text
+            className="text-xs text-muted-foreground"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            {quando}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * "Parada registrada" / "Abastecimento registrado": os nomes vêm do catálogo da
+ * empresa, então o gênero sai da terminação (o caso comum do português).
+ */
+function registradoA(nome: string): string {
+  const n = nome.trim().toLowerCase();
+  return /(a|ção|gem|dade)$/.test(n) && !/(dia|mapa|problema|sistema)$/.test(n)
+    ? "registrada"
+    : "registrado";
+}
+
 
 /**
  * Modal que coleta só o que o TipoEventoViagem pede (pede*) e registra o
@@ -796,9 +1015,14 @@ function EventoSheet({
                   </View>
                 ) : null}
 
-                <Button size="lg" className="h-20" onPress={salvar} loading={salvando}>
-                  <Check size={24} color="white" />
-                  <Text className="text-xl font-bold text-primary-foreground">
+                <Button size="lg" onPress={salvar} loading={salvando}>
+                  <Check size={22} color="white" />
+                  <Text
+                    className="shrink text-lg font-bold text-primary-foreground"
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
                     {salvando ? "Salvando…" : `Registrar ${tipo.nome}`}
                   </Text>
                 </Button>

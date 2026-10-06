@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { router, Stack } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { router, Stack, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Flag } from "lucide-react-native";
+import { CheckCircle2, Flag, House } from "lucide-react-native";
 import {
   ActivityIndicator,
+  BackHandler,
   KeyboardAvoidingView,
   ScrollView,
   Text,
@@ -27,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { showAlert, showConfirm } from "@/lib/alert";
+import { CartaoEtapa } from "@/components/etapas/cartao-etapas-viagem";
 import { humanizeApiError } from "@/lib/api";
 import { hojeISO } from "@/lib/datetime";
 import { avaliarKm, escolherModoDaLista, regrasDoModo, type KmFonte } from "@ronan/shared-types";
@@ -47,7 +49,16 @@ import {
 import { AvisoKmForaDoPadrao, SugestaoKmHistorico } from "@/components/sugestao-km-historico";
 import { BarreiraEtapas } from "@/components/etapas/barreira-etapas";
 import { CAP_ETAPAS } from "@/lib/etapas";
-import { lerEstadoEtapas, marcarViagemFinalizada } from "@/lib/etapas-local";
+import { etapasAbertas, marcarViagemFinalizada, useEstadoEtapas } from "@/lib/etapas-local";
+
+/**
+ * Sai do "Viagem finalizada" pro início: desempilha até a home (a viagem em
+ * andamento que está embaixo já não existe — cair nela faria a tela piscar
+ * "Carregando" e saltar pra home).
+ */
+function irProInicio() {
+  router.dismissTo("/");
+}
 
 /**
  * Passo final do lifecycle guiado: coleta os dados que faltam pra fechar a
@@ -61,7 +72,37 @@ export default function FinalizarViagem() {
   // Documentos da viagem: "Antes de seguir" (documento da carga que o
   // escritório precisa). Finalizar só aparece depois que ele anexa ou explica.
   const etapasLigado = useCapacidadeNova(CAP_ETAPAS);
+  const estadoEtapas = useEstadoEtapas();
   const [liberadoEtapas, setLiberadoEtapas] = useState(true);
+  // Depois de "Confirmar e finalizar" a própria tela vira "Viagem finalizada"
+  // (sem pop-up e sem saltar pros documentos da descarga sozinha).
+  const [finalizada, setFinalizada] = useState<{
+    viagemClientId: string | null;
+    aguardandoPeso: boolean;
+  } | null>(null);
+
+  // Finalizada: o "voltar" do Android leva pro início, nunca pra viagem em
+  // andamento (que já não existe). Só enquanto esta tela está em foco — senão
+  // roubaria o voltar dos documentos abertos por cima dela.
+  useFocusEffect(
+    useCallback(() => {
+      if (!finalizada) return;
+      const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+        irProInicio();
+        return true;
+      });
+      return () => sub.remove();
+    }, [finalizada]),
+  );
+  const docsDescarga = useMemo(
+    () =>
+      finalizada?.viagemClientId && etapasLigado && estadoEtapas
+        ? etapasAbertas(estadoEtapas, finalizada.viagemClientId).filter(
+            (e) => e.modelo.momento === "FIM",
+          )
+        : [],
+    [finalizada, etapasLigado, estadoEtapas],
+  );
 
   const [clienteId, setClienteId] = useState("");
   const [materialId, setMaterialId] = useState("");
@@ -644,27 +685,12 @@ export default function FinalizarViagem() {
         foto: foto ? { uri: foto.uri, mime: foto.mime } : undefined,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Documentos: a viagem acabou — os da descarga abrem logo em seguida (e
-      // o acerto do frete passa a esperar na home).
-      let docsDescarga: { viagemClientId: string; modeloId: string } | null = null;
-      if (ciclo) {
-        await marcarViagemFinalizada(ciclo.clientId).catch(() => {});
-        if (etapasLigado) {
-          const est = await lerEstadoEtapas().catch(() => null);
-          const fim = est?.viagens
-            .find((x) => x.viagemClientId === ciclo.clientId)
-            ?.modelos.find((m) => m.momento === "FIM");
-          if (fim) docsDescarga = { viagemClientId: ciclo.clientId, modeloId: fim.id };
-        }
-      }
-      await showAlert({
-        title: aguardandoPeso ? "Viagem finalizada — falta o peso" : "Viagem finalizada!",
-        message: aguardandoPeso
-          ? "Enviamos assim que tiver sinal. Quando sair o romaneio, complete o peso e o ticket — a gente te lembra."
-          : "Vamos enviar assim que tiver sinal. Bom trabalho.",
-      });
-      if (docsDescarga) router.replace({ pathname: "/etapa", params: docsDescarga });
-      else router.replace("/");
+      // Documentos: a viagem acabou — os da descarga ficam disponíveis (e o
+      // acerto do frete passa a esperar na home). Nada abre sozinho: a tela
+      // vira "Viagem finalizada" com o convite.
+      if (ciclo) await marcarViagemFinalizada(ciclo.clientId).catch(() => {});
+      setFinalizada({ viagemClientId: ciclo?.clientId ?? null, aguardandoPeso });
+      setSubmitting(false);
     } catch (err) {
       setErro(humanizeApiError(err));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -682,10 +708,49 @@ export default function FinalizarViagem() {
     );
   }
 
+  if (finalizada) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+        {/* Sem gesto de voltar no iOS: atrás desta tela não há mais viagem. */}
+        <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
+        <ScreenHeader title="Fim da viagem" semVoltar />
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}>
+          <View className="gap-2 rounded-2xl border-2 border-success/40 bg-success/15 p-4">
+            <View className="flex-row items-center gap-3">
+              <CheckCircle2 size={24} color="#16a34a" />
+              <Text className="flex-1 text-lg font-extrabold text-foreground">
+                {finalizada.aguardandoPeso ? "Viagem finalizada — falta o peso" : "Viagem finalizada"}
+              </Text>
+            </View>
+            <Text className="text-base text-foreground">
+              {finalizada.aguardandoPeso
+                ? "Enviamos assim que tiver sinal. Quando sair o romaneio, complete o peso e o ticket — a gente te lembra."
+                : "Vamos enviar assim que tiver sinal. Bom trabalho."}
+            </Text>
+          </View>
+
+          {docsDescarga.map((e, i) => (
+            <CartaoEtapa
+              key={e.modelo.id}
+              e={e}
+              destaque
+              botao={i === 0 ? "principal" : "contorno"}
+            />
+          ))}
+
+          <Button variant="outline" onPress={irProInicio}>
+            <House size={20} color="#0f172a" />
+            <Text className="text-base font-semibold text-foreground">Ir pro início</Text>
+          </Button>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScreenHeader title="Finalizar viagem" />
+      <ScreenHeader title="Fim da viagem" />
 
       {!cat.data ? (
         <SemCatalogo carregando={cat.isFetching} aoBaixar={() => void cat.refetch()} />
@@ -702,7 +767,7 @@ export default function FinalizarViagem() {
             scrollEnabled={!assinando}
           >
             {/* 1) Onde descarregou — captura já dispara sozinha ao abrir a tela
-                   (o motorista veio do "Finalizar viagem" acabando de descarregar).
+                   (o motorista veio do "Finalizar viagem" da viagem em andamento).
                    Só quando o modo de serviço pede o local de descarga. */}
             {exigeLocalDescarga ? (
               <View
@@ -1044,18 +1109,18 @@ export default function FinalizarViagem() {
             {liberadoEtapas ? (
               <Button
                 size="lg"
-                className="h-20 bg-success"
+                variant="success"
                 onPress={salvar}
                 loading={submitting}
               >
-                <Flag size={24} color="white" />
-                <Text className="text-xl font-bold text-primary-foreground">
-                  {submitting ? "Finalizando…" : "Finalizar viagem"}
+                {!submitting && <Flag size={22} color="white" />}
+                <Text className="text-lg font-bold text-success-foreground">
+                  {submitting ? "Finalizando…" : "Confirmar e finalizar"}
                 </Text>
               </Button>
             ) : (
               <Text className="text-center text-base text-muted-foreground">
-                Anexe o documento acima, ou toque em “Seguir sem isso”, pra finalizar a viagem.
+                Anexe o documento acima, ou toque em “Seguir sem isso”, pra liberar o “Confirmar e finalizar”.
               </Text>
             )}
           </ScrollView>

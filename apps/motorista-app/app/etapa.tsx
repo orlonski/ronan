@@ -416,17 +416,18 @@ export default function EtapaScreen() {
               <Button
                 size="lg"
                 variant="success"
-                className="h-20"
                 onPress={aoTocarConcluir}
                 loading={concluindo && !mostrarFaltam}
               >
-                <CheckCircle2 size={24} color="white" />
-                <Text className="text-xl font-bold text-success-foreground">Concluir</Text>
+                <CheckCircle2 size={22} color="white" />
+                <Text className="text-lg font-bold text-success-foreground">Concluir documentos</Text>
               </Button>
             ) : null}
+            {/* "Voltar", sem prometer "pra viagem": esta tela também abre da
+                home, da barreira e depois da viagem finalizada. */}
             <Button variant="outline" onPress={() => router.back()}>
               <ArrowLeft size={20} color="#0f172a" />
-              <Text className="text-base font-semibold text-foreground">Voltar pra viagem</Text>
+              <Text className="text-base font-semibold text-foreground">Voltar</Text>
             </Button>
             {!somenteLeitura ? (
               <Text className="text-center text-sm text-muted-foreground">

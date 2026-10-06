@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { ArrowRight, ClipboardCheck, Play } from "lucide-react-native";
+import { CheckCircle2, ClipboardCheck } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -155,8 +155,8 @@ export default function IniciarViagem() {
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Documentos: a viagem guarda os formulários que valem AGORA (a versão
-      // que ele vai ver), e os da carga abrem logo em seguida.
-      const inicio = modelosEtapa.find((m) => m.momento === "INICIO");
+      // que ele vai ver). Os da carga NÃO abrem sozinhos: ele cai na viagem em
+      // andamento, vê que começou, e o cartão "Agora" convida pros documentos.
       if (etapasLigado && modelosEtapa.length > 0) {
         await registrarViagemComEtapas({
           viagemClientId,
@@ -167,11 +167,7 @@ export default function IniciarViagem() {
           modelos: modelosEtapa,
         }).catch(() => {});
       }
-      router.replace(
-        etapasLigado && inicio
-          ? { pathname: "/viagem-guiada", params: { abrirEtapa: inicio.id } }
-          : "/viagem-guiada",
-      );
+      router.replace({ pathname: "/viagem-guiada", params: { iniciou: "1" } });
     } catch (err) {
       setErro(humanizeApiError(err));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -318,16 +314,18 @@ export default function IniciarViagem() {
           {erro ? <ErroCampo msg={erro} /> : null}
 
           {liberadoEtapas ? (
-            <Button size="lg" className="h-20" onPress={confirmar} loading={submitting}>
-              <Play size={24} color="white" fill="white" />
-              <Text className="text-xl font-bold text-primary-foreground">
-                {submitting ? "Abrindo..." : "Começar viagem"}
+            // "Confirmar carga", não "Começar viagem": o título da tela já é
+            // esse nome, e dois toques seguidos no mesmo nome fazem ele achar
+            // que o primeiro não pegou.
+            <Button size="lg" variant="success" onPress={confirmar} loading={submitting}>
+              {!submitting && <CheckCircle2 size={22} color="white" />}
+              <Text className="text-lg font-bold text-success-foreground">
+                {submitting ? "Confirmando…" : "Confirmar carga"}
               </Text>
-              {!submitting && <ArrowRight size={22} color="white" />}
             </Button>
           ) : (
             <Text className="text-center text-base text-muted-foreground">
-              Anexe o documento lá em cima, ou toque em “Seguir sem isso”, pra começar a viagem.
+              Anexe o documento lá em cima, ou toque em “Seguir sem isso”, pra liberar o “Confirmar carga”.
             </Text>
           )}
         </ScrollView>
