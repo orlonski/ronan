@@ -70,7 +70,8 @@ type Viagem = {
   cliente?: { id: string; nome: string } | null;
   // Nulos quando o modo de serviço não os exige.
   material: { id: string; nome: string; exigeTicket: boolean } | null;
-  localCarga: { id: string; nome: string; cidade: string; uf: string };
+  // Nulo na viagem guiada que parou antes de carregar.
+  localCarga: { id: string; nome: string; cidade: string; uf: string } | null;
   localDescarga: { id: string; nome: string; cidade: string; uf: string } | null;
   fotos: { id: string; storageKey: string }[];
   /** true quando rota passa por pedágio cadastrado mas motorista não pôs valor. */
@@ -261,9 +262,11 @@ export default function ViagensPage() {
           <div className="text-xs">
             <div className="flex items-center gap-1">
               <ArrowUp className="h-3 w-3 text-muted-foreground" />
-              {row.original.localCarga.nome.length > 28
-                ? row.original.localCarga.nome.slice(0, 25) + "..."
-                : row.original.localCarga.nome}
+              {!row.original.localCarga
+                ? "Ainda não carregou"
+                : row.original.localCarga.nome.length > 28
+                  ? row.original.localCarga.nome.slice(0, 25) + "..."
+                  : row.original.localCarga.nome}
             </div>
             {row.original.localDescarga && (
               <div className="flex items-center gap-1">
@@ -558,7 +561,7 @@ function ViagemCard({ v }: { v: Viagem }) {
           <div className="space-y-1 text-sm font-medium">
             <span className="flex min-w-0 items-center gap-1.5">
               <ArrowUp className="h-4 w-4 shrink-0 text-emerald-600" />
-              <span className="truncate">{v.localCarga.nome}</span>
+              <span className="truncate">{v.localCarga?.nome ?? "Ainda não carregou"}</span>
             </span>
             {v.localDescarga && (
               <span className="flex min-w-0 items-center gap-1.5">

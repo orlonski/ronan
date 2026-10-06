@@ -200,6 +200,8 @@ type ViagemDetalhe = {
   duplicidadeAceitaEm: string | null;
   /** Modo de serviço. null = frete por tonelada (histórico e app antigo). */
   tipoServico: { id: string; nome: string } | null;
+  // Nulo na viagem guiada que ainda não carregou: o local de carga só é
+  // preenchido no evento de carga (ou no iniciar, se o GPS detectou).
   localCarga: {
     id: string;
     nome: string;
@@ -208,7 +210,7 @@ type ViagemDetalhe = {
     logradouro: string;
     lat: number | null;
     lng: number | null;
-  };
+  } | null;
   // Nulo quando o modo de serviço não exige descarga.
   localDescarga: {
     id: string;
@@ -342,7 +344,7 @@ export default function ViagemDetalhePage({
       fetchApi<{ gpsLimiteSinalFracoM: number }>("/admin/busca-locais-config", { token }),
   });
   const limiteSinalFraco = gpsConfig.data?.gpsLimiteSinalFracoM ?? 50;
-  const localCargaId = viagem.data?.localCarga.id;
+  const localCargaId = viagem.data?.localCarga?.id;
   const localDescargaId = viagem.data?.localDescarga?.id;
   // Por viagem, não por par de locais: o backend resolve a rota que ela de fato
   // percorreu (rota escolhida / "cheguei direto" / bota-fora). `pedagios: null`
@@ -517,12 +519,11 @@ export default function ViagemDetalhePage({
   // não re-renderizar à toa quando o resto da página muda. Antes dos guards por
   // regra de hooks — por isso referenciam viagem.data? (ainda pode estar nulo).
   const vd = viagem.data;
+  const lc = vd?.localCarga;
   const mapaCarga = useMemo(
     () =>
-      vd?.localCarga.lat != null && vd?.localCarga.lng != null
-        ? { lat: vd.localCarga.lat, lng: vd.localCarga.lng, nome: vd.localCarga.nome }
-        : null,
-    [vd?.localCarga.lat, vd?.localCarga.lng, vd?.localCarga.nome],
+      lc?.lat != null && lc.lng != null ? { lat: lc.lat, lng: lc.lng, nome: lc.nome } : null,
+    [lc?.lat, lc?.lng, lc?.nome],
   );
   const mapaDescarga = useMemo(
     () =>
@@ -932,25 +933,33 @@ export default function ViagemDetalhePage({
                       <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                         <ArrowUp className="h-3.5 w-3.5" /> Carga
                       </div>
-                      <Link
-                        href={`/locais/${v.localCarga.id}/ver`}
-                        title="Ver local"
-                        className="mt-0.5 inline-flex items-center gap-1 font-medium hover:text-primary hover:underline"
-                      >
-                        {v.localCarga.nome}
-                        <Eye className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                      </Link>
-                      {dupPorLocal.get(v.localCarga.id) && (
-                        <span className="ml-2 align-middle">
-                          <DuplicataLocalBadge
-                            info={dupPorLocal.get(v.localCarga.id)!}
-                            selfId={v.localCarga.id}
-                          />
-                        </span>
+                      {v.localCarga ? (
+                        <>
+                          <Link
+                            href={`/locais/${v.localCarga.id}/ver`}
+                            title="Ver local"
+                            className="mt-0.5 inline-flex items-center gap-1 font-medium hover:text-primary hover:underline"
+                          >
+                            {v.localCarga.nome}
+                            <Eye className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                          </Link>
+                          {dupPorLocal.get(v.localCarga.id) && (
+                            <span className="ml-2 align-middle">
+                              <DuplicataLocalBadge
+                                info={dupPorLocal.get(v.localCarga.id)!}
+                                selfId={v.localCarga.id}
+                              />
+                            </span>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {v.localCarga.logradouro} — {v.localCarga.cidade}/{v.localCarga.uf}
+                          </p>
+                        </>
+                      ) : (
+                        // Viagem guiada que ainda não carregou: o local nasce no
+                        // evento de carga. Antes disto a ficha inteira quebrava.
+                        <p className="mt-0.5 text-muted-foreground">Ainda não carregou</p>
                       )}
-                      <p className="text-xs text-muted-foreground">
-                        {v.localCarga.logradouro} — {v.localCarga.cidade}/{v.localCarga.uf}
-                      </p>
                       {(v.cargaDistanciaMetros != null || v.cargaPrecisao != null) && (
                         <div className="mt-1 text-xs">
                           <MarcacaoCarga viagem={v} limiteSinalFraco={limiteSinalFraco} />
@@ -991,25 +1000,29 @@ export default function ViagemDetalhePage({
                     </div>
                     )}
                     {/* Trechos adicionais (retorno do bota-fora): voltou pra carga */}
-                    {(v.trechos ?? []).map((t) => (
+                    {(() => {
+                      const carga = v.localCarga;
+                      if (!carga) return null;
+                      return (v.trechos ?? []).map((t) => (
                       <div key={t.id}>
                         <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700">
                           <RotateCw className="h-3.5 w-3.5" /> Retorno (bota-fora)
                         </div>
                         <Link
-                          href={`/locais/${v.localCarga.id}/ver`}
+                          href={`/locais/${carga.id}/ver`}
                           title="Ver local"
                           className="mt-0.5 inline-flex items-center gap-1 font-medium hover:text-primary hover:underline"
                         >
-                          Voltou pra {v.localCarga.nome}
+                          Voltou pra {carga.nome}
                           <Eye className="h-3.5 w-3.5 shrink-0 opacity-70" />
                         </Link>
                         <p className="text-xs text-muted-foreground">
-                          {v.localCarga.logradouro} — {v.localCarga.cidade}/{v.localCarga.uf} · +
+                          {carga.logradouro} — {carga.cidade}/{carga.uf} · +
                           {Number(t.km).toFixed(1).replace(".", ",")} km
                         </p>
                       </div>
-                    ))}
+                    ));
+                    })()}
                   </div>
                 </Card>
                 <ReferenciaKmCard
@@ -1221,7 +1234,7 @@ export default function ViagemDetalhePage({
             </Card>
           )}
 
-          {(v.localCarga.lat != null ||
+          {(v.localCarga?.lat != null ||
             v.localDescarga?.lat != null ||
             v.lat != null) && (
             <Card className="p-4 sm:p-5">

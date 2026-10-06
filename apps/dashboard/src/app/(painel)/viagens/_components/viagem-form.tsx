@@ -59,7 +59,8 @@ export type ViagemEditavel = {
   cliente?: { id: string; nome: string } | null;
   // Nulos quando o modo de serviço não os exige.
   material: { id: string; nome: string } | null;
-  localCarga: { id: string; nome: string; cidade: string; uf: string };
+  // Nulo na viagem guiada que parou antes de carregar.
+  localCarga: { id: string; nome: string; cidade: string; uf: string } | null;
   localDescarga: { id: string; nome: string; cidade: string; uf: string } | null;
   /** Modo de serviço. null = frete por tonelada (histórico e app antigo). */
   tipoServico: { id: string; nome: string } | null;
@@ -145,7 +146,7 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     veiculoId: initial.veiculo.id,
     clienteId: initial.cliente?.id ?? "",
     materialId: initial.material?.id ?? "",
-    localCargaId: initial.localCarga.id,
+    localCargaId: initial.localCarga?.id ?? "",
     localDescargaId: initial.localDescarga?.id ?? "",
   });
 
@@ -168,11 +169,13 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
   const clienteInicial = initial.cliente
     ? { value: initial.cliente.id, label: initial.cliente.nome }
     : undefined;
-  const localCargaInicial = {
-    value: initial.localCarga.id,
-    label: initial.localCarga.nome,
-    sublabel: `${initial.localCarga.cidade}/${initial.localCarga.uf}`,
-  };
+  const localCargaInicial = initial.localCarga
+    ? {
+        value: initial.localCarga.id,
+        label: initial.localCarga.nome,
+        sublabel: `${initial.localCarga.cidade}/${initial.localCarga.uf}`,
+      }
+    : undefined;
   const localDescargaInicial = initial.localDescarga
     ? {
         value: initial.localDescarga.id,
@@ -230,7 +233,7 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     if (form.veiculoId !== initial.veiculo.id) diff.veiculoId = form.veiculoId;
     if (form.clienteId !== (initial.cliente?.id ?? "")) diff.clienteId = form.clienteId;
     if (form.materialId !== (initial.material?.id ?? "")) diff.materialId = form.materialId;
-    if (form.localCargaId !== initial.localCarga.id)
+    if (form.localCargaId !== (initial.localCarga?.id ?? ""))
       diff.localCargaId = form.localCargaId;
     if (form.localDescargaId !== (initial.localDescarga?.id ?? ""))
       diff.localDescargaId = form.localDescargaId;
