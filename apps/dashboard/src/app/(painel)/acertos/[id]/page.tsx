@@ -1,5 +1,6 @@
 "use client";
 
+import { GastosNoAcerto } from "../../gastos-viagem/_components/cartoes";
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -314,6 +315,13 @@ function Conteudo({ id }: { id: string }) {
         />
       </div>
 
+      <GastosNoAcerto
+        motoristaId={a.motorista.id}
+        periodoInicio={a.periodoInicio}
+        periodoFim={a.periodoFim}
+        itens={a.itens}
+        aberto={aberto}
+      />
       {aberto && conf && conf.ficouDeFora.length > 0 && (
         <Permitido chave="acertos.gerar">
           <FicouDeFora acertoId={id} itens={conf.ficouDeFora} onIncluiu={recarregar} />

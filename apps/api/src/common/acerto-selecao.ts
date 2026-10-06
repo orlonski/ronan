@@ -35,6 +35,7 @@ export type RefItemAcerto = {
   viagemId?: string | null;
   pedagioId?: string | null;
   abastecimentoId?: string | null;
+  despesaId?: string | null;
 };
 
 /**
@@ -56,6 +57,7 @@ export function chaveDoItem(i: RefItemAcerto): string | null {
   if (i.tipo === "REEMBOLSO_ABASTECIMENTO" && i.abastecimentoId) {
     return `ABASTECIMENTO:${i.abastecimentoId}`;
   }
+  if (i.tipo === "REEMBOLSO_DESPESA" && i.despesaId) return `DESPESA:${i.despesaId}`;
   return null;
 }
 

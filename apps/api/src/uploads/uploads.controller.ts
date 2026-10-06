@@ -13,6 +13,9 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { UploadsService } from "./uploads.service";
 import { checarArquivoEnviado, MIMES_IMAGEM } from "../common/arquivo-enviado";
+import { PrismaService } from "../prisma/prisma.service";
+import { contaIdAtual } from "../common/conta/conta-context";
+import { exigirModuloDespesas, exigirMotoristaAprovado } from "../common/despesa-acesso";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -21,7 +24,10 @@ const MAX_BYTES = 10 * 1024 * 1024;
 @UseGuards(RolesGuard)
 @Controller()
 export class UploadsController {
-  constructor(private readonly uploads: UploadsService) {}
+  constructor(
+    private readonly uploads: UploadsService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Roles("MOTORISTA")
   @Post("m/uploads/ticket")
@@ -57,6 +63,27 @@ export class UploadsController {
       user.id,
     );
     return { storageKey: key };
+  }
+
+  /**
+   * Foto do comprovante do GASTO DE VIAGEM. Devolve a chave e o sha256 (calculado
+   * aqui). Mesmas portas do POST /m/despesas: cadastro aprovado e módulo.
+   */
+  @Roles("MOTORISTA")
+  @Post("m/uploads/despesa")
+  @UseInterceptors(FileInterceptor("foto"))
+  async uploadDespesa(
+    @CurrentUser() user: AuthMotorista,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    await exigirMotoristaAprovado(this.prisma, user.id);
+    await exigirModuloDespesas(this.prisma, contaIdAtual());
+    checarArquivoEnviado(file, {
+      mimes: MIMES_IMAGEM,
+      maxBytes: MAX_BYTES,
+      comoDizer: "Isso não é uma foto. Mande uma imagem.",
+    });
+    return this.uploads.putDespesaFoto(file.buffer, file.mimetype, user.id);
   }
 
   @Roles("MOTORISTA")

@@ -35,6 +35,8 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.locais.cadastrarCarga",
   "app.pedagio.lancar",
   "app.abastecimento.lancar",
+  "app.despesa.lancar",
+  "app.despesa.acompanhar",
   "app.problema.avisar",
   "app.checklist.fazer",
   "app.posicao.compartilhar",
@@ -304,6 +306,34 @@ const DEFS: CapacidadeAppDef[] = [
     gate: "SERVIDOR",
     aoPerder: "VALA",
     colunaLegada: { coluna: "podeLancarAbastecimento", espelha: true },
+  },
+  {
+    // Gasto de viagem: a porta única "O que você pagou?" + o formulário do
+    // tipo. Só existe onde a empresa contratou o módulo `despesas` — sem ele a
+    // home fica exatamente como hoje. O servidor checa o módulo e o cadastro
+    // APROVADO no próprio endpoint (o guard de capacidade começa em sombra).
+    chave: "app.despesa.lancar",
+    label: "Lançar gasto de viagem",
+    efeito: "Card \"Gasto de viagem\" no Início: alimentação, borracharia, chapa, pernoite… com a foto do papel, pra o escritório devolver.",
+    grupo: "Gastos",
+    tipo: "EMPRESA",
+    vinculo: "MOTORISTA",
+    modulo: "despesas",
+    gate: "SERVIDOR",
+    aoPerder: "VALA",
+  },
+  {
+    // Acompanhar é direito de ver o que é dele: sobrevive ao cancelamento.
+    chave: "app.despesa.acompanhar",
+    label: "Acompanhar os reembolsos",
+    efeito: "\"Meus reembolsos\": quanto tem pra receber de volta e em que pé está cada gasto.",
+    grupo: "Gastos",
+    tipo: "EMPRESA",
+    vinculo: "MOTORISTA",
+    modulo: "despesas",
+    gate: "FILTRO",
+    aoPerder: "RECUSAR",
+    sobreviveCancelamento: true,
   },
   {
     // O motorista é quem vê o pneu careca e a luz acesa no painel (dono,

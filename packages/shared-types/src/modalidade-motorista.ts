@@ -28,6 +28,8 @@ export const CriarModalidadeMotoristaInput = z.object({
   valorPorKm: z.number().positive().max(99999.99).nullish(),
   reembolsaPedagio: z.boolean().optional(),
   reembolsaAbastecimento: z.boolean().optional(),
+  /** Terceiro interruptor (gasto de viagem). Ausente = devolve. */
+  reembolsaDespesa: z.boolean().optional(),
 });
 export type CriarModalidadeMotoristaInput = z.infer<typeof CriarModalidadeMotoristaInput>;
 
@@ -46,6 +48,8 @@ export const AtualizarModalidadeMotoristaInput = z.object({
   valorPorKm: z.number().positive().max(99999.99).nullish(),
   reembolsaPedagio: z.boolean().optional(),
   reembolsaAbastecimento: z.boolean().optional(),
+  /** Terceiro interruptor (gasto de viagem). Ausente = devolve. */
+  reembolsaDespesa: z.boolean().optional(),
 });
 export type AtualizarModalidadeMotoristaInput = z.infer<typeof AtualizarModalidadeMotoristaInput>;
 
@@ -67,5 +71,7 @@ export const ModalidadeMotorista = z.object({
   valorPorKm: z.string().nullable().optional(),
   reembolsaPedagio: z.boolean().optional(),
   reembolsaAbastecimento: z.boolean().optional(),
+  /** Terceiro interruptor (gasto de viagem). Ausente = devolve. */
+  reembolsaDespesa: z.boolean().optional(),
 });
 export type ModalidadeMotorista = z.infer<typeof ModalidadeMotorista>;

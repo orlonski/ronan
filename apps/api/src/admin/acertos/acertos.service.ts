@@ -18,9 +18,11 @@ import { filtroEscopo, SEM_ESCOPO, type EscopoAdmin } from "../../common/escopo/
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { dentroDeEmprego, periodosDeEmprego } from "../../common/regime-vigente";
 import { inicioDoDiaBR } from "../../common/timezone";
+import { diaSP } from "../../common/despesa-regras";
 import {
   calcularAcerto,
   descricaoPedagioAvulso,
+  itensReembolsoDespesa,
   resolverRemuneracao,
   totalizarAcerto,
   type AbastecimentoParaAcerto,
@@ -270,11 +272,18 @@ export class AcertosService {
       regra,
     });
 
+    // Gasto de viagem (módulo `despesas`): entra pela MESMA seleção que viagem,
+    // diesel e pedágio — mesma trava contra pagar duas vezes (chave DESPESA:id),
+    // mesmo "puxar do ABERTO esquecido", mesma lista "Ficou de fora".
+    const despesas = await this.despesasDoPeriodo(motorista.id, deYmd, ateYmd, foraDoEmprego);
+    calculado.itens.push(...itensReembolsoDespesa(despesas, regra));
+
     // A data de cada lançamento, pra lista "Ficou de fora" dizer de quando é.
     const dataPorRef = new Map<string, Date>();
     for (const v of viagensParaAcerto) dataPorRef.set(v.id, v.data);
     for (const a of abastecimentosParaAcerto) dataPorRef.set(a.id, a.data);
     for (const p of avulsos) dataPorRef.set(p.id, p.data);
+    for (const d of despesas) dataPorRef.set(d.id, diaUtc(diaSP(d.data)));
 
     return { calculado, regra, periodosEmprego, dataPorRef };
   }
@@ -290,6 +299,8 @@ export class AcertosService {
     if (viagemIds.length) ou.push({ viagemId: { in: viagemIds } });
     if (pedagioIds.length) ou.push({ pedagioId: { in: pedagioIds } });
     if (abastIds.length) ou.push({ abastecimentoId: { in: abastIds } });
+    const despesaIds = [...new Set(itens.map((i) => i.despesaId).filter((x): x is string => !!x))];
+    if (despesaIds.length) ou.push({ despesaId: { in: despesaIds } });
     if (ou.length === 0) return [];
 
     const linhas = await this.prisma.itemAcerto.findMany({
@@ -300,6 +311,7 @@ export class AcertosService {
         viagemId: true,
         pedagioId: true,
         abastecimentoId: true,
+        despesaId: true,
         automatico: true,
         puxadoDe: true,
         acerto: { select: { id: true, status: true, periodoInicio: true, periodoFim: true } },
@@ -421,6 +433,7 @@ export class AcertosService {
             viagemId: i.viagemId ?? null,
             pedagioId: i.pedagioId ?? null,
             abastecimentoId: i.abastecimentoId ?? null,
+            despesaId: i.despesaId ?? null,
             descricao: i.descricao,
             valor: i.valor,
             automatico: true,
@@ -461,6 +474,34 @@ export class AcertosService {
       puxados: selecao.puxar.length,
       jaFechados: selecao.jaFechados.length + selecao.aMaoEmOutro.length,
     };
+  }
+
+  /**
+   * Gastos de viagem candidatos ao acerto: APROVADOS, de tipo que devolve, com
+   * DATA (dia civil de SP) dentro do período e fora de dia de emprego CLT (o
+   * mesmo `foraDoEmprego` de viagem/diesel/pedágio — B10). Com ou sem viagem: o
+   * vínculo nunca decide pagamento. Quem decide se já está em outro acerto é a
+   * seleção (`selecionarItensDoAcerto`), igual pros outros lançamentos.
+   */
+  private async despesasDoPeriodo(
+    motoristaId: string,
+    deYmd: string,
+    ateYmd: string,
+    foraDoEmprego: (data: Date | null) => boolean,
+  ) {
+    const de = inicioDoDiaBR(deYmd);
+    const ate = new Date(inicioDoDiaBR(ateYmd).getTime() + 86_400_000);
+    const despesas = await this.prisma.despesa.findMany({
+      where: {
+        motoristaId,
+        status: "APROVADA",
+        tipoDespesa: { devolve: true },
+        data: { gte: de, lt: ate },
+      },
+      select: { id: true, data: true, tipoNome: true, valorAprovado: true, descricao: true },
+      orderBy: { data: "asc" },
+    });
+    return despesas.filter((d) => foraDoEmprego(diaUtc(diaSP(d.data))));
   }
 
   /**

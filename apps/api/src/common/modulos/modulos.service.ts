@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { MODULOS, MODULOS_PADRAO, type ModuloChave } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { modulosDaConta } from "../conta/teto-da-conta";
 import { comConta } from "../conta/conta-context";
 import { PermissoesService } from "../../admin/permissoes/permissoes.service";
+import { semearKitDespesas } from "../despesa-kit";
 
 @Injectable()
 export class ModulosService {
@@ -67,6 +68,20 @@ export class ModulosService {
       );
     }
 
+    // Módulo que depende de outro (Gasto de viagem → Financeiro: o acerto mora
+    // lá) só liga com o outro vigente. Desligar o de baixo depois não derruba
+    // este: o gasto aprovado fica "aguardando acerto", nunca some.
+    if (args.ativo && def.dependeDe?.length) {
+      const vigentes = await comConta(args.contaId, () => modulosDaConta(this.prisma, args.contaId));
+      const faltam = def.dependeDe.filter((d) => !vigentes.has(d));
+      if (faltam.length) {
+        const nomes = faltam.map((f) => MODULOS.find((m) => m.chave === f)?.nome ?? f).join(", ");
+        throw new ConflictException(
+          `"${def.nome}" só funciona com ${nomes} ligado nesta empresa. Ligue ${nomes} antes.`,
+        );
+      }
+    }
+
     // Mesmo motivo do `daConta`: sem o contexto da conta alvo o upsert gravava o
     // módulo na conta de quem clicou (a casa) e devolvia 200, e a empresa
     // continuava exatamente como estava.
@@ -96,6 +111,10 @@ export class ModulosService {
     // da API: a Schaba ligou o Ponto em 23/09/2026 e ninguém lá tinha nada de
     // ponto. Desligar poda os papéis na hora pelo mesmo caminho.
     await comConta(args.contaId, () => this.permissoes.seedPapeisSistema());
+    // Gasto de viagem: o kit de tipos nasce quando o módulo LIGA (idempotente).
+    if (args.chave === "despesas" && args.ativo) {
+      await comConta(args.contaId, () => semearKitDespesas(this.prisma, args.contaId));
+    }
     return linha;
   }
 

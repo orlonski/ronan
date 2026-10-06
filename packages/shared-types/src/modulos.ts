@@ -35,6 +35,7 @@ export const MODULOS_CHAVES = [
   "comunicacao",
   "admissao",
   "ponto",
+  "despesas",
   "plataforma",
 ] as const;
 export const ModuloChaveSchema = z.enum(MODULOS_CHAVES);
@@ -65,6 +66,11 @@ export type ModuloDef = {
    * adicional pode não custar nada por documento e ainda assim ser vendido.
    */
   adicional?: boolean;
+  /**
+   * Só faz sentido com estes outros módulos vigentes. A tela da plataforma não
+   * deixa ligar sem eles (e avisa se eles forem desligados depois).
+   */
+  dependeDe?: ModuloChave[];
   /** Recursos do catálogo RBAC que este módulo traz. */
   recursos: string[];
 };
@@ -213,6 +219,20 @@ export const MODULOS: ModuloDef[] = [
       "fechamento-ponto",
       "config-ponto",
     ],
+  },
+  {
+    // Gasto de viagem (almoço, borracharia, chapa, pernoite…): o motorista
+    // lança com a foto, o escritório confere e o aprovado entra no acerto.
+    // Vendido à parte (decisão do dono, 05/10/2026) e DEPENDE do Financeiro:
+    // é lá que mora o acerto, e sem ele o dinheiro aprovado não teria pra
+    // onde ir. Conta nova não recebe sozinha, nem no teste grátis.
+    chave: "despesas",
+    nome: "Gasto de viagem",
+    pitch:
+      "O motorista lança o gasto da estrada com a foto do papel, mesmo sem sinal; o escritório confere com a foto do lado; e o dinheiro volta pra ele sozinho no acerto.",
+    adicional: true,
+    dependeDe: ["financeiro"],
+    recursos: ["despesas", "conferencia-despesas", "tipos-despesa"],
   },
   {
     chave: "plataforma",

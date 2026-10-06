@@ -7,6 +7,7 @@ import { ModalidadesModule } from "./modalidades/modalidades.module";
 import { RegrasMinimoModule } from "./regras-minimo/regras-minimo.module";
 import { TabelasPrecoModule } from "./tabelas-preco/tabelas-preco.module";
 import { AcertosModule } from "./acertos/acertos.module";
+import { DespesasAdminModule } from "./despesas/despesas-admin.module";
 import { PedidosModule } from "./pedidos/pedidos.module";
 import { OrcamentosModule } from "./orcamentos/orcamentos.module";
 import { FinanceiroModule } from "./financeiro/financeiro.module";
@@ -60,6 +61,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     RegrasMinimoModule,
     TabelasPrecoModule,
     AcertosModule,
+    DespesasAdminModule,
     PedidosModule,
     OrcamentosModule,
     FinanceiroModule,

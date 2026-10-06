@@ -327,3 +327,46 @@ export function FornecedorCombobox(props: SingleProps) {
     />
   );
 }
+
+type ViagemOpcao = {
+  id: string;
+  data: string | null;
+  ticket: string | null;
+  veiculo?: { placa: string } | null;
+  localCarga?: { nome: string } | null;
+  localDescarga?: { nome: string } | null;
+};
+
+/** "05/10 · Pedreira → Arena · ABC1D23" — o que quem confere reconhece. */
+export const viagemOption = (v: ViagemOpcao): ComboboxOption => {
+  const dia = v.data ? v.data.slice(0, 10).split("-").reverse().slice(0, 2).join("/") : "sem data";
+  const rota = [v.localCarga?.nome, v.localDescarga?.nome].filter(Boolean).join(" → ") || "viagem";
+  return {
+    value: v.id,
+    label: `${dia} · ${rota}`,
+    sublabel: [v.veiculo?.placa, v.ticket ? `ticket ${v.ticket}` : null].filter(Boolean).join(" · ") || undefined,
+  };
+};
+
+/**
+ * Viagem de UM motorista numa janela de dias (ligar um gasto à viagem). A
+ * busca é a da lista de viagens — sem teto de 200.
+ */
+export function ViagemCombobox({
+  motoristaId,
+  de,
+  ate,
+  ...props
+}: SingleProps & { motoristaId: string; de?: string; ate?: string }) {
+  return (
+    <AsyncCombobox<ViagemOpcao>
+      {...props}
+      path="/admin/viagens"
+      filtros={{ motoristaId, de, ate }}
+      mapOption={viagemOption}
+      searchPlaceholder="Buscar por ticket, local…"
+      emptyMessage="Nenhuma viagem desse motorista nesses dias."
+      placeholder={props.placeholder ?? "Escolher a viagem"}
+    />
+  );
+}

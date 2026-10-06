@@ -23,6 +23,8 @@ function servico(estado: {
   viagens?: { id: string; data: Date }[];
   /** Linhas de acerto que já apontam pras viagens (de outros acertos). */
   itensExistentes?: Record<string, unknown>[];
+  /** Gastos de viagem já APROVADOS que a busca devolveria. */
+  despesas?: { id: string; data: Date; valorAprovado: string }[];
 }) {
   const criados: Record<string, unknown>[] = [];
   const apagados: unknown[] = [];
@@ -73,6 +75,10 @@ function servico(estado: {
       },
     },
     pedagio: { findMany: async () => [] },
+    despesa: {
+      findMany: async () =>
+        (estado.despesas ?? []).map((d) => ({ ...d, tipoNome: "Alimentação", descricao: null })),
+    },
     registroPresenca: { findMany: async () => [] },
     itemAcerto: {
       deleteMany: async ({ where }: { where: unknown }) => {
@@ -96,6 +102,8 @@ function servico(estado: {
     criados,
     apagados,
     abastWhere: () => abastWhere,
+    /** Ids de gasto de viagem que viraram linha "Reembolso de gastos". */
+    despesasPagas: () => criados.map((i) => i.despesaId).filter(Boolean),
   };
 }
 
@@ -198,5 +206,37 @@ describe("seleção nova do acerto (Onda 0c)", () => {
     const data = (abastWhere() as { data: { gte: Date; lt: Date } }).data;
     expect(data.gte.toISOString()).toBe("2026-03-01T03:00:00.000Z");
     expect(data.lt.toISOString()).toBe("2026-04-01T03:00:00.000Z");
+  });
+});
+
+describe("gasto de viagem no acerto (B10: dia de emprego CLT não entra)", () => {
+  it("gasto aprovado do período vira REEMBOLSO_DESPESA, com ou sem viagem", async () => {
+    const { s, despesasPagas } = servico({
+      despesas: [{ id: "d1", data: new Date("2026-03-10T15:00:00Z"), valorAprovado: "38.00" }],
+    });
+    await s.gerar(periodo as never, "user1");
+    expect(despesasPagas()).toEqual(["d1"]);
+  });
+
+  it("gasto de dia em que ele era empregado registrado NUNCA entra no acerto", async () => {
+    const { s, despesasPagas } = servico({
+      emprego: [{ iniciouEm: em("2026-03-16"), encerradoEm: null }],
+      despesas: [
+        { id: "antes", data: new Date("2026-03-10T15:00:00Z"), valorAprovado: "38.00" },
+        { id: "depois", data: new Date("2026-03-20T15:00:00Z"), valorAprovado: "45.00" },
+      ],
+    });
+    await s.gerar(periodo as never, "user1");
+    expect(despesasPagas()).toEqual(["antes"]);
+  });
+
+  it("o dia que conta é o de São Paulo: 23h do dia 15 (SP) ainda é antes do vínculo", async () => {
+    const { s, despesasPagas } = servico({
+      emprego: [{ iniciouEm: em("2026-03-16"), encerradoEm: null }],
+      // 02:00 UTC do dia 16 = 23:00 do dia 15 em São Paulo.
+      despesas: [{ id: "noite", data: new Date("2026-03-16T02:00:00Z"), valorAprovado: "30.00" }],
+    });
+    await s.gerar(periodo as never, "user1");
+    expect(despesasPagas()).toEqual(["noite"]);
   });
 });

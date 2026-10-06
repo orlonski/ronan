@@ -32,6 +32,7 @@ import {
   MessagesSquare,
   PieChart,
   Package,
+  Receipt,
   PenLine,
   Radio,
   ShieldCheck,
@@ -208,6 +209,18 @@ export const GRUPOS: Grupo[] = [
         perm: "abastecimentos.ver",
         // Aba: o extrato do cartão combustível ao lado do que foi lançado.
         ou: [{ href: "/cartao-combustivel", perm: "cartao-combustivel.ver" }],
+      },
+      {
+        // Módulo `despesas` (vendido à parte): sem ele o item SOME (temModulo).
+        // Abas: Conferir (a fila), Todos e ⚙ Tipos de gasto.
+        href: "/gastos-viagem/conferir",
+        label: "Gastos de viagem",
+        icon: Receipt,
+        perm: "conferencia-despesas.ver",
+        ou: [
+          { href: "/gastos-viagem/todos", perm: "despesas.ver" },
+          { href: "/gastos-viagem/tipos", perm: "tipos-despesa.ver" },
+        ],
       },
     ],
   },

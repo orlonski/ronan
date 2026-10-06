@@ -30,6 +30,12 @@ export type RegraRemuneracao = {
   valorPorKm: DecimalLike;
   reembolsaPedagio: boolean;
   reembolsaAbastecimento: boolean;
+  /**
+   * Gasto de viagem (módulo `despesas`). Ausente = devolve (como os outros
+   * dois na modalidade). Opcional no TIPO pra não obrigar todo chamador que já
+   * monta uma régua à mão a conhecer o módulo novo.
+   */
+  reembolsaDespesa?: boolean;
 };
 
 type FonteRemuneracao = {
@@ -50,7 +56,11 @@ type FonteRemuneracao = {
 export function resolverRemuneracao(
   motorista: FonteRemuneracao | null | undefined,
   modalidade:
-    | (FonteRemuneracao & { reembolsaPedagio?: boolean; reembolsaAbastecimento?: boolean })
+    | (FonteRemuneracao & {
+        reembolsaPedagio?: boolean;
+        reembolsaAbastecimento?: boolean;
+        reembolsaDespesa?: boolean;
+      })
     | null
     | undefined,
 ): RegraRemuneracao {
@@ -67,6 +77,7 @@ export function resolverRemuneracao(
     // modalidade. Ausente = devolve (o combinado em 99% dos casos).
     reembolsaPedagio: modalidade?.reembolsaPedagio ?? true,
     reembolsaAbastecimento: modalidade?.reembolsaAbastecimento ?? true,
+    reembolsaDespesa: modalidade?.reembolsaDespesa ?? true,
   };
 }
 
@@ -98,8 +109,10 @@ export type ItemCalculado = {
   tipo:
     | "FRETE"
     | "REEMBOLSO_PEDAGIO"
-    | "REEMBOLSO_ABASTECIMENTO";
+    | "REEMBOLSO_ABASTECIMENTO"
+    | "REEMBOLSO_DESPESA";
   viagemId?: string;
+  despesaId?: string;
   pedagioId?: string;
   abastecimentoId?: string;
   descricao: string;
@@ -265,6 +278,47 @@ export function calcularAcerto(args: {
 
   const creditos = itens.reduce((acc, i) => acc.add(dec(i.valor)), new Prisma.Decimal(0));
   return { itens, creditos: creditos.toFixed(2), semRemuneracao };
+}
+
+/** Gasto de viagem já filtrado pela busca (APROVADA, tipo que devolve, fora de acerto fechado). */
+export type DespesaParaAcerto = {
+  id: string;
+  data: Date;
+  tipoNome: string;
+  valorAprovado: DecimalLike;
+  descricao?: string | null;
+};
+
+/**
+ * Os itens "Reembolso de gastos" do acerto (módulo `despesas`).
+ *
+ * Bloco SEPARADO do `calcularAcerto` de propósito: a seleção do acerto está
+ * sendo reescrita (Onda 0c) e isto precisa juntar com ela sem conflito.
+ *
+ * Entra pelo motorista e pela DATA do gasto, com ou sem viagem (o vínculo
+ * nunca decide pagamento: vincular depois de um acerto fechado pagaria duas
+ * vezes, e viagem incompleta engoliria o gasto). Um item por gasto, com o
+ * valor APROVADO — o lançado é a palavra dele, o aprovado é o que se paga.
+ * Devolve = o tipo devolve (já filtrado na busca) E a modalidade devolve.
+ */
+export function itensReembolsoDespesa(
+  despesas: readonly DespesaParaAcerto[],
+  regra: Pick<RegraRemuneracao, "reembolsaDespesa">,
+): ItemCalculado[] {
+  if (regra.reembolsaDespesa === false) return [];
+  const itens: ItemCalculado[] = [];
+  for (const d of despesas) {
+    const valor = dec(d.valorAprovado);
+    if (valor.lte(0)) continue;
+    const dia = new Date(d.data.getTime() - 3 * 3_600_000); // dia civil de SP
+    itens.push({
+      tipo: "REEMBOLSO_DESPESA",
+      despesaId: d.id,
+      descricao: `${d.tipoNome} ${fmtData(dia)}${d.descricao ? ` · ${d.descricao.slice(0, 60)}` : ""}`,
+      valor: valor.toFixed(2),
+    });
+  }
+  return itens;
 }
 
 /** Tipos que são desconto. Usado pra validar sinal e exigir motivo. */
