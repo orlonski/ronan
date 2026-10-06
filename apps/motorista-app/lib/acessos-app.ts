@@ -160,3 +160,24 @@ export function usePermite(chave: CapacidadeApp, legado = true): boolean {
 export function useLigadaPelaEmpresa(chave: CapacidadeApp): boolean {
   return useCapacidade(chave) === true;
 }
+
+/**
+ * Capacidade que o catálogo de `shared-types` deste app AINDA NÃO conhece
+ * (chegou num módulo novo, ex.: `app.despesa.lancar`). Só vale com um `true`
+ * explícito do servidor: servidor antigo, empresa sem o módulo ou "não sei"
+ * são todos "desligada" — é coisa nova, esconder não tira nada de ninguém.
+ *
+ * Escolhe a empresa do mesmo jeito que `capacidadeNaConta` (a da sessão; sem
+ * sessão, a do vínculo de registrado).
+ */
+function capacidadeNovaSync(chave: string): boolean {
+  const conta = sessaoAtivaSync()?.contaId ?? vinculoRegistradoSync()?.contaId ?? null;
+  if (!conta || !_atual) return false;
+  const daConta = _atual.find((a) => a.contaId === conta);
+  if (!daConta || !Array.isArray(daConta.capacidades)) return false;
+  return (daConta.capacidades as readonly string[]).includes(chave);
+}
+
+export function useCapacidadeNova(chave: string): boolean {
+  return useSyncExternalStore(assinarTudo, () => capacidadeNovaSync(chave), () => false);
+}

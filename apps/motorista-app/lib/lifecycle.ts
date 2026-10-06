@@ -28,6 +28,7 @@ import {
   enqueueViagemIniciar,
   enqueueLocal,
   removerItensLifecycleDaViagem,
+  soltarGastosDaViagem,
 } from "./sync";
 
 export type LocalSnapshotLifecycle = { nome: string; lat: number; lng: number };
@@ -150,6 +151,8 @@ export async function salvarFinalizarDraft(draft: FinalizarDraft): Promise<void>
 export async function descartarViagemGuiada(clientId: string): Promise<void> {
   await removerItensLifecycleDaViagem(clientId);
   await enqueueViagemCancelar(clientId);
+  // Gasto de viagem lançado dentro dela não some: vira "sem viagem".
+  await soltarGastosDaViagem(clientId);
   const atual = await getLifecycleLocal();
   if (!atual || atual.clientId === clientId) {
     await clearLifecycleLocal();

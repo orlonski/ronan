@@ -134,6 +134,12 @@ export type Catalogos = {
   // Vazio/ausente = conta sem modo cadastrado ou cache antigo. Nos dois casos
   // o app se comporta como sempre.
   tiposServico?: TipoServico[];
+  /**
+   * Tipos de gasto de viagem (módulo `despesas`). Cru de propósito: quem lê é
+   * `lerTiposDespesa` (lib/despesas.ts), tolerante a cache antigo (ausente =
+   * lista vazia) e a config de campos com lixo. Nunca ler direto daqui.
+   */
+  tiposDespesa?: unknown;
   clientes: Cliente[];
   locais: Local[];
   empresas: Empresa[];

@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CameraView, type FlashMode, useCameraPermissions } from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
@@ -89,6 +89,8 @@ export function PhotoCapture({
   onCancel,
   hidePlaceholder = false,
   permitirGaleria = true,
+  renderVazio,
+  renderComFoto,
 }: {
   value: CapturedPhoto | null;
   onChange: (p: CapturedPhoto | null) => void;
@@ -101,6 +103,18 @@ export function PhotoCapture({
   /** Oferece "Da galeria" ao lado de "Tirar foto". Story é foto do momento,
    *  então lá vem desligado. */
   permitirGaleria?: boolean;
+  /**
+   * Desenho próprio do "sem foto" (o gasto de viagem tem o quadro dele, com
+   * "Não tenho o comprovante"). `abrirCamera` devolve false quando o celular
+   * não deixou usar a câmera — quem desenha mostra o recado.
+   */
+  renderVazio?: (acoes: {
+    abrirCamera: () => Promise<boolean>;
+    abrirGaleria: () => void;
+    escolhendo: boolean;
+  }) => ReactNode;
+  /** Desenho próprio do "com foto" (miniatura + "Tirar outra"). */
+  renderComFoto?: (acoes: { abrirCamera: () => Promise<boolean>; remover: () => void }) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -242,7 +256,15 @@ export function PhotoCapture({
 
   return (
     <>
-      {value ? (
+      {value && renderComFoto ? (
+        renderComFoto({ abrirCamera: abrir, remover: () => onChange(null) })
+      ) : !value && renderVazio ? (
+        renderVazio({
+          abrirCamera: abrir,
+          abrirGaleria: () => void escolherDaGaleria(),
+          escolhendo,
+        })
+      ) : value ? (
         <View className="gap-2">
           <View className="overflow-hidden rounded-lg border border-border">
             <Image

@@ -72,7 +72,17 @@ import {
   type PendingViagemFinalizar,
   type PendingViagemIniciar,
   type ZodIssueSaved,
+  listPendingDespesas,
+  upsertPendingDespesa,
+  deletePendingDespesa,
+  type PendingDespesa,
+  type FotoDespesaPendente,
+  listPendingVinculosGasto,
+  upsertPendingVinculoGasto,
+  deletePendingVinculoGasto,
+  type PendingVinculoGasto,
 } from "@/db/database";
+import { enviarDespesa, enviarFotoDespesa, enviarVinculoDespesa } from "./despesas";
 import {
   api,
   ApiError,
@@ -893,6 +903,8 @@ export async function pendingCounts(): Promise<{
   problemas: number;
   /** Checklists do caminhão esperando subir. */
   checklists: number;
+  /** Gastos de viagem (e ligações de gasto com viagem) esperando subir. */
+  despesas: number;
   /**
    * TUDO que está esperando subir.
    *
@@ -905,7 +917,7 @@ export async function pendingCounts(): Promise<{
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck] = await Promise.all([
+  const [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck, dp, vg] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
@@ -920,10 +932,12 @@ export async function pendingCounts(): Promise<{
     listPendingDocumentosAdmissao(),
     listPendingProblemasVeiculo(),
     listPendingChecklists(),
+    listPendingDespesas(),
+    listPendingVinculosGasto(),
   ]);
   // foto/local/story ficavam de fora da contagem: item travado desses não
   // aparecia em lugar nenhum, nem no badge da home nem na tela de Pendentes.
-  const comErro = [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck].reduce(
+  const comErro = [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck, dp, vg].reduce(
     (acc, lista) => acc + lista.filter((i) => i.attempts >= MAX_ATTEMPTS).length,
     0,
   );
@@ -939,7 +953,8 @@ export async function pendingCounts(): Promise<{
     documentos: dc.length,
     problemas: pr.length,
     checklists: ck.length,
-    total: [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck].reduce(
+    despesas: dp.length + vg.length,
+    total: [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck, dp, vg].reduce(
       (acc, l) => acc + l.length,
       0,
     ),
@@ -1042,6 +1057,9 @@ const TIPOS_RESGATAVEIS: Record<string, string> = {
   abastecimento: "abastecimento",
   local: "local",
   "completar-peso": "completar-peso",
+  // Gasto de viagem: é dinheiro do motorista voltando. O payload guarda tudo
+  // menos as fotos (que moram no aparelho), e já serve pro escritório relançar.
+  despesa: "despesa",
 };
 
 /**
@@ -1171,6 +1189,8 @@ async function snapshotPendentes(): Promise<{ total: number; motivo?: string }> 
     listPendingDocumentosAdmissao(),
     listPendingProblemasVeiculo(),
     listPendingChecklists(),
+    listPendingDespesas(),
+    listPendingVinculosGasto(),
   ]);
   const todos = listas.flat();
   const motivo = todos.map((i) => i.errorMsg).find(Boolean) ?? undefined;
@@ -1244,6 +1264,13 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
     await drainCompletarPeso();
     await drainPedagios();
     await drainAbastecimentos();
+    // Gastos DEPOIS das viagens (lifecycle e manuais): o gasto lançado dentro
+    // de uma viagem que ainda estava no celular normalmente já acha a viagem
+    // no servidor. Se não achar, o servidor guarda o clientId e amarra depois.
+    await drainDespesas();
+    // Ligações por último: ligam gasto JÁ enviado a viagem — inclusive a que
+    // acabou de subir nesta mesma passada.
+    await drainVinculosGasto();
     await drainStories();
     await drainMensagensChat();
     // Documento por ÚLTIMO: é o item mais gordo da fila (até 25 MB) e ninguém
@@ -1347,6 +1374,16 @@ async function rescueStaleItems(): Promise<void> {
   for (const c of await listPendingViagemCancelar()) {
     if (c.status === "syncing" && isStale(c.lastTriedAt)) {
       await upsertPendingViagemCancelar({ ...c, status: "pending" });
+    }
+  }
+  for (const d of await listPendingDespesas()) {
+    if (d.status === "syncing" && isStale(d.lastTriedAt)) {
+      await upsertPendingDespesa({ ...d, status: "pending" });
+    }
+  }
+  for (const g of await listPendingVinculosGasto()) {
+    if (g.status === "syncing" && isStale(g.lastTriedAt)) {
+      await upsertPendingVinculoGasto({ ...g, status: "pending" });
     }
   }
 }
@@ -2618,6 +2655,8 @@ export async function recuperarItensPresos(): Promise<void> {
   await varrer(await listPendingEventosViagem(), upsertPendingEventoViagem);
   await varrer(await listPendingViagemFinalizar(), upsertPendingViagemFinalizar);
   await varrer(await listPendingViagemCancelar(), upsertPendingViagemCancelar);
+  await varrer(await listPendingDespesas(), upsertPendingDespesa);
+  await varrer(await listPendingVinculosGasto(), upsertPendingVinculoGasto);
 
   if (mexeu) {
     notify();
@@ -2655,4 +2694,311 @@ export function startAutoSync(): void {
   setTimeout(() => {
     void drenarTudo();
   }, 2_000);
+}
+
+// ---------------------------------------------------------------------------
+// GASTO DE VIAGEM (módulo despesas)
+// ---------------------------------------------------------------------------
+
+/**
+ * Copia a foto pra `documentDirectory` antes de enfileirar: a câmera grava em
+ * `Caches/`, que o iOS esvazia sob pressão — e o gasto pode esperar dias por
+ * sinal. Foto que já mora lá (correção de pendente) não é copiada de novo.
+ */
+async function guardarFotoDespesa(
+  clientId: string,
+  indice: number,
+  f: { uri: string; mime: string },
+): Promise<FotoDespesaPendente> {
+  if (FileSystem.documentDirectory && f.uri.startsWith(FileSystem.documentDirectory)) {
+    return { uri: f.uri, mime: f.mime };
+  }
+  const ext = f.mime.includes("png") ? "png" : "jpg";
+  // Nome novo a cada foto: o cache de <Image> guarda por CAMINHO.
+  const destino = `${FileSystem.documentDirectory}despesa-${clientId}-${indice}-${Date.now()}.${ext}`;
+  await FileSystem.copyAsync({ from: f.uri, to: destino });
+  return { uri: destino, mime: f.mime };
+}
+
+/** Enfileira o gasto. Devolve na hora: o envio é da fila. */
+export async function enqueueDespesa(e: {
+  clientId: string;
+  payload: Record<string, unknown>;
+  fotos: { uri: string; mime: string }[];
+  resumo: PendingDespesa["resumo"];
+}): Promise<void> {
+  const fotos: FotoDespesaPendente[] = [];
+  for (const [i, f] of e.fotos.entries()) fotos.push(await guardarFotoDespesa(e.clientId, i, f));
+  await upsertPendingDespesa({
+    clientId: e.clientId,
+    payload: e.payload,
+    fotos,
+    resumo: e.resumo,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
+/**
+ * Corrige um gasto que ainda está no celular (inclusive o que o servidor
+ * recusou). Mantém o `clientId`: se ele subiu enquanto o motorista editava, o
+ * reenvio devolve o que já existe em vez de duplicar.
+ *
+ * `fotos` ausente = mantém as fotos que já estavam (e as que já subiram).
+ */
+export async function atualizarDespesaPendente(input: {
+  clientId: string;
+  payload: Record<string, unknown>;
+  fotos?: { uri: string; mime: string }[];
+  resumo: PendingDespesa["resumo"];
+}): Promise<{ removed: boolean }> {
+  const existing = (await listPendingDespesas()).find((x) => x.clientId === input.clientId);
+  if (!existing) return { removed: true };
+  let fotos = existing.fotos;
+  if (input.fotos) {
+    fotos = [];
+    for (const [i, f] of input.fotos.entries()) {
+      const igual = existing.fotos.find((x) => x.uri === f.uri);
+      fotos.push(igual ?? (await guardarFotoDespesa(input.clientId, i, f)));
+    }
+    for (const velha of existing.fotos) {
+      if (!fotos.some((x) => x.uri === velha.uri)) {
+        void FileSystem.deleteAsync(velha.uri, { idempotent: true }).catch(() => {});
+      }
+    }
+  }
+  await upsertPendingDespesa({
+    ...existing,
+    payload: input.payload,
+    fotos,
+    resumo: input.resumo,
+    fotoRecusada: undefined,
+    status: "pending",
+    attempts: 0,
+    lastTriedAt: undefined,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+    errorPermanenteLocal: undefined,
+  });
+  notify();
+  void drain();
+  return { removed: false };
+}
+
+export async function descartarDespesaPendente(clientId: string): Promise<void> {
+  const item = (await listPendingDespesas()).find((x) => x.clientId === clientId);
+  await deletePendingDespesa(clientId);
+  for (const f of item?.fotos ?? []) {
+    void FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => {});
+  }
+  notify();
+}
+
+export async function tentarNovamenteDespesaPendente(clientId: string): Promise<void> {
+  const item = (await listPendingDespesas()).find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingDespesa({ ...resetItem(item), fotoRecusada: undefined });
+  notify();
+  void drain();
+}
+
+/**
+ * Liga (ou solta) gastos que AINDA ESTÃO na fila a uma viagem — edita o
+ * próprio pendente, sem item novo. `viagem` null = soltar (sem resposta).
+ */
+export async function vincularDespesasPendentes(
+  clientIds: string[],
+  viagem:
+    | { viagemId?: string | null; viagemClientId?: string | null; rotulo?: string | null }
+    | { naoFoiEmViagem: true }
+    | null,
+): Promise<void> {
+  const lista = await listPendingDespesas();
+  let mexeu = false;
+  for (const item of lista) {
+    if (!clientIds.includes(item.clientId)) continue;
+    const payload = { ...item.payload };
+    delete payload.viagemId;
+    delete payload.viagemClientId;
+    delete payload.vinculoPor;
+    delete payload.naoFoiEmViagem;
+    let rotulo: string | null = null;
+    if (viagem && "naoFoiEmViagem" in viagem) {
+      payload.naoFoiEmViagem = true;
+    } else if (viagem) {
+      if (viagem.viagemId) payload.viagemId = viagem.viagemId;
+      if (viagem.viagemClientId) payload.viagemClientId = viagem.viagemClientId;
+      payload.vinculoPor = "MOTORISTA";
+      rotulo = viagem.rotulo ?? null;
+    }
+    await upsertPendingDespesa({ ...item, payload, resumo: { ...item.resumo, viagemRotulo: rotulo } });
+    mexeu = true;
+  }
+  if (mexeu) {
+    notify();
+    void drain();
+  }
+}
+
+/**
+ * A viagem que estava sendo lançada foi descartada: os gastos dela NÃO somem —
+ * viram "sem viagem". Os que ainda estão na fila perdem o vínculo aqui; os já
+ * enviados ficam com o clientId órfão, que o servidor trata como solto.
+ */
+export async function soltarGastosDaViagem(viagemClientId: string): Promise<void> {
+  const ids = (await listPendingDespesas())
+    .filter((d) => d.payload.viagemClientId === viagemClientId)
+    .map((d) => d.clientId);
+  if (ids.length > 0) await vincularDespesasPendentes(ids, null);
+}
+
+/** Liga/solta um gasto JÁ ENVIADO. Devolve o id da operação (pro "Desfazer"). */
+export async function enqueueVinculoGasto(e: {
+  despesaId: string;
+  viagemId?: string | null;
+  viagemClientId?: string | null;
+  naoFoiEmViagem?: boolean;
+  desvincular?: boolean;
+  resumo: PendingVinculoGasto["resumo"];
+}): Promise<string> {
+  const clientId = uuidPonto();
+  await upsertPendingVinculoGasto({
+    clientId,
+    despesaId: e.despesaId,
+    viagemId: e.viagemId ?? null,
+    viagemClientId: e.viagemClientId ?? null,
+    naoFoiEmViagem: e.naoFoiEmViagem || undefined,
+    desvincular: e.desvincular || undefined,
+    resumo: e.resumo,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+  return clientId;
+}
+
+export async function descartarVinculoGastoPendente(clientId: string): Promise<void> {
+  await deletePendingVinculoGasto(clientId);
+  notify();
+}
+
+export async function tentarNovamenteVinculoGastoPendente(clientId: string): Promise<void> {
+  const item = (await listPendingVinculosGasto()).find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingVinculoGasto(resetItem(item));
+  notify();
+  void drain();
+}
+
+async function drainDespesas(): Promise<void> {
+  const list = await listPendingDespesas();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!(await podeTentar("despesas"))) return;
+    await processDespesa(item);
+  }
+}
+
+async function processDespesa(item: PendingDespesa): Promise<void> {
+  // `atual` acompanha o que já foi persistido (molde do abastecimento): foto
+  // que subiu e POST que falhou → o item fica salvo COM a fotoKey dela.
+  let atual: PendingDespesa = { ...item, status: "syncing", lastTriedAt: Date.now() };
+  await upsertPendingDespesa(atual);
+  notify();
+  try {
+    let fotos = [...(atual.fotos ?? [])];
+    let perdeuAlguma = false;
+    for (let i = 0; i < fotos.length; i++) {
+      const f = fotos[i]!;
+      if (f.fotoKey) continue;
+      if (await fotoAindaExiste(f.uri)) {
+        let chave: string;
+        try {
+          chave = await enviarFotoDespesa(f, atual.clientId, i);
+        } catch (err) {
+          // O servidor recusou a FOTO (arquivo inválido, grande demais): a
+          // saída é ele tirar outra, não editar o valor. Marca pra tela de
+          // Pendentes mostrar "Tirar a foto de novo".
+          if (isErroPermanente(err)) atual = { ...atual, fotoRecusada: true };
+          throw err;
+        }
+        fotos = fotos.map((x, idx) => (idx === i ? { ...x, fotoKey: chave } : x));
+      } else {
+        // Arquivo sumiu do aparelho: o gasto vale mais que a foto. Segue sem
+        // ela, com a explicação, em vez de ficar preso pra sempre.
+        reportarFotoPerdida("despesa", atual.clientId, f.uri);
+        fotos = fotos.filter((_, idx) => idx !== i);
+        i--;
+        perdeuAlguma = true;
+      }
+      atual = { ...atual, fotos };
+      await upsertPendingDespesa(atual);
+    }
+
+    let payload = { ...atual.payload };
+    if (perdeuAlguma && !payload.justificativaSemFoto && !fotos.some((f) => f.fotoKey)) {
+      payload = {
+        ...payload,
+        justificativaSemFoto: "A foto sumiu do aparelho antes de conseguir enviar.",
+      };
+    }
+    const fotoKeys = fotos.map((f) => f.fotoKey).filter((k): k is string => !!k);
+    await enviarDespesa({ ...payload, fotoKeys });
+    await deletePendingDespesa(atual.clientId);
+    for (const f of atual.fotos) {
+      void FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => {});
+    }
+  } catch (err) {
+    // Sumiu = ele descartou na tela de Pendentes enquanto subia.
+    const ainda = (await listPendingDespesas()).some((x) => x.clientId === atual.clientId);
+    if (ainda) {
+      await upsertPendingDespesa(
+        proximoEstadoFalha(atual, err, isErroPermanente(err), "despesa"),
+      );
+    }
+  }
+  notify();
+}
+
+async function drainVinculosGasto(): Promise<void> {
+  const list = await listPendingVinculosGasto();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    // Em ordem: "ligar" e o "desfazer" do mesmo gasto não podem trocar de
+    // lugar. Item parado (erro ou esperando sinal) segura os de trás.
+    if (item.attempts >= MAX_ATTEMPTS) return;
+    if (!(await podeTentar("vinculos-gasto"))) return;
+    await processVinculoGasto(item);
+    const ainda = (await listPendingVinculosGasto()).some((x) => x.clientId === item.clientId);
+    if (ainda) return;
+  }
+}
+
+async function processVinculoGasto(item: PendingVinculoGasto): Promise<void> {
+  await upsertPendingVinculoGasto({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    await enviarVinculoDespesa(item.despesaId, {
+      viagemId: item.viagemId,
+      viagemClientId: item.viagemClientId,
+      naoFoiEmViagem: item.naoFoiEmViagem,
+      desvincular: item.desvincular,
+    });
+    await deletePendingVinculoGasto(item.clientId);
+  } catch (err) {
+    const ainda = (await listPendingVinculosGasto()).some((x) => x.clientId === item.clientId);
+    if (ainda) {
+      await upsertPendingVinculoGasto(
+        proximoEstadoFalha(item, err, isErroPermanente(err), "vinculo-gasto"),
+      );
+    }
+  }
+  notify();
 }
