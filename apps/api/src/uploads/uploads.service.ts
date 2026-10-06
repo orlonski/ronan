@@ -166,6 +166,18 @@ export class UploadsService implements OnModuleInit {
   }
 
   /**
+   * PDF original da fatura da tag de pedágio. Traz razão social, CNPJ, banco e
+   * nº da nota — por isso o nome é SORTEADO (nada de nº da fatura no caminho) e
+   * ele só sai pela API, com `tag.importar` (04-qa I5). O bucket é anônimo:
+   * nunca dar link direto.
+   */
+  async putFaturaTag(buffer: Buffer): Promise<string> {
+    const key = `${contaIdAtual()}/tag-pedagio/${randomUUID()}.pdf`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, { "Content-Type": "application/pdf" });
+    return key;
+  }
+
+  /**
    * Logo da empresa (marca no painel).
    *
    * Nome com uuid a cada envio em vez de um `logo.png` fixo: o navegador cacheia

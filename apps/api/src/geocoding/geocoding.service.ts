@@ -300,6 +300,68 @@ export class GeocodingService {
   }
 
   /**
+   * Coordenada da SEDE de um município ("NOBRES", "MT"), pelo Nominatim (OSM,
+   * grátis). Cacheada pra sempre: sede de município não anda. Usada pela
+   * conferência da tag pra achar a praça do mapa perto da cidade que o extrato
+   * imprime. null = não sei — quem chama manda a praça pra fila, nunca chuta.
+   */
+  async sedeDoMunicipio(cidade: string, uf: string | null): Promise<{ lat: number; lng: number } | null> {
+    const nome = cidade.trim().toUpperCase();
+    if (!nome) return null;
+    const cacheKey = `municipio:${uf ?? "?"}:${nome}`;
+    const hit = await this.prisma.geocodingCache.findUnique({ where: { query: cacheKey } });
+    if (hit) return (hit.resposta as unknown as { lat: number; lng: number } | null) ?? null;
+    // O extrato escreve "ROSÁRIO DO OESTE"; o município é "Rosário Oeste". Tenta
+    // o nome como veio e, se nada, sem os "do/da/de".
+    const tentativas = [cidade, cidade.replace(/\s+(DO|DA|DE|DOS|DAS)\s+/gi, " ")].filter((x, i, a) => a.indexOf(x) === i);
+    for (const nomeBusca of tentativas) {
+      const r = await this.buscarSede(nomeBusca, uf);
+      if (r === "ERRO") return null;
+      if (r) {
+        await this.prisma.geocodingCache
+          .create({ data: { query: cacheKey, resposta: r as unknown as Prisma.InputJsonValue } })
+          .catch(() => {});
+        return r;
+      }
+    }
+    return null;
+  }
+
+  /** Nominatim aceita 1 consulta por segundo: a fila de praças pergunta várias seguidas. */
+  private ultimaBuscaSede = 0;
+
+  private async buscarSede(cidade: string, uf: string | null): Promise<{ lat: number; lng: number } | null | "ERRO"> {
+    const espera = this.ultimaBuscaSede + 1100 - Date.now();
+    if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+    this.ultimaBuscaSede = Date.now();
+    try {
+      const params = new URLSearchParams({
+        city: cidade,
+        country: "Brasil",
+        format: "json",
+        limit: "5",
+        addressdetails: "1",
+        "accept-language": "pt-BR",
+      });
+      if (uf) params.set("state", nomeDoEstado(uf) ?? uf);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+        headers: { "User-Agent": "Ronan/1.0 (transportadora; contato@ronan.local)" },
+      });
+      if (!res.ok) {
+        this.log.warn(`Nominatim search respondeu ${res.status}`);
+        return "ERRO";
+      }
+      const lista = (await res.json()) as Array<{ lat: string; lon: string; addresstype?: string; type?: string }>;
+      const melhor =
+        lista.find((r) => ["city", "town", "village", "municipality"].includes(r.addresstype ?? r.type ?? "")) ?? lista[0];
+      return melhor ? { lat: Number(melhor.lat), lng: Number(melhor.lon) } : null;
+    } catch (err) {
+      this.log.warn(`Nominatim search falhou: ${(err as Error).message}`);
+      return "ERRO";
+    }
+  }
+
+  /**
    * Resolve um placeId em endereço estruturado via Place Details. Cacheia por placeId.
    */
   async resolverPlace(placeId: string): Promise<SugestaoEndereco | null> {
@@ -367,6 +429,13 @@ const SIGLAS_ESTADO: Record<string, string> = {
   rondônia: "RO", rondonia: "RO", roraima: "RR", "santa catarina": "SC",
   "são paulo": "SP", "sao paulo": "SP", sergipe: "SE", tocantins: "TO",
 };
+/** "MT" → "Mato Grosso" (o Nominatim procura pelo nome do estado). */
+function nomeDoEstado(sigla: string): string | undefined {
+  const alvo = sigla.toUpperCase();
+  const nome = Object.entries(SIGLAS_ESTADO).find(([, s]) => s === alvo)?.[0];
+  return nome ? nome.replace(/(^|\s)\S/g, (c) => c.toUpperCase()) : undefined;
+}
+
 function siglaEstado(nome?: string): string | undefined {
   if (!nome) return undefined;
   return SIGLAS_ESTADO[nome.toLowerCase().trim()];

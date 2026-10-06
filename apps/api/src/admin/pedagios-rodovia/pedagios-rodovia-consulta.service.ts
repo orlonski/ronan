@@ -2,7 +2,9 @@ import { Injectable } from "@nestjs/common";
 import { PedagiosRodoviaService } from "./pedagios-rodovia.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RoteamentoService, chavePar } from "../../roteamento/roteamento.service";
-import { distanciaMetros } from "../../common/geo";
+import { menorDistanciaAteRota } from "../../common/polyline";
+import { pracasNaOrdemDaRota, type PracaNaOrdem } from "../../common/tag-pedagio/rota";
+import { decodificarPolyline as decodePolyline } from "../../roteamento/polyline";
 
 const DISTANCIA_MAX_METROS = 150; // raio em volta da polyline pra considerar "na rota"
 const ENVELOPE_PADDING_GRAUS = 0.05; // ~5.5km de folga no bbox pré-filtro
@@ -116,6 +118,44 @@ export class PedagiosRodoviaConsultaService {
   async pedagiosDasViagens(viagemIds: string[]): Promise<Map<string, PedagiosDaViagem>> {
     const out = new Map<string, PedagiosDaViagem>();
     if (viagemIds.length === 0) return out;
+    const geometriasPorViagem = await this.geometriasDasViagens(viagemIds);
+
+    const pontosPorGeometria = new Map<string, Array<[number, number]>>();
+    for (const gs of geometriasPorViagem.values()) {
+      for (const g of gs ?? []) {
+        if (!pontosPorGeometria.has(g)) pontosPorGeometria.set(g, decodePolyline(g));
+      }
+    }
+    const comRota = [...pontosPorGeometria.values()].filter((p) => p.length >= 2);
+    const candidatos =
+      comRota.length > 0 ? await this.pedagiosAdmin.listarNoEnvelope(bboxComFolga(comRota.flat())) : [];
+
+    for (const [id, gs] of geometriasPorViagem) {
+      if (!gs) {
+        out.set(id, { pedagios: null });
+        continue;
+      }
+      const listas = gs.map((g) => {
+        const pontos = pontosPorGeometria.get(g)!;
+        if (pontos.length < 2) return [];
+        const bbox = bboxComFolga(pontos);
+        return pracasPertoDaRota(
+          pontos,
+          candidatos.filter(
+            (c) => c.lat >= bbox.minLat && c.lat <= bbox.maxLat && c.lng >= bbox.minLng && c.lng <= bbox.maxLng,
+          ),
+        );
+      });
+      out.set(id, { pedagios: juntarPracas(listas) });
+    }
+    return out;
+  }
+
+  /**
+   * As geometrias que cada viagem percorreu (ida + pernas de bota-fora), só do
+   * cache. null = "não sei" — mesma régua de `pedagiosDaViagem`.
+   */
+  private async geometriasDasViagens(viagemIds: string[]): Promise<Map<string, string[] | null>> {
     const viagens = await this.prisma.viagem.findMany({
       where: { id: { in: viagemIds } },
       select: {
@@ -151,33 +191,43 @@ export class PedagiosRodoviaConsultaService {
       geometriasPorViagem.set(v.id, ida && todas.every(Boolean) ? (todas as string[]) : null);
     }
 
-    const pontosPorGeometria = new Map<string, Array<[number, number]>>();
-    for (const gs of geometriasPorViagem.values()) {
-      for (const g of gs ?? []) {
-        if (!pontosPorGeometria.has(g)) pontosPorGeometria.set(g, decodePolyline(g));
-      }
-    }
-    const comRota = [...pontosPorGeometria.values()].filter((p) => p.length >= 2);
-    const candidatos =
-      comRota.length > 0 ? await this.pedagiosAdmin.listarNoEnvelope(bboxComFolga(comRota.flat())) : [];
+    return geometriasPorViagem;
+  }
 
-    for (const [id, gs] of geometriasPorViagem) {
+  /**
+   * Praças da rota de cada viagem NA ORDEM do traçado, com o rumo (N/S) da
+   * estrada em cada uma — o que a conferência da tag usa pra dizer se as
+   * passagens foram na ordem origem → destino (e denunciar a volta). Mesma
+   * regra de "está na rota" (150 m) e mesma geometria de `pedagiosDasViagens`.
+   */
+  async pracasEmOrdemDasViagens(
+    viagemIds: string[],
+  ): Promise<Map<string, Array<PracaNaOrdem & { lat: number; lng: number; nome: string }> | null>> {
+    const out = new Map<string, Array<PracaNaOrdem & { lat: number; lng: number; nome: string }> | null>();
+    if (viagemIds.length === 0) return out;
+    const geometrias = await this.geometriasDasViagens(viagemIds);
+    const pontosDe = new Map<string, Array<[number, number]>>();
+    for (const gs of geometrias.values()) for (const g of gs ?? []) if (!pontosDe.has(g)) pontosDe.set(g, decodePolyline(g));
+    const comRota = [...pontosDe.values()].filter((p) => p.length >= 2);
+    const candidatos = comRota.length ? await this.pedagiosAdmin.listarNoEnvelope(bboxComFolga(comRota.flat())) : [];
+    const porId = new Map(candidatos.map((c) => [c.id, c]));
+    for (const id of viagemIds) {
+      const gs = geometrias.get(id);
       if (!gs) {
-        out.set(id, { pedagios: null });
+        out.set(id, null);
         continue;
       }
-      const listas = gs.map((g) => {
-        const pontos = pontosPorGeometria.get(g)!;
-        if (pontos.length < 2) return [];
-        const bbox = bboxComFolga(pontos);
-        return pracasPertoDaRota(
-          pontos,
-          candidatos.filter(
-            (c) => c.lat >= bbox.minLat && c.lat <= bbox.maxLat && c.lng >= bbox.minLng && c.lng <= bbox.maxLng,
-          ),
-        );
-      });
-      out.set(id, { pedagios: juntarPracas(listas) });
+      const lista: Array<PracaNaOrdem & { lat: number; lng: number; nome: string }> = [];
+      let base = 0;
+      for (const g of gs) {
+        const pontos = pontosDe.get(g)!;
+        for (const p of pracasNaOrdemDaRota(pontos, candidatos)) {
+          const c = porId.get(p.id)!;
+          lista.push({ ...p, idx: base + p.idx, lat: c.lat, lng: c.lng, nome: c.nome });
+        }
+        base += pontos.length;
+      }
+      out.set(id, lista);
     }
     return out;
   }
@@ -282,38 +332,6 @@ function juntarPracas(listas: PedagioNaRota[][]): PedagioNaRota[] {
 
 // ===== Helpers geométricos =====
 
-/**
- * Decode polyline encoded (Google polyline algorithm, precision 5).
- * OSRM retorna nesse formato com `overview=simplified&geometries=polyline`.
- */
-function decodePolyline(encoded: string): Array<[number, number]> {
-  const pontos: Array<[number, number]> = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-  while (index < encoded.length) {
-    let b: number;
-    let shift = 0;
-    let result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    lat += result & 1 ? ~(result >> 1) : result >> 1;
-    shift = 0;
-    result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    lng += result & 1 ? ~(result >> 1) : result >> 1;
-    pontos.push([lat / 1e5, lng / 1e5]);
-  }
-  return pontos;
-}
-
 function bboxComFolga(pontos: Array<[number, number]>): {
   minLat: number;
   maxLat: number;
@@ -339,46 +357,3 @@ function bboxComFolga(pontos: Array<[number, number]>): {
 }
 
 
-function menorDistanciaAteRota(
-  lat: number,
-  lng: number,
-  pontos: Array<[number, number]>,
-): number {
-  let min = Infinity;
-  for (let i = 0; i < pontos.length - 1; i++) {
-    const d = distanciaPontoSegmento(lat, lng, pontos[i]!, pontos[i + 1]!);
-    if (d < min) min = d;
-  }
-  return min;
-}
-
-/**
- * Distância mínima do ponto até o segmento. Projeção planar local (cartesiana
- * em lat/lng) pra achar o ponto mais próximo no segmento; depois haversine
- * pra distância real. Suficiente pra distâncias curtas (segmentos OSRM têm
- * ~poucas centenas de metros).
- */
-function distanciaPontoSegmento(
-  lat: number,
-  lng: number,
-  a: [number, number],
-  b: [number, number],
-): number {
-  const ax = a[1];
-  const ay = a[0];
-  const bx = b[1];
-  const by = b[0];
-  const px = lng;
-  const py = lat;
-
-  const dx = bx - ax;
-  const dy = by - ay;
-  if (dx === 0 && dy === 0) {
-    return distanciaMetros(lat, lng, a[0], a[1]);
-  }
-  const t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
-  const tc = Math.max(0, Math.min(1, t));
-  const projX = ax + tc * dx;
-  const projY = ay + tc * dy;
-  return distanciaMetros(lat, lng, projY, projX);
-}
