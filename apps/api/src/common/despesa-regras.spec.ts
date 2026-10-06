@@ -298,6 +298,38 @@ describe("o que o motorista vê", () => {
     ).toBe("POR_SUA_CONTA");
     expect(situacaoParaMotorista({ ...base, foraDoAcerto: true }).situacao).toBe("PAGO_FORA_DO_ACERTO");
   });
+  it("modalidade que não devolve gasto: não promete acerto nem soma em 'pra receber'", () => {
+    // A régua resolvida é quem diz (motorista com acordo próprio não muda o reembolso).
+    const regra = resolverRemuneracao({ tipoRemuneracao: "VALOR_POR_VIAGEM" }, { reembolsaDespesa: false });
+    expect(regra.reembolsaDespesa).toBe(false);
+    const naoDevolve = { ...base, reembolsaDespesa: regra.reembolsaDespesa };
+    expect(situacaoParaMotorista(naoDevolve)).toEqual({
+      situacao: "POR_SUA_CONTA",
+      somaPraReceber: false,
+      naoVoltaNoAcerto: true,
+    });
+    expect(
+      situacaoParaMotorista({ ...naoDevolve, status: "COM_ESCRITORIO", valorAprovado: null }),
+    ).toEqual({ situacao: "POR_SUA_CONTA", somaPraReceber: false, naoVoltaNoAcerto: true });
+    // E o acerto, com a mesma régua, de fato não paga — os dois lados batem.
+    expect(
+      itensReembolsoDespesa([{ id: "d", data: new Date(), tipoNome: "Comida", valorAprovado: 58 }], regra),
+    ).toEqual([]);
+    // O que já entrou num acerto fechado continua sendo o que o acerto diz.
+    expect(situacaoParaMotorista({ ...naoDevolve, acerto: { status: "FECHADO" } }).situacao).toBe("NO_ACERTO");
+    expect(situacaoParaMotorista({ ...naoDevolve, acerto: { status: "PAGO" } }).situacao).toBe("PAGO");
+    // Empregado no dia: pago fora do acerto, a régua do acerto não se aplica.
+    expect(situacaoParaMotorista({ ...naoDevolve, foraDoAcerto: true }).situacao).toBe("PAGO_FORA_DO_ACERTO");
+    // Decisão do escritório com motivo continua sendo a do escritório.
+    expect(
+      situacaoParaMotorista({ ...naoDevolve, status: "NAO_REEMBOLSADA", motivo: "sem nota" }).situacao,
+    ).toBe("NAO_REEMBOLSADA");
+    // Ausente ou true = como sempre foi.
+    expect(situacaoParaMotorista({ ...base, reembolsaDespesa: true })).toEqual({
+      situacao: "APROVADA",
+      somaPraReceber: true,
+    });
+  });
   it("corrigir/apagar só antes de gente decidir e fora de acerto", () => {
     expect(editavelPeloMotorista({ status: "COM_ESCRITORIO", decididoAutomatico: false, emAcerto: false })).toBe(true);
     expect(editavelPeloMotorista({ status: "APROVADA", decididoAutomatico: true, emAcerto: false })).toBe(true);

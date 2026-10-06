@@ -560,6 +560,12 @@ export type DespesaDoMotorista = {
   acerto: { id: string; periodoInicio: string; periodoFim: string; status: "ABERTO" | "FECHADO" | "PAGO"; pagoEm: string | null } | null;
   /** Entra no "pra receber de volta"? */
   somaPraReceber: boolean;
+  /**
+   * A régua dele (modalidade) não devolve gasto de viagem: vem com
+   * `situacao: "POR_SUA_CONTA"` e isto `true`, pro app explicar "Não volta no
+   * acerto (combinado da empresa)". App antigo ignora e mostra "Por sua conta".
+   */
+  naoVoltaNoAcerto?: boolean;
   /** Ainda dá pra corrigir/apagar pelo app. */
   editavel: boolean;
 };

@@ -22,6 +22,7 @@ import {
   situacaoParaMotorista,
 } from "../common/despesa-regras";
 import { dentroDeEmprego, periodosDeEmprego } from "../common/regime-vigente";
+import { resolverRemuneracao } from "../common/acerto-motorista";
 import { DespesasNucleoService } from "../despesas/despesas-nucleo.service";
 import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamentos-resgatados.service";
 import { mesRange } from "./viagens.service";
@@ -59,6 +60,8 @@ export const DESPESA_INCLUDE_MOTORISTA = {
 
 type DespesaCompleta = Prisma.DespesaGetPayload<{ include: typeof DESPESA_INCLUDE_MOTORISTA }>;
 
+type ContextoMotorista = { periodos: { inicio: Date; fim: Date | null }[]; reembolsaDespesa: boolean };
+
 const dec = (v: Prisma.Decimal | null | undefined) => (v == null ? null : Number(v));
 const ymd = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
 
@@ -89,18 +92,31 @@ export class DespesasMotoristaService {
     private readonly resgates: LancamentosResgatadosService,
   ) {}
 
-  private async periodosEmprego(motoristaId: string) {
-    const m = await this.prisma.motorista.findUnique({ where: { id: motoristaId }, select: { cpf: true } });
-    return periodosDeEmprego(this.prisma, m?.cpf ?? "");
+  /**
+   * O que vale pra TODOS os gastos dele: os períodos de emprego (dia de CLT é
+   * pago fora do acerto) e se a régua dele devolve gasto de viagem — a MESMA
+   * `resolverRemuneracao` que o acerto usa, senão o app promete o que o
+   * acerto não paga.
+   */
+  private async contextoDoMotorista(motoristaId: string): Promise<ContextoMotorista> {
+    const m = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+      select: {
+        cpf: true,
+        tipoRemuneracao: true,
+        modalidade: { select: { reembolsaDespesa: true } },
+      },
+    });
+    return {
+      periodos: await periodosDeEmprego(this.prisma, m?.cpf ?? ""),
+      reembolsaDespesa: resolverRemuneracao(m, m?.modalidade ?? null).reembolsaDespesa !== false,
+    };
   }
 
-  paraMotorista(
-    d: DespesaCompleta,
-    periodos: { inicio: Date; fim: Date | null }[],
-  ): DespesaDoMotorista {
+  paraMotorista(d: DespesaCompleta, ctx: ContextoMotorista): DespesaDoMotorista {
     const acerto = d.itensAcerto.map((i) => i.acerto)[0] ?? null;
-    const foraDoAcerto = dentroDeEmprego(periodos, new Date(`${diaSP(d.data)}T00:00:00Z`));
-    const { situacao, somaPraReceber } = situacaoParaMotorista({
+    const foraDoAcerto = dentroDeEmprego(ctx.periodos, new Date(`${diaSP(d.data)}T00:00:00Z`));
+    const { situacao, somaPraReceber, naoVoltaNoAcerto } = situacaoParaMotorista({
       status: d.status,
       valorInformado: Number(d.valorInformado),
       valorAprovado: dec(d.valorAprovado),
@@ -108,6 +124,7 @@ export class DespesasMotoristaService {
       decididoAutomatico: d.decididoAutomatico,
       acerto,
       foraDoAcerto,
+      reembolsaDespesa: ctx.reembolsaDespesa,
     });
     return {
       id: d.id,
@@ -142,6 +159,7 @@ export class DespesasMotoristaService {
           }
         : null,
       somaPraReceber,
+      ...(naoVoltaNoAcerto ? { naoVoltaNoAcerto: true } : {}),
       editavel: editavelPeloMotorista({
         status: d.status,
         decididoAutomatico: d.decididoAutomatico,
@@ -160,7 +178,7 @@ export class DespesasMotoristaService {
   private async devolver(motoristaId: string, id: string): Promise<DespesaDoMotorista> {
     const d = await this.prisma.despesa.findUnique({ where: { id }, include: DESPESA_INCLUDE_MOTORISTA });
     if (!d) throw new NotFoundException("Gasto não encontrado.");
-    return this.paraMotorista(d, await this.periodosEmprego(motoristaId));
+    return this.paraMotorista(d, await this.contextoDoMotorista(motoristaId));
   }
 
   /** O que o tipo, o lançamento e os vizinhos dizem — marcas e decisão de nascimento. */
@@ -498,20 +516,20 @@ export class DespesasMotoristaService {
         },
       });
     }
-    const periodos = await this.periodosEmprego(motoristaId);
+    const ctx = await this.contextoDoMotorista(motoristaId);
     const itens = await this.prisma.despesa.findMany({
       where: { motoristaId, OR: [{ id: { in: input.despesas } }, { clientId: { in: input.despesas } }] },
       include: DESPESA_INCLUDE_MOTORISTA,
       orderBy: { data: "desc" },
     });
-    return { itens: itens.map((d) => this.paraMotorista(d, periodos)) };
+    return { itens: itens.map((d) => this.paraMotorista(d, ctx)) };
   }
 
   async detalhe(motoristaId: string, idOuClientId: string): Promise<DespesaDoMotorista> {
     await this.nucleo.amarrarPendentes(motoristaId);
     const d = await this.buscar(motoristaId, idOuClientId);
     if (!d) throw new NotFoundException("Gasto não encontrado.");
-    return this.paraMotorista(d, await this.periodosEmprego(motoristaId));
+    return this.paraMotorista(d, await this.contextoDoMotorista(motoristaId));
   }
 
   async foto(motoristaId: string, despesaId: string, fotoId: string) {
@@ -535,19 +553,19 @@ export class DespesasMotoristaService {
       take: q.limit + 1,
       ...(q.cursor ? { cursor: { id: q.cursor }, skip: 1 } : {}),
     });
-    const periodos = await this.periodosEmprego(motoristaId);
+    const ctx = await this.contextoDoMotorista(motoristaId);
     const temMais = linhas.length > q.limit;
     const pagina = temMais ? linhas.slice(0, q.limit) : linhas;
     const resposta: DespesasDoMotoristaResposta = {
-      itens: pagina.map((d) => this.paraMotorista(d, periodos)),
+      itens: pagina.map((d) => this.paraMotorista(d, ctx)),
       nextCursor: temMais ? pagina[pagina.length - 1]!.id : null,
     };
-    if (!q.cursor) resposta.resumo = await this.resumo(motoristaId, periodos);
+    if (!q.cursor) resposta.resumo = await this.resumo(motoristaId, ctx);
     return resposta;
   }
 
   /** "Pra receber de volta": o que ainda não entrou em acerto fechado. */
-  private async resumo(motoristaId: string, periodos: { inicio: Date; fim: Date | null }[]) {
+  private async resumo(motoristaId: string, ctx: ContextoMotorista) {
     const vivas = await this.prisma.despesa.findMany({
       where: {
         motoristaId,
@@ -559,7 +577,7 @@ export class DespesasMotoristaService {
     let aprovado = 0;
     let comEscritorio = 0;
     for (const d of vivas) {
-      const m = this.paraMotorista(d, periodos);
+      const m = this.paraMotorista(d, ctx);
       if (!m.somaPraReceber) continue;
       if (d.status === "APROVADA") aprovado += Number(d.valorAprovado ?? 0);
       else comEscritorio += Number(d.valorInformado);

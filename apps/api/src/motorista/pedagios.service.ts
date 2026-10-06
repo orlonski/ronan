@@ -10,6 +10,7 @@ import { resolverTransportadora } from "../common/transportadora";
 import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamentos-resgatados.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { mesRange } from "./viagens.service";
+import { acertoDoItem, ITENS_ACERTO_FECHADO } from "./acerto-do-lancamento";
 
 const PEDAGIO_INCLUDE = {
   veiculo: { select: { id: true, placa: true } },
@@ -35,7 +36,19 @@ export class PedagiosMotoristaService {
 
     const itens = await this.prisma.pedagio.findMany({
       where,
-      include: PEDAGIO_INCLUDE,
+      include: {
+        ...PEDAGIO_INCLUDE,
+        // "No acerto de DD/MM" em Meus gastos: o acerto fechado em que este
+        // pedágio entrou — pelo próprio pedágio (avulso) ou pela viagem dele
+        // (o acerto junta os pedágios da viagem num item só).
+        itensAcerto: ITENS_ACERTO_FECHADO,
+        viagem: {
+          select: {
+            ...PEDAGIO_INCLUDE.viagem.select,
+            itensAcerto: { ...ITENS_ACERTO_FECHADO, where: { ...ITENS_ACERTO_FECHADO.where, tipo: "REEMBOLSO_PEDAGIO" } },
+          },
+        },
+      },
       orderBy: [{ data: "desc" }, { id: "desc" }],
       take: filtros.limit + 1,
       ...(filtros.cursor
@@ -47,7 +60,17 @@ export class PedagiosMotoristaService {
     const pageItens = hasMore ? itens.slice(0, filtros.limit) : itens;
     const nextCursor = hasMore ? pageItens[pageItens.length - 1].id : null;
 
-    return { itens: pageItens, nextCursor };
+    return {
+      itens: pageItens.map(({ itensAcerto, viagem, ...p }) => {
+        const item = itensAcerto[0] ?? viagem?.itensAcerto[0] ?? null;
+        return {
+          ...p,
+          viagem: viagem ? { id: viagem.id, ticket: viagem.ticket, data: viagem.data } : null,
+          acerto: acertoDoItem(item),
+        };
+      }),
+      nextCursor,
+    };
   }
 
   async delete(motoristaId: string, pedagioId: string): Promise<void> {

@@ -173,16 +173,31 @@ export function situacaoParaMotorista(d: {
   acerto: { status: "ABERTO" | "FECHADO" | "PAGO" } | null;
   /** Dia em que ele era empregado registrado: o escritório paga fora do acerto. */
   foraDoAcerto: boolean;
-}): { situacao: SituacaoDespesaMotorista; somaPraReceber: boolean } {
+  /**
+   * A régua dele devolve gasto de viagem? (`resolverRemuneracao(...).reembolsaDespesa`,
+   * que mora na modalidade.) Ausente = devolve. Com `false`, o acerto NÃO paga
+   * (`itensReembolsoDespesa` devolve `[]`) — então dizer "entra no próximo
+   * acerto" e somar em "Pra receber" seria prometer dinheiro que não vem.
+   */
+  reembolsaDespesa?: boolean;
+}): { situacao: SituacaoDespesaMotorista; somaPraReceber: boolean; naoVoltaNoAcerto?: true } {
   if (d.status === "NAO_REEMBOLSADA") {
     const porSuaConta = d.decididoAutomatico && d.motivo === MOTIVO_POR_SUA_CONTA;
     return { situacao: porSuaConta ? "POR_SUA_CONTA" : "NAO_REEMBOLSADA", somaPraReceber: false };
   }
+  // O que JÁ está num acerto fechado é fato: vale o acerto, seja qual for a régua de hoje.
+  if (d.status === "APROVADA" && d.acerto?.status === "PAGO") return { situacao: "PAGO", somaPraReceber: false };
+  if (d.status === "APROVADA" && d.acerto?.status === "FECHADO") return { situacao: "NO_ACERTO", somaPraReceber: false };
+  // Empregado no dia: o escritório paga fora do acerto, a régua do acerto não manda.
+  if (d.status === "APROVADA" && d.foraDoAcerto) return { situacao: "PAGO_FORA_DO_ACERTO", somaPraReceber: true };
+  // A régua não devolve: nem "com o escritório" nem "aprovado" somam. Vai como
+  // POR_SUA_CONTA (o app antigo já mostra "Por sua conta" sem somar) com a
+  // marca `naoVoltaNoAcerto`, que o app novo lê pra explicar o porquê.
+  if (d.reembolsaDespesa === false && !d.foraDoAcerto) {
+    return { situacao: "POR_SUA_CONTA", somaPraReceber: false, naoVoltaNoAcerto: true };
+  }
   if (d.status === "COM_ESCRITORIO") return { situacao: "COM_ESCRITORIO", somaPraReceber: true };
   // APROVADA
-  if (d.acerto?.status === "PAGO") return { situacao: "PAGO", somaPraReceber: false };
-  if (d.acerto?.status === "FECHADO") return { situacao: "NO_ACERTO", somaPraReceber: false };
-  if (d.foraDoAcerto) return { situacao: "PAGO_FORA_DO_ACERTO", somaPraReceber: true };
   const outroValor =
     d.valorAprovado != null && Math.round(d.valorAprovado * 100) !== Math.round(d.valorInformado * 100);
   return { situacao: outroValor ? "APROVADA_OUTRO_VALOR" : "APROVADA", somaPraReceber: true };

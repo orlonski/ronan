@@ -18,6 +18,7 @@ import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamen
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { mesRange } from "./viagens.service";
+import { acertoDoItem, ITENS_ACERTO_FECHADO } from "./acerto-do-lancamento";
 
 const ABAST_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
@@ -45,7 +46,8 @@ export class AbastecimentosMotoristaService {
 
     const itens = await this.prisma.abastecimento.findMany({
       where,
-      include: ABAST_INCLUDE,
+      // "No acerto de DD/MM" em Meus gastos.
+      include: { ...ABAST_INCLUDE, itensAcerto: ITENS_ACERTO_FECHADO },
       orderBy: [{ data: "desc" }, { id: "desc" }],
       take: filtros.limit + 1,
       ...(filtros.cursor ? { cursor: { id: filtros.cursor }, skip: 1 } : {}),
@@ -54,7 +56,10 @@ export class AbastecimentosMotoristaService {
     const hasMore = itens.length > filtros.limit;
     const pageItens = hasMore ? itens.slice(0, filtros.limit) : itens;
     const nextCursor = hasMore ? pageItens[pageItens.length - 1].id : null;
-    return { itens: pageItens, nextCursor };
+    return {
+      itens: pageItens.map(({ itensAcerto, ...a }) => ({ ...a, acerto: acertoDoItem(itensAcerto[0]) })),
+      nextCursor,
+    };
   }
 
   async detalhe(motoristaId: string, id: string) {
