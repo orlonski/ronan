@@ -580,6 +580,18 @@ model Conta {
   custosFixosVeiculo             CustoFixoVeiculo[]
   extratosCartao                 ExtratoCartao[]
   transacoesCartao               TransacaoCartao[]
+  extratosTag                    ExtratoTag[]
+  extratosTagVeiculo             ExtratoTagVeiculo[]
+  passagensTag                   PassagemTag[]
+  pracasTagDeParaConta           PracaTagDeParaConta[]
+  trechosTag                     TrechoTag[]
+  ligacoesTagViagem              LigacaoTagViagem[]
+  achadosTag                     AchadoTag[]
+  respostasCargaTag              RespostaCargaTag[]
+  /// Conferência da tag (módulo `tag-pedagio`): false = o cruzamento SÓ SUGERE,
+  /// e o que ligaria sozinho aparece como sugestão destacada. É o 1º mês de
+  /// toda empresa (decisão do dono, 06/10/2026): mede em sombra antes de ligar.
+  ligacaoAutomaticaTag           Boolean                          @default(false)
   modelosChecklist               ModeloChecklist[]
   itensModeloChecklist           ItemModeloChecklist[]
   checklistsVeiculo              ChecklistVeiculo[]
@@ -835,6 +847,7 @@ model User {
 
   coletasCriadas           ConviteColeta[] @relation("CriouColeta")
   extratosCartaoImportados ExtratoCartao[] @relation("ImportouExtratoCartao")
+  extratosTagImportados    ExtratoTag[]    @relation("ImportouExtratoTag")
 
   @@index([contaId])
   @@map("users")
@@ -1885,6 +1898,9 @@ model PedagioRodovia {
   criadoEm       DateTime @default(now())
   alteradoEm     DateTime @updatedAt
 
+  deParaTag      PracaTagDePara[]
+  deParaTagConta PracaTagDeParaConta[]
+
   // Bounding-box pré-filtro: a app calcula menor distância ponto-segmento
   // só pros pedágios cujo lat/lng cabe num envelope da rota. Sem índice
   // espacial dedicado (sem PostGIS) — índices simples cobrem o volume
@@ -2205,6 +2221,15 @@ model Veiculo {
   tipoProprietario       String?
   /// CNPJ/CPF do dono quando não é a própria empresa.
   cpfCnpjProprietario    String?
+  /// Eixos do cavalo e da composição de costume (cavalo + carreta), e quantos
+  /// ele suspende vazio. Opcionais: a conferência da tag SUGERE pela moda das
+  /// passagens carregadas (nunca pelo máximo — uma cobrança errada de 9 eixos
+  /// viraria cadastro e calaria a regra) e gente confirma. Ver 04-qa I6.
+  eixosCavalo            Int?
+  eixosComposicao        Int?
+  eixosSuspensosVazio    Int?
+  eixosConfirmadoPorId   String?
+  eixosConfirmadoEm      DateTime?
   rntrcProprietario      String?
   /// Documento do veículo com validade, pra avisar antes de parar na balança.
   crlvValidade           DateTime?       @db.Date
@@ -2233,6 +2258,8 @@ model Veiculo {
 
   manutencoes      ManutencaoVeiculo[]
   transacoesCartao TransacaoCartao[]
+  passagensTag     PassagemTag[]
+  extratosTag      ExtratoTagVeiculo[]
   checklists       ChecklistVeiculo[]
   problemas        ProblemaVeiculo[]
   leiturasOdometro LeituraOdometro[]
@@ -2359,13 +2386,14 @@ model Empresa {
   // --- ticket por e-mail ao cliente pagador ---
   /// Endereços que recebem o ticket das viagens aprovadas. Vale pras obras
   /// deste cliente que não tenham configuração própria (`Cliente.ticketEnvioModo` null).
-  ticketEmails     String[]        @default([])
+  ticketEmails      String[]           @default([])
   /// NENHUM por padrão: ninguém passa a receber e-mail sem alguém ligar no painel.
-  ticketEnvioModo  ModoEnvioTicket @default(NENHUM)
+  ticketEnvioModo   ModoEnvioTicket    @default(NENHUM)
   /// Quando o envio foi ligado. Só viagem aprovada DEPOIS disto sai — ligar
   /// não pode despejar o histórico inteiro na caixa do cliente.
-  ticketEnvioDesde DateTime?
-  emailsEnviados   EmailEnviado[]
+  ticketEnvioDesde  DateTime?
+  emailsEnviados    EmailEnviado[]
+  respostasCargaTag RespostaCargaTag[]
 
   @@unique([contaId, cnpj])
   @@index([ativa])
@@ -4683,6 +4711,7 @@ model Viagem {
 
   alertas           AlertaOperacional[]
   documentosFiscais DocumentoFiscal[]
+  ligacoesTag       LigacaoTagViagem[]
 
   @@index([transportadoraId, data])
   @@index([motoristaId, data])
@@ -9291,4 +9320,295 @@ model EtapaPendenciaAcao {
   @@index([motoristaId])
   @@index([contaId])
   @@map("etapa_pendencia_acoes")
+}
+
+// ============================================================================
+// Conferência da tag de pedágio (módulo `tag-pedagio`, Onda 1).
+// Desenho: docs/tag-pedagio/03-proposta.md, 04-qa.md e 05-prova-cruzamento.md.
+// O que é FATO (a fatura lida, as passagens) é gravado uma vez e nunca muda; o
+// que é LEITURA (trechos, sugestões, achados) é recalculado e pode mudar
+// quando chega viagem nova; o que é DECISÃO DE GENTE (ligação, de quem era a
+// carga, praça, achado) se ancora na passagem-âncora e sobrevive ao recálculo.
+// ============================================================================
+
+/// Uma fatura de tag importada. FALHOU também fica (com o motivo), mas sem
+/// passagens e sem o PDF: o escritório precisa ver que o arquivo não entrou.
+model ExtratoTag {
+  contaId             String    @default("__SEM_CONTA__")
+  conta               Conta     @relation(fields: [contaId], references: [id])
+  id                  String    @id @default(uuid())
+  /// "SEM_PARAR" (ConectCar/Veloe quando um cliente pedir).
+  operadora           String
+  /// "PDF_FATURA". Relatório de período e Excel do portal só ENRIQUECEM:
+  /// nunca geram "cobrada em outra fatura" (04-qa I3).
+  formato             String
+  /// LIDO | LIDO_COM_DIVERGENCIA | FALHOU
+  status              String
+  /// Por que falhou ou o que não fechou, em português de gente.
+  motivo              String?
+  nomeArquivo         String
+  /// sha256 dos bytes: o mesmo arquivo subido de novo não grava nada.
+  hashArquivo         String
+  /// O original no MinIO, com nome sorteado. Servido SÓ pela API (o bucket é
+  /// anônimo). Null depois da retenção, ao desfazer, ou quando FALHOU.
+  arquivoKey          String?
+  arquivoExpiraEm     DateTime?
+  numeroFatura        String?
+  numeroNotaFiscal    String?
+  codigoCliente       String?
+  /// Só os dígitos. A raiz (8) é comparada com a da conta (04-qa I4).
+  cnpjFatura          String?
+  nomeFatura          String?
+  /// Quem disse "é nossa" quando a raiz do CNPJ não bateu.
+  cnpjConfirmadoPorId String?
+  periodoDe           DateTime? @db.Date
+  periodoAte          DateTime? @db.Date
+  emitidoEm           DateTime? @db.Date
+  totalNota           Decimal?  @db.Decimal(12, 2)
+  /// As 6 checagens, linhas não lidas (cruas), recargas e a nota fiscal.
+  conferencia         Json
+  passagens           Int       @default(0)
+  importadoPor        User?     @relation("ImportouExtratoTag", fields: [importadoPorId], references: [id], onDelete: SetNull)
+  importadoPorId      String?
+  importadoEm         DateTime  @default(now())
+  processadoEm        DateTime?
+
+  veiculos ExtratoTagVeiculo[]
+  itens    PassagemTag[]
+
+  @@unique([contaId, hashArquivo])
+  @@index([contaId, importadoEm])
+  @@index([contaId, operadora, numeroFatura])
+  @@map("extratos_tag")
+}
+
+/// O "Resumo por Veículo" da fatura: o que ela cobra por placa, o que o
+/// detalhe soma, a diferença e as taxas que não são pedágio.
+model ExtratoTagVeiculo {
+  contaId     String     @default("__SEM_CONTA__")
+  conta       Conta      @relation(fields: [contaId], references: [id])
+  id          String     @id @default(uuid())
+  extrato     ExtratoTag @relation(fields: [extratoId], references: [id], onDelete: Cascade)
+  extratoId   String
+  placaTexto  String
+  veiculo     Veiculo?   @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
+  veiculoId   String?
+  plano       Decimal    @db.Decimal(10, 2)
+  uso         Decimal    @db.Decimal(12, 2)
+  qtdUsos     Int
+  outras      Decimal    @db.Decimal(10, 2)
+  somaDetalhe Decimal    @db.Decimal(12, 2)
+  qtdDetalhe  Int
+  /// Resumo − detalhe. Diferente de zero = AJUSTE_NAO_DETALHADO.
+  ajuste      Decimal    @db.Decimal(12, 2)
+  /// Linhas do plano e das "outras arrecadações" (descrição, valor).
+  taxas       Json
+
+  @@unique([extratoId, placaTexto])
+  @@index([contaId, placaTexto])
+  @@map("extratos_tag_veiculos")
+}
+
+/// Uma linha da fatura: passagem pela tag (PEDAGIO) ou linha de vale-pedágio
+/// (VALE, crédito C e débito D). Única DENTRO do documento — entre documentos a
+/// chave só serve pra comparar (04-qa I3).
+model PassagemTag {
+  contaId          String     @default("__SEM_CONTA__")
+  conta            Conta      @relation(fields: [contaId], references: [id])
+  id               String     @id @default(uuid())
+  extrato          ExtratoTag @relation(fields: [extratoId], references: [id], onDelete: Cascade)
+  extratoId        String
+  /// sha256(operadora|placa|tipo|data|hora|rodovia|km|sentido|cat|valor|dc|nºviagem) + ordinal:
+  /// a mesma passagem cobrada duas vezes no arquivo entra duas vezes.
+  chave            String
+  /// PEDAGIO | VALE
+  tipo             String
+  /// D | C
+  dc               String
+  placaTexto       String
+  veiculo          Veiculo?   @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
+  veiculoId        String?
+  /// Instante interpretado (o PDF não diz o fuso: vem da UF da concessionária).
+  ocorridoEm       DateTime
+  /// "dd/mm/aa hh:mm:ss" como veio, pra reinterpretar se o fuso mudar.
+  dataHoraTexto    String
+  fusoOffsetMin    Int
+  concessionaria   String?
+  pracaTexto       String
+  /// rodovia|km em metros ("BR364|579100"): a praça física, sem sentido.
+  chavePraca       String
+  rodovia          String
+  kmMetros         Int
+  sentido          String
+  cidade           String
+  uf               String?
+  /// Código da operadora (61) e os eixos que ele quer dizer (7).
+  categoria        Int
+  eixosCobrados    Int
+  valor            Decimal    @db.Decimal(10, 2)
+  /// Vale: o embarcador como a operadora imprimiu (truncado) e o nº da viagem.
+  embarcadorTexto  String?
+  numeroViagemVale String?
+  linhaOriginal    String
+  linhaPdf         Int
+
+  @@unique([extratoId, chave])
+  @@index([contaId, chave])
+  @@index([contaId, placaTexto, ocorridoEm])
+  @@index([veiculoId, ocorridoEm])
+  @@map("passagens_tag")
+}
+
+/// Praça do extrato → praça do mapa, GLOBAL (vale pra todas as empresas).
+/// AUTOMATICA = casou sozinha pelas conferências; CONFIRMADA = a equipe da
+/// Movatruck confirmou. Empresa nenhuma escreve aqui (04-qa M6).
+model PracaTagDePara {
+  id               String         @id @default(uuid())
+  operadora        String
+  chavePraca       String
+  pedagioRodovia   PedagioRodovia @relation(fields: [pedagioRodoviaId], references: [id], onDelete: Cascade)
+  pedagioRodoviaId String
+  /// AUTOMATICA | CONFIRMADA
+  origem           String
+  evidencia        Json?
+  confirmadoPorId  String?
+  confirmadoEm     DateTime?
+  criadoEm         DateTime       @default(now())
+  alteradoEm       DateTime       @updatedAt
+
+  @@unique([operadora, chavePraca])
+  @@map("pracas_tag_de_para")
+}
+
+/// A mesma coisa, só pra uma empresa: ela confirma pra ela, e vence o global.
+model PracaTagDeParaConta {
+  contaId          String         @default("__SEM_CONTA__")
+  conta            Conta          @relation(fields: [contaId], references: [id])
+  id               String         @id @default(uuid())
+  operadora        String
+  chavePraca       String
+  pedagioRodovia   PedagioRodovia @relation(fields: [pedagioRodoviaId], references: [id], onDelete: Cascade)
+  pedagioRodoviaId String
+  confirmadoPorId  String?
+  confirmadoEm     DateTime       @default(now())
+
+  @@unique([contaId, operadora, chavePraca])
+  @@map("pracas_tag_de_para_conta")
+}
+
+/// Trecho = passagens seguidas da mesma placa, cortadas quando a carga muda
+/// (eixos) ou a parada passa de 90 min além do tempo de rota. RECALCULADO:
+/// a decisão de gente não mora aqui, mora na LigacaoTagViagem (pela âncora).
+model TrechoTag {
+  contaId                String   @default("__SEM_CONTA__")
+  conta                  Conta    @relation(fields: [contaId], references: [id])
+  id                     String   @id @default(uuid())
+  placaTexto             String
+  veiculoId              String?
+  /// CARREGADO | VAZIO
+  estado                 String
+  ini                    DateTime
+  fim                    DateTime
+  passagemIds            String[]
+  /// A 1ª passagem do trecho.
+  passagemAncoraId       String
+  /// A 1ª passagem da viagem inferida a que o trecho pertence (carregado).
+  viagemInferidaAncoraId String?
+  valorTag               Decimal  @db.Decimal(10, 2)
+  valorVale              Decimal  @db.Decimal(10, 2)
+  /// Por que abriu: início | carregou | descarregou | parada.
+  abriuPor               String
+  /// O que o cruzamento achou: status, viagem, candidatas com pontos e motivo.
+  cruzamento             Json
+  calculadoEm            DateTime @default(now())
+
+  @@unique([contaId, passagemAncoraId])
+  @@index([contaId, placaTexto, ini])
+  @@map("trechos_tag")
+}
+
+/// Ligação de um trecho (pela passagem-âncora) a uma viagem. Desfazível: nunca
+/// se apaga, ganha `desfeitaEm`. AUTO é do sistema; o resto é decisão de gente.
+model LigacaoTagViagem {
+  contaId          String    @default("__SEM_CONTA__")
+  conta            Conta     @relation(fields: [contaId], references: [id])
+  id               String    @id @default(uuid())
+  passagemAncoraId String
+  viagem           Viagem?   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId         String?
+  /// AUTO | SUGESTAO (sugestão aceita) | MANUAL | RETORNO | NAO_E_VIAGEM
+  tipo             String
+  /// O motivo em texto ("3 de 3 praças da rota, na ordem, mesmo dia").
+  motivo           String
+  /// Null = o sistema.
+  autorId          String?
+  criadoEm         DateTime  @default(now())
+  desfeitaEm       DateTime?
+  desfeitaPorId    String?
+  desfeitaMotivo   String?
+
+  @@index([contaId, passagemAncoraId])
+  @@index([viagemId])
+  @@map("ligacoes_tag_viagem")
+}
+
+/// Um achado em R$. Cada passagem cai em UM só (precedência da 04-qa B2), e a
+/// decisão de gente (status) sobrevive ao recálculo pela `chave`.
+model AchadoTag {
+  contaId          String    @default("__SEM_CONTA__")
+  conta            Conta     @relation(fields: [contaId], references: [id])
+  id               String    @id @default(uuid())
+  /// tipo + âncora (ou extrato+placa): estável entre recálculos.
+  chave            String
+  tipo             String
+  /// PODE_SER_SEU | PRA_CONTESTAR | PRA_CONVERSAR
+  caixa            String
+  extratoId        String?
+  placaTexto       String?
+  veiculoId        String?
+  passagemAncoraId String?
+  passagemIds      String[]
+  /// Em jogo. Null = não é dinheiro (praça pulada).
+  valor            Decimal?  @db.Decimal(12, 2)
+  titulo           String
+  explicacao       String
+  /// Quando duas hipóteses se excluem: as explicações possíveis, a pessoa escolhe.
+  explicacoes      Json?
+  evidencia        Json?
+  /// 90 dias da passagem mais antiga (pré-pago: conta da passagem).
+  prazoEm          DateTime?
+  /// ABERTO | CONFERIDO | CONTESTADO | DESCARTADO
+  status           String    @default("ABERTO")
+  motivo           String?
+  decididoPorId    String?
+  decididoEm       DateTime?
+  /// O recálculo não achou mais: fica pela decisão, some da tela.
+  vigente          Boolean   @default(true)
+  calculadoEm      DateTime  @default(now())
+
+  @@unique([contaId, chave])
+  @@index([contaId, caixa, vigente])
+  @@map("achados_tag")
+}
+
+/// "Essa carga era de quem?" — UMA vez por viagem inferida (âncora), com as 4
+/// respostas da 04-qa I1/I2. O relatório por contratante só traz CLIENTE.
+model RespostaCargaTag {
+  contaId          String   @default("__SEM_CONTA__")
+  conta            Conta    @relation(fields: [contaId], references: [id])
+  id               String   @id @default(uuid())
+  passagemAncoraId String
+  /// CLIENTE | CARGA_PROPRIA | PAGOU_DE_OUTRO_JEITO | NAO_SEI
+  resposta         String
+  /// O contratante (Empresa = quem paga o frete; na tela, "Cliente").
+  empresa          Empresa? @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+  empresaId        String?
+  comprovante      String?
+  observacao       String?
+  autorId          String?
+  respondidoEm     DateTime @default(now())
+  alteradoEm       DateTime @updatedAt
+
+  @@unique([contaId, passagemAncoraId])
+  @@map("respostas_carga_tag")
 }

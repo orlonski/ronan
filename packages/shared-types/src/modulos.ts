@@ -37,6 +37,7 @@ export const MODULOS_CHAVES = [
   "ponto",
   "despesas",
   "etapas",
+  "tag-pedagio",
   "plataforma",
 ] as const;
 export const ModuloChaveSchema = z.enum(MODULOS_CHAVES);
@@ -247,6 +248,21 @@ export const MODULOS: ModuloDef[] = [
       "CT-e, MDF-e, canhoto, tacógrafo e o acerto do frete chegam pelo app, presos à viagem certa — e o escritório vê o que falta mesmo do formulário que o motorista nem abriu.",
     adicional: true,
     recursos: ["etapas-viagem", "etapas-respostas"],
+  },
+  {
+    // Conferência da tag de pedágio (Sem Parar): o escritório sobe a fatura do
+    // mês, o sistema lê sem errar calado, liga cada passagem à viagem e mostra
+    // em reais o vale-pedágio que não veio e o que dá pra contestar no prazo.
+    // Vendido à parte (decisão do dono, 06/10/2026) e SEM depender do
+    // Financeiro: a Onda 1 não mexe em acerto nem em lucro — essas partes
+    // (Onda 2) é que vão precisar dele. Conta nova não recebe sozinha, nem no
+    // teste grátis.
+    chave: "tag-pedagio",
+    nome: "Conferência da tag de pedágio",
+    pitch:
+      "Sobe a fatura do Sem Parar e o sistema liga cada passagem à viagem certa, mostra o vale-pedágio que o contratante deixou de dar e o que dá pra contestar antes do prazo.",
+    adicional: true,
+    recursos: ["tag"],
   },
   {
     chave: "plataforma",

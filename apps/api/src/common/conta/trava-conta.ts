@@ -78,6 +78,11 @@ const MODELS_GLOBAIS = new Set<string>([
   // A tabela de preço do produto. É da casa: nenhuma empresa tem a sua.
   "FaixaPreco",
   "PedagioRodovia", // praças de pedágio vindas do OSM (dado público)
+  // Praça do extrato da tag → praça do mapa, valendo pra TODAS as empresas.
+  // Praça é dado público; só a equipe da plataforma confirma aqui (a empresa
+  // confirma pra ela em `PracaTagDeParaConta`, que é escopado). Toda leitura
+  // cita operadora+chavePraca no where.
+  "PracaTagDePara",
   "GeocodingCache", // endereço → coordenada
   "RotaCache", // chaveado por par de Local, que já é da conta
   "ExecucaoAgente", // fila interna da plataforma

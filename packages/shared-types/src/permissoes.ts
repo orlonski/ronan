@@ -97,6 +97,9 @@ const ACAO_TITULO_POR_RECURSO: Record<string, string> = {
   "conferencia-despesas.decidir": "Aprovar, aprovar outro valor ou não reembolsar",
   "etapas-respostas.ver": "Ver os documentos da viagem e o que falta",
   "etapas-respostas.editar": "Anexar pelo escritório e dispensar documento com motivo",
+  "tag.ver": "Ver a conferência da tag, os achados e os relatórios",
+  "tag.decidir": "Ligar passagem à viagem, dizer de quem era a carga e confirmar praça",
+  "tag.importar": "Subir a fatura, desfazer a importação e baixar o PDF original",
 };
 
 type ResourceDef = { recurso: string; label: string; modulo: string; acoes: string[] };
@@ -140,6 +143,12 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // dispensar com motivo — fecha pendência, por isso não vem junto do ver.
   { recurso: "etapas-viagem", label: "Viagens — formulários de documentos (etapas)", modulo: "Cadastros", acoes: ["ver", "criar", "editar"] },
   { recurso: "etapas-respostas", label: "Viagens — documentos recebidos", modulo: "Operação", acoes: ["ver", "editar"] },
+  // Conferência da tag de pedágio (módulo `tag-pedagio`, vendido à parte). Uma
+  // tela só ("Tag de pedágio"), três ações: `ver` é olhar o raio-x e os
+  // relatórios; `decidir` mexe no que o sistema sugeriu (ligar passagem à
+  // viagem, de quem era a carga, praça); `importar` sobe e desfaz fatura e é o
+  // ÚNICO que baixa o PDF original — ele traz razão social, CNPJ e banco.
+  { recurso: "tag", label: "Tag de pedágio — conferência da fatura", modulo: "Operação", acoes: ["ver", "decidir", "importar"] },
   // O que o cliente pediu, e o quadro de quem leva o quê. Recursos separados
   // porque quem negocia o pedido com o cliente raramente é quem monta a escala
   // do dia. `publicar` é à parte de `editar` pelo mesmo motivo que em marketing:
@@ -423,6 +432,8 @@ export const ADMIN_ONLY: string[] = [
   "pedagios.importar",
   // Convidar gente de fora da empresa pro portal da obra.
   "encarregados.editar",
+  // O PDF da fatura da tag traz razão social, CNPJ e banco da empresa.
+  "tag.importar",
 ];
 
 /** Permissões do papel Operador: tudo de Operação + Cadastros, menos as
