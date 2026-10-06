@@ -35,6 +35,11 @@ function ocup(p: Partial<OcupacaoItem> & { chave: string; acertoId: string }): O
 }
 
 describe("chaveDoItem", () => {
+  it("gasto de viagem tem chave própria: a trava do fechamento cobre ele também", () => {
+    expect(chaveDoItem({ tipo: "REEMBOLSO_DESPESA", despesaId: "d1" })).toBe("DESPESA:d1");
+    expect(chaveDoItem({ tipo: "REEMBOLSO_DESPESA" })).toBeNull();
+  });
+
   it("frete e pedágio da MESMA viagem são lançamentos diferentes", () => {
     expect(chaveDoItem({ tipo: "FRETE", viagemId: "v1" })).toBe("FRETE:v1");
     expect(chaveDoItem({ tipo: "REEMBOLSO_PEDAGIO", viagemId: "v1", pedagioId: "p1" })).toBe(
