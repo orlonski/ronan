@@ -162,12 +162,13 @@ function lerItem(v: unknown, areaDaDefinicao: string | null): ItemEtapa | null {
     ajuda: texto(o.ajuda, 300),
     tipo,
     obrigatorio: o.obrigatorio === true,
-    seFaltar: o.seFaltar === "NAO_SEGUIR" ? "NAO_SEGUIR" : "AVISAR",
+    // NAO_SEGUIR em item opcional não tem o que parar: vira AVISAR (igual ao servidor).
+    seFaltar: o.seFaltar === "NAO_SEGUIR" && o.obrigatorio === true ? "NAO_SEGUIR" : "AVISAR",
     escritorioPodeAnexar: o.escritorioPodeAnexar === true,
     fotos: lerFaixaFotos(o.fotos),
     simNao: { aoSim: lerExtra(sn.aoSim), aoNao: lerExtra(sn.aoNao) },
     numero: { unidade: texto(num.unidade, 20), casas: inteiro(num.casas, 0, 0, 6) },
-    assinatura: { pedeNome: as.pedeNome !== false },
+    assinatura: { pedeNome: as.pedeNome === true },
   };
 }
 
