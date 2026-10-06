@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { HoraField } from "@/components/ui/hora-field";
 import { Input } from "@/components/ui/input";
+import { InputDinheiro } from "@/components/ui/input-dinheiro";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { humanizeApiError } from "@/lib/api";
@@ -51,7 +52,6 @@ import {
   type TipoDespesaApp,
 } from "@/lib/despesas";
 import {
-  centavosDoTexto,
   diaFalado,
   diaSP,
   fmtReais,
@@ -623,14 +623,13 @@ export default function GastoNovo() {
   const blocoValor = (
     <View ref={val.refCampo("valor")} onLayout={val.onLayoutCampo("valor")} className="gap-2">
       <Label error={!!val.erroDe("valor")}>Valor</Label>
-      <Input
-        value={centavos > 0 ? fmtReais(valor) : ""}
-        onChangeText={(t) => {
+      <InputDinheiro
+        centavos={centavos}
+        onChangeCentavos={(c) => {
           val.limpar();
           setRepetidos(null);
-          setCentavos(centavosDoTexto(t));
+          setCentavos(c);
         }}
-        keyboardType="number-pad"
         placeholder="R$ 0,00"
         className="font-bold"
         // Altura e métrica da fonte no `style` (vence o className): com

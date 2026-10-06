@@ -102,9 +102,35 @@ export function fmtReais(n: number): string {
   return `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/** Máscara de valor: só dígitos, em centavos. "1234" → 12,34. */
-export function centavosDoTexto(t: string): number {
-  const d = t.replace(/\D/g, "").slice(0, 9);
+const MAX_DIGITOS_VALOR = 9;
+
+/**
+ * Máscara de dinheiro estilo "maquininha": o número cresce pela direita.
+ * Compara o texto novo com o que estava no campo, em vez de reler os dígitos
+ * do texto inteiro — reler embaralhava quando ele apagava com o cursor no
+ * meio (sumia o dígito do meio, ou apagar a vírgula não fazia nada).
+ *
+ * - Ficou mais curto (backspace, onde quer que o cursor estivesse): sai o
+ *   ÚLTIMO dígito. Sem dígito nenhum sobrando: zera.
+ * - Ficou mais longo (digitou ou colou): os dígitos inseridos entram no fim.
+ */
+export function proximoCentavos(anterior: string, novo: string, centavos: number): number {
+  const digitosNovos = novo.replace(/\D/g, "");
+  if (!digitosNovos) return 0;
+  if (novo.length < anterior.length) return Math.floor(centavos / 10);
+  // O trecho inserido: o que sobra tirando o começo e o fim em comum.
+  let ini = 0;
+  while (ini < anterior.length && ini < novo.length && anterior[ini] === novo[ini]) ini++;
+  let fim = 0;
+  while (
+    fim < anterior.length - ini &&
+    fim < novo.length - ini &&
+    anterior[anterior.length - 1 - fim] === novo[novo.length - 1 - fim]
+  )
+    fim++;
+  const inseridos = novo.slice(ini, novo.length - fim).replace(/\D/g, "");
+  if (!inseridos) return centavos;
+  const d = `${centavos > 0 ? centavos : ""}${inseridos}`.replace(/^0+/, "").slice(0, MAX_DIGITOS_VALOR);
   return d ? parseInt(d, 10) : 0;
 }
 
