@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { router, Stack, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   AlertTriangle,
@@ -43,16 +43,25 @@ import {
   registrarEventoGuiado,
   type LifecycleLocal,
 } from "@/lib/lifecycle";
-import { useCatalogoEventos, useCatalogoOcorrencias, useCatalogos } from "@/lib/queries";
+import { useCatalogoEventos, useCatalogoOcorrencias, useCatalogos, useModelosEtapa } from "@/lib/queries";
 import { DocumentosDaViagem } from "@/components/documentos-da-viagem";
 import { GastosDaViagem } from "@/components/gastos";
 import { useModuloDespesas } from "@/lib/gastos";
+import { useCapacidadeNova } from "@/lib/acessos-app";
+import { CAP_ETAPAS } from "@/lib/etapas";
+import { lerEstadoEtapas, registrarViagemComEtapas } from "@/lib/etapas-local";
+import { abrirEtapa, CartaoEtapasViagem } from "@/components/etapas/cartao-etapas-viagem";
 
 export default function ViagemGuiada() {
   const catalogo = useCatalogoEventos();
   const ocorrencias = useCatalogoOcorrencias();
   const catalogos = useCatalogos();
   const [local, setLocal] = useState<LifecycleLocal | null>(null);
+  // Documentos da viagem: "Começar viagem" manda abrir os da carga logo depois.
+  const params = useLocalSearchParams<{ abrirEtapa?: string }>();
+  const jaAbriuEtapa = useRef(false);
+  const etapasLigado = useCapacidadeNova(CAP_ETAPAS);
+  const modelosEtapa = useModelosEtapa(etapasLigado);
   // Gasto de viagem (módulo `despesas`): sem o módulo a tela fica como sempre.
   const moduloGastos = useModuloDespesas();
   const [carregando, setCarregando] = useState(true);
@@ -77,6 +86,31 @@ export default function ViagemGuiada() {
   }, []);
 
   useFocusEffect(recarregar);
+
+  // Abre os documentos da carga uma vez, logo depois de "Começar viagem".
+  useEffect(() => {
+    if (!local || jaAbriuEtapa.current || !params.abrirEtapa) return;
+    jaAbriuEtapa.current = true;
+    abrirEtapa(local.clientId, params.abrirEtapa);
+  }, [local, params.abrirEtapa]);
+
+  // Viagem retomada do servidor (outro celular, app reinstalado) com a função
+  // ligada: anota com os formulários de agora, pra o cartão e a barreira
+  // existirem também nela.
+  useEffect(() => {
+    if (!local || !etapasLigado || modelosEtapa.length === 0) return;
+    void lerEstadoEtapas().then((e) => {
+      if (e.viagens.some((v) => v.viagemClientId === local.clientId)) return;
+      void registrarViagemComEtapas({
+        viagemClientId: local.clientId,
+        rotulo: [local.clienteNome, local.localCargaNome].filter(Boolean).join(" · ") || "Viagem",
+        placa: catalogos.data?.veiculos.find((x) => x.id === local.veiculoId)?.placa ?? null,
+        origem: "GUIADA",
+        iniciadaEm: local.iniciadoEm,
+        modelos: modelosEtapa,
+      });
+    });
+  }, [local, etapasLigado, modelosEtapa, catalogos.data?.veiculos]);
 
   const cat = catalogo.data ?? [];
   const slugsRegistrados = useMemo(
@@ -341,6 +375,11 @@ export default function ViagemGuiada() {
             </View>
           ) : null}
         </View>
+
+        {/* Documentos da viagem (carga, acerto do frete): entre o que já foi
+            feito e o botão grande — sem roubar o botão, que continua sendo o
+            próximo passo. Sem a função ligada, não desenha nada. */}
+        <CartaoEtapasViagem viagemClientId={local.clientId} />
 
         {/* BOTÃO PRIMÁRIO GRANDE = próximo passo obrigatório, ou Finalizar */}
         {proximo ? (

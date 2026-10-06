@@ -178,6 +178,11 @@ function capacidadeNovaSync(chave: string): boolean {
   return (daConta.capacidades as readonly string[]).includes(chave);
 }
 
+/** O mesmo, fora de componente (prefetch, fila). */
+export function capacidadeNovaAgora(chave: string): boolean {
+  return capacidadeNovaSync(chave);
+}
+
 export function useCapacidadeNova(chave: string): boolean {
   return useSyncExternalStore(assinarTudo, () => capacidadeNovaSync(chave), () => false);
 }

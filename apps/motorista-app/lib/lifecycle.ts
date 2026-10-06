@@ -21,6 +21,7 @@ import {
 } from "@/db/database";
 import { api } from "./api";
 import { reportarEvento } from "./event-reporter";
+import { esquecerEtapasDaViagem } from "./etapas-local";
 import {
   enqueueEventoViagem,
   enqueueViagemCancelar,
@@ -164,6 +165,8 @@ export async function descartarViagemGuiada(clientId: string): Promise<void> {
   await enqueueViagemCancelar(clientId);
   // Gasto de viagem lançado dentro dela não some: vira "sem viagem".
   await soltarGastosDaViagem(clientId);
+  // Documentos da viagem descartada: sem viagem, não há a quem pertencer.
+  await esquecerEtapasDaViagem(clientId);
   const atual = await getLifecycleLocal();
   if (!atual || atual.clientId === clientId) {
     await clearLifecycleLocal();

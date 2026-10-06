@@ -26,7 +26,7 @@ import { AvisoKmForaDoPadrao, SugestaoKmHistorico } from "@/components/sugestao-
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { BuscarLocalModal } from "@/components/buscar-local-modal";
 import { LocalPorGps, type SelecaoLocal } from "@/components/local-por-gps";
-import { useLigadaPelaEmpresa } from "@/lib/acessos-app";
+import { useCapacidadeNova, useLigadaPelaEmpresa } from "@/lib/acessos-app";
 import { useModuloDespesas } from "@/lib/gastos";
 import { GastosDaViagem } from "@/components/gastos";
 import { SeletorRotas } from "@/components/seletor-rotas";
@@ -60,6 +60,7 @@ import {
   useCriarViagem,
   useExtrairTicket,
   useMe,
+  useModelosEtapa,
   useDistanciasEstrada,
   usePedagiosNaRota,
   useReferenciaKm,
@@ -67,6 +68,12 @@ import {
   useOpcoesRota,
   type Local,
 } from "@/lib/queries";
+import { CAP_ETAPAS } from "@/lib/etapas";
+import { registrarViagemComEtapas } from "@/lib/etapas-local";
+import { BarreiraEtapas } from "@/components/etapas/barreira-etapas";
+
+/** O aviso de documento da viagem anterior aqui nunca segura o lançamento. */
+function semAcao(): void {}
 
 type FormShape = {
   veiculoId: string;
@@ -124,6 +131,9 @@ export default function NovaViagem() {
   const me = useMe();
   const cat = useCatalogos();
   const criar = useCriarViagem();
+  // Documentos da viagem (nasce desligado: sem a função, nada aqui muda).
+  const etapasLigado = useCapacidadeNova(CAP_ETAPAS);
+  const modelosEtapa = useModelosEtapa(etapasLigado);
   const params = useLocalSearchParams<{
     fromTracking?: string;
     trackingData?: string;
@@ -1183,6 +1193,31 @@ export default function NovaViagem() {
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       saindoDePropositoRef.current = true;
+      // Documentos da viagem: a viagem lançada depois do fato já nasce
+      // finalizada — os documentos da carga e da descarga são oferecidos agora
+      // ("Agora os documentos"), sem obrigar: dá pra fazer depois pela home.
+      if (!modoEdit && etapasLigado && modelosEtapa.length > 0) {
+        const nomeLocal = (id: string) => cat.data?.locais.find((l) => l.id === id)?.nome;
+        const rotulo =
+          [nomeLocal(form.localCargaId), nomeLocal(form.localDescargaId)].filter(Boolean).join(" → ") ||
+          cat.data?.clientes.find((c) => c.id === form.clienteId)?.nome ||
+          "Viagem";
+        const agora = new Date().toISOString();
+        await registrarViagemComEtapas({
+          viagemClientId: payload.clientId,
+          rotulo,
+          placa: cat.data?.veiculos.find((x) => x.id === form.veiculoId)?.placa ?? null,
+          origem: "LANCADA",
+          iniciadaEm: agora,
+          finalizadaEm: agora,
+          modelos: modelosEtapa,
+        }).catch(() => {});
+        router.replace({
+          pathname: "/documentos-pra-completar",
+          params: { viagemClientId: payload.clientId },
+        });
+        return;
+      }
       router.back();
     } catch (err) {
       setErro(humanizeApiError(err));
@@ -2015,6 +2050,17 @@ export default function NovaViagem() {
             {/* Wrapper com ref pra validação guiada medir a posição real dos
                 campos (measureLayout relativo a este View) mesmo dentro de cards. */}
             <View ref={val.conteudoRef} style={{ gap: 16 }}>
+            {/* Documento que ficou faltando da viagem anterior. Aqui é só
+                AVISO: a viagem lançada é de algo que já aconteceu, então não
+                faz sentido pedir motivo nem segurar nada. */}
+            {!modoEdit ? (
+              <BarreiraEtapas
+                acao="INICIAR"
+                viagemClientIdAtual={viagemClientId}
+                modo="AVISO"
+                onLiberado={semAcao}
+              />
+            ) : null}
             {tracking ? (
               /* MODO GPS ("finalizar viagem"): layout guiado — resumo no topo,
                  carga/descarga (auto-detectados) primeiro, depois o resto. */

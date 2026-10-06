@@ -23,7 +23,11 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { showAlert } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { hidratarViagemDoServidor, iniciarViagemGuiada } from "@/lib/lifecycle";
-import { useCatalogos, useMe } from "@/lib/queries";
+import { useCatalogos, useMe, useModelosEtapa } from "@/lib/queries";
+import { useCapacidadeNova } from "@/lib/acessos-app";
+import { CAP_ETAPAS } from "@/lib/etapas";
+import { registrarViagemComEtapas } from "@/lib/etapas-local";
+import { BarreiraEtapas } from "@/components/etapas/barreira-etapas";
 import { useChecklistDeHoje } from "@/lib/checklist";
 import { pagadorSeDiferente } from "@/lib/utils";
 import { escolherModoDaLista } from "@ronan/shared-types";
@@ -51,6 +55,12 @@ export default function IniciarViagem() {
   const v = useValidacaoGuiada();
   // Já tem viagem aberta? Não deixa abrir duas — redireciona pra andamento.
   const [checando, setChecando] = useState(true);
+  // Documentos da viagem (nasce desligado: sem a função, nada aqui muda).
+  const etapasLigado = useCapacidadeNova(CAP_ETAPAS);
+  const modelosEtapa = useModelosEtapa(etapasLigado);
+  // "Antes de seguir": documento da viagem anterior que o escritório precisa.
+  // O botão final só aparece depois que ele anexa ou explica.
+  const [liberadoEtapas, setLiberadoEtapas] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -112,7 +122,7 @@ export default function IniciarViagem() {
     v.limpar();
     setSubmitting(true);
     try {
-      await iniciarViagemGuiada({
+      const viagemClientId = await iniciarViagemGuiada({
         veiculoId,
         // Snapshot da placa junto: se o veículo sumir do cadastro antes de esta
         // viagem subir, o servidor readota pela placa em vez de ter que
@@ -144,7 +154,24 @@ export default function IniciarViagem() {
         },
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace("/viagem-guiada");
+      // Documentos: a viagem guarda os formulários que valem AGORA (a versão
+      // que ele vai ver), e os da carga abrem logo em seguida.
+      const inicio = modelosEtapa.find((m) => m.momento === "INICIO");
+      if (etapasLigado && modelosEtapa.length > 0) {
+        await registrarViagemComEtapas({
+          viagemClientId,
+          rotulo: [clienteNome, localCarga.nome].filter(Boolean).join(" · ") || "Viagem",
+          placa: veiculoOptions.find((o) => o.value === veiculoId)?.label ?? null,
+          origem: "GUIADA",
+          iniciadaEm: new Date().toISOString(),
+          modelos: modelosEtapa,
+        }).catch(() => {});
+      }
+      router.replace(
+        etapasLigado && inicio
+          ? { pathname: "/viagem-guiada", params: { abrirEtapa: inicio.id } }
+          : "/viagem-guiada",
+      );
     } catch (err) {
       setErro(humanizeApiError(err));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -178,6 +205,8 @@ export default function IniciarViagem() {
           contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 20 }}
           keyboardShouldPersistTaps="handled"
         >
+          <BarreiraEtapas acao="INICIAR" onLiberado={setLiberadoEtapas} />
+
           {checklistHoje.devoLembrar && veiculoId ? (
             <Pressable
               onPress={() => router.push("/checklist")}
@@ -288,13 +317,19 @@ export default function IniciarViagem() {
 
           {erro ? <ErroCampo msg={erro} /> : null}
 
-          <Button size="lg" className="h-20" onPress={confirmar} loading={submitting}>
-            <Play size={24} color="white" fill="white" />
-            <Text className="text-xl font-bold text-primary-foreground">
-              {submitting ? "Abrindo..." : "Começar viagem"}
+          {liberadoEtapas ? (
+            <Button size="lg" className="h-20" onPress={confirmar} loading={submitting}>
+              <Play size={24} color="white" fill="white" />
+              <Text className="text-xl font-bold text-primary-foreground">
+                {submitting ? "Abrindo..." : "Começar viagem"}
+              </Text>
+              {!submitting && <ArrowRight size={22} color="white" />}
+            </Button>
+          ) : (
+            <Text className="text-center text-base text-muted-foreground">
+              Anexe o documento lá em cima, ou toque em “Seguir sem isso”, pra começar a viagem.
             </Text>
-            {!submitting && <ArrowRight size={22} color="white" />}
-          </Button>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
       )}

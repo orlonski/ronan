@@ -589,6 +589,80 @@ export type PendingVinculoGasto = {
   errorPermanenteLocal?: boolean;
 };
 
+/**
+ * ETAPAS DA VIAGEM: uma resposta de formulário (Documentos da carga, da
+ * descarga, Acerto do frete) esperando subir.
+ *
+ * UM item por resposta (`clientId` da resposta), COALESCIDO: cada vez que ele
+ * sai da tela o item é substituído pelo estado inteiro de agora — nunca
+ * empilha. `createdAt` é o carimbo DESTE envio: é por ele que o drain sabe se
+ * o item na fila ainda é o que ele terminou de mandar (molde da admissão).
+ *
+ * Os arquivos ficam em `documentDirectory` (nunca `Caches/`, que o iOS
+ * esvazia) e sobem UM POR VEZ; `storageKey` preenchida = já subiu, não sobe de
+ * novo. `arquivoId` = arquivo que já estava no servidor (outro celular).
+ *
+ * Nunca espera a viagem existir no servidor: vai com `viagemClientId` e o
+ * servidor amarra quando ela chegar.
+ */
+export type ArquivoEtapaPendente = {
+  /** id local do arquivo (estável entre envios — é a marca do que já subiu). */
+  id: string;
+  itemChave: string;
+  uri?: string;
+  mime: string;
+  nome: string;
+  tamanho?: number;
+  storageKey?: string;
+  arquivoId?: string;
+};
+
+export type PendingEtapa = {
+  /** clientId da RESPOSTA. */
+  clientId: string;
+  viagemClientId: string;
+  modeloId: string;
+  /** O corpo do POST sem os arquivos (quem junta é o drain). */
+  payload: Record<string, unknown>;
+  arquivos: ArquivoEtapaPendente[];
+  /** Pra tela de Pendentes dizer o que é, sem rede nem catálogo. */
+  resumo: { modeloNome: string; viagemRotulo: string | null; itensRespondidos: number; itensTotal: number };
+  /** O servidor recusou ESTE arquivo (4xx no upload): a saída é tirar outro. */
+  arquivoRecusado?: { itemChave: string; arquivoId: string } | null;
+  /** O POST recusou as chaves (ARQUIVO_INVALIDO) e os arquivos já subiram de novo uma vez. */
+  resubiuArquivos?: boolean;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
+};
+
+/**
+ * "Seguir sem isso": o motorista seguiu sem um documento que o escritório
+ * precisa, com o motivo. Sobe DEPOIS da resposta do mesmo formulário (gate no
+ * drain), mas não depende dela existir: formulário que ele nunca abriu também
+ * tem pendência no servidor.
+ */
+export type PendingEtapaSeguiuSem = {
+  clientId: string;
+  viagemClientId: string;
+  modeloId: string;
+  payload: Record<string, unknown>;
+  resumo: { itemRotulo: string; motivoLabel: string };
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
+};
+
 // Sufixos (sem o prefixo do cadastro — quem monta a chave completa é `chave`).
 const VIAGENS_KEY = "outbox.viagens";
 const MENSAGENS_CHAT_KEY = "outbox.mensagens-chat";
@@ -608,6 +682,8 @@ const PROBLEMAS_VEICULO_KEY = "outbox.problemas-veiculo";
 const CHECKLISTS_KEY = "outbox.checklists";
 const DESPESAS_KEY = "outbox.despesas";
 const VINCULOS_GASTO_KEY = "outbox.vinculos-gasto";
+const ETAPAS_KEY = "outbox.etapas";
+const ETAPAS_SEGUIU_SEM_KEY = "outbox.etapas-seguiu-sem";
 
 /** Todos os sufixos do outbox — usado pela adoção/limpeza do storage legado. */
 const SUFIXOS_OUTBOX = [
@@ -631,6 +707,8 @@ const SUFIXOS_OUTBOX = [
   CHECKLISTS_KEY,
   DESPESAS_KEY,
   VINCULOS_GASTO_KEY,
+  ETAPAS_KEY,
+  ETAPAS_SEGUIU_SEM_KEY,
 ];
 
 async function readList<T>(key: string): Promise<T[]> {
@@ -1021,6 +1099,48 @@ export async function deletePendingVinculoGasto(clientId: string): Promise<void>
   const list = await listPendingVinculosGasto();
   await writeList(
     VINCULOS_GASTO_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+// ---- Etapas da viagem (módulo etapas) ----
+
+export async function listPendingEtapas(): Promise<PendingEtapa[]> {
+  return readList<PendingEtapa>(ETAPAS_KEY);
+}
+
+export async function upsertPendingEtapa(item: PendingEtapa): Promise<void> {
+  const list = await listPendingEtapas();
+  const i = list.findIndex((x) => x.clientId === item.clientId);
+  if (i >= 0) list[i] = item;
+  else list.push(item);
+  await writeList(ETAPAS_KEY, list);
+}
+
+export async function deletePendingEtapa(clientId: string): Promise<void> {
+  const list = await listPendingEtapas();
+  await writeList(
+    ETAPAS_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingEtapasSeguiuSem(): Promise<PendingEtapaSeguiuSem[]> {
+  return readList<PendingEtapaSeguiuSem>(ETAPAS_SEGUIU_SEM_KEY);
+}
+
+export async function upsertPendingEtapaSeguiuSem(item: PendingEtapaSeguiuSem): Promise<void> {
+  const list = await listPendingEtapasSeguiuSem();
+  const i = list.findIndex((x) => x.clientId === item.clientId);
+  if (i >= 0) list[i] = item;
+  else list.push(item);
+  await writeList(ETAPAS_SEGUIU_SEM_KEY, list);
+}
+
+export async function deletePendingEtapaSeguiuSem(clientId: string): Promise<void> {
+  const list = await listPendingEtapasSeguiuSem();
+  await writeList(
+    ETAPAS_SEGUIU_SEM_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }
