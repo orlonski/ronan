@@ -643,6 +643,13 @@ model Conta {
   tiposDespesa                   TipoDespesa[]
   despesas                       Despesa[]
   despesaFotos                   DespesaFoto[]
+  modelosEtapa                   ModeloEtapa[]
+  modelosEtapaVersoes            ModeloEtapaVersao[]
+  respostasEtapa                 RespostaEtapa[]
+  respostasEtapaItens            RespostaEtapaItem[]
+  respostasEtapaArquivos         RespostaEtapaArquivo[]
+  respostasEtapaHistorico        RespostaEtapaItemHistorico[]
+  acoesPendenciaEtapa            EtapaPendenciaAcao[]
   notificacoes                   Notificacao[]
   conversas                      Conversa[]
   conversaParticipantes          ConversaParticipante[]
@@ -1640,6 +1647,8 @@ model Motorista {
   viagens               Viagem[]
   pedagios              Pedagio[]
   despesas              Despesa[]
+  respostasEtapa        RespostaEtapa[]
+  acoesPendenciaEtapa   EtapaPendenciaAcao[]
   abastecimentos        Abastecimento[]
   veiculos              MotoristaVeiculo[]
   documentos            MotoristaDocumento[]
@@ -4605,17 +4614,19 @@ model Viagem {
   transportadora          Transportadora?    @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
   transportadoraId        String?
 
-  fotos              TicketFoto[]
-  pedagios           Pedagio[]
-  despesas           Despesa[]
-  pontos             ViagemPonto[]
-  matchesFechamento  FechamentoLinha[]
-  eventos            EventoMotorista[]
-  eventosViagem      EventoViagem[]
-  mensagens          ViagemMensagem[]
-  compartilhamentos  ViagemCompartilhamento[]
-  divergencias       ViagemDivergencia[]
-  conferenciasTicket ConferenciaTicket[]
+  fotos               TicketFoto[]
+  pedagios            Pedagio[]
+  despesas            Despesa[]
+  respostasEtapa      RespostaEtapa[]
+  acoesPendenciaEtapa EtapaPendenciaAcao[]
+  pontos              ViagemPonto[]
+  matchesFechamento   FechamentoLinha[]
+  eventos             EventoMotorista[]
+  eventosViagem       EventoViagem[]
+  mensagens           ViagemMensagem[]
+  compartilhamentos   ViagemCompartilhamento[]
+  divergencias        ViagemDivergencia[]
+  conferenciasTicket  ConferenciaTicket[]
 
   /// O valor congelado desta viagem. Nasce nulo: viagem só ganha valor
   /// quando existe TabelaPreco que case, e nunca em STATUS_FORA_FECHAMENTO.
@@ -4656,6 +4667,17 @@ model Viagem {
   /// Assinatura de quem recebeu, desenhada no celular do motorista na
   /// descarga: `d` de path SVG num quadro de 300×150. Opcional.
   assinaturaRecebedor String?
+
+  // --- etapas da viagem (módulo `etapas`) ---
+  /// Os formulários de documentos que valem pra ESTA viagem: ids de
+  /// ModeloEtapaVersao fixados quando ela nasceu (só se a conta tinha o módulo
+  /// e o motorista a capacidade `app.viagem.etapas` naquele momento). É a
+  /// fotografia que impede publicar um modelo hoje e cobrar viagem de ontem —
+  /// e que não depende do estado ATUAL da capacidade. Resposta que chega pra
+  /// modelo fora da lista entra nela (ele preencheu, então vale).
+  etapasAplicaveis String[]  @default([])
+  /// Quando a lista acima foi fixada. Null = viagem anterior ao módulo.
+  etapasFixadasEm  DateTime?
 
   faturaLinhas FaturaLinha[]
 
@@ -4791,7 +4813,9 @@ model TipoEventoViagem {
   criadoPor      User?    @relation("CriouTipoEventoViagem", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId    String?
 
-  eventos EventoViagem[]
+  eventos      EventoViagem[]
+  /// Formulários de documentos que aparecem junto desta parada (momento EVENTO).
+  modelosEtapa ModeloEtapa[]
 
   // --- ocorrência ---
   // O catálogo nasceu como a espinha da viagem (cheguei, carreguei, saí). Nada
@@ -9008,4 +9032,263 @@ model DespesaFoto {
   @@index([contaId, sha256])
   @@index([contaId])
   @@map("despesa_fotos")
+}
+
+// ─── Etapas da viagem (módulo `etapas`) ─────────────────────────────────────
+// Desenho: docs/etapas-viagem/04-proposta.md ("Pra quem implementa").
+// Definição em JSON versionado e imutável; respostas em linhas tipadas; o que
+// FALTA é calculado na leitura (shared-types `calcularEstadoEtapas`) e nunca
+// mora em ViagemDivergencia.
+
+/// Quando o formulário aparece no app.
+enum MomentoEtapa {
+  /// Logo depois de "Começar viagem" (é a carga).
+  INICIO
+  /// Logo depois de "Finalizar viagem" (é a descarga).
+  FIM
+  /// Não abre sozinho; espera na tela inicial (acerto do frete).
+  AVULSA
+  /// Junto de uma parada EXTRA do catálogo (carga/descarga nunca geram evento).
+  EVENTO
+}
+
+/// O que aconteceu com um item que faltava.
+enum TipoAcaoEtapa {
+  /// O motorista seguiu sem o item "não seguir viagem sem este" (com motivo).
+  /// NÃO supre a pendência: só anota o motivo ao lado.
+  SEGUIU_SEM
+  /// O escritório dispensou (com motivo). Supre.
+  DISPENSADO
+  /// O escritório anexou o documento. Supre.
+  ANEXADO_ESCRITORIO
+}
+
+/// O formulário que a empresa monta. Identidade estável; o conteúdo mora nas
+/// versões. Nunca se apaga — desativa.
+model ModeloEtapa {
+  contaId       String             @default("__SEM_CONTA__")
+  conta         Conta              @relation(fields: [contaId], references: [id])
+  id            String             @id @default(uuid())
+  nome          String
+  momento       MomentoEtapa
+  /// Só no momento EVENTO.
+  tipoEvento    TipoEventoViagem?  @relation(fields: [tipoEventoId], references: [id], onDelete: SetNull)
+  tipoEventoId  String?
+  /// Até quantos dias depois de finalizar o app ainda oferece (padrão 30).
+  janelaDias    Int                @default(30)
+  ordem         Int                @default(0)
+  ativo         Boolean            @default(true)
+  versaoAtual   ModeloEtapaVersao? @relation("VersaoAtualDoModelo", fields: [versaoAtualId], references: [id], onDelete: SetNull)
+  versaoAtualId String?            @unique
+  criadoPorId   String?
+  criadoEm      DateTime           @default(now())
+  alteradoEm    DateTime           @updatedAt
+
+  versoes   ModeloEtapaVersao[]  @relation("VersoesDoModelo")
+  respostas RespostaEtapa[]
+  acoes     EtapaPendenciaAcao[]
+
+  @@index([contaId, ativo, ordem])
+  @@index([tipoEventoId])
+  @@index([contaId])
+  @@map("modelos_etapa")
+}
+
+/// Uma versão publicada. IMUTÁVEL: mudar o formulário publica a próxima.
+model ModeloEtapaVersao {
+  contaId        String      @default("__SEM_CONTA__")
+  conta          Conta       @relation(fields: [contaId], references: [id])
+  id             String      @id @default(uuid())
+  modelo         ModeloEtapa @relation("VersoesDoModelo", fields: [modeloId], references: [id], onDelete: Cascade)
+  modeloId       String
+  versao         Int
+  /// shared-types `DefinicaoEtapaInput` (gravado estrito, lido por `lerDefinicaoEtapa`).
+  definicao      Json
+  publicadaEm    DateTime    @default(now())
+  publicadaPorId String?
+
+  atualDe   ModeloEtapa?    @relation("VersaoAtualDoModelo")
+  respostas RespostaEtapa[]
+
+  @@unique([modeloId, versao])
+  @@index([contaId])
+  @@map("modelos_etapa_versoes")
+}
+
+/// Um formulário respondido numa viagem. UM por (viagem, modelo): outro
+/// clientId pro mesmo par (reinstalou, outro celular) MESCLA, nunca duplica.
+/// A viagem pode ainda estar no celular — `viagemClientId` sempre vem, e o
+/// servidor amarra `viagemId` quando ela chega.
+model RespostaEtapa {
+  contaId         String            @default("__SEM_CONTA__")
+  conta           Conta             @relation(fields: [contaId], references: [id])
+  id              String            @id @default(uuid())
+  /// O clientId do PRIMEIRO envio.
+  clientId        String
+  modelo          ModeloEtapa       @relation(fields: [modeloId], references: [id])
+  modeloId        String
+  /// A versão que ELE viu por último.
+  versao          ModeloEtapaVersao @relation(fields: [versaoId], references: [id])
+  versaoId        String
+  /// Snapshots: renomear o modelo não reescreve o passado.
+  modeloNome      String
+  momento         MomentoEtapa
+  viagemClientId  String
+  viagem          Viagem?           @relation(fields: [viagemId], references: [id], onDelete: SetNull)
+  viagemId        String?
+  motorista       Motorista         @relation(fields: [motoristaId], references: [id])
+  motoristaId     String
+  /// "Unidade": a placa da viagem quando a resposta chegou.
+  veiculoId       String?
+  placa           String?
+  iniciadaEm      DateTime?
+  concluida       Boolean           @default(false)
+  concluidaEm     DateTime?
+  /// GPS do fim do preenchimento.
+  lat             Float?
+  lng             Float?
+  precisao        Float?
+  /// shared-types MARCAS_RESPOSTA_ETAPA. Nunca recusa: carimba.
+  marcas          String[]          @default([])
+  criadoOfflineEm DateTime?
+  recebidoEm      DateTime          @default(now())
+  atualizadoEm    DateTime          @updatedAt
+
+  itens RespostaEtapaItem[]
+
+  @@unique([contaId, viagemClientId, modeloId])
+  @@index([contaId, motoristaId, recebidoEm])
+  @@index([viagemId])
+  @@index([modeloId])
+  @@index([versaoId])
+  @@index([contaId])
+  @@map("respostas_etapa")
+}
+
+model RespostaEtapaItem {
+  contaId       String        @default("__SEM_CONTA__")
+  conta         Conta         @relation(fields: [contaId], references: [id])
+  id            String        @id @default(uuid())
+  resposta      RespostaEtapa @relation(fields: [respostaId], references: [id], onDelete: Cascade)
+  respostaId    String
+  /// Estável entre versões do modelo.
+  itemChave     String
+  /// Snapshot do item como ele viu.
+  rotulo        String
+  area          String?
+  tipo          String
+  obrigatorio   Boolean
+  simNao        Boolean?
+  texto         String?
+  numero        Decimal?      @db.Decimal(16, 3)
+  valor         Decimal?      @db.Decimal(12, 2)
+  comentario    String?
+  /// `d` do AssinaturaPad (300×150).
+  assinaturaSvg String?
+  assinanteNome String?
+  /// Relógio do aparelho — desempata dois envios (o mais novo vence).
+  respondidoEm  DateTime
+  /// Preenchido quando um envio posterior trocou o valor (o anterior está no histórico).
+  corrigidoEm   DateTime?
+  criadoEm      DateTime      @default(now())
+  atualizadoEm  DateTime      @updatedAt
+
+  arquivos  RespostaEtapaArquivo[]
+  historico RespostaEtapaItemHistorico[]
+
+  @@unique([respostaId, itemChave])
+  @@index([contaId])
+  @@map("respostas_etapa_itens")
+}
+
+model RespostaEtapaArquivo {
+  contaId    String            @default("__SEM_CONTA__")
+  conta      Conta             @relation(fields: [contaId], references: [id])
+  id         String            @id @default(uuid())
+  item       RespostaEtapaItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId     String
+  /// MinIO privado; sai só pela API. Prefixo conferido: `${contaId}/etapas/${dia}/${motoristaId}/`.
+  storageKey String
+  /// image/jpeg | image/png | image/webp | application/pdf
+  mime       String
+  nome       String?
+  tamanho    Int?
+  /// Calculado no upload (vem no nome da chave).
+  sha256     String?
+  ordem      Int               @default(0)
+  criadoEm   DateTime          @default(now())
+  /// "Apagar esta foto?" — sai da contagem, fica no banco.
+  removidoEm DateTime?
+
+  @@unique([itemId, storageKey])
+  @@index([contaId, sha256])
+  @@index([contaId])
+  @@map("respostas_etapa_arquivos")
+}
+
+/// "Corrigido às": o valor anterior de um item, sem segunda linha no item.
+model RespostaEtapaItemHistorico {
+  contaId String            @default("__SEM_CONTA__")
+  conta   Conta             @relation(fields: [contaId], references: [id])
+  id      String            @id @default(uuid())
+  item    RespostaEtapaItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId  String
+  /// Os campos como estavam antes da troca.
+  antes   Json
+  em      DateTime          @default(now())
+
+  @@index([itemId])
+  @@index([contaId])
+  @@map("respostas_etapa_itens_historico")
+}
+
+/// O que aconteceu com um item faltando: seguiu sem (motorista), dispensado ou
+/// anexado (escritório). Tabela própria de propósito — nada de
+/// ViagemDivergencia, que é a fila da conferência de ticket.
+model EtapaPendenciaAcao {
+  contaId         String        @default("__SEM_CONTA__")
+  conta           Conta         @relation(fields: [contaId], references: [id])
+  id              String        @id @default(uuid())
+  tipo            TipoAcaoEtapa
+  /// Idempotência do app (SEGUIU_SEM). Null nas ações do escritório.
+  clientId        String?
+  modelo          ModeloEtapa   @relation(fields: [modeloId], references: [id])
+  modeloId        String
+  /// Null = o formulário inteiro (só DISPENSADO).
+  itemChave       String?
+  viagemClientId  String
+  viagem          Viagem?       @relation(fields: [viagemId], references: [id], onDelete: SetNull)
+  viagemId        String?
+  /// SEGUIU_SEM: shared-types MOTIVOS_SEGUIR_SEM.
+  motivoCodigo    String?
+  motivo          String?
+  /// SEGUIU_SEM: em que ação a barreira apareceu (FINALIZAR | INICIAR_PROXIMA | OUTRA).
+  acaoMotorista   String?
+  motorista       Motorista?    @relation(fields: [motoristaId], references: [id], onDelete: SetNull)
+  motoristaId     String?
+  autorUserId     String?
+  autorNome       String?
+  lat             Float?
+  lng             Float?
+  precisao        Float?
+  ocorridoEm      DateTime      @default(now())
+  recebidoEm      DateTime      @default(now())
+  /// ANEXADO_ESCRITORIO: o arquivo.
+  storageKey      String?
+  mime            String?
+  nomeArquivo     String?
+  tamanho         Int?
+  sha256          String?
+  /// Desfeita pelo escritório (dispensa ou anexo por engano).
+  desfeitoEm      DateTime?
+  desfeitoPorId   String?
+  desfeitoPorNome String?
+
+  @@unique([contaId, clientId, itemChave])
+  @@index([contaId, viagemClientId])
+  @@index([viagemId])
+  @@index([modeloId])
+  @@index([motoristaId])
+  @@index([contaId])
+  @@map("etapa_pendencia_acoes")
 }

@@ -783,6 +783,24 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
+  "/etapas-viagem": {
+    oQue:
+      "Os formulários de documentos de cada momento da viagem — carregamento, " +
+      "descarga, acerto do frete. O motorista preenche no app, preso àquela " +
+      "viagem, e o que falta aparece na ficha da viagem mesmo que ele nem abra.",
+    faz: [
+      "Montar o formulário vendo ao lado como fica no celular: fotos, foto ou PDF, sim/não, valor, texto, assinatura",
+      "Escolher quando ele aparece: ao começar a viagem, ao finalizar ou depois, quando o motorista quiser",
+      "Marcar o que é obrigatório e o que o escritório precisa antes de ele seguir viagem",
+      "Começar pelos modelos prontos de carregamento, descarga e acerto do frete",
+    ],
+    naoEAqui: {
+      procurando: "ver os documentos que chegaram de uma viagem",
+      vaEm: "Viagens",
+      href: "/viagens",
+    },
+  },
+
   "/tipos-evento-viagem": {
     oQue:
       "As paradas e os perrengues do meio da viagem — fila na pedreira, quebra, " +

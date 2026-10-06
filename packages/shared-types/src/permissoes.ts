@@ -95,6 +95,8 @@ const ACAO_TITULO_POR_RECURSO: Record<string, string> = {
   "config-cte.editar": "Configurar emissor, certificado e emitir teste",
   "despesas.ver": "Ver todos os gastos (aba Todos)",
   "conferencia-despesas.decidir": "Aprovar, aprovar outro valor ou não reembolsar",
+  "etapas-respostas.ver": "Ver os documentos da viagem e o que falta",
+  "etapas-respostas.editar": "Anexar pelo escritório e dispensar documento com motivo",
 };
 
 type ResourceDef = { recurso: string; label: string; modulo: string; acoes: string[] };
@@ -131,6 +133,13 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "conferencia-despesas", label: "Gastos de viagem — conferir", modulo: "Operação", acoes: ["ver", "decidir"] },
   // A aba "Tipos de gasto": o que o celular pede e o que a empresa devolve.
   { recurso: "tipos-despesa", label: "Gastos de viagem — tipos de gasto", modulo: "Cadastros", acoes: ["ver", "criar", "editar"] },
+  // Etapas da viagem (módulo `etapas`, vendido à parte). Uma chave por tela:
+  // `etapas-viagem` é a aba ⚙ "Documentos da viagem" (montar e publicar os
+  // formulários); `etapas-respostas` é a seção "Documentos" da ficha da viagem
+  // e o filtro "Documento faltando". `editar` = anexar pelo escritório e
+  // dispensar com motivo — fecha pendência, por isso não vem junto do ver.
+  { recurso: "etapas-viagem", label: "Viagens — formulários de documentos (etapas)", modulo: "Cadastros", acoes: ["ver", "criar", "editar"] },
+  { recurso: "etapas-respostas", label: "Viagens — documentos recebidos", modulo: "Operação", acoes: ["ver", "editar"] },
   // O que o cliente pediu, e o quadro de quem leva o quê. Recursos separados
   // porque quem negocia o pedido com o cliente raramente é quem monta a escala
   // do dia. `publicar` é à parte de `editar` pelo mesmo motivo que em marketing:

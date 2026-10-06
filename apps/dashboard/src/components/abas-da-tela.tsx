@@ -123,6 +123,8 @@ export const ABAS = {
     // avisar no caminho e o alerta de km — ajustes da viagem, não trabalho do dia.
     { href: "/tipos-servico", label: "Campos no app", perm: "tipos-servico.ver", config: true },
     { href: "/tipos-evento-viagem", label: "Paradas e imprevistos", perm: "tipos-evento-viagem.ver", config: true },
+    // Módulo `etapas`: sem ele a aba some (temModulo).
+    { href: "/etapas-viagem", label: "Documentos da viagem", perm: "etapas-viagem.ver", config: true },
     { href: "/configuracoes/km-atipico", label: "Km fora do padrão", perm: "config-km-atipico.ver", config: true },
     { href: "/configuracoes/conferencia-diaria", label: "Quando perguntar", perm: "config-conferencia-diaria.ver", config: true },
   ],

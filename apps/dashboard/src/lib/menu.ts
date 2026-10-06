@@ -198,9 +198,13 @@ export const GRUPOS: Grupo[] = [
           { href: "/lancamentos-travados", perm: "lancamentos-resgatados.ver" },
           { href: "/tipos-servico", perm: "tipos-servico.ver" },
           { href: "/tipos-evento-viagem", perm: "tipos-evento-viagem.ver" },
+          { href: "/etapas-viagem", perm: "etapas-viagem.ver" },
           { href: "/configuracoes/km-atipico", perm: "config-km-atipico.ver" },
           { href: "/configuracoes/conferencia-diaria", perm: "config-conferencia-diaria.ver" },
         ],
+        // Módulo `etapas`: a seção "Documentos" da ficha e o filtro
+        // "Documento faltando" da lista.
+        partes: [{ perm: "etapas-respostas.ver", label: "Documentos da viagem" }],
       },
       {
         href: "/abastecimentos",

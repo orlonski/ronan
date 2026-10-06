@@ -11,6 +11,7 @@ export * from "./pedagio";
 export * from "./abastecimento";
 export * from "./despesa";
 export * from "./despesa-vinculo";
+export * from "./etapa-viagem";
 export * from "./story";
 export * from "./chat";
 export * from "./cpf";

@@ -36,6 +36,7 @@ export const MODULOS_CHAVES = [
   "admissao",
   "ponto",
   "despesas",
+  "etapas",
   "plataforma",
 ] as const;
 export const ModuloChaveSchema = z.enum(MODULOS_CHAVES);
@@ -233,6 +234,19 @@ export const MODULOS: ModuloDef[] = [
     adicional: true,
     dependeDe: ["financeiro"],
     recursos: ["despesas", "conferencia-despesas", "tipos-despesa"],
+  },
+  {
+    // Etapas da viagem: os papéis de cada momento (carregamento, descarga,
+    // acerto do frete) preenchidos no app e presos à viagem; o escritório vê
+    // o que chegou e o que falta. Vendido à parte (decisão do dono,
+    // 06/10/2026), mas SEM depender do Financeiro: não mexe em dinheiro.
+    // Conta nova não recebe sozinha, nem no teste grátis.
+    chave: "etapas",
+    nome: "Etapas e documentos da viagem",
+    pitch:
+      "CT-e, MDF-e, canhoto, tacógrafo e o acerto do frete chegam pelo app, presos à viagem certa — e o escritório vê o que falta mesmo do formulário que o motorista nem abriu.",
+    adicional: true,
+    recursos: ["etapas-viagem", "etapas-respostas"],
   },
   {
     chave: "plataforma",

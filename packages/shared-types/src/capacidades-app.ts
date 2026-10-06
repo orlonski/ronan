@@ -27,6 +27,7 @@ export const CAPACIDADES_APP_CHAVES = [
   "app.viagem.guiada",
   "app.viagem.gpsClassico",
   "app.viagem.assinatura",
+  "app.viagem.etapas",
   "app.historico.ver",
   "app.ticket.ocr",
   "app.km.referencia",
@@ -188,6 +189,27 @@ const DEFS: CapacidadeAppDef[] = [
     dependeDe: ["app.viagem.guiada"],
     gate: "SO_TELA",
     aoPerder: "VALA",
+  },
+  {
+    // Etapas da viagem (módulo `etapas`): os documentos da carga, da descarga
+    // e do acerto do frete. NASCE DESLIGADA (decisão do dono, 06/10/2026): um
+    // modelo publicado vale pra toda viagem de quem tem a capacidade, então o
+    // piloto começa por UMA pessoa. Conta em `fonte: REGRAS` não herda pelo
+    // espelho de colunas — liga por tipo de motorista ou exceção. O servidor
+    // checa o módulo e o cadastro APROVADO no próprio endpoint (o guard de
+    // capacidade começa em sombra) e, sem módulo, aceita e carimba.
+    chave: "app.viagem.etapas",
+    label: "Documentos da viagem (etapas)",
+    efeito:
+      "Depois de Começar e de Finalizar a viagem o app abre os documentos da carga e da descarga (fotos, PDF, sim/não, valor, assinatura); o acerto do frete espera na tela inicial.",
+    grupo: "Viagens",
+    tipo: "EMPRESA",
+    vinculo: "MOTORISTA",
+    modulo: "etapas",
+    dependeDe: ["app.viagem.lancar"],
+    gate: "SERVIDOR",
+    aoPerder: "VALA",
+    nasceDesligada: true,
   },
   {
     // Quem manda no app é a empresa (dono, 23/09/2026): até aqui o histórico
