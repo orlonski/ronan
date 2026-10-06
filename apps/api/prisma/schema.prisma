@@ -639,6 +639,9 @@ model Conta {
   eventosMotorista               EventoMotorista[]
   abastecimentos                 Abastecimento[]
   abastecimentoFotos             AbastecimentoFoto[]
+  tiposDespesa                   TipoDespesa[]
+  despesas                       Despesa[]
+  despesaFotos                   DespesaFoto[]
   notificacoes                   Notificacao[]
   conversas                      Conversa[]
   conversaParticipantes          ConversaParticipante[]
@@ -783,6 +786,7 @@ model User {
   acertosFechados           AcertoMotorista[]     @relation("FechouAcerto")
   acertosPagos              AcertoMotorista[]     @relation("PagouAcerto")
   itensAcertoCriados        ItemAcerto[]          @relation("CriouItemAcerto")
+  despesasDecididas         Despesa[]             @relation("DecidiuDespesa")
   pedidosCriados            Pedido[]              @relation("CriouPedido")
   anexosPedidoEnviados      AnexoPedido[]         @relation("EnviouAnexoPedido")
   orcamentosCriados         Orcamento[]           @relation("CriouOrcamento")
@@ -1633,6 +1637,7 @@ model Motorista {
 
   viagens               Viagem[]
   pedagios              Pedagio[]
+  despesas              Despesa[]
   abastecimentos        Abastecimento[]
   veiculos              MotoristaVeiculo[]
   documentos            MotoristaDocumento[]
@@ -2205,6 +2210,7 @@ model Veiculo {
   motoristas            MotoristaVeiculo[]
   viagens               Viagem[]
   pedagios              Pedagio[]
+  despesas              Despesa[]
   abastecimentos        Abastecimento[]
   criadoPor             User?              @relation("CriouVeiculo", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId           String?
@@ -2601,6 +2607,8 @@ enum TipoItemAcerto {
   REEMBOLSO_PEDAGIO
   /// Idem combustível.
   REEMBOLSO_ABASTECIMENTO
+  /// Gasto de viagem (almoço, borracharia, chapa…) aprovado pelo escritório.
+  REEMBOLSO_DESPESA
   /// Vale/adiantamento que ele já recebeu — desconta do que tem a receber.
   ADIANTAMENTO
   DESCONTO_AVARIA
@@ -2692,6 +2700,9 @@ model ItemAcerto {
   pedagioId       String?
   abastecimento   Abastecimento?  @relation(fields: [abastecimentoId], references: [id], onDelete: SetNull)
   abastecimentoId String?
+  /// Gasto de viagem reembolsado (módulo `despesas`).
+  despesa         Despesa?        @relation(fields: [despesaId], references: [id], onDelete: SetNull)
+  despesaId       String?
   /// O que o motorista lê na linha. Snapshot: sobrevive à viagem ser editada.
   descricao       String
   /// Um sinal só, positivo credita e negativo desconta — assim a soma do extrato
@@ -2708,6 +2719,7 @@ model ItemAcerto {
 
   @@index([acertoId])
   @@index([viagemId])
+  @@index([despesaId])
   @@index([contaId])
   @@map("itens_acerto")
 }
@@ -2745,6 +2757,9 @@ model ModalidadeMotorista {
   /// tipo de coisa que faz motorista ir embora.
   reembolsaPedagio       Boolean         @default(true)
   reembolsaAbastecimento Boolean         @default(true)
+  /// Terceiro interruptor: devolve gasto de viagem (módulo `despesas`)? Mora
+  /// só na modalidade, como os outros dois. Devolve = o TIPO devolve E isto.
+  reembolsaDespesa       Boolean         @default(true)
   criadoEm               DateTime        @default(now())
   alteradoEm             DateTime        @updatedAt
   criadoPor              User?           @relation("CriouModalidadeMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
@@ -4550,6 +4565,7 @@ model Viagem {
 
   fotos              TicketFoto[]
   pedagios           Pedagio[]
+  despesas           Despesa[]
   pontos             ViagemPonto[]
   matchesFechamento  FechamentoLinha[]
   eventos            EventoMotorista[]
@@ -8789,4 +8805,164 @@ enum TipoVinculoNome {
   FORNECEDOR
   /// Quem recebe no fim (concessionária, prefeitura). Não prova obra.
   DESTINO
+}
+
+// ─── Gasto de viagem (módulo `despesas`) ────────────────────────────────────
+// Desenho em docs/despesas-viagem/09-modelo-dinamico.md. Pedágio e
+// abastecimento NÃO são tipo de gasto: têm entidade própria.
+
+/// O que o escritório decidiu. O gasto nunca é "recusado": decide-se se DEVOLVE.
+enum StatusDespesa {
+  /// Esperando a conferência.
+  COM_ESCRITORIO
+  /// Vai ser devolvido (valorAprovado).
+  APROVADA
+  /// Não vai ser devolvido (motivo obrigatório) — ou tipo "por sua conta".
+  NAO_REEMBOLSADA
+}
+
+/// "Sem resposta" ≠ "fora de viagem": quem não respondeu não afirmou nada.
+enum VinculoDespesa {
+  SEM_RESPOSTA
+  VIAGEM
+  FORA_DE_VIAGEM
+}
+
+enum VinculoPorDespesa {
+  MOTORISTA
+  ESCRITORIO
+}
+
+/// Tipo de gasto DA EMPRESA ("Alimentação", "Borracharia"…). Nunca é apagado:
+/// só desativado (o celular pode subir um gasto dias depois com o id velho).
+model TipoDespesa {
+  contaId           String   @default("__SEM_CONTA__")
+  conta             Conta    @relation(fields: [contaId], references: [id])
+  id                String   @id @default(uuid())
+  /// Chave estável (kit inicial). Imutável — o nome é que se edita.
+  slug              String
+  nome              String
+  /// Chave da lista fechada de ícones (shared-types ICONES_TIPO_DESPESA).
+  icone             String?
+  ativo             Boolean  @default(true)
+  ordem             Int      @default(0)
+  /// A empresa devolve este tipo? Falso = "Por sua conta" no celular.
+  devolve           Boolean  @default(true)
+  /// Até este valor nasce APROVADA sozinha. Nulo = o escritório confere tudo.
+  aprovaSozinhoAte  Decimal? @db.Decimal(10, 2)
+  /// Acima disto chega com o aviso "acima do máximo". Nunca recusa.
+  devolveNoMaximo   Decimal? @db.Decimal(10, 2)
+  /// "Também é manutenção do caminhão". Gravado sem efeito na Etapa 1 (a ponte
+  /// com a manutenção é da Onda 2) — só trava a placa em obrigatória.
+  manutencao        Boolean  @default(false)
+  /// "Pode ser cobrado do cliente". Só a marca e o filtro na Etapa 1.
+  podeCobrarCliente Boolean  @default(false)
+  /// O formulário do celular (shared-types CamposDoTipo). Lido SEMPRE por
+  /// `lerConfigCampos`/`resolverCamposDoTipo`; escrito com Zod estrito.
+  campos            Json     @default("{\"v\":1,\"foto\":\"PEDE\",\"campos\":{}}")
+  /// +1 a cada edição de `campos`.
+  camposVersao      Int      @default(1)
+  criadoEm          DateTime @default(now())
+  alteradoEm        DateTime @updatedAt
+
+  despesas Despesa[]
+
+  @@unique([contaId, slug])
+  @@index([contaId, ativo, ordem])
+  @@map("tipos_despesa")
+}
+
+/// Um gasto que o motorista pagou na estrada.
+model Despesa {
+  contaId              String             @default("__SEM_CONTA__")
+  conta                Conta              @relation(fields: [contaId], references: [id])
+  id                   String             @id @default(uuid())
+  /// Gerado no celular. Único POR MOTORISTA (idempotência do outbox).
+  clientId             String
+  motorista            Motorista          @relation(fields: [motoristaId], references: [id])
+  motoristaId          String
+  tipoDespesa          TipoDespesa        @relation(fields: [tipoDespesaId], references: [id])
+  tipoDespesaId        String
+  /// Snapshot do nome: a linha continua legível se o tipo for renomeado.
+  tipoNome             String
+  /// O que o motorista digitou. INTOCÁVEL: só o app escreve (como o km).
+  valorInformado       Decimal            @db.Decimal(10, 2)
+  /// O que o escritório aprovou. Nulo enquanto não aprovado.
+  valorAprovado        Decimal?           @db.Decimal(10, 2)
+  /// Instante do gasto. O dia civil é o de São Paulo (na leitura).
+  data                 DateTime
+  vinculo              VinculoDespesa     @default(SEM_RESPOSTA)
+  vinculoPor           VinculoPorDespesa?
+  vinculadoEm          DateTime?
+  viagem               Viagem?            @relation(fields: [viagemId], references: [id], onDelete: SetNull)
+  viagemId             String?
+  /// A viagem que ainda estava no celular. O servidor amarra quando ela chega.
+  viagemClientId       String?
+  veiculo              Veiculo?           @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
+  veiculoId            String?
+  descricao            String?
+  litros               Decimal?           @db.Decimal(10, 3)
+  odometro             Int?
+  onde                 String?
+  lat                  Float?
+  lng                  Float?
+  precisao             Float?
+  /// "Não tenho o comprovante" → o que aconteceu.
+  semComprovanteMotivo String?
+  /// 44 dígitos, só se passou no DV e é modelo 55/65 (common/chave-fiscal.ts).
+  chaveFiscal          String?
+  /// Revisão da config do tipo que o celular usou.
+  camposVersao         Int?
+  status               StatusDespesa      @default(COM_ESCRITORIO)
+  /// Obrigatório em NAO_REEMBOLSADA e em valor aprovado diferente do lançado.
+  motivo               String?
+  decididoPor          User?              @relation("DecidiuDespesa", fields: [decididoPorId], references: [id], onDelete: SetNull)
+  decididoPorId        String?
+  decididoEm           DateTime?
+  /// Decidido pela regra do tipo (aprova sozinho / por sua conta), não por gente.
+  decididoAutomatico   Boolean            @default(false)
+  /// Marcas de atenção (shared-types MARCAS_DESPESA). Nunca recusa: carimba.
+  marcas               String[]           @default([])
+  /// Parece o mesmo papel deste outro gasto (marca, não recusa).
+  duplicadaDe          Despesa?           @relation("DespesaDuplicada", fields: [duplicadaDeId], references: [id], onDelete: SetNull)
+  duplicadaDeId        String?
+  duplicadas           Despesa[]          @relation("DespesaDuplicada")
+  /// MESMA_CHAVE | MESMA_FOTO | PARECIDO
+  repetidoPor          String?
+  /// O app avisou "parece repetido" e ele confirmou que é outro.
+  confirmouQueEOutro   Boolean            @default(false)
+  criadoOfflineEm      DateTime?
+  sincronizadoEm       DateTime           @default(now())
+  alteradoEm           DateTime           @updatedAt
+
+  fotos       DespesaFoto[]
+  itensAcerto ItemAcerto[]
+
+  @@unique([motoristaId, clientId])
+  @@index([contaId, status, data])
+  @@index([contaId, data])
+  @@index([motoristaId, data])
+  @@index([viagemId])
+  @@index([viagemClientId])
+  @@index([contaId, chaveFiscal])
+  @@index([contaId])
+  @@map("despesas")
+}
+
+model DespesaFoto {
+  contaId    String   @default("__SEM_CONTA__")
+  conta      Conta    @relation(fields: [contaId], references: [id])
+  id         String   @id @default(uuid())
+  despesa    Despesa  @relation(fields: [despesaId], references: [id], onDelete: Cascade)
+  despesaId  String
+  storageKey String
+  /// sha256 dos bytes, calculado pelo servidor no upload (antiduplicação).
+  sha256     String?
+  rotacao    Int      @default(0)
+  criadoEm   DateTime @default(now())
+
+  @@index([despesaId])
+  @@index([contaId, sha256])
+  @@index([contaId])
+  @@map("despesa_fotos")
 }
