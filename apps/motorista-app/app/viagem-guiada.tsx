@@ -617,15 +617,17 @@ export default function ViagemGuiada() {
             </Button>
           </View>
         ) : (
+          // Botão de verdade (contorno vermelho), não texto solto: ação é botão.
           <Button
-            variant="ghost"
+            variant="outline"
+            className="border-destructive/60"
             onPress={() => {
               setConfirmandoDescarte(true);
               setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
             }}
           >
-            <Trash2 size={18} color="#dc2626" />
-            <Text className="text-sm font-medium text-destructive">Descartar viagem</Text>
+            <Trash2 size={20} color="#dc2626" />
+            <Text className="text-base font-semibold text-destructive">Descartar viagem</Text>
           </Button>
         )}
       </ScrollView>
