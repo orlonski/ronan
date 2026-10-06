@@ -85,14 +85,14 @@ export const MODOS_EXTRA_SIM_NAO = ["NAO", "PEDE", "EXIGE"] as const;
 export type ModoExtraSimNao = (typeof MODOS_EXTRA_SIM_NAO)[number];
 
 /** Os motivos de "Seguir sem isso". OUTRO exige o texto. */
-export const MOTIVOS_SEGUIR_SEM = ["JA_COM_ESCRITORIO", "AINDA_NAO_RECEBI", "VOU_MANDAR_DEPOIS", "OUTRO"] as const;
+export const MOTIVOS_SEGUIR_SEM = ["JA_COM_ESCRITORIO", "ESCRITORIO_NAO_MANDOU", "ESQUECI", "OUTRO"] as const;
 export type MotivoSeguirSem = (typeof MOTIVOS_SEGUIR_SEM)[number];
 
 export const MOTIVO_SEGUIR_SEM_LABEL: Record<MotivoSeguirSem, string> = {
   JA_COM_ESCRITORIO: "Já está com o escritório",
-  AINDA_NAO_RECEBI: "Ainda não recebi",
-  VOU_MANDAR_DEPOIS: "Vou mandar mais tarde",
-  OUTRO: "Outro motivo",
+  ESCRITORIO_NAO_MANDOU: "O escritório ainda não mandou",
+  ESQUECI: "Esqueci o papel",
+  OUTRO: "Outro",
 };
 
 /** Teto de arquivo do upload (foto ou PDF). */
