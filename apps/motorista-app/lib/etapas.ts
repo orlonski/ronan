@@ -321,10 +321,9 @@ export async function enviarRespostaEtapa(corpo: RespostaEtapaEnviada): Promise<
 }
 
 /**
- * Motivos de "Seguir sem isso" COMO O MOTORISTA LÊ (decisão do dono,
- * 06/10/2026). O servidor tem outro enum (`MotivoSeguirSem`): a tradução está
- * em `motivoParaServidor` — "Esqueci o papel" não tem código próprio lá e vai
- * como OUTRO com o texto, sem perder nada.
+ * Motivos de "Seguir sem isso" (decisão do dono, 06/10/2026). Os códigos são os
+ * MESMOS do servidor (`MotivoSeguirSem` em @ronan/shared-types): sem tradução.
+ * OUTRO exige o texto dele.
  */
 export const MOTIVOS_SEGUIR_SEM = [
   { value: "JA_COM_ESCRITORIO", label: "Já está com o escritório" },
@@ -334,22 +333,12 @@ export const MOTIVOS_SEGUIR_SEM = [
 ] as const;
 export type MotivoSeguirSem = (typeof MOTIVOS_SEGUIR_SEM)[number]["value"];
 
-export type MotivoSeguirSemServidor = "JA_COM_ESCRITORIO" | "AINDA_NAO_RECEBI" | "VOU_MANDAR_DEPOIS" | "OUTRO";
-
 export function motivoParaServidor(
   motivo: MotivoSeguirSem,
   textoOutro?: string,
-): { motivoCodigo: MotivoSeguirSemServidor; motivoTexto?: string } {
-  switch (motivo) {
-    case "JA_COM_ESCRITORIO":
-      return { motivoCodigo: "JA_COM_ESCRITORIO" };
-    case "ESCRITORIO_NAO_MANDOU":
-      return { motivoCodigo: "AINDA_NAO_RECEBI" };
-    case "ESQUECI":
-      return { motivoCodigo: "OUTRO", motivoTexto: "Esqueci o papel" };
-    case "OUTRO":
-      return { motivoCodigo: "OUTRO", motivoTexto: textoOutro?.trim() || undefined };
-  }
+): { motivoCodigo: MotivoSeguirSem; motivoTexto?: string } {
+  if (motivo === "OUTRO") return { motivoCodigo: "OUTRO", motivoTexto: textoOutro?.trim() || undefined };
+  return { motivoCodigo: motivo };
 }
 
 /** `SeguiuSemEtapaInput`. Não supre a pendência — só anota o motivo. */
@@ -358,7 +347,7 @@ export type SeguiuSemEnviado = {
   viagemClientId: string;
   modeloId: string;
   itens: string[];
-  motivoCodigo: MotivoSeguirSemServidor;
+  motivoCodigo: MotivoSeguirSem;
   motivoTexto?: string | null;
   acao: "FINALIZAR" | "INICIAR_PROXIMA" | "OUTRA";
   ocorridoEm: string;
