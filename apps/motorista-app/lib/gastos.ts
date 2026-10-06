@@ -438,11 +438,16 @@ export function useGastos(opts: { enabled?: boolean } = {}) {
   const vinc = usePendingVinculosGasto();
   // Gasto que acabou de sair da fila ainda não está no cache do servidor:
   // revalida na hora, senão ele some da lista por um instante.
+  // Mesma coisa com a ligação à viagem: enquanto ela está na fila, o vínculo
+  // pendente é pintado por cima do cache; quando sobe, ela sai da fila e, sem
+  // revalidar, o cache velho fazia o gasto voltar pra "Gastos sem viagem".
   const qtdFila = useRef(pend.length);
+  const qtdVinc = useRef(vinc.length);
   useEffect(() => {
-    if (enabled && pend.length < qtdFila.current) void q.refetch();
+    if (enabled && (pend.length < qtdFila.current || vinc.length < qtdVinc.current)) void q.refetch();
     qtdFila.current = pend.length;
-  }, [pend.length, enabled, q]);
+    qtdVinc.current = vinc.length;
+  }, [pend.length, vinc.length, enabled, q]);
   const gastos = useMemo<GastoVisto[]>(() => {
     const locais = pend.map(doCelular);
     const ids = new Set(pend.map((p) => p.clientId));

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { useQueryClient } from "@tanstack/react-query";
 import { Camera, Check, ChevronDown, ChevronRight, TriangleAlert } from "lucide-react-native";
 import {
   ActivityIndicator,
@@ -101,6 +102,7 @@ export default function GastoNovo() {
     /** Corrigir um gasto JÁ enviado (só enquanto está com o escritório). */
     despesaId?: string;
   }>();
+  const qc = useQueryClient();
   const modulo = useModuloDespesas();
   const tipos = useTiposDespesa();
   const cat = useCatalogos();
@@ -337,6 +339,9 @@ export default function GastoNovo() {
       return val.apontar("foto", "Fotografe o comprovante ou conte o que aconteceu");
     }
     if (!(centavos > 0)) return val.apontar("valor", "Digite quanto você pagou");
+    // Mesmo teto do servidor (CriarDespesaInput.valor ≤ 50.000): sem isto o
+    // gasto ia pra fila e voltava 400 pros Pendentes, sem dizer o porquê na hora.
+    if (centavos > 5_000_000) return val.apontar("valor", "Confira o valor: passou de R$ 50.000,00");
     for (const c of obrigatorios) {
       if (c === "descricao" && !descricao.trim()) {
         return val.apontar(
@@ -430,6 +435,8 @@ export default function GastoNovo() {
         const { clientId: _c, criadoOfflineEm: _o, ...resto } = corpo;
         await corrigirDespesa(params.despesaId!, resto);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Sem isto a lista e o detalhe seguiam mostrando o valor de antes.
+        await qc.invalidateQueries({ queryKey: ["despesas"] });
         router.back();
         return;
       }
