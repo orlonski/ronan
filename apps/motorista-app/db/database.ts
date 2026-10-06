@@ -1109,20 +1109,103 @@ export async function listPendingEtapas(): Promise<PendingEtapa[]> {
   return readList<PendingEtapa>(ETAPAS_KEY);
 }
 
+/*
+ * A fila de respostas de etapa é COALESCIDA: cada formulário tem UM item, que
+ * é substituído inteiro a cada envio novo (`createdAt` diz qual versão é). Por
+ * isso ela não pode ter duas mãos fazendo ler-mudar-gravar ao mesmo tempo: o
+ * drain lia o item da versão 1, o motorista enfileirava a versão 2, e o drain
+ * gravava "versão 1 subindo" por cima — a 2 sumia sem subir e o servidor ficava
+ * com o texto velho. Toda escrita aqui passa numa fila só, e quem só quer mudar
+ * o ESTADO de um envio (subindo, falhou, reabrir) diz qual versão viu: se a
+ * fila já tem outra, não mexe.
+ */
+let filaEscritaEtapas: Promise<unknown> = Promise.resolve();
+
+function naFilaEtapas<T>(fn: () => Promise<T>): Promise<T> {
+  const p = filaEscritaEtapas.then(fn);
+  filaEscritaEtapas = p.catch(() => {});
+  return p;
+}
+
+/** Coloca a versão NOVA do formulário (quem monta recebe a anterior, já dentro da trava). */
+export async function substituirPendingEtapa(
+  clientId: string,
+  montar: (anterior: PendingEtapa | undefined) => PendingEtapa,
+): Promise<PendingEtapa> {
+  return naFilaEtapas(async () => {
+    const list = await listPendingEtapas();
+    const i = list.findIndex((x) => x.clientId === clientId);
+    const novo = montar(i >= 0 ? list[i] : undefined);
+    if (i >= 0) list[i] = novo;
+    else list.push(novo);
+    await writeList(ETAPAS_KEY, list);
+    return novo;
+  });
+}
+
+/**
+ * Muda o item SÓ se ele ainda é a versão que quem chama viu (`createdAt`).
+ * `mudar` devolvendo `null` = não mexe. Devolve o item gravado, ou `null`
+ * (sumiu, foi substituído por versão mais nova, ou `mudar` desistiu).
+ */
+export async function atualizarPendingEtapaSeMesmoEnvio(
+  clientId: string,
+  createdAt: number,
+  mudar: (atual: PendingEtapa) => PendingEtapa | null,
+): Promise<PendingEtapa | null> {
+  return naFilaEtapas(async () => {
+    const list = await listPendingEtapas();
+    const i = list.findIndex((x) => x.clientId === clientId);
+    if (i < 0 || list[i]!.createdAt !== createdAt) return null;
+    const novo = mudar(list[i]!);
+    if (!novo) return null;
+    list[i] = { ...novo, createdAt };
+    await writeList(ETAPAS_KEY, list);
+    return list[i]!;
+  });
+}
+
+/** Muda o item que estiver na fila AGORA, qualquer que seja a versão. */
+export async function mudarPendingEtapa(
+  clientId: string,
+  mudar: (atual: PendingEtapa) => PendingEtapa,
+): Promise<void> {
+  await naFilaEtapas(async () => {
+    const list = await listPendingEtapas();
+    const i = list.findIndex((x) => x.clientId === clientId);
+    if (i < 0) return;
+    list[i] = mudar(list[i]!);
+    await writeList(ETAPAS_KEY, list);
+  });
+}
+
+/** Tira da fila SÓ se ainda é a versão que subiu. `true` = tirou. */
+export async function removerPendingEtapaSeMesmoEnvio(clientId: string, createdAt: number): Promise<boolean> {
+  return naFilaEtapas(async () => {
+    const list = await listPendingEtapas();
+    const atual = list.find((x) => x.clientId === clientId);
+    if (!atual || atual.createdAt !== createdAt) return false;
+    await writeList(
+      ETAPAS_KEY,
+      list.filter((x) => x.clientId !== clientId),
+    );
+    return true;
+  });
+}
+
+/** Grava o item como está — só pra quem não tem versão a conferir. */
 export async function upsertPendingEtapa(item: PendingEtapa): Promise<void> {
-  const list = await listPendingEtapas();
-  const i = list.findIndex((x) => x.clientId === item.clientId);
-  if (i >= 0) list[i] = item;
-  else list.push(item);
-  await writeList(ETAPAS_KEY, list);
+  await substituirPendingEtapa(item.clientId, () => item);
 }
 
 export async function deletePendingEtapa(clientId: string): Promise<void> {
-  const list = await listPendingEtapas();
-  await writeList(
-    ETAPAS_KEY,
-    list.filter((x) => x.clientId !== clientId),
-  );
+  await naFilaEtapas(async () => {
+    const list = await listPendingEtapas();
+    await writeList(
+      ETAPAS_KEY,
+      list.filter((x) => x.clientId !== clientId),
+    );
+  });
 }
 
 export async function listPendingEtapasSeguiuSem(): Promise<PendingEtapaSeguiuSem[]> {

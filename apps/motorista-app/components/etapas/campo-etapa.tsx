@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type ComponentProps } from "react";
 import { Text, View } from "react-native";
 import { CheckCircle2 } from "lucide-react-native";
 import Svg, { Path } from "react-native-svg";
@@ -24,6 +24,50 @@ const OPCOES_SIM_NAO = [
   { value: "SIM", label: "Sim" },
   { value: "NAO", label: "Não" },
 ];
+
+/**
+ * Campo de texto que grava SEMPRE a versão mais nova do que ele digitou.
+ *
+ * O nativo numera cada mudança (`eventCount`, cresce a cada letra). Um aviso
+ * que chega fora de ordem — mais velho que o último já visto — não volta o
+ * texto pra trás: na tela ficava "Agência Rota Sul" e no celular e no
+ * escritório só "A". E ao sair do campo, grava o texto que está NA TELA: se
+ * algum aviso se perdeu no caminho, o que ele vê é o que vale.
+ */
+function TextoEtapa({
+  valor,
+  onTexto,
+  filtrar,
+  ...props
+}: Omit<ComponentProps<typeof Input>, "value" | "onChange" | "onChangeText" | "onEndEditing"> & {
+  valor: string;
+  onTexto: (t: string) => void;
+  /** Limpa o que ele digitou antes de gravar (ex.: só dígitos no número). */
+  filtrar?: (t: string) => string;
+}) {
+  const ultimoEvento = useRef(-1);
+  const valorAtual = useRef(valor);
+  valorAtual.current = valor;
+  const limpo = (t: string) => (filtrar ? filtrar(t) : t);
+  return (
+    <Input
+      {...props}
+      value={valor}
+      onChange={(e) => {
+        const n = e.nativeEvent.eventCount;
+        if (typeof n === "number") {
+          if (n < ultimoEvento.current) return;
+          ultimoEvento.current = n;
+        }
+        onTexto(limpo(e.nativeEvent.text));
+      }}
+      onEndEditing={(e) => {
+        const t = e.nativeEvent.text;
+        if (typeof t === "string" && limpo(t) !== valorAtual.current) onTexto(limpo(t));
+      }}
+    />
+  );
+}
 
 /**
  * UM item do formulário, do jeito do tipo. Cada mudança chama `onMudar` na
@@ -93,10 +137,10 @@ export function CampoEtapa({
       ) : null}
 
       {item.tipo === "TEXTO" || item.tipo === "TEXTO_FOTO" ? (
-        <Input
-          value={r.texto ?? ""}
+        <TextoEtapa
+          valor={r.texto ?? ""}
           editable={!somenteLeitura}
-          onChangeText={(t) => onMudar((x) => ({ ...x, texto: t }))}
+          onTexto={(t) => onMudar((x) => ({ ...x, texto: t }))}
           placeholder="Escreva aqui"
           maxLength={500}
           error={!!erro}
@@ -104,11 +148,12 @@ export function CampoEtapa({
       ) : null}
 
       {item.tipo === "NUMERO" ? (
-        <Input
-          value={r.numero ?? ""}
+        <TextoEtapa
+          valor={r.numero ?? ""}
           editable={!somenteLeitura}
           keyboardType="decimal-pad"
-          onChangeText={(t) => onMudar((x) => ({ ...x, numero: t.replace(/[^0-9.,]/g, "") }))}
+          filtrar={(t) => t.replace(/[^0-9.,]/g, "")}
+          onTexto={(t) => onMudar((x) => ({ ...x, numero: t }))}
           placeholder={item.numero.unidade ? `0 ${item.numero.unidade}` : "0"}
           maxLength={15}
           error={!!erro}
@@ -138,10 +183,10 @@ export function CampoEtapa({
       ) : null}
 
       {pedeComentarioAgora(item, r) ? (
-        <Input
-          value={r.comentario ?? ""}
+        <TextoEtapa
+          valor={r.comentario ?? ""}
           editable={!somenteLeitura}
-          onChangeText={(t) => onMudar((x) => ({ ...x, comentario: t }))}
+          onTexto={(t) => onMudar((x) => ({ ...x, comentario: t }))}
           placeholder={extraDaResposta(item, r)?.comentario === "EXIGE" ? "Comentário" : "Comentário (opcional)"}
           maxLength={500}
           multiline
@@ -153,10 +198,10 @@ export function CampoEtapa({
       {item.tipo === "ASSINATURA" ? (
         <View className="gap-2">
           {item.assinatura.pedeNome ? (
-            <Input
-              value={r.assinanteNome ?? ""}
+            <TextoEtapa
+              valor={r.assinanteNome ?? ""}
               editable={!somenteLeitura}
-              onChangeText={(t) => onMudar((x) => ({ ...x, assinanteNome: t }))}
+              onTexto={(t) => onMudar((x) => ({ ...x, assinanteNome: t }))}
               placeholder="Nome de quem assina"
               maxLength={120}
             />

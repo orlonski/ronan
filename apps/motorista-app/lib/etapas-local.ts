@@ -234,6 +234,10 @@ async function ler(): Promise<Estado> {
   } catch {
     estado = vazio();
   }
+  // Enquanto lia o disco, uma gravação (`mudar`) pode ter terminado: a memória
+  // dela é mais nova que o que acabou de ser lido. Trocar por esta leitura
+  // apagaria a gravação na próxima escrita.
+  if (memoria && memoria.dono === dono) return memoria.estado;
   memoria = { dono, estado };
   return estado;
 }
