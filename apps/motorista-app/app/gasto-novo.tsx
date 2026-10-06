@@ -137,6 +137,8 @@ export default function GastoNovo() {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const hidratou = useRef(false);
+  /** Corrigindo um pendente que já subiu (ou foi apagado) enquanto a tela abria. */
+  const [pendenteSumiu, setPendenteSumiu] = useState(false);
 
   // ---- corrigir um pendente: carrega o que estava guardado
   useEffect(() => {
@@ -144,7 +146,11 @@ export default function GastoNovo() {
     let vivo = true;
     void (async () => {
       const item = (await listPendingDespesas()).find((x) => x.clientId === params.editarClientId);
-      if (!vivo || !item) return;
+      if (!vivo) return;
+      if (!item) {
+        setPendenteSumiu(true);
+        return;
+      }
       hidratou.current = true;
       const p = item.payload;
       if (typeof p.valor === "number") setCentavos(Math.round(p.valor * 100));
@@ -282,7 +288,16 @@ export default function GastoNovo() {
         <Stack.Screen options={{ headerShown: false }} />
         <ScreenHeader title="Gasto de viagem" />
         <View className="flex-1 items-center justify-center gap-4 p-6">
-          {tipos.carregando || editando ? (
+          {pendenteSumiu ? (
+            <>
+              <Text className="text-center text-base text-foreground">
+                Esse gasto já foi pro escritório. Pra mudar, abra ele em Meus reembolsos.
+              </Text>
+              <Button variant="outline" onPress={() => router.back()}>
+                Voltar
+              </Button>
+            </>
+          ) : tipos.carregando || editando || corrigindoEnviado ? (
             <ActivityIndicator />
           ) : (
             <>
