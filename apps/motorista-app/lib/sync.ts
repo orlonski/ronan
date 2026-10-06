@@ -81,8 +81,26 @@ import {
   upsertPendingVinculoGasto,
   deletePendingVinculoGasto,
   type PendingVinculoGasto,
+  listPendingEtapas,
+  upsertPendingEtapa,
+  deletePendingEtapa,
+  type PendingEtapa,
+  type ArquivoEtapaPendente,
+  listPendingEtapasSeguiuSem,
+  upsertPendingEtapaSeguiuSem,
+  deletePendingEtapaSeguiuSem,
+  type PendingEtapaSeguiuSem,
 } from "@/db/database";
 import { enviarDespesa, enviarFotoDespesa, enviarVinculoDespesas } from "./despesas";
+import {
+  enviarArquivoEtapa,
+  enviarRespostaEtapa,
+  enviarSeguiuSem,
+  ehArquivoInvalido,
+  type ArquivoEnviado,
+  type RespostaEtapaEnviada,
+  type SeguiuSemEnviado,
+} from "./etapas";
 import {
   api,
   ApiError,
@@ -868,6 +886,18 @@ export async function removerItensLifecycleDaViagem(viagemClientId: string): Pro
   for (const e of await listPendingEventosViagem()) {
     if (e.viagemClientId === viagemClientId) await deletePendingEventoViagem(e.clientId);
   }
+  // Documentos da viagem descartada: sem viagem, não há a quem pertencer. O
+  // que estiver subindo AGORA termina sozinho (o servidor guarda solto).
+  for (const e of await listPendingEtapas()) {
+    if (e.viagemClientId === viagemClientId && e.status !== "syncing") {
+      await deletePendingEtapa(e.clientId);
+    }
+  }
+  for (const e of await listPendingEtapasSeguiuSem()) {
+    if (e.viagemClientId === viagemClientId && e.status !== "syncing") {
+      await deletePendingEtapaSeguiuSem(e.clientId);
+    }
+  }
   notify();
 }
 
@@ -905,6 +935,8 @@ export async function pendingCounts(): Promise<{
   checklists: number;
   /** Gastos de viagem (e ligações de gasto com viagem) esperando subir. */
   despesas: number;
+  /** Documentos da viagem (respostas de etapa e "seguiu sem") esperando subir. */
+  etapas: number;
   /**
    * TUDO que está esperando subir.
    *
@@ -917,7 +949,7 @@ export async function pendingCounts(): Promise<{
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck, dp, vg] = await Promise.all([
+  const [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck, dp, vg, et, es] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
@@ -934,10 +966,12 @@ export async function pendingCounts(): Promise<{
     listPendingChecklists(),
     listPendingDespesas(),
     listPendingVinculosGasto(),
+    listPendingEtapas(),
+    listPendingEtapasSeguiuSem(),
   ]);
   // foto/local/story ficavam de fora da contagem: item travado desses não
   // aparecia em lugar nenhum, nem no badge da home nem na tela de Pendentes.
-  const comErro = [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck, dp, vg].reduce(
+  const comErro = [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck, dp, vg, et, es].reduce(
     (acc, lista) => acc + lista.filter((i) => i.attempts >= MAX_ATTEMPTS).length,
     0,
   );
@@ -954,7 +988,8 @@ export async function pendingCounts(): Promise<{
     problemas: pr.length,
     checklists: ck.length,
     despesas: dp.length + vg.length,
-    total: [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck, dp, vg].reduce(
+    etapas: et.length + es.length,
+    total: [v, p, a2, li, ev, fi, cp, fo, lo, st, pt, dc, pr, ck, dp, vg, et, es].reduce(
       (acc, l) => acc + l.length,
       0,
     ),
@@ -1191,6 +1226,8 @@ async function snapshotPendentes(): Promise<{ total: number; motivo?: string }> 
     listPendingChecklists(),
     listPendingDespesas(),
     listPendingVinculosGasto(),
+    listPendingEtapas(),
+    listPendingEtapasSeguiuSem(),
   ]);
   const todos = listas.flat();
   const motivo = todos.map((i) => i.errorMsg).find(Boolean) ?? undefined;
@@ -1271,6 +1308,11 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
     // Ligações por último: ligam gasto JÁ enviado a viagem — inclusive a que
     // acabou de subir nesta mesma passada.
     await drainVinculosGasto();
+    // Documentos da viagem: depois das viagens (o servidor amarra pelo
+    // viagemClientId, e é melhor que ela já esteja lá), e o "seguiu sem" só
+    // depois da resposta do mesmo formulário.
+    await drainEtapas();
+    await drainEtapasSeguiuSem();
     await drainStories();
     await drainMensagensChat();
     // Documento por ÚLTIMO: é o item mais gordo da fila (até 25 MB) e ninguém
@@ -1384,6 +1426,18 @@ async function rescueStaleItems(): Promise<void> {
   for (const g of await listPendingVinculosGasto()) {
     if (g.status === "syncing" && isStale(g.lastTriedAt)) {
       await upsertPendingVinculoGasto({ ...g, status: "pending" });
+    }
+  }
+  for (const e of await listPendingEtapas()) {
+    // Em voo de verdade nesta sessão não é órfão (o lastTriedAt é renovado a
+    // cada arquivo, mas a trava em memória é a garantia).
+    if (e.status === "syncing" && isStale(e.lastTriedAt) && !etapasEmVoo.has(e.clientId)) {
+      await upsertPendingEtapa({ ...e, status: "pending" });
+    }
+  }
+  for (const e of await listPendingEtapasSeguiuSem()) {
+    if (e.status === "syncing" && isStale(e.lastTriedAt)) {
+      await upsertPendingEtapaSeguiuSem({ ...e, status: "pending" });
     }
   }
 }
@@ -2657,6 +2711,8 @@ export async function recuperarItensPresos(): Promise<void> {
   await varrer(await listPendingViagemCancelar(), upsertPendingViagemCancelar);
   await varrer(await listPendingDespesas(), upsertPendingDespesa);
   await varrer(await listPendingVinculosGasto(), upsertPendingVinculoGasto);
+  await varrer(await listPendingEtapas(), upsertPendingEtapa);
+  await varrer(await listPendingEtapasSeguiuSem(), upsertPendingEtapaSeguiuSem);
 
   if (mexeu) {
     notify();
@@ -3003,6 +3059,297 @@ async function processVinculoGasto(item: PendingVinculoGasto): Promise<void> {
     if (ainda) {
       await upsertPendingVinculoGasto(
         proximoEstadoFalha(item, err, isErroPermanente(err), "vinculo-gasto"),
+      );
+    }
+  }
+  notify();
+}
+
+// ---------------------------------------------------------------------------
+// ETAPAS DA VIAGEM (módulo etapas)
+// ---------------------------------------------------------------------------
+
+/**
+ * Respostas subindo AGORA nesta sessão. O drain pula (nada de dois envios do
+ * mesmo formulário em paralelo) e o rescue de "syncing órfão" também.
+ */
+const etapasEmVoo = new Set<string>();
+
+/**
+ * Enfileira (ou SUBSTITUI) a resposta do formulário — upsert coalescido.
+ *
+ * O que já subiu não sobe de novo: a `storageKey` de cada arquivo (pelo id
+ * local) é herdada do item que estava na fila. Os arquivos já moram em
+ * `documentDirectory` (quem cuida é lib/etapas-local.ts, no ato da foto).
+ */
+export async function enqueueEtapa(e: {
+  clientId: string;
+  viagemClientId: string;
+  modeloId: string;
+  payload: Record<string, unknown>;
+  arquivos: ArquivoEtapaPendente[];
+  resumo: PendingEtapa["resumo"];
+}): Promise<void> {
+  const anterior = (await listPendingEtapas()).find((x) => x.clientId === e.clientId);
+  const subidos = new Map(
+    (anterior?.arquivos ?? [])
+      .filter((a) => a.storageKey)
+      .map((a) => [a.id, a.storageKey!] as const),
+  );
+  const arquivos = e.arquivos.map((a) =>
+    a.storageKey || a.arquivoId || !subidos.has(a.id) ? a : { ...a, storageKey: subidos.get(a.id) },
+  );
+  await upsertPendingEtapa({
+    clientId: e.clientId,
+    viagemClientId: e.viagemClientId,
+    modeloId: e.modeloId,
+    payload: e.payload,
+    arquivos,
+    resumo: e.resumo,
+    arquivoRecusado: null,
+    // Status do item EM VOO é preservado: senão o drain começaria um segundo
+    // envio do mesmo formulário enquanto o primeiro ainda sobe. O novo
+    // `createdAt` é o que faz o envio em voo perceber que foi substituído.
+    status: etapasEmVoo.has(e.clientId) ? "syncing" : "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+    lastTriedAt: anterior?.lastTriedAt,
+  });
+  notify();
+  void drain();
+}
+
+/** Guarda a storageKey no item que estiver na fila AGORA (mesmo que seja um envio mais novo). */
+async function marcarArquivoEtapaSubido(
+  clientId: string,
+  arquivoId: string,
+  storageKey: string,
+): Promise<void> {
+  const atual = (await listPendingEtapas()).find((x) => x.clientId === clientId);
+  if (!atual) return;
+  await upsertPendingEtapa({
+    ...atual,
+    // Renova o carimbo a CADA arquivo: 10 arquivos de 120 s passam do stale de
+    // 5 min, e sem isto o rescue devolveria pra fila um envio ainda vivo.
+    lastTriedAt: Date.now(),
+    arquivos: atual.arquivos.map((a) => (a.id === arquivoId ? { ...a, storageKey } : a)),
+  });
+}
+
+async function etapaAindaEOMesmoEnvio(item: PendingEtapa): Promise<boolean> {
+  const atual = (await listPendingEtapas()).find((x) => x.clientId === item.clientId);
+  // Sumiu = descartado na tela de Pendentes. Escrever de volta ressuscitaria.
+  return atual !== undefined && atual.createdAt === item.createdAt;
+}
+
+export async function descartarEtapaPendente(clientId: string): Promise<void> {
+  await deletePendingEtapa(clientId);
+  notify();
+}
+
+export async function tentarNovamenteEtapaPendente(clientId: string): Promise<void> {
+  const item = (await listPendingEtapas()).find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingEtapa({ ...resetItem(item), arquivoRecusado: null });
+  notify();
+  void drain();
+}
+
+async function drainEtapas(): Promise<void> {
+  const list = await listPendingEtapas();
+  for (const item of list) {
+    if (etapasEmVoo.has(item.clientId)) continue;
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!(await podeTentar("etapas"))) return;
+    await processEtapa(item);
+  }
+}
+
+async function processEtapa(item: PendingEtapa): Promise<void> {
+  etapasEmVoo.add(item.clientId);
+  const envio: PendingEtapa = { ...item, status: "syncing", lastTriedAt: Date.now() };
+  await upsertPendingEtapa(envio);
+  notify();
+  let substituido = false;
+  let arquivoRecusado: PendingEtapa["arquivoRecusado"] = null;
+  try {
+    const porItem = new Map<string, ArquivoEnviado[]>();
+    for (const a of envio.arquivos) {
+      let pronto: ArquivoEnviado | null = null;
+      if (a.storageKey) {
+        pronto = { storageKey: a.storageKey, mime: a.mime, nome: a.nome };
+      } else if (a.uri && (await fotoAindaExiste(a.uri))) {
+        let r: { storageKey: string };
+        try {
+          r = await enviarArquivoEtapa({ uri: a.uri, mime: a.mime, nome: a.nome });
+        } catch (err) {
+          if (isErroPermanente(err)) arquivoRecusado = { itemChave: a.itemChave, arquivoId: a.id };
+          throw err;
+        }
+        await marcarArquivoEtapaSubido(envio.clientId, a.id, r.storageKey);
+        avisarArquivoEtapaSubido({
+          clientId: envio.clientId,
+          itemChave: a.itemChave,
+          arquivoId: a.id,
+          storageKey: r.storageKey,
+        });
+        pronto = { storageKey: r.storageKey, mime: a.mime, nome: a.nome };
+      } else {
+        // Arquivo sumiu do aparelho: a resposta vale mais que ele. Segue sem;
+        // o item volta a contar como faltando no servidor e na tela.
+        reportarFotoPerdida("etapa", envio.clientId, a.uri);
+      }
+      if (pronto) {
+        const lista = porItem.get(a.itemChave) ?? [];
+        lista.push(pronto);
+        porItem.set(a.itemChave, lista);
+      }
+    }
+
+    const base = envio.payload as unknown as RespostaEtapaEnviada;
+    const corpo: RespostaEtapaEnviada = {
+      ...base,
+      itens: (base.itens ?? []).map((i) => ({ ...i, arquivos: porItem.get(i.chave) ?? [] })),
+    };
+    await enviarRespostaEtapa(corpo);
+    substituido = !(await etapaAindaEOMesmoEnvio(envio));
+    // Só sai da fila o envio que subiu. Se ele editou no meio, o item da fila
+    // já é outro (mais novo) e sobe na sequência.
+    if (!substituido) await deletePendingEtapa(envio.clientId);
+  } catch (err) {
+    substituido = !(await etapaAindaEOMesmoEnvio(envio));
+    const atual = substituido
+      ? null
+      : (await listPendingEtapas()).find((x) => x.clientId === envio.clientId);
+    if (atual) {
+      // Chave de arquivo recusada (fora do prefixo conta/motorista — troca de
+      // empresa no meio, por exemplo): sobe de novo o que ainda está no
+      // aparelho, UMA vez, sem queimar tentativa. Na segunda, vira Pendentes.
+      const reSubir =
+        err instanceof ApiError &&
+        err.status === 400 &&
+        ehArquivoInvalido(err.body) &&
+        !atual.resubiuArquivos &&
+        atual.arquivos.some((a) => a.uri && a.storageKey);
+      if (reSubir) {
+        await upsertPendingEtapa({
+          ...atual,
+          status: "pending",
+          resubiuArquivos: true,
+          arquivos: atual.arquivos.map((a) => (a.uri ? { ...a, storageKey: undefined } : a)),
+        });
+      } else {
+        await upsertPendingEtapa({
+          ...proximoEstadoFalha(atual, err, isErroPermanente(err), "etapa"),
+          arquivoRecusado,
+        });
+      }
+    }
+  } finally {
+    etapasEmVoo.delete(envio.clientId);
+  }
+  // Um envio mais novo esperou a trava sair: o item dele ainda está marcado
+  // "syncing" (herdado no enqueue) — volta pra "pending" e sobe agora.
+  if (substituido) {
+    const atual = (await listPendingEtapas()).find((x) => x.clientId === envio.clientId);
+    if (atual && atual.status === "syncing") await upsertPendingEtapa({ ...atual, status: "pending" });
+    void drain();
+  }
+  notify();
+}
+
+/**
+ * Quem quer saber que um arquivo de etapa SUBIU (o rascunho guarda a
+ * storageKey — é ela que permite apagar depois). Registro em vez de import pra
+ * não criar ciclo (lib/etapas-local importa daqui).
+ */
+type ArquivoEtapaSubido = { clientId: string; itemChave: string; arquivoId: string; storageKey: string };
+const ouvintesArquivoEtapa = new Set<(e: ArquivoEtapaSubido) => void>();
+
+export function aoSubirArquivoEtapa(fn: (e: ArquivoEtapaSubido) => void): () => void {
+  ouvintesArquivoEtapa.add(fn);
+  return () => {
+    ouvintesArquivoEtapa.delete(fn);
+  };
+}
+
+function avisarArquivoEtapaSubido(e: ArquivoEtapaSubido): void {
+  for (const fn of ouvintesArquivoEtapa) {
+    try {
+      fn(e);
+    } catch {
+      /* ouvinte com defeito não derruba o envio */
+    }
+  }
+}
+
+
+/** Enfileira o "Seguir sem isso" (o motivo vai pro escritório). */
+export async function enqueueEtapaSeguiuSem(e: {
+  payload: SeguiuSemEnviado;
+  resumo: PendingEtapaSeguiuSem["resumo"];
+}): Promise<void> {
+  await upsertPendingEtapaSeguiuSem({
+    clientId: e.payload.clientId,
+    viagemClientId: e.payload.viagemClientId,
+    modeloId: e.payload.modeloId,
+    payload: e.payload as unknown as Record<string, unknown>,
+    resumo: e.resumo,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
+export async function descartarEtapaSeguiuSemPendente(clientId: string): Promise<void> {
+  await deletePendingEtapaSeguiuSem(clientId);
+  notify();
+}
+
+export async function tentarNovamenteEtapaSeguiuSemPendente(clientId: string): Promise<void> {
+  const item = (await listPendingEtapasSeguiuSem()).find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingEtapaSeguiuSem(resetItem(item));
+  notify();
+  void drain();
+}
+
+async function drainEtapasSeguiuSem(): Promise<void> {
+  const list = await listPendingEtapasSeguiuSem();
+  const respostas = await listPendingEtapas();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    // A resposta do mesmo formulário sobe antes (senão o servidor registraria
+    // "seguiu sem" de um documento que estava na fila logo atrás). Resposta
+    // parada em erro não segura: o motivo tem que chegar mesmo assim.
+    const respostaNaFrente = respostas.some(
+      (r) =>
+        r.viagemClientId === item.viagemClientId &&
+        r.modeloId === item.modeloId &&
+        r.status !== "error" &&
+        r.attempts < MAX_ATTEMPTS,
+    );
+    if (respostaNaFrente) continue;
+    if (!(await podeTentar("etapas-seguiu-sem"))) return;
+    await processEtapaSeguiuSem(item);
+  }
+}
+
+async function processEtapaSeguiuSem(item: PendingEtapaSeguiuSem): Promise<void> {
+  await upsertPendingEtapaSeguiuSem({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    await enviarSeguiuSem(item.payload as unknown as SeguiuSemEnviado);
+    await deletePendingEtapaSeguiuSem(item.clientId);
+  } catch (err) {
+    const ainda = (await listPendingEtapasSeguiuSem()).some((x) => x.clientId === item.clientId);
+    if (ainda) {
+      await upsertPendingEtapaSeguiuSem(
+        proximoEstadoFalha(item, err, isErroPermanente(err), "etapa-seguiu-sem"),
       );
     }
   }

@@ -19,7 +19,7 @@ import { SemCatalogo } from "@/components/sem-catalogo";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { AvisoKmEstimado } from "@/components/aviso-km-estimado";
 import { AssinaturaPad } from "@/components/assinatura-pad";
-import { usePermite } from "@/lib/acessos-app";
+import { useCapacidadeNova, usePermite } from "@/lib/acessos-app";
 import { useModuloDespesas } from "@/lib/gastos";
 import { GastosDaViagem } from "@/components/gastos";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,9 @@ import {
   useOpcoesRota,
 } from "@/lib/queries";
 import { AvisoKmForaDoPadrao, SugestaoKmHistorico } from "@/components/sugestao-km-historico";
+import { BarreiraEtapas } from "@/components/etapas/barreira-etapas";
+import { CAP_ETAPAS } from "@/lib/etapas";
+import { lerEstadoEtapas, marcarViagemFinalizada } from "@/lib/etapas-local";
 
 /**
  * Passo final do lifecycle guiado: coleta os dados que faltam pra fechar a
@@ -55,6 +58,10 @@ export default function FinalizarViagem() {
   const cat = useCatalogos();
   const [ciclo, setCiclo] = useState<LifecycleLocal | null>(null);
   const [carregando, setCarregando] = useState(true);
+  // Documentos da viagem: "Antes de seguir" (documento da carga que o
+  // escritório precisa). Finalizar só aparece depois que ele anexa ou explica.
+  const etapasLigado = useCapacidadeNova(CAP_ETAPAS);
+  const [liberadoEtapas, setLiberadoEtapas] = useState(true);
 
   const [clienteId, setClienteId] = useState("");
   const [materialId, setMaterialId] = useState("");
@@ -637,13 +644,27 @@ export default function FinalizarViagem() {
         foto: foto ? { uri: foto.uri, mime: foto.mime } : undefined,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Documentos: a viagem acabou — os da descarga abrem logo em seguida (e
+      // o acerto do frete passa a esperar na home).
+      let docsDescarga: { viagemClientId: string; modeloId: string } | null = null;
+      if (ciclo) {
+        await marcarViagemFinalizada(ciclo.clientId).catch(() => {});
+        if (etapasLigado) {
+          const est = await lerEstadoEtapas().catch(() => null);
+          const fim = est?.viagens
+            .find((x) => x.viagemClientId === ciclo.clientId)
+            ?.modelos.find((m) => m.momento === "FIM");
+          if (fim) docsDescarga = { viagemClientId: ciclo.clientId, modeloId: fim.id };
+        }
+      }
       await showAlert({
         title: aguardandoPeso ? "Viagem finalizada — falta o peso" : "Viagem finalizada!",
         message: aguardandoPeso
           ? "Enviamos assim que tiver sinal. Quando sair o romaneio, complete o peso e o ticket — a gente te lembra."
           : "Vamos enviar assim que tiver sinal. Bom trabalho.",
       });
-      router.replace("/");
+      if (docsDescarga) router.replace({ pathname: "/etapa", params: docsDescarga });
+      else router.replace("/");
     } catch (err) {
       setErro(humanizeApiError(err));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -1012,17 +1033,31 @@ export default function FinalizarViagem() {
 
             {erro ? <ErroCampo msg={erro} /> : null}
 
-            <Button
-              size="lg"
-              className="h-20 bg-success"
-              onPress={salvar}
-              loading={submitting}
-            >
-              <Flag size={24} color="white" />
-              <Text className="text-xl font-bold text-primary-foreground">
-                {submitting ? "Finalizando…" : "Finalizar viagem"}
+            {ciclo ? (
+              <BarreiraEtapas
+                acao="FINALIZAR"
+                viagemClientIdAtual={ciclo.clientId}
+                onLiberado={setLiberadoEtapas}
+              />
+            ) : null}
+
+            {liberadoEtapas ? (
+              <Button
+                size="lg"
+                className="h-20 bg-success"
+                onPress={salvar}
+                loading={submitting}
+              >
+                <Flag size={24} color="white" />
+                <Text className="text-xl font-bold text-primary-foreground">
+                  {submitting ? "Finalizando…" : "Finalizar viagem"}
+                </Text>
+              </Button>
+            ) : (
+              <Text className="text-center text-base text-muted-foreground">
+                Anexe o documento acima, ou toque em “Seguir sem isso”, pra finalizar a viagem.
               </Text>
-            </Button>
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
       )}

@@ -53,6 +53,7 @@ import {
 import { enqueueFoto } from "@/lib/sync";
 import { ConversaViagem } from "@/components/conversa-viagem";
 import { CardCorrigirDados } from "@/components/card-corrigir-dados";
+import { CartaoEtapasViagem } from "@/components/etapas/cartao-etapas-viagem";
 
 const STATUS_VARIANT: Record<
   string,
@@ -233,6 +234,10 @@ export default function ViagemDetalheScreen() {
               ) : null}
             </View>
           </Card>
+
+          {/* Documentos da viagem (carga, descarga, acerto do frete) — também
+              pra quem lança pela "Lançar viagem feita". Sem a função, nada. */}
+          <CartaoEtapasViagem viagemClientId={detalhe.data.clientId} />
 
           {/* Card de divergência — motivo do admin pra motorista saber o que ajustar.
               Quando tipo=PEDAGIO_SEM_VALOR, vira fluxo dedicado: input do valor +

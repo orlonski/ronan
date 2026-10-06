@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Clock, CloudOff, Pencil, RefreshCw, Scale, Trash2 } from "lucide-react-native";
+import { Clock, CloudOff, FileText, Pencil, RefreshCw, Scale, Trash2 } from "lucide-react-native";
 import {
   FlatList,
   Modal,
@@ -31,8 +31,11 @@ import {
   type PendingChecklist,
   type PendingDespesa,
   type PendingVinculoGasto,
+  type PendingEtapa,
+  type PendingEtapaSeguiuSem,
   type ZodIssueSaved,
 } from "@/db/database";
+import { usePendingEtapas, usePendingEtapasSeguiuSem } from "@/lib/etapas-local";
 import { usePendingDespesas, usePendingVinculosGasto } from "@/lib/gastos";
 import { usePendingViagens } from "@/hooks/use-pending-viagens";
 import { usePendingPedagios } from "@/hooks/use-pending-pedagios";
@@ -73,6 +76,10 @@ import {
   tentarNovamenteDespesaPendente,
   descartarVinculoGastoPendente,
   tentarNovamenteVinculoGastoPendente,
+  descartarEtapaPendente,
+  tentarNovamenteEtapaPendente,
+  descartarEtapaSeguiuSemPendente,
+  tentarNovamenteEtapaSeguiuSemPendente,
 } from "@/lib/sync";
 import { descartarViagemGuiada } from "@/lib/lifecycle";
 import { useCatalogos } from "@/lib/queries";
@@ -99,7 +106,11 @@ type PendingRow =
   // Tipo novo TEM que entrar aqui — senão some da tela e fica contando em
   // "X com erro" (a armadilha do CLAUDE.md).
   | { kind: "despesa"; item: PendingDespesa }
-  | { kind: "vinculo"; item: PendingVinculoGasto };
+  | { kind: "vinculo"; item: PendingVinculoGasto }
+  // Documentos da viagem: a resposta do formulário (com os arquivos) e o
+  // "seguiu sem" (o motivo). Os dois TÊM que estar aqui e no `pendingCounts`.
+  | { kind: "etapa"; item: PendingEtapa }
+  | { kind: "etapaSeguiuSem"; item: PendingEtapaSeguiuSem };
 
 const TIPO_COMBUSTIVEL_LABEL: Record<string, string> = {
   DIESEL_S10: "Diesel S10",
@@ -122,6 +133,8 @@ export default function Pendentes() {
   const checklists = usePendingChecklists();
   const despesas = usePendingDespesas();
   const vinculosGasto = usePendingVinculosGasto();
+  const etapas = usePendingEtapas();
+  const etapasSeguiuSem = usePendingEtapasSeguiuSem();
   const cat = useCatalogos();
   const [sincronizando, setSincronizando] = useState(false);
 
@@ -213,9 +226,23 @@ export default function Pendentes() {
       ...checklists.map((item) => ({ kind: "checklist" as const, item })),
       ...despesas.map((item) => ({ kind: "despesa" as const, item })),
       ...vinculosGasto.map((item) => ({ kind: "vinculo" as const, item })),
+      ...etapas.map((item) => ({ kind: "etapa" as const, item })),
+      ...etapasSeguiuSem.map((item) => ({ kind: "etapaSeguiuSem" as const, item })),
     ];
     return all.sort((a, b) => a.item.createdAt - b.item.createdAt);
-  }, [viagens, pedagios, abastecimentos, outros, documentos, problemas, checklists, despesas, vinculosGasto]);
+  }, [
+    viagens,
+    pedagios,
+    abastecimentos,
+    outros,
+    documentos,
+    problemas,
+    checklists,
+    despesas,
+    vinculosGasto,
+    etapas,
+    etapasSeguiuSem,
+  ]);
 
   // Helpers de lookup por id no catalogo
   const lookups = useMemo(() => {
@@ -240,6 +267,8 @@ export default function Pendentes() {
     checklist: "este checklist",
     despesa: "este gasto",
     vinculo: "esta ligação do gasto com a viagem",
+    etapa: "estes documentos",
+    etapaSeguiuSem: "este aviso ao escritório",
   };
 
   async function confirmarExcluir(row: PendingRow) {
@@ -262,6 +291,8 @@ export default function Pendentes() {
     else if (row.kind === "checklist") await descartarChecklistPendente(id);
     else if (row.kind === "despesa") await descartarDespesaPendente(id);
     else if (row.kind === "vinculo") await descartarVinculoGastoPendente(id);
+    else if (row.kind === "etapa") await descartarEtapaPendente(id);
+    else if (row.kind === "etapaSeguiuSem") await descartarEtapaSeguiuSemPendente(id);
     else await descartarStoryPendente(id);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
@@ -279,6 +310,8 @@ export default function Pendentes() {
     else if (row.kind === "checklist") await tentarNovamenteChecklistPendente(id);
     else if (row.kind === "despesa") await tentarNovamenteDespesaPendente(id);
     else if (row.kind === "vinculo") await tentarNovamenteVinculoGastoPendente(id);
+    else if (row.kind === "etapa") await tentarNovamenteEtapaPendente(id);
+    else if (row.kind === "etapaSeguiuSem") await tentarNovamenteEtapaSeguiuSemPendente(id);
     else await tentarNovamenteStoryPendente(id);
   }
 
@@ -705,6 +738,22 @@ function PendingCard({
           <Button variant="outline" size="sm" onPress={onVerDetalhes}>
             Ver detalhes
           </Button>
+          {row.kind === "etapa" ? (
+            <Button
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({
+                  pathname: "/etapa",
+                  params: { viagemClientId: row.item.viagemClientId, modeloId: row.item.modeloId },
+                });
+              }}
+            >
+              <FileText size={18} color="white" />
+              <Text className="ml-1 font-semibold text-primary-foreground">
+                {row.item.arquivoRecusado ? "Tirar a foto de novo" : "Abrir documentos"}
+              </Text>
+            </Button>
+          ) : null}
           {temErro && fotoRecusada && row.kind === "despesa" ? (
             <Button
               onPress={() => {
@@ -824,6 +873,28 @@ function resumoCard(
           : row.item.fotos.length > 0
             ? "Com foto do comprovante"
             : undefined,
+    };
+  }
+  if (row.kind === "etapa") {
+    const r = row.item.resumo;
+    return {
+      tipoLabel: "Documentos da viagem",
+      titulo: r.modeloNome,
+      subtitulo: `${fmtData(new Date(row.item.createdAt).toISOString())} · ${r.itensRespondidos} de ${r.itensTotal}`,
+      linha3: row.item.arquivoRecusado
+        ? "Uma foto não subiu. Abra os documentos e tire de novo."
+        : r.viagemRotulo
+          ? `Viagem: ${r.viagemRotulo}`
+          : undefined,
+    };
+  }
+  if (row.kind === "etapaSeguiuSem") {
+    const r = row.item.resumo;
+    return {
+      tipoLabel: "Aviso ao escritório",
+      titulo: `Seguiu sem: ${r.itemRotulo}`,
+      subtitulo: fmtData(new Date(row.item.createdAt).toISOString()),
+      linha3: `Motivo: ${r.motivoLabel}`,
     };
   }
   if (row.kind === "vinculo") {

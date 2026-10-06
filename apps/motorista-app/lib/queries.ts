@@ -3,7 +3,7 @@
 // de uma. Chave global aqui faria o dado de uma aparecer — ou ser ENVIADO —
 // pela outra.
 import { storage as AsyncStorage } from "@/lib/storage";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -48,6 +48,8 @@ import {
 } from "./pedagios-offline";
 import { getRotaCache, setRotaCache } from "./rota-cache";
 import { useVisao } from "./visao";
+import { CAP_ETAPAS, lerModelosEtapa, type ModeloEtapa } from "./etapas";
+import { capacidadeNovaAgora } from "./acessos-app";
 import { getKmReferenciaCache, setKmReferenciaCache } from "./km-referencia-cache";
 import {
   drainLocais,
@@ -140,6 +142,12 @@ export type Catalogos = {
    * lista vazia) e a config de campos com lixo. Nunca ler direto daqui.
    */
   tiposDespesa?: unknown;
+  /**
+   * Formulários de "Documentos da viagem" (módulo `etapas`). Cru de propósito:
+   * quem lê é `lerModelosEtapa` (lib/etapas.ts) — cache sem o campo = nenhum
+   * modelo = app exatamente como antes. Nunca ler direto daqui.
+   */
+  modelosEtapa?: unknown;
   clientes: Cliente[];
   locais: Local[];
   empresas: Empresa[];
@@ -582,6 +590,29 @@ export function useSalvarPreferenciasNotificacao() {
   });
 }
 
+/**
+ * Os formulários de "Documentos da viagem" — cache-first, como o resto.
+ *
+ * Fonte: o campo `modelosEtapa` do `/m/catalogos` quando o servidor manda; se o
+ * catálogo deste celular não tem o campo, o `GET /m/etapas/modelos` (que o
+ * prefetch baixa no login). Com `ligado` falso não busca nada e devolve [].
+ */
+export function useModelosEtapa(ligado: boolean): ModeloEtapa[] {
+  const cat = useCatalogos();
+  const doCatalogo = cat.data?.modelosEtapa;
+  const temNoCatalogo = Array.isArray(doCatalogo);
+  const q = useQuery({
+    ...offlineCacheQuery<unknown>("etapas-modelos", "/m/etapas/modelos", {
+      staleTime: 5 * 60_000,
+    }),
+    enabled: ligado && !temNoCatalogo,
+  });
+  return useMemo(() => {
+    if (!ligado) return [];
+    return lerModelosEtapa(temNoCatalogo ? doCatalogo : q.data);
+  }, [ligado, temNoCatalogo, doCatalogo, q.data]);
+}
+
 export function useCatalogos() {
   return useQuery(
     offlineCacheQuery<Catalogos>("catalogos", "/m/catalogos", {
@@ -667,7 +698,18 @@ export async function prefetchDadosBase(qc: QueryClient): Promise<void> {
     staleTime: 6 * 60 * 60 * 1000,
   });
 
+  // Documentos da viagem: só com a função ligada (nasce desligada) — sem ela
+  // nem pergunta, pra não somar uma requisição no login de todo mundo.
+  const etapas = capacidadeNovaAgora(CAP_ETAPAS)
+    ? qc.prefetchQuery(
+        offlineCacheQuery<unknown>("etapas-modelos", "/m/etapas/modelos", {
+          staleTime: 5 * 60_000,
+        }),
+      )
+    : Promise.resolve();
+
   await Promise.allSettled([
+    etapas,
     qc.prefetchQuery(cat),
     qc.prefetchQuery(me),
     qc.prefetchQuery(tipos),
