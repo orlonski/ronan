@@ -160,6 +160,18 @@ sozinhas, aviso por push com antecedência maior pro toxicológico (60 dias, nã
 `apps/motorista-app/app/meus-documentos.tsx`). Fonte do prazo legal: art. 165-D
 do Código de Trânsito Brasileiro, já levantado em `docs/motorista-sem-empresa.md`.
 
+### 17. Ele passa o dia sozinho na cabine
+**Como ele diz:** "fico dias sem trocar uma palavra com alguém que entenda essa vida."
+**O que custa:** solidão é queixa recorrente do ofício — quem fica em casa não
+vive fila de pátio, chuva na serra ou noite de posto; só outro motorista
+entende isso de verdade.
+**O que mata:** chat direto entre motoristas dentro do app, liberado pra todo
+mundo desde a migração `20260807140000_chat_liberado_para_todos` — não é
+restrito à mesma transportadora (`contatos()` em `apps/api/src/chat/chat.service.ts`
+não filtra por conta), com bloqueio e denúncia (`apps/motorista-app/app/chat/`).
+O escritório só vê o canal de Avisos que ele mesmo publica, nunca a conversa
+entre motoristas (`chat-admin.service.ts`).
+
 ---
 
 ## De onde vem isto, e o que falta
