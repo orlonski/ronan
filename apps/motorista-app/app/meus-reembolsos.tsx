@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { router, Stack } from "expo-router";
-import { ReceiptText } from "lucide-react-native";
+import { Link, ReceiptText } from "lucide-react-native";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
-import { abrirGasto, LinhaGasto, SemGastoDeViagem } from "@/components/gastos";
+import { abrirGasto, BotaoAcao, LinhaGasto, SemGastoDeViagem } from "@/components/gastos";
 import { Button } from "@/components/ui/button";
 import {
   fmtReais,
@@ -62,7 +62,7 @@ export default function MeusReembolsos() {
     return [...m.entries()];
   }, [lista]);
 
-  if (!modulo.acompanhar) return <SemGastoDeViagem titulo="Meus reembolsos" />;
+  if (!modulo.acompanhar) return <SemGastoDeViagem titulo="Meus gastos" />;
 
   const semCacheEErro = query.isError && !query.data && gastos.length === 0;
   const desatualizado =
@@ -71,7 +71,7 @@ export default function MeusReembolsos() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScreenHeader title="Meus reembolsos" />
+      <ScreenHeader title="Meus gastos" />
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
         refreshControl={
@@ -113,17 +113,14 @@ export default function MeusReembolsos() {
         </View>
 
         {resumo.semViagem > 0 && modulo.lancar ? (
-          <Pressable
-            onPress={() => router.push("/gastos-sem-viagem")}
-            className="flex-row items-center justify-between rounded-xl bg-sky-50 px-4 active:opacity-75"
-            style={{ minHeight: 56 }}
-            accessibilityRole="button"
-          >
+          <View className="gap-2 rounded-xl bg-sky-50 p-4">
             <Text className="text-base text-foreground">
               {resumo.semViagem} {resumo.semViagem === 1 ? "gasto sem viagem" : "gastos sem viagem"}
             </Text>
-            <Text className="text-base font-semibold text-brand">Ligar agora ›</Text>
-          </Pressable>
+            <BotaoAcao Icone={Link} onPress={() => router.push("/gastos-sem-viagem")}>
+              Ligar à viagem
+            </BotaoAcao>
+          </View>
         ) : null}
 
         {/* Duas abas de TEXTO (não botões grandes). Abre em "Pra receber". */}

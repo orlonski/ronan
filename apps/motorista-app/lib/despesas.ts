@@ -24,7 +24,7 @@ import { api } from "./api";
 
 /** Card "Gasto de viagem", lista, lançar/corrigir/apagar/ligar à viagem. */
 export const CAP_DESPESA_LANCAR = "app.despesa.lancar";
-/** Card "Pra receber de volta", "Meus reembolsos". */
+/** Card "Pra receber de volta", "Meus gastos". */
 export const CAP_DESPESA_ACOMPANHAR = "app.despesa.acompanhar";
 
 // ---------------------------------------------------------------------------

@@ -59,13 +59,16 @@ export function useModuloDespesas(): { lancar: boolean; acompanhar: boolean } {
   // mesmo `modulosDaConta` do servidor). Catálogo antigo, sem o campo = não.
   const cat = useCatalogos();
   const contratado = cat.data?.config?.despesas === true;
-  // Acompanhar sobrevive ao cancelamento: sem o módulo, "Meus reembolsos" só
+  // Acompanhar sobrevive ao cancelamento: sem o módulo, "Meus gastos" só
   // aparece pra quem tem gasto lançado (o GET não exige o módulo).
   const historico = useMinhasDespesas(capAcompanhar && !contratado && !!cat.data);
   const temHistorico = (historico.data?.length ?? 0) > 0;
+  const lancar = capLancar && contratado;
   return {
-    lancar: capLancar && contratado,
-    acompanhar: capAcompanhar && (contratado || temHistorico),
+    lancar,
+    // Quem pode LANÇAR sempre pode ACOMPANHAR o que lançou: lançar e não
+    // achar o gasto depois foi exatamente a reclamação do motorista.
+    acompanhar: lancar || (capAcompanhar && (contratado || temHistorico)),
   };
 }
 

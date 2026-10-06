@@ -332,7 +332,7 @@ function PerfilDaEmpresa() {
                   <View className="h-px bg-border" />
                   <ActionRow
                     icon={<ReceiptText size={20} color="#13316b" />}
-                    title="Meus reembolsos"
+                    title="Meus gastos"
                     onPress={() => router.push("/meus-reembolsos")}
                   />
                 </>

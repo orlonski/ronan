@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { Check } from "lucide-react-native";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Check, ListChecks, ListTodo, Undo2 } from "lucide-react-native";
+import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
-import { IconeTipo, SemGastoDeViagem } from "@/components/gastos";
+import { BotaoAcao, IconeTipo, SemGastoDeViagem } from "@/components/gastos";
 import { Button } from "@/components/ui/button";
 import { Select, type SelectOption } from "@/components/ui/select";
 import {
@@ -150,9 +150,9 @@ export default function GastosSemViagem() {
         <View className="mx-4 mt-3 flex-row items-center gap-3 rounded-xl bg-green-50 px-4 py-3">
           <Check size={20} color="#15803d" />
           <Text className="flex-1 text-base font-semibold text-green-900">{feito.texto}</Text>
-          <Pressable onPress={() => void desfazer()} className="min-h-[44px] justify-center" accessibilityRole="link">
-            <Text className="text-base font-semibold text-brand">Desfazer</Text>
-          </Pressable>
+          <BotaoAcao Icone={Undo2} size="sm" onPress={() => void desfazer()}>
+            Desfazer
+          </BotaoAcao>
         </View>
       ) : null}
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}>
@@ -165,13 +165,13 @@ export default function GastosSemViagem() {
             <Text className="text-center text-base text-foreground">
               Todos os seus gastos estão com a viagem certa.
             </Text>
-            <Pressable
+            <BotaoAcao
+              Icone={ListChecks}
+              className="self-stretch"
               onPress={() => (router.canGoBack() ? router.back() : router.replace("/meus-reembolsos"))}
-              className="min-h-[44px] justify-center"
-              accessibilityRole="link"
             >
-              <Text className="text-base font-semibold text-brand">Voltar pros reembolsos</Text>
-            </Pressable>
+              Ver meus gastos
+            </BotaoAcao>
           </View>
         ) : null}
 
@@ -226,13 +226,12 @@ export default function GastosSemViagem() {
                 <Button onPress={() => void aplicar(gs, { tipo: "viagem", viagem })}>
                   {gs.length === 1 ? "Ligar a esta viagem" : `Ligar os ${gs.length} a esta viagem`}
                 </Button>
-                <Pressable
+                <BotaoAcao
+                  Icone={ListTodo}
                   onPress={() => setUmPorUm((m) => ({ ...m, [viagem.chave]: true }))}
-                  className="min-h-[44px] justify-center"
-                  accessibilityRole="link"
                 >
-                  <Text className="text-[15px] font-semibold text-brand">Escolher um por um</Text>
-                </Pressable>
+                  Escolher um por um
+                </BotaoAcao>
               </>
             ) : null}
           </View>

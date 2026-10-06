@@ -19,6 +19,8 @@ import {
   Ellipsis,
   Fuel,
   Hammer,
+  Link,
+  ListChecks,
   Package,
   Plus,
   Receipt,
@@ -48,12 +50,78 @@ import {
   resumirGastos,
   useDespesasAtualizadasEm,
   useGastos,
+  useModuloDespesas,
   usePendingDespesas,
   type AvisoGastoSalvo,
   type CorStatus,
   type GastoVisto,
   type StatusExibido,
 } from "@/lib/gastos";
+
+// ---------------------------------------------------------------------------
+// Botão de ação com ícone
+// ---------------------------------------------------------------------------
+
+type VarianteAcao = "default" | "outline" | "success" | "warning" | "destructive";
+
+const COR_ACAO: Record<VarianteAcao, { icone: string; texto: string }> = {
+  default: { icone: "#ffffff", texto: "text-primary-foreground" },
+  outline: { icone: "#0f172a", texto: "text-foreground" },
+  success: { icone: "#ffffff", texto: "text-success-foreground" },
+  warning: { icone: "#0f172a", texto: "text-warning-foreground" },
+  destructive: { icone: "#ffffff", texto: "text-destructive-foreground" },
+};
+
+/**
+ * Toda AÇÃO do módulo de gasto é botão de verdade, com ícone e verbo. O
+ * motorista não reconhece texto colorido como coisa que se toca — o dono
+ * testou e o "link" passou batido. Nada de texto-link nestas telas.
+ */
+export function BotaoAcao({
+  Icone,
+  children,
+  onPress,
+  variant = "outline",
+  size = "default",
+  className,
+  disabled,
+  loading,
+  accessibilityLabel,
+}: {
+  Icone: LucideIcon;
+  children: string;
+  onPress: () => void;
+  variant?: VarianteAcao;
+  size?: "default" | "sm";
+  className?: string;
+  disabled?: boolean;
+  loading?: boolean;
+  accessibilityLabel?: string;
+}) {
+  const cor = COR_ACAO[variant];
+  const sm = size === "sm";
+  return (
+    <Button
+      variant={variant}
+      size={size}
+      className={className}
+      onPress={onPress}
+      disabled={disabled}
+      loading={loading}
+      accessibilityLabel={accessibilityLabel ?? children}
+    >
+      {loading ? null : <Icone size={sm ? 16 : 20} color={cor.icone} strokeWidth={2.2} />}
+      <Text
+        className={`${sm ? "text-sm" : "text-base"} font-semibold ${cor.texto}`}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
+      >
+        {children}
+      </Text>
+    </Button>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Ícone do tipo
@@ -159,7 +227,7 @@ export function StatusGasto({ status, grande }: { status: StatusExibido; grande?
 }
 
 // ---------------------------------------------------------------------------
-// Linha de um gasto (Meus reembolsos, Gastos desta viagem)
+// Linha de um gasto (Meus gastos, Gastos desta viagem)
 // ---------------------------------------------------------------------------
 
 export function LinhaGasto({
@@ -254,28 +322,23 @@ export function CardPraReceber({ podeLigar }: { podeLigar: boolean }) {
         </Pressable>
       ) : null}
       {semViagem > 0 ? (
-        <>
-          {resumo.total > 0 ? <View className="my-3 h-px bg-border" /> : null}
-          <Pressable
-            onPress={() => router.push("/gastos-sem-viagem")}
-            className="min-h-[44px] justify-center active:opacity-75"
-            accessibilityRole="link"
-          >
-            <Text className="text-base text-foreground">
-              {semViagem} {semViagem === 1 ? "gasto sem viagem" : "gastos sem viagem"} ·{" "}
-              <Text className="font-semibold text-brand">Ligar ›</Text>
-            </Text>
-          </Pressable>
-        </>
+        <View className={`gap-2 ${resumo.total > 0 ? "mt-3 border-t border-border pt-3" : ""}`}>
+          <Text className="text-base text-foreground">
+            {semViagem} {semViagem === 1 ? "gasto sem viagem" : "gastos sem viagem"}
+          </Text>
+          <BotaoAcao Icone={Link} onPress={() => router.push("/gastos-sem-viagem")}>
+            Ligar à viagem
+          </BotaoAcao>
+        </View>
       ) : null}
       {resumo.total > 0 ? (
-        <Pressable
+        <BotaoAcao
+          Icone={ListChecks}
+          className="mt-3"
           onPress={() => router.push("/meus-reembolsos")}
-          className="mt-1 min-h-[44px] items-end justify-center active:opacity-75"
-          accessibilityRole="link"
         >
-          <Text className="text-base font-semibold text-brand">Ver meus reembolsos ›</Text>
-        </Pressable>
+          Ver meus gastos
+        </BotaoAcao>
       ) : null}
     </View>
   );
@@ -419,7 +482,7 @@ export function abrirGasto(g: GastoVisto): void {
 }
 
 // ---------------------------------------------------------------------------
-// Faixa verde depois de salvar (4 s)
+// Faixa verde depois de salvar (8 s)
 // ---------------------------------------------------------------------------
 
 /**
@@ -427,6 +490,7 @@ export function abrirGasto(g: GastoVisto): void {
  * saiu mesmo da fila do celular (nunca promete o que não fez).
  */
 export function FaixaGastoSalvo() {
+  const modulo = useModuloDespesas();
   const [aviso, setAviso] = useState<AvisoGastoSalvo | null>(null);
   const pend = usePendingDespesas();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -437,7 +501,7 @@ export function FaixaGastoSalvo() {
       if (a) {
         setAviso(a);
         if (timer.current) clearTimeout(timer.current);
-        timer.current = setTimeout(() => setAviso(null), 4_000);
+        timer.current = setTimeout(() => setAviso(null), 8_000);
       }
       return undefined;
     }, []),
@@ -452,21 +516,39 @@ export function FaixaGastoSalvo() {
   if (!aviso) return null;
   const naFila = pend.some((p) => p.clientId === aviso.clientId);
   return (
-    <View className="m-3 flex-row items-center gap-3 rounded-xl bg-green-50 px-4 py-3">
-      <Check size={20} color="#15803d" />
-      <Text className="flex-1 text-base font-semibold text-green-900">
-        {naFila ? "Gasto guardado. Vai pro escritório quando tiver sinal." : "Gasto enviado pro escritório."}
-      </Text>
-      <Pressable
-        onPress={() => {
-          setAviso(null);
-          router.push({ pathname: "/gasto-viagem", params: aviso.params });
-        }}
-        accessibilityRole="link"
-        className="min-h-[44px] justify-center"
-      >
-        <Text className="text-base font-semibold text-brand">Lançar outro</Text>
-      </Pressable>
+    <View className="m-3 gap-3 rounded-xl bg-green-50 px-4 py-3">
+      <View className="flex-row items-center gap-3">
+        <Check size={20} color="#15803d" />
+        <Text className="flex-1 text-base font-semibold text-green-900">
+          {naFila ? "Gasto guardado. Vai pro escritório quando tiver sinal." : "Gasto enviado pro escritório."}
+        </Text>
+      </View>
+      <View className="flex-row gap-2">
+        {modulo.acompanhar ? (
+          <BotaoAcao
+            Icone={ListChecks}
+            size="sm"
+            className="flex-1 px-2"
+            onPress={() => {
+              setAviso(null);
+              router.push("/meus-reembolsos");
+            }}
+          >
+            Ver meus gastos
+          </BotaoAcao>
+        ) : null}
+        <BotaoAcao
+          Icone={Plus}
+          size="sm"
+          className="flex-1 px-2"
+          onPress={() => {
+            setAviso(null);
+            router.push({ pathname: "/gasto-viagem", params: aviso.params });
+          }}
+        >
+          Lançar outro
+        </BotaoAcao>
+      </View>
     </View>
   );
 }

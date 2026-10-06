@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { ScreenHeader } from "@/components/screen-header";
-import { FotoDaDespesa, SemGastoDeViagem, StatusGasto } from "@/components/gastos";
+import { MapPinOff, Pencil, Trash2, X } from "lucide-react-native";
+import { BotaoAcao, FotoDaDespesa, SemGastoDeViagem, StatusGasto } from "@/components/gastos";
 import { ErroCampo } from "@/components/validacao-guiada";
 import { Button } from "@/components/ui/button";
 import { Select, type SelectOption } from "@/components/ui/select";
@@ -97,22 +98,10 @@ export default function GastoDetalhe() {
     }
   }
 
+  const podeTrocarViagem = modulo.lancar && d.situacao !== "NO_ACERTO" && d.situacao !== "PAGO";
   const pares: [string, React.ReactNode][] = [
     ["Quando", `${diaFalado(g.dia)}, ${horaSP(g.data)}`],
-    [
-      "Viagem",
-      <Text key="v" className="text-[15px] text-foreground">
-        {g.viagemRotulo ?? (g.naoFoiEmViagem ? "Fora de viagem" : "Sem viagem")}
-        {modulo.lancar && d.situacao !== "NO_ACERTO" && d.situacao !== "PAGO" ? (
-          <>
-            {" · "}
-            <Text className="font-semibold text-brand" onPress={() => setTrocandoViagem(true)}>
-              Trocar
-            </Text>
-          </>
-        ) : null}
-      </Text>,
-    ],
+    ["Viagem", g.viagemRotulo ?? (g.naoFoiEmViagem ? "Fora de viagem" : "Sem viagem")],
   ];
   if (d.veiculo) pares.push(["Caminhão", d.veiculo.placa]);
   if (d.descricao) pares.push(["O que foi", d.descricao]);
@@ -152,6 +141,12 @@ export default function GastoDetalhe() {
           ))}
         </View>
 
+        {podeTrocarViagem && !trocandoViagem ? (
+          <BotaoAcao Icone={Pencil} onPress={() => setTrocandoViagem(true)}>
+            Trocar a viagem
+          </BotaoAcao>
+        ) : null}
+
         {trocandoViagem ? (
           <View className="gap-2 rounded-2xl border-2 border-border p-4">
             <Text className="text-base font-semibold text-foreground">Em qual viagem foi?</Text>
@@ -168,25 +163,18 @@ export default function GastoDetalhe() {
               searchable
               emptyMessage="Nenhuma viagem dos últimos 15 dias neste celular."
             />
-            <View className="flex-row flex-wrap gap-x-4">
-              <Pressable
-                onPress={() => {
-                  setTrocandoViagem(false);
-                  void ligarGastos([g], { tipo: "fora" });
-                }}
-                className="min-h-[44px] justify-center"
-                accessibilityRole="link"
-              >
-                <Text className="text-[15px] font-semibold text-brand">Não foi em viagem</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setTrocandoViagem(false)}
-                className="min-h-[44px] justify-center"
-                accessibilityRole="link"
-              >
-                <Text className="text-[15px] font-semibold text-brand">Deixar como está</Text>
-              </Pressable>
-            </View>
+            <BotaoAcao
+              Icone={MapPinOff}
+              onPress={() => {
+                setTrocandoViagem(false);
+                void ligarGastos([g], { tipo: "fora" });
+              }}
+            >
+              Não foi em viagem
+            </BotaoAcao>
+            <BotaoAcao Icone={X} onPress={() => setTrocandoViagem(false)}>
+              Deixar como está
+            </BotaoAcao>
           </View>
         ) : null}
 
@@ -219,13 +207,9 @@ export default function GastoDetalhe() {
               >
                 <Text className="text-xl font-bold text-primary-foreground">Corrigir gasto</Text>
               </Button>
-              <Pressable
-                onPress={() => setConfirmandoApagar(true)}
-                className="min-h-[44px] items-center justify-center"
-                accessibilityRole="button"
-              >
-                <Text className="text-base font-medium text-destructive">Apagar este gasto</Text>
-              </Pressable>
+              <BotaoAcao Icone={Trash2} variant="destructive" onPress={() => setConfirmandoApagar(true)}>
+                Apagar este gasto
+              </BotaoAcao>
             </>
           )
         ) : !g.editavel ? (

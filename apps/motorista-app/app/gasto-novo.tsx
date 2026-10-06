@@ -2,12 +2,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
-import { Camera, Check, ChevronDown, ChevronRight, TriangleAlert } from "lucide-react-native";
+import {
+  CalendarDays,
+  Camera,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  FileX,
+  Images,
+  MapPinOff,
+  Pencil,
+  TriangleAlert,
+  Undo2,
+} from "lucide-react-native";
 import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -17,7 +30,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
-import { SemGastoDeViagem } from "@/components/gastos";
+import { BotaoAcao, SemGastoDeViagem } from "@/components/gastos";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { HoraField } from "@/components/ui/hora-field";
@@ -73,6 +86,18 @@ import { listPendingDespesas } from "@/db/database";
  * - Teto do tipo é só texto cinza; nunca valida nem avisa em vermelho.
  * - Funciona sem sinal: tudo vai pela fila do celular.
  */
+
+/** Campo do valor: grande, mas sem cortar o texto em iOS nem Android. */
+const ESTILO_VALOR = {
+  height: 72,
+  fontSize: 28,
+  paddingVertical: 0,
+  textAlignVertical: "center",
+  includeFontPadding: false,
+  // lineHeight em TextInput de uma linha empurra o texto pra baixo no iOS;
+  // no Android ele segura a altura da linha dentro da caixa.
+  ...(Platform.OS === "android" ? { lineHeight: 34 } : null),
+} as const;
 
 type Vinculo =
   | { modo: "aberto" }
@@ -293,7 +318,7 @@ export default function GastoNovo() {
           {pendenteSumiu ? (
             <>
               <Text className="text-center text-base text-foreground">
-                Esse gasto já foi pro escritório. Pra mudar, abra ele em Meus reembolsos.
+                Esse gasto já foi pro escritório. Pra mudar, abra ele em Meus gastos.
               </Text>
               <Button variant="outline" onPress={() => router.back()}>
                 Voltar
@@ -444,7 +469,7 @@ export default function GastoNovo() {
       if (editando) {
         const r = await atualizarDespesaPendente({ clientId, payload: corpo, fotos, resumo });
         if (r.removed) {
-          setErro("Esse gasto já tinha ido pro escritório. Pra mudar, abra ele em Meus reembolsos.");
+          setErro("Esse gasto já tinha ido pro escritório. Pra mudar, abra ele em Meus gastos.");
           return;
         }
       } else {
@@ -502,23 +527,17 @@ export default function GastoNovo() {
                 maxLength={300}
                 error={!!val.erroDe("foto")}
               />
-              <Pressable
-                onPress={() => setSemComprovante(false)}
-                className="min-h-[44px] justify-center"
-                accessibilityRole="link"
-              >
-                <Text className="text-[15px] font-semibold text-brand">
-                  Tenho o comprovante, vou fotografar
-                </Text>
-              </Pressable>
+              <BotaoAcao Icone={Camera} onPress={() => setSemComprovante(false)}>
+                Fotografar o comprovante
+              </BotaoAcao>
             </View>
           ) : (
-            <Text className="text-base text-muted-foreground">
-              Sem comprovante ·{" "}
-              <Text className="font-semibold text-brand" onPress={() => setSemComprovante(false)}>
-                Fotografar
-              </Text>
-            </Text>
+            <View className="gap-2">
+              <Text className="text-base text-muted-foreground">Sem comprovante.</Text>
+              <BotaoAcao Icone={Camera} onPress={() => setSemComprovante(false)}>
+                Fotografar o comprovante
+              </BotaoAcao>
+            </View>
           )
         ) : (
           <PhotoCapture
@@ -540,18 +559,14 @@ export default function GastoNovo() {
                     resizeMode="cover"
                   />
                 ) : null}
-                <View className="flex-1 gap-1">
+                <View className="flex-1 gap-2">
                   <View className="flex-row items-center gap-1.5">
                     <Check size={18} color="#15803d" />
                     <Text className="text-base font-semibold text-green-800">Foto guardada</Text>
                   </View>
-                  <Pressable
-                    onPress={() => void abrirCamera()}
-                    className="min-h-[44px] justify-center"
-                    accessibilityRole="link"
-                  >
-                    <Text className="text-[15px] font-semibold text-brand">Tirar outra</Text>
-                  </Pressable>
+                  <BotaoAcao Icone={Camera} className="px-3" onPress={() => void abrirCamera()}>
+                    Tirar outra foto
+                  </BotaoAcao>
                 </View>
               </View>
             )}
@@ -583,33 +598,20 @@ export default function GastoNovo() {
                     Abrir ajustes do celular
                   </Button>
                 ) : null}
-                <View className="flex-row flex-wrap items-center gap-x-1">
-                  <Pressable
-                    onPress={abrirGaleria}
-                    disabled={escolhendo}
-                    className="min-h-[44px] justify-center"
-                    accessibilityRole="link"
+                <BotaoAcao Icone={Images} onPress={abrirGaleria} disabled={escolhendo}>
+                  Escolher da galeria
+                </BotaoAcao>
+                {!cameraNegada ? (
+                  <BotaoAcao
+                    Icone={FileX}
+                    onPress={() => {
+                      val.limpar();
+                      setSemComprovante(true);
+                    }}
                   >
-                    <Text className="text-[15px] font-semibold text-brand">Escolher da galeria</Text>
-                  </Pressable>
-                  {!cameraNegada ? (
-                    <>
-                      <Text className="text-[15px] text-muted-foreground">·</Text>
-                      <Pressable
-                        onPress={() => {
-                          val.limpar();
-                          setSemComprovante(true);
-                        }}
-                        className="min-h-[44px] justify-center"
-                        accessibilityRole="link"
-                      >
-                        <Text className="text-[15px] font-semibold text-brand">
-                          Não tenho o comprovante
-                        </Text>
-                      </Pressable>
-                    </>
-                  ) : null}
-                </View>
+                    Não tenho o comprovante
+                  </BotaoAcao>
+                ) : null}
               </View>
             )}
           />
@@ -630,7 +632,10 @@ export default function GastoNovo() {
         }}
         keyboardType="number-pad"
         placeholder="R$ 0,00"
-        className="h-16 text-[28px] font-bold"
+        className="font-bold"
+        // Altura e métrica da fonte no `style` (vence o className): com
+        // h-16 + py-2 + 28px o "R$ 0,00" saía cortado ao meio no celular.
+        style={ESTILO_VALOR}
         error={!!val.erroDe("valor")}
         accessibilityLabel="Valor que você pagou"
       />
@@ -677,12 +682,14 @@ export default function GastoNovo() {
         <>
           <Label error={!!erroDe}>{pergunta("placa")}</Label>
           {placaDaViagem ? (
-            <Text className="text-base text-foreground">
-              Caminhão: <Text className="font-semibold">{placas.get(placaDaViagem) ?? viagemEscolhida?.placa ?? "da viagem"}</Text> (da viagem) ·{" "}
-              <Text className="font-semibold text-brand" onPress={() => setTrocouPlaca(true)}>
-                Trocar
+            <View className="gap-2">
+              <Text className="text-base text-foreground">
+                Caminhão: <Text className="font-semibold">{placas.get(placaDaViagem) ?? viagemEscolhida?.placa ?? "da viagem"}</Text> (da viagem)
               </Text>
-            </Text>
+              <BotaoAcao Icone={Pencil} onPress={() => setTrocouPlaca(true)}>
+                Trocar o caminhão
+              </BotaoAcao>
+            </View>
           ) : (
             <Select
               value={veiculoId}
@@ -793,13 +800,6 @@ export default function GastoNovo() {
                 Não foi nesta
               </Button>
             </View>
-            <Pressable
-              onPress={() => setVinculo({ modo: "escolher", viagem: null })}
-              className="min-h-[44px] justify-center"
-              accessibilityRole="link"
-            >
-              <Text className="text-[15px] font-semibold text-brand">Escolher outra viagem</Text>
-            </Pressable>
           </>
         ) : vinculo.modo === "nesta" ? (
           <>
@@ -809,16 +809,15 @@ export default function GastoNovo() {
                 <Check size={20} color="white" />
                 <Text className="text-base font-semibold text-white">Foi nesta viagem</Text>
               </View>
-              <Pressable
+              <BotaoAcao
+                Icone={Undo2}
                 onPress={() => {
                   setTrocouPlaca(false);
                   setVinculo({ modo: "aberto" });
                 }}
-                className="min-h-[44px] justify-center px-2"
-                accessibilityRole="link"
               >
-                <Text className="text-[15px] font-semibold text-brand">Desfazer</Text>
-              </Pressable>
+                Desfazer
+              </BotaoAcao>
             </View>
           </>
         ) : vinculo.modo === "escolher" ? (
@@ -836,35 +835,31 @@ export default function GastoNovo() {
               searchable
               emptyMessage="Nenhuma viagem dos últimos 7 dias neste celular."
             />
-            <Pressable
-              onPress={() => setVinculo({ modo: "fora" })}
-              className="min-h-[44px] justify-center"
-              accessibilityRole="link"
-            >
-              <Text className="text-[15px] font-semibold text-brand">Não foi em viagem</Text>
-            </Pressable>
+            <BotaoAcao Icone={MapPinOff} onPress={() => setVinculo({ modo: "fora" })}>
+              Não foi em viagem
+            </BotaoAcao>
           </>
         ) : (
-          <Text className="text-base text-muted-foreground">
-            Fora de viagem ·{" "}
-            <Text className="font-semibold text-brand" onPress={() => setVinculo({ modo: "aberto" })}>
+          <View className="flex-row items-center gap-3">
+            <Text className="flex-1 text-base text-muted-foreground">Fora de viagem</Text>
+            <BotaoAcao Icone={Pencil} onPress={() => setVinculo({ modo: "aberto" })}>
               Mudar
-            </Text>
-          </Text>
+            </BotaoAcao>
+          </View>
         )}
       </View>
     );
 
   const linhaData = (
     <View className="gap-2">
-      <Text className="text-sm text-muted-foreground">
-        {diaDoGasto === hoje ? "Hoje" : diaFalado(diaDoGasto)}, {horaSP(dataISO)} ·{" "}
-        {!outroDia ? (
-          <Text className="font-semibold text-brand" onPress={() => setOutroDia(true)}>
-            Foi em outro dia?
-          </Text>
-        ) : null}
+      <Text className="text-base text-muted-foreground">
+        {diaDoGasto === hoje ? "Hoje" : diaFalado(diaDoGasto)}, {horaSP(dataISO)}
       </Text>
+      {!outroDia ? (
+        <BotaoAcao Icone={CalendarDays} onPress={() => setOutroDia(true)}>
+          Foi em outro dia
+        </BotaoAcao>
+      ) : null}
       {outroDia ? (
         <View className="flex-row gap-3">
           <View className="flex-1">

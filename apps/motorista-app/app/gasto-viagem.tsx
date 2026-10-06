@@ -1,11 +1,11 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { ChevronRight, Fuel, Route } from "lucide-react-native";
+import { ChevronRight, Fuel, ListChecks, Route } from "lucide-react-native";
 import type { ComponentProps } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
-import { IconeTipo, SemGastoDeViagem } from "@/components/gastos";
+import { BotaoAcao, IconeTipo, SemGastoDeViagem } from "@/components/gastos";
 import { usePermite } from "@/lib/acessos-app";
 import { useModuloDespesas, useTiposDespesa } from "@/lib/gastos";
 import { useMe } from "@/lib/queries";
@@ -55,6 +55,13 @@ export default function GastoViagem() {
             Vai pro escritório e volta pra você no acerto.
           </Text>
         </View>
+
+        {/* No topo, não no rodapé: é aqui que ele procura o que já lançou. */}
+        {!daViagem && modulo.acompanhar ? (
+          <BotaoAcao Icone={ListChecks} onPress={() => router.push("/meus-reembolsos")}>
+            Ver meus gastos
+          </BotaoAcao>
+        ) : null}
 
         {pedagio || abastecimento ? (
           <Grupo>
@@ -108,14 +115,6 @@ export default function GastoViagem() {
           <Text className="text-sm text-muted-foreground">
             Pedágio desta viagem: use o campo Pedágio da tela anterior.
           </Text>
-        ) : modulo.acompanhar ? (
-          <Pressable
-            onPress={() => router.push("/meus-reembolsos")}
-            className="min-h-[48px] justify-center active:opacity-75"
-            accessibilityRole="link"
-          >
-            <Text className="text-base font-semibold text-brand">Ver meus reembolsos ›</Text>
-          </Pressable>
         ) : null}
       </ScrollView>
     </SafeAreaView>

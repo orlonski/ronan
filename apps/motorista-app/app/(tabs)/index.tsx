@@ -10,6 +10,7 @@ import {
   ArrowUp,
   CloudOff,
   Fuel,
+  ListChecks,
   Wrench,
   MapPin,
   Play,
@@ -73,7 +74,7 @@ import { autoLimparCascaOrfa, getLifecycleLocal, hidratarViagemDoServidor } from
 import { startHomeTutorialIfNeeded } from "@/lib/home-tutorial";
 import { usePermite } from "@/lib/acessos-app";
 import { useModuloDespesas, useTiposDespesa } from "@/lib/gastos";
-import { CardPraReceber, FaixaGastoSalvo } from "@/components/gastos";
+import { BotaoAcao, CardPraReceber, FaixaGastoSalvo } from "@/components/gastos";
 import { useMostraHistorico } from "@/lib/mostra-historico";
 
 const statusVariant: Record<
@@ -672,6 +673,13 @@ function HomeDaEmpresa() {
                   tipos={tiposGasto.daEmpresa}
                 />
               </>
+            ) : null}
+            {/* Achar o gasto depois de lançar: botão de verdade, sempre que ele
+                acompanha — não depende de ter valor a receber. */}
+            {modulo.acompanhar ? (
+              <BotaoAcao Icone={ListChecks} onPress={() => router.push("/meus-reembolsos")}>
+                Ver meus gastos
+              </BotaoAcao>
             ) : null}
 
             {/* Botão Pedágio */}
