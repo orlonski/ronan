@@ -82,7 +82,7 @@ import {
   deletePendingVinculoGasto,
   type PendingVinculoGasto,
 } from "@/db/database";
-import { enviarDespesa, enviarFotoDespesa, enviarVinculoDespesa } from "./despesas";
+import { enviarDespesa, enviarFotoDespesa, enviarVinculoDespesas } from "./despesas";
 import {
   api,
   ApiError,
@@ -2808,13 +2808,13 @@ export async function tentarNovamenteDespesaPendente(clientId: string): Promise<
 
 /**
  * Liga (ou solta) gastos que AINDA ESTÃO na fila a uma viagem — edita o
- * próprio pendente, sem item novo. `viagem` null = soltar (sem resposta).
+ * próprio pendente, sem item novo. `viagem` null = "sem resposta".
  */
 export async function vincularDespesasPendentes(
   clientIds: string[],
   viagem:
     | { viagemId?: string | null; viagemClientId?: string | null; rotulo?: string | null }
-    | { naoFoiEmViagem: true }
+    | { foraDeViagem: true }
     | null,
 ): Promise<void> {
   const lista = await listPendingDespesas();
@@ -2824,15 +2824,13 @@ export async function vincularDespesasPendentes(
     const payload = { ...item.payload };
     delete payload.viagemId;
     delete payload.viagemClientId;
-    delete payload.vinculoPor;
-    delete payload.naoFoiEmViagem;
+    delete payload.foraDeViagem;
     let rotulo: string | null = null;
-    if (viagem && "naoFoiEmViagem" in viagem) {
-      payload.naoFoiEmViagem = true;
+    if (viagem && "foraDeViagem" in viagem) {
+      payload.foraDeViagem = true;
     } else if (viagem) {
       if (viagem.viagemId) payload.viagemId = viagem.viagemId;
-      if (viagem.viagemClientId) payload.viagemClientId = viagem.viagemClientId;
-      payload.vinculoPor = "MOTORISTA";
+      else if (viagem.viagemClientId) payload.viagemClientId = viagem.viagemClientId;
       rotulo = viagem.rotulo ?? null;
     }
     await upsertPendingDespesa({ ...item, payload, resumo: { ...item.resumo, viagemRotulo: rotulo } });
@@ -2854,25 +2852,33 @@ export async function soltarGastosDaViagem(viagemClientId: string): Promise<void
     .filter((d) => d.payload.viagemClientId === viagemClientId)
     .map((d) => d.clientId);
   if (ids.length > 0) await vincularDespesasPendentes(ids, null);
+  // Ligação de gasto JÁ enviado a esta viagem que ainda não subiu: some
+  // (o servidor nunca soube). A que já subiu fica órfã — o servidor trata.
+  let tirou = false;
+  for (const v of await listPendingVinculosGasto()) {
+    if (v.viagemClientId === viagemClientId && v.status !== "syncing") {
+      await deletePendingVinculoGasto(v.clientId);
+      tirou = true;
+    }
+  }
+  if (tirou) notify();
 }
 
-/** Liga/solta um gasto JÁ ENVIADO. Devolve o id da operação (pro "Desfazer"). */
+/** Liga/solta gastos JÁ ENVIADOS (em lote). Devolve o id da operação (pro "Desfazer"). */
 export async function enqueueVinculoGasto(e: {
-  despesaId: string;
+  despesas: string[];
+  acao: PendingVinculoGasto["acao"];
   viagemId?: string | null;
   viagemClientId?: string | null;
-  naoFoiEmViagem?: boolean;
-  desvincular?: boolean;
   resumo: PendingVinculoGasto["resumo"];
 }): Promise<string> {
   const clientId = uuidPonto();
   await upsertPendingVinculoGasto({
     clientId,
-    despesaId: e.despesaId,
+    despesas: e.despesas,
+    acao: e.acao,
     viagemId: e.viagemId ?? null,
     viagemClientId: e.viagemClientId ?? null,
-    naoFoiEmViagem: e.naoFoiEmViagem || undefined,
-    desvincular: e.desvincular || undefined,
     resumo: e.resumo,
     status: "pending",
     attempts: 0,
@@ -2943,10 +2949,10 @@ async function processDespesa(item: PendingDespesa): Promise<void> {
     }
 
     let payload = { ...atual.payload };
-    if (perdeuAlguma && !payload.justificativaSemFoto && !fotos.some((f) => f.fotoKey)) {
+    if (perdeuAlguma && !payload.semComprovanteMotivo && !fotos.some((f) => f.fotoKey)) {
       payload = {
         ...payload,
-        justificativaSemFoto: "A foto sumiu do aparelho antes de conseguir enviar.",
+        semComprovanteMotivo: "A foto sumiu do aparelho antes de conseguir enviar.",
       };
     }
     const fotoKeys = fotos.map((f) => f.fotoKey).filter((k): k is string => !!k);
@@ -2985,11 +2991,11 @@ async function processVinculoGasto(item: PendingVinculoGasto): Promise<void> {
   await upsertPendingVinculoGasto({ ...item, status: "syncing", lastTriedAt: Date.now() });
   notify();
   try {
-    await enviarVinculoDespesa(item.despesaId, {
+    await enviarVinculoDespesas({
+      despesas: item.despesas,
+      acao: item.acao,
       viagemId: item.viagemId,
       viagemClientId: item.viagemClientId,
-      naoFoiEmViagem: item.naoFoiEmViagem,
-      desvincular: item.desvincular,
     });
     await deletePendingVinculoGasto(item.clientId);
   } catch (err) {

@@ -26,11 +26,13 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { humanizeApiError } from "@/lib/api";
 import { isoDeDataHoraBR } from "@/lib/datetime";
 import {
+  CAMPO_DESPESA_PERGUNTA_PADRAO,
+  CAMPOS_DESPESA,
   corrigirDespesa,
   ehTipoOutro,
-  lerConfigCampos,
   montarCorpoDespesa,
-  type ModoCampo,
+  tipoDeReserva,
+  type CampoDespesa,
   type NovaDespesa,
   type TipoDespesaApp,
 } from "@/lib/despesas";
@@ -77,15 +79,13 @@ type Vinculo =
   | { modo: "escolher"; viagem: ViagemConhecida | null }
   | { modo: "fora" };
 
-const ORDEM_OBRIGATORIOS = ["observacao", "placa", "litros", "odometro", "estabelecimento"] as const;
-type CampoTexto = (typeof ORDEM_OBRIGATORIOS)[number];
-
-const NOME_CURTO: Record<CampoTexto, string> = {
-  observacao: "observação",
+/** Como o campo aparece no rótulo "Mais detalhes (…)". */
+const NOME_CURTO: Record<CampoDespesa, string> = {
+  descricao: "o que foi feito",
   placa: "caminhão",
   litros: "litros",
   odometro: "odômetro",
-  estabelecimento: "onde foi",
+  onde: "onde foi",
 };
 
 export default function GastoNovo() {
@@ -124,7 +124,7 @@ export default function GastoNovo() {
   const [cameraNegada, setCameraNegada] = useState(false);
   const [centavos, setCentavos] = useState(0);
   const [descricao, setDescricao] = useState("");
-  const [estabelecimento, setEstabelecimento] = useState("");
+  const [onde, setOnde] = useState("");
   const [litros, setLitros] = useState("");
   const [odometro, setOdometro] = useState("");
   const [veiculoId, setVeiculoId] = useState("");
@@ -149,7 +149,7 @@ export default function GastoNovo() {
       const p = item.payload;
       if (typeof p.valor === "number") setCentavos(Math.round(p.valor * 100));
       if (typeof p.descricao === "string") setDescricao(p.descricao);
-      if (typeof p.estabelecimento === "string") setEstabelecimento(p.estabelecimento);
+      if (typeof p.onde === "string") setOnde(p.onde);
       if (typeof p.litros === "number") setLitros(String(p.litros).replace(".", ","));
       if (typeof p.odometro === "number") setOdometro(String(p.odometro));
       if (typeof p.veiculoId === "string") {
@@ -157,14 +157,14 @@ export default function GastoNovo() {
         setTrocouPlaca(true);
       }
       if (typeof p.data === "string") setDataISO(p.data);
-      if (typeof p.justificativaSemFoto === "string") {
-        setJustificativa(p.justificativaSemFoto);
+      if (typeof p.semComprovanteMotivo === "string") {
+        setJustificativa(p.semComprovanteMotivo);
         setSemComprovante(true);
       }
       if (params.fotoDeNovo !== "1" && item.fotos[0]) {
         setFoto({ uri: item.fotos[0].uri, mime: item.fotos[0].mime });
       }
-      if (p.naoFoiEmViagem === true) setVinculo({ modo: "fora" });
+      if (p.foraDeViagem === true) setVinculo({ modo: "fora" });
       else if (typeof p.viagemId === "string" || typeof p.viagemClientId === "string") {
         setVinculo({
           modo: "nesta",
@@ -181,22 +181,16 @@ export default function GastoNovo() {
           },
         });
       }
-      setTipoReserva({
-        id: String(p.tipoId ?? params.tipoId),
-        slug: String(p.tipoId ?? params.tipoId),
-        nome: item.resumo.tipoNome,
-        icone: item.resumo.tipoIcone ?? null,
-        ordem: 0,
-        sistema: null,
-        reembolsa: item.resumo.reembolsa,
-        tetoValor: null,
-        manutencao: false,
-        campos: lerConfigCampos(p.camposUsados),
-        camposBrutos: p.camposUsados ?? null,
-        camposVersao: typeof p.camposVersao === "number" ? p.camposVersao : 1,
-        observacaoPergunta: null,
-        observacaoExemplo: null,
-      });
+      setTipoReserva(
+        tipoDeReserva({
+          id: String(p.tipoDespesaId ?? params.tipoId),
+          nome: item.resumo.tipoNome,
+          icone: item.resumo.tipoIcone,
+          reembolsa: item.resumo.reembolsa,
+          campos: item.resumo.campos,
+          camposVersao: typeof p.camposVersao === "number" ? p.camposVersao : 1,
+        }),
+      );
     })();
     return () => {
       vivo = false;
@@ -210,9 +204,12 @@ export default function GastoNovo() {
     if (!g?.servidor) return;
     hidratou.current = true;
     const d = g.servidor;
+    setTipoReserva(
+      tipoDeReserva({ id: d.tipoId ?? params.tipoId, nome: d.tipoNome, icone: d.tipoIcone, reembolsa: g.reembolsa }),
+    );
     setCentavos(Math.round(d.valorInformado * 100));
     if (d.descricao) setDescricao(d.descricao);
-    if (d.estabelecimento) setEstabelecimento(d.estabelecimento);
+    if (d.onde) setOnde(d.onde);
     if (d.litros != null) setLitros(String(d.litros).replace(".", ","));
     if (d.odometro != null) setOdometro(String(d.odometro));
     if (d.veiculo) {
@@ -220,8 +217,8 @@ export default function GastoNovo() {
       setTrocouPlaca(true);
     }
     setDataISO(d.data);
-    if (d.justificativaSemFoto) {
-      setJustificativa(d.justificativaSemFoto);
+    if (d.semComprovanteMotivo) {
+      setJustificativa(d.semComprovanteMotivo);
       setSemComprovante(true);
     }
   }, [params.despesaId, gastos]);
@@ -302,14 +299,14 @@ export default function GastoNovo() {
     );
   }
 
-  const campos = tipo.campos;
+  const cfg = tipo.cfg;
+  const campos = cfg.campos;
   const outro = ehTipoOutro(tipo);
-  const perguntaObs = outro ? "O que você pagou?" : (tipo.observacaoPergunta ?? "O que foi feito?");
-  const exemploObs = outro
-    ? "ex.: taxa da balança"
-    : (tipo.observacaoExemplo ?? "ex.: remendo no pneu traseiro");
-  const obrigatorios = ORDEM_OBRIGATORIOS.filter((c) => campos[c] === "EXIGE");
-  const opcionais = ORDEM_OBRIGATORIOS.filter((c) => campos[c] === "PEDE");
+  const pergunta = (c: CampoDespesa) => campos[c].pergunta ?? CAMPO_DESPESA_PERGUNTA_PADRAO[c];
+  const exemploObs =
+    campos.descricao.exemplo ?? (outro ? "ex.: taxa da balança" : "ex.: remendo no pneu traseiro");
+  const obrigatorios = CAMPOS_DESPESA.filter((c) => campos[c].modo === "OBRIGATORIO");
+  const opcionais = CAMPOS_DESPESA.filter((c) => campos[c].modo === "OPCIONAL");
   const valor = centavos / 100;
   const hoje = diaSP(Date.now());
   const diaDoGasto = diaSP(dataISO);
@@ -321,13 +318,16 @@ export default function GastoNovo() {
   // ---- validação (ordem visual, um por vez)
   function validar(): boolean {
     val.limpar();
-    if (campos.foto === "EXIGE" && !foto && !(semComprovante && justificativa.trim())) {
+    if (cfg.foto === "EXIGE" && !foto && !(semComprovante && justificativa.trim())) {
       return val.apontar("foto", "Fotografe o comprovante ou conte o que aconteceu");
     }
     if (!(centavos > 0)) return val.apontar("valor", "Digite quanto você pagou");
     for (const c of obrigatorios) {
-      if (c === "observacao" && !descricao.trim()) {
-        return val.apontar("observacao", outro ? "Conte o que você pagou" : `Conte ${perguntaObs.replace(/\?$/, "").toLowerCase()}`);
+      if (c === "descricao" && !descricao.trim()) {
+        return val.apontar(
+          "descricao",
+          outro ? "Conte o que você pagou" : `Conte ${pergunta("descricao").replace(/\?$/, "").toLowerCase()}`,
+        );
       }
       if (c === "placa" && !veiculoFinal) return val.apontar("placa", "Escolha o caminhão");
       if (c === "litros" && !(parseFloat(litros.replace(",", ".")) > 0)) {
@@ -336,8 +336,8 @@ export default function GastoNovo() {
       if (c === "odometro" && !(parseInt(odometro.replace(/\D/g, ""), 10) > 0)) {
         return val.apontar("odometro", "Digite o odômetro");
       }
-      if (c === "estabelecimento" && !estabelecimento.trim()) {
-        return val.apontar("estabelecimento", "Diga onde foi");
+      if (c === "onde" && !onde.trim()) {
+        return val.apontar("onde", "Diga onde foi");
       }
     }
     return true;
@@ -347,28 +347,26 @@ export default function GastoNovo() {
     const v = viagemEscolhida;
     return {
       clientId,
-      tipoId: tipo!.id,
+      tipoDespesaId: tipo!.id,
       data: dataISO,
       valor,
-      veiculoId: campos.placa !== "OCULTO" ? veiculoFinal : null,
+      veiculoId: campos.placa.modo !== "OCULTO" ? veiculoFinal : null,
       viagemId: v?.viagemId ?? null,
       viagemClientId: v ? (v.viagemId ? null : v.clientId) : null,
-      naoFoiEmViagem: !daViagem && vinculo.modo === "fora",
-      vinculoPor: v ? (daViagem ? "CONTEXTO" : "MOTORISTA") : null,
-      descricao: campos.observacao !== "OCULTO" ? descricao : null,
-      estabelecimento: campos.estabelecimento !== "OCULTO" ? estabelecimento : null,
+      foraDeViagem: !daViagem && vinculo.modo === "fora",
+      descricao: campos.descricao.modo !== "OCULTO" ? descricao : null,
+      onde: campos.onde.modo !== "OCULTO" ? onde : null,
       litros:
-        campos.litros !== "OCULTO" && litros.trim()
+        campos.litros.modo !== "OCULTO" && litros.trim()
           ? parseFloat(litros.replace(",", ".")) || null
           : null,
       odometro:
-        campos.odometro !== "OCULTO" && odometro.trim()
+        campos.odometro.modo !== "OCULTO" && odometro.trim()
           ? parseInt(odometro.replace(/\D/g, ""), 10) || null
           : null,
-      justificativaSemFoto: !foto && semComprovante ? justificativa : null,
+      semComprovanteMotivo: !foto && semComprovante ? justificativa : null,
       camposVersao: tipo!.camposVersao,
-      camposUsados: tipo!.camposBrutos,
-      confirmouNaoRepetido,
+      confirmouQueEOutro: confirmouNaoRepetido,
       criadoOfflineEm: new Date().toISOString(),
     };
   }
@@ -410,6 +408,7 @@ export default function GastoNovo() {
         tipoIcone: tipo!.icone,
         reembolsa: tipo!.reembolsa,
         viagemRotulo: viagemEscolhida?.rotulo ?? null,
+        campos: cfg,
       };
       if (corrigindoEnviado) {
         // Gasto já está com o escritório: a correção precisa de internet.
@@ -462,11 +461,11 @@ export default function GastoNovo() {
   ) : null;
 
   const blocoFoto =
-    campos.foto === "OCULTO" || corrigindoEnviado ? null : (
+    cfg.foto === "NAO_PEDE" || corrigindoEnviado ? null : (
       <View ref={val.refCampo("foto")} onLayout={val.onLayoutCampo("foto")} className="gap-2">
         <Label error={!!val.erroDe("foto")}>Foto do comprovante</Label>
         {semComprovante && !foto ? (
-          campos.foto === "EXIGE" ? (
+          cfg.foto === "EXIGE" ? (
             <View className="gap-2">
               <Text className="text-base font-semibold text-foreground">O que aconteceu?</Text>
               <Input
@@ -622,7 +621,7 @@ export default function GastoNovo() {
     </View>
   );
 
-  function campoTexto(c: CampoTexto, modo: ModoCampo) {
+  function campoTexto(c: CampoDespesa, opcional: boolean) {
     const erroDe = val.erroDe(c);
     const wrap = (children: React.ReactNode) => (
       <View key={c} ref={val.refCampo(c)} onLayout={val.onLayoutCampo(c)} className="gap-2">
@@ -630,11 +629,11 @@ export default function GastoNovo() {
         {erroDe ? <ErroCampo msg={erroDe} /> : null}
       </View>
     );
-    const aoFocar = modo === "PEDE" ? rolarProFim : undefined;
-    if (c === "observacao") {
+    const aoFocar = opcional ? rolarProFim : undefined;
+    if (c === "descricao") {
       return wrap(
         <>
-          <Label error={!!erroDe}>{perguntaObs}</Label>
+          <Label error={!!erroDe}>{pergunta("descricao")}</Label>
           <Input
             value={descricao}
             onChangeText={(t) => {
@@ -654,7 +653,7 @@ export default function GastoNovo() {
     if (c === "placa") {
       return wrap(
         <>
-          <Label error={!!erroDe}>Caminhão</Label>
+          <Label error={!!erroDe}>{pergunta("placa")}</Label>
           {placaDaViagem ? (
             <Text className="text-base text-foreground">
               Caminhão: <Text className="font-semibold">{placas.get(placaDaViagem) ?? viagemEscolhida?.placa ?? "da viagem"}</Text> (da viagem) ·{" "}
@@ -685,7 +684,7 @@ export default function GastoNovo() {
     if (c === "litros") {
       return wrap(
         <>
-          <Label error={!!erroDe}>Litros</Label>
+          <Label error={!!erroDe}>{pergunta("litros")}</Label>
           <Input
             value={litros}
             onChangeText={(t) => {
@@ -704,7 +703,7 @@ export default function GastoNovo() {
     if (c === "odometro") {
       return wrap(
         <>
-          <Label error={!!erroDe}>Odômetro (km)</Label>
+          <Label error={!!erroDe}>{pergunta("odometro")}</Label>
           <Input
             value={odometro}
             onChangeText={(t) => {
@@ -722,15 +721,15 @@ export default function GastoNovo() {
     }
     return wrap(
       <>
-        <Label error={!!erroDe}>Onde foi</Label>
+        <Label error={!!erroDe}>{pergunta("onde")}</Label>
         <Input
-          value={estabelecimento}
+          value={onde}
           onChangeText={(t) => {
             val.limpar();
-            setEstabelecimento(t);
+            setOnde(t);
           }}
-          placeholder="ex.: Borracharia do Zé, BR-376"
-          maxLength={120}
+          placeholder={campos.onde.exemplo ?? "ex.: Borracharia do Zé, BR-376"}
+          maxLength={160}
           onFocus={aoFocar}
           error={!!erroDe}
         />
@@ -881,10 +880,10 @@ export default function GastoNovo() {
         >
           {maisDetalhes ? <ChevronDown size={20} color="#475569" /> : <ChevronRight size={20} color="#475569" />}
           <Text className="flex-1 text-base font-semibold text-foreground">
-            Mais detalhes ({opcionais.map((c) => (c === "observacao" ? perguntaObs.replace(/\?$/, "").toLowerCase() : NOME_CURTO[c])).join(", ")})
+            Mais detalhes ({opcionais.map((c) => NOME_CURTO[c]).join(", ")})
           </Text>
         </Pressable>
-        {maisDetalhes ? opcionais.map((c) => campoTexto(c, "PEDE")) : null}
+        {maisDetalhes ? opcionais.map((c) => campoTexto(c, true)) : null}
       </View>
     );
 
@@ -908,7 +907,7 @@ export default function GastoNovo() {
             {linhaViagemFixa}
             {blocoFoto}
             {blocoValor}
-            {obrigatorios.map((c) => campoTexto(c, "EXIGE"))}
+            {obrigatorios.map((c) => campoTexto(c, false))}
             {cardViagem}
             {linhaData}
             {blocoMaisDetalhes}

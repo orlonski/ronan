@@ -543,6 +543,11 @@ export type PendingDespesa = {
     tipoIcone?: string | null;
     reembolsa: boolean;
     viagemRotulo?: string | null;
+    /**
+     * A configuração de campos que ele VIU (CamposDoTipo). Serve pra corrigir
+     * o pendente mesmo se o tipo sair do catálogo enquanto espera sinal.
+     */
+    campos?: unknown;
   };
   /** O servidor recusou a FOTO (4xx no upload): a saída é tirar outra. */
   fotoRecusada?: boolean;
@@ -564,18 +569,16 @@ export type PendingDespesa = {
  * resolve quando ela subir. Drena DEPOIS das viagens e dos gastos.
  */
 export type PendingVinculoGasto = {
-  /** UUID da operação (idempotência + chave da fila). */
+  /** UUID da operação (chave da fila). */
   clientId: string;
-  /** id do gasto no servidor. */
-  despesaId: string;
+  /** Gastos JÁ ENVIADOS — id do servidor ou clientId do celular (o servidor aceita os dois). */
+  despesas: string[];
+  /** VIAGEM / FORA_DE_VIAGEM / DESFAZER (volta a "sem resposta"). */
+  acao: "VIAGEM" | "FORA_DE_VIAGEM" | "DESFAZER";
   viagemId?: string | null;
   viagemClientId?: string | null;
-  /** Ele disse "não foi em viagem". */
-  naoFoiEmViagem?: boolean;
-  /** Tirar o vínculo (o "Desfazer" depois que a ligação já subiu). */
-  desvincular?: boolean;
-  /** Pra tela de Pendentes dizer qual gasto é, sem rede. */
-  resumo: { tipoNome: string; valor: number; viagemRotulo?: string | null };
+  /** Pra tela de Pendentes e pra lista dizerem o que é, sem rede. */
+  resumo: { quantos: number; valor: number; viagemRotulo?: string | null };
   status: "pending" | "syncing" | "error";
   attempts: number;
   createdAt: number;

@@ -7,7 +7,7 @@
  * só ("o que ele vê"). Ligar um gasto a uma viagem aparece na hora, antes de
  * subir: a ligação pendente é aplicada por cima do que o servidor disse.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -24,6 +24,7 @@ import {
 } from "@/db/database";
 import {
   buscarMinhasDespesas,
+  catalogoTemTiposDespesa,
   CAP_DESPESA_ACOMPANHAR,
   CAP_DESPESA_LANCAR,
   lerTiposDespesa,
@@ -33,7 +34,12 @@ import {
 import { useCapacidadeNova } from "./acessos-app";
 import { getLifecycleLocal, type LifecycleLocal } from "./lifecycle";
 import { cacheFirst, useCatalogos, useViagens, type Viagem } from "./queries";
-import { onSyncChange } from "./sync";
+import {
+  descartarVinculoGastoPendente,
+  enqueueVinculoGasto,
+  onSyncChange,
+  vincularDespesasPendentes,
+} from "./sync";
 
 // ---------------------------------------------------------------------------
 // Módulo ligado?
@@ -115,8 +121,9 @@ export function useTiposDespesa(): {
 } {
   const cat = useCatalogos();
   const todos = useMemo(() => lerTiposDespesa(cat.data), [cat.data]);
-  const daEmpresa = useMemo(() => todos.filter((t) => t.sistema === null), [todos]);
-  const chegaram = Array.isArray((cat.data as { tiposDespesa?: unknown } | undefined)?.tiposDespesa);
+  // O catálogo só traz tipos da empresa (pedágio e abastecimento são do app).
+  const daEmpresa = todos;
+  const chegaram = catalogoTemTiposDespesa(cat.data);
   const porId = useCallback((id: string | null | undefined) => todos.find((t) => t.id === id), [todos]);
   return {
     daEmpresa,
@@ -249,56 +256,69 @@ function fmtDM(iso: string): string {
   return `${d}/${m}`;
 }
 
+/**
+ * O texto da tela sai da `situacao` do servidor (10-telas §8). Vermelho nunca:
+ * "não vai ser reembolsado" é âmbar, e ele pode responder ao escritório.
+ */
 export function statusDoServidor(d: DespesaApp): StatusExibido {
-  if (!d.reembolsa) {
-    return { texto: "Por sua conta", cor: "cinza", motivo: null, soma: 0, grupo: "fora" };
-  }
-  if (d.status === "RECUSADA") {
-    return {
-      texto: "Não vai ser reembolsado",
-      cor: "ambar",
-      motivo: d.motivoDecisao,
-      soma: 0,
-      grupo: "fora",
-    };
-  }
-  if (d.status === "APROVADA") {
-    if (d.pagoEm) {
-      return { texto: `Pago em ${fmtDM(d.pagoEm)}`, cor: "verde", motivo: null, soma: 0, grupo: "fora" };
-    }
-    if (d.acertoEm) {
-      return { texto: `No acerto de ${fmtDM(d.acertoEm)}`, cor: "verde", motivo: null, soma: 0, grupo: "fora" };
-    }
-    if (Math.abs(d.valor - d.valorInformado) >= 0.005) {
+  const aprovado = d.valorAprovado ?? d.valorInformado;
+  const soma = d.somaPraReceber ? aprovado : 0;
+  switch (d.situacao) {
+    case "POR_SUA_CONTA":
+      return { texto: "Por sua conta", cor: "cinza", motivo: null, soma: 0, grupo: "fora" };
+    case "NAO_REEMBOLSADA":
+      return { texto: "Não vai ser reembolsado", cor: "ambar", motivo: d.motivo, soma: 0, grupo: "fora" };
+    case "PAGO":
       return {
-        texto: `Aprovado ${fmtReais(d.valor)}`,
+        texto: d.acerto?.pagoEm ? `Pago em ${fmtDM(d.acerto.pagoEm)}` : "Pago",
+        cor: "verde",
+        motivo: null,
+        soma,
+        grupo: soma > 0 ? "aprovado" : "fora",
+      };
+    case "NO_ACERTO":
+      return {
+        texto: d.acerto?.periodoFim ? `No acerto de ${fmtDM(d.acerto.periodoFim)}` : "No acerto",
+        cor: "verde",
+        motivo: null,
+        soma,
+        grupo: soma > 0 ? "aprovado" : "fora",
+      };
+    case "APROVADA_OUTRO_VALOR":
+      return {
+        texto: `Aprovado ${fmtReais(aprovado)}`,
         cor: "ambar",
-        motivo: d.motivoDecisao,
-        soma: d.valor,
+        motivo: d.motivo,
+        soma,
         grupo: "aprovado",
       };
-    }
-    if (d.pagoForaDoAcerto) {
+    case "PAGO_FORA_DO_ACERTO":
       return {
         texto: "Aprovado — o escritório paga fora do acerto",
         cor: "verde",
         motivo: null,
-        soma: d.valor,
+        soma,
         grupo: "aprovado",
       };
-    }
-    return {
-      texto: "Aprovado — entra no próximo acerto",
-      cor: "verde",
-      motivo: null,
-      soma: d.valor,
-      grupo: "aprovado",
-    };
+    case "APROVADA":
+      return {
+        texto: "Aprovado — entra no próximo acerto",
+        cor: "verde",
+        motivo: null,
+        soma,
+        grupo: "aprovado",
+      };
+    default:
+      return {
+        texto: "Com o escritório",
+        cor: "azul",
+        motivo: null,
+        // Com o escritório sempre conta (o servidor manda `somaPraReceber`; o
+        // cache de antes do campo não tem, e aí vale o lançado).
+        soma: d.somaPraReceber ? aprovado : d.valorInformado,
+        grupo: "escritorio",
+      };
   }
-  if (d.fotoPendente) {
-    return { texto: "Foto ainda no celular", cor: "cinza", motivo: null, soma: d.valorInformado, grupo: "escritorio" };
-  }
-  return { texto: "Com o escritório", cor: "azul", motivo: null, soma: d.valorInformado, grupo: "escritorio" };
 }
 
 function valorDoPayload(p: Record<string, unknown>): number {
@@ -312,10 +332,11 @@ function doCelular(p: PendingDespesa): GastoVisto {
   const valor = valorDoPayload(pl);
   const viagemId = typeof pl.viagemId === "string" ? pl.viagemId : null;
   const viagemClientId = typeof pl.viagemClientId === "string" ? pl.viagemClientId : null;
-  const naoFoi = pl.naoFoiEmViagem === true;
+  const fora = pl.foraDeViagem === true;
+  const fotoNoCelular = p.fotos.length > 0 && p.fotos.some((f) => !f.fotoKey) && !!p.lastTriedAt;
   const status: StatusExibido = !p.resumo.reembolsa
     ? { texto: "Por sua conta", cor: "cinza", motivo: null, soma: 0, grupo: "fora" }
-    : p.fotos.some((f) => !f.fotoKey) && p.fotos.length > 0 && p.lastTriedAt
+    : fotoNoCelular
       ? { texto: "Foto ainda no celular", cor: "cinza", motivo: null, soma: valor, grupo: "escritorio" }
       : { texto: "Guardado no celular", cor: "cinza", motivo: null, soma: valor, grupo: "escritorio" };
   return {
@@ -323,7 +344,7 @@ function doCelular(p: PendingDespesa): GastoVisto {
     origem: "celular",
     despesaId: null,
     clientId: p.clientId,
-    tipoId: typeof pl.tipoId === "string" ? pl.tipoId : null,
+    tipoId: typeof pl.tipoDespesaId === "string" ? pl.tipoDespesaId : null,
     tipoNome: p.resumo.tipoNome,
     tipoIcone: p.resumo.tipoIcone ?? null,
     data,
@@ -333,8 +354,8 @@ function doCelular(p: PendingDespesa): GastoVisto {
     viagemId,
     viagemClientId,
     viagemRotulo: p.resumo.viagemRotulo ?? null,
-    naoFoiEmViagem: naoFoi,
-    semResposta: !viagemId && !viagemClientId && !naoFoi,
+    naoFoiEmViagem: fora,
+    semResposta: !viagemId && !viagemClientId && !fora,
     editavel: true,
     status,
     servidor: null,
@@ -343,35 +364,31 @@ function doCelular(p: PendingDespesa): GastoVisto {
 }
 
 function doServidor(d: DespesaApp, vinculos: PendingVinculoGasto[]): GastoVisto {
-  let viagemId = d.viagem?.id ?? null;
+  let viagemId = d.viagem?.id ?? d.viagemId;
   let viagemClientId = d.viagem?.clientId ?? d.viagemClientId;
-  let rotulo = d.viagem?.rotulo ?? null;
-  let naoFoi = d.naoFoiEmViagem;
+  let rotulo = d.viagem?.resumo ?? null;
+  let vinculo = d.vinculo;
   // A ligação que ainda está na fila vale por cima do que o servidor disse —
-  // ele ligou agora, tem que ver ligado agora.
+  // ele ligou agora, tem que ver ligado agora. Em ordem (a última vence).
   for (const v of vinculos) {
-    if (v.despesaId !== d.id) continue;
-    if (v.desvincular) {
+    if (!v.despesas.includes(d.id) && !(d.clientId && v.despesas.includes(d.clientId))) continue;
+    if (v.acao === "DESFAZER") {
       viagemId = null;
       viagemClientId = null;
       rotulo = null;
-      naoFoi = false;
-    } else if (v.naoFoiEmViagem) {
+      vinculo = "SEM_RESPOSTA";
+    } else if (v.acao === "FORA_DE_VIAGEM") {
       viagemId = null;
       viagemClientId = null;
       rotulo = null;
-      naoFoi = true;
+      vinculo = "FORA_DE_VIAGEM";
     } else {
       viagemId = v.viagemId ?? null;
       viagemClientId = v.viagemClientId ?? null;
       rotulo = v.resumo.viagemRotulo ?? null;
-      naoFoi = false;
+      vinculo = "VIAGEM";
     }
   }
-  const status = statusDoServidor(d);
-  // Já tem ligação do servidor, mas a viagem não veio junto (órfã, de
-  // rascunho descartado): conta como sem resposta pra ele poder ligar.
-  const temViagem = !!viagemId || (!!viagemClientId && (!!rotulo || vinculos.some((v) => v.despesaId === d.id)));
   return {
     chave: `s:${d.id}`,
     origem: "servidor",
@@ -383,15 +400,14 @@ function doServidor(d: DespesaApp, vinculos: PendingVinculoGasto[]): GastoVisto 
     data: d.data,
     dia: diaSP(d.data),
     valorInformado: d.valorInformado,
-    reembolsa: d.reembolsa,
+    reembolsa: d.situacao !== "POR_SUA_CONTA",
     viagemId,
     viagemClientId,
-    viagemRotulo: rotulo,
-    naoFoiEmViagem: naoFoi,
-    semResposta: !temViagem && !naoFoi,
-    // Só enquanto ninguém decidiu (10-telas §8: "Corrigir" só Guardado/Com o escritório).
-    editavel: d.status === "PENDENTE" && !d.acertoEm,
-    status,
+    viagemRotulo: rotulo ?? (vinculo === "VIAGEM" ? "Viagem ainda no celular" : null),
+    naoFoiEmViagem: vinculo === "FORA_DE_VIAGEM",
+    semResposta: vinculo === "SEM_RESPOSTA",
+    editavel: d.editavel,
+    status: statusDoServidor(d),
     servidor: d,
     pendente: null,
   };
@@ -407,6 +423,13 @@ export function useGastos(opts: { enabled?: boolean } = {}) {
   const q = useMinhasDespesas(enabled);
   const pend = usePendingDespesas();
   const vinc = usePendingVinculosGasto();
+  // Gasto que acabou de sair da fila ainda não está no cache do servidor:
+  // revalida na hora, senão ele some da lista por um instante.
+  const qtdFila = useRef(pend.length);
+  useEffect(() => {
+    if (enabled && pend.length < qtdFila.current) void q.refetch();
+    qtdFila.current = pend.length;
+  }, [pend.length, enabled, q]);
   const gastos = useMemo<GastoVisto[]>(() => {
     const locais = pend.map(doCelular);
     const ids = new Set(pend.map((p) => p.clientId));
@@ -442,8 +465,12 @@ export function resumirGastos(gastos: GastoVisto[]): ResumoReembolso {
 
 /** Gastos que pedem "de qual viagem foi?" (sem resposta e ainda mexíveis). */
 export function gastosSemViagem(gastos: GastoVisto[]): GastoVisto[] {
+  // Gasto que já entrou em acerto fechado sai daqui (não tem mais o que mudar).
   return gastos.filter(
-    (g) => g.semResposta && (g.origem === "celular" || (g.servidor && !g.servidor.acertoEm && !g.servidor.pagoEm)),
+    (g) =>
+      g.semResposta &&
+      (g.origem === "celular" ||
+        (g.servidor && g.servidor.situacao !== "NO_ACERTO" && g.servidor.situacao !== "PAGO")),
   );
 }
 
@@ -639,4 +666,84 @@ export function pegarAvisoGastoSalvo(): AvisoGastoSalvo | null {
   avisoSalvo = null;
   if (!a || Date.now() - a.em > 10_000) return null;
   return a;
+}
+
+// ---------------------------------------------------------------------------
+// Ligar gastos a uma viagem (offline: pela fila do celular)
+// ---------------------------------------------------------------------------
+
+export type DestinoGasto =
+  | { tipo: "viagem"; viagem: ViagemConhecida }
+  | { tipo: "fora" }
+  | { tipo: "desfazer" };
+
+/** O que foi feito, pro "Desfazer". */
+export type LigacaoFeita = {
+  gastos: GastoVisto[];
+  /** Operação na fila (gastos já enviados), se houve. */
+  opId: string | null;
+};
+
+/**
+ * Liga os gastos ao destino. Os que ainda estão no celular são editados ali
+ * mesmo; os já enviados viram UM item de ligação em lote na fila.
+ */
+export async function ligarGastos(gs: GastoVisto[], destino: DestinoGasto): Promise<LigacaoFeita> {
+  const doCel = gs.filter((g) => g.origem === "celular" && g.clientId).map((g) => g.clientId!);
+  const enviados = gs.filter((g) => g.origem === "servidor" && g.despesaId);
+  if (doCel.length > 0) {
+    await vincularDespesasPendentes(
+      doCel,
+      destino.tipo === "viagem"
+        ? {
+            viagemId: destino.viagem.viagemId,
+            viagemClientId: destino.viagem.clientId,
+            rotulo: destino.viagem.rotulo,
+          }
+        : destino.tipo === "fora"
+          ? { foraDeViagem: true }
+          : null,
+    );
+  }
+  let opId: string | null = null;
+  if (enviados.length > 0) {
+    opId = await enqueueVinculoGasto({
+      despesas: enviados.map((g) => g.despesaId!),
+      acao: destino.tipo === "viagem" ? "VIAGEM" : destino.tipo === "fora" ? "FORA_DE_VIAGEM" : "DESFAZER",
+      viagemId: destino.tipo === "viagem" ? destino.viagem.viagemId : null,
+      viagemClientId:
+        destino.tipo === "viagem" && !destino.viagem.viagemId ? destino.viagem.clientId : null,
+      resumo: {
+        quantos: enviados.length,
+        valor: enviados.reduce((s, g) => s + g.valorInformado, 0),
+        viagemRotulo: destino.tipo === "viagem" ? destino.viagem.rotulo : null,
+      },
+    });
+  }
+  return { gastos: gs, opId };
+}
+
+/**
+ * "Desfazer": volta os gastos pra "sem resposta". Se a ligação ainda não
+ * subiu, só tira ela da fila (o servidor nunca soube).
+ */
+export async function desfazerLigacao(l: LigacaoFeita): Promise<void> {
+  const doCel = l.gastos.filter((g) => g.origem === "celular" && g.clientId).map((g) => g.clientId!);
+  if (doCel.length > 0) await vincularDespesasPendentes(doCel, null);
+  const enviados = l.gastos.filter((g) => g.origem === "servidor" && g.despesaId);
+  if (enviados.length === 0) return;
+  const naFila = l.opId ? (await listPendingVinculosGasto()).find((v) => v.clientId === l.opId) : null;
+  if (naFila && naFila.status !== "syncing") {
+    await descartarVinculoGastoPendente(naFila.clientId);
+    return;
+  }
+  await enqueueVinculoGasto({
+    despesas: enviados.map((g) => g.despesaId!),
+    acao: "DESFAZER",
+    resumo: {
+      quantos: enviados.length,
+      valor: enviados.reduce((s, g) => s + g.valorInformado, 0),
+      viagemRotulo: null,
+    },
+  });
 }

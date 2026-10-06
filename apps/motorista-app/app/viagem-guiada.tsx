@@ -45,12 +45,16 @@ import {
 } from "@/lib/lifecycle";
 import { useCatalogoEventos, useCatalogoOcorrencias, useCatalogos } from "@/lib/queries";
 import { DocumentosDaViagem } from "@/components/documentos-da-viagem";
+import { GastosDaViagem } from "@/components/gastos";
+import { useModuloDespesas } from "@/lib/gastos";
 
 export default function ViagemGuiada() {
   const catalogo = useCatalogoEventos();
   const ocorrencias = useCatalogoOcorrencias();
   const catalogos = useCatalogos();
   const [local, setLocal] = useState<LifecycleLocal | null>(null);
+  // Gasto de viagem (módulo `despesas`): sem o módulo a tela fica como sempre.
+  const moduloGastos = useModuloDespesas();
   const [carregando, setCarregando] = useState(true);
   const [sheetTipo, setSheetTipo] = useState<TipoEventoViagem | null>(null);
 
@@ -414,6 +418,16 @@ export default function ViagemGuiada() {
             </View>
           </View>
         )}
+
+        {/* Gastos desta viagem: abaixo dos eventos, compacto. O vínculo é
+            do contexto (ele tocou de dentro da viagem), não escolha do app. */}
+        {moduloGastos.lancar && local ? (
+          <GastosDaViagem
+            viagemClientId={local.clientId}
+            viagemRotulo={local.localCargaNome ?? local.clienteNome ?? null}
+            veiculoId={local.veiculoId}
+          />
+        ) : null}
 
         {/* Descartar — discreto */}
         <Button variant="ghost" onPress={descartar}>

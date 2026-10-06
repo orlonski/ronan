@@ -9,6 +9,7 @@ import {
   Wrench,
   ClipboardCheck,
   HandCoins,
+  ReceiptText,
   Landmark,
   ChevronRight,
   HelpCircle,
@@ -53,6 +54,7 @@ import {
   type StatusPermissaoNotificacao,
 } from "@/lib/notifications";
 import { usePermite } from "@/lib/acessos-app";
+import { useModuloDespesas } from "@/lib/gastos";
 
 export default function Perfil() {
   const visao = useVisao();
@@ -76,6 +78,8 @@ function PerfilDaEmpresa() {
   const verPosicao = usePermite("app.posicao.compartilhar");
   const verProgramacao = usePermite("app.programacao.ver");
   const verAcertos = usePermite("app.acertos.ver", !ehRegistrado);
+  // Gasto de viagem (módulo `despesas`): só com a capacidade ligada.
+  const moduloGastos = useModuloDespesas();
   const verDocumentos = usePermite("app.documentos.enviar");
   // Motorista CLT também avisa: quem corta é o acesso (mora no cadastro de motorista).
   const verAvisos = usePermite("app.problema.avisar");
@@ -321,6 +325,18 @@ function PerfilDaEmpresa() {
                   />
                 </>
               )}
+              {/* Ao lado de "Meus acertos": o que ele tem pra receber de volta
+                  dos gastos de viagem. */}
+              {moduloGastos.acompanhar ? (
+                <>
+                  <View className="h-px bg-border" />
+                  <ActionRow
+                    icon={<ReceiptText size={20} color="#13316b" />}
+                    title="Meus reembolsos"
+                    onPress={() => router.push("/meus-reembolsos")}
+                  />
+                </>
+              ) : null}
               {/* A porta fixa dos documentos, pelo MESMO motivo dos convites
                   logo abaixo: o bloco da home some quando não falta nada, e
                   aí a tela existiria sem porta — ele não teria como rever o
@@ -389,7 +405,10 @@ function PerfilDaEmpresa() {
                     title="Rever tutorial"
                     onPress={() => {
                       router.push("/");
-                      setTimeout(() => replayHomeTutorial(me.data!), 350);
+                      setTimeout(
+                        () => replayHomeTutorial(me.data!, { gastoDeViagem: moduloGastos.lancar }),
+                        350,
+                      );
                     }}
                   />
                 </>

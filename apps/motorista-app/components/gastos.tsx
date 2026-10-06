@@ -29,7 +29,11 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, Text, View } from "react-native";
+import { VerDePerto } from "@/components/miniatura-documento";
+import { API_URL } from "@/lib/api-url";
+import { caminhoFotoDespesa } from "@/lib/despesas";
+import { motoristaAtivoId, tokensDe } from "@/lib/sessoes";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { ScreenHeader } from "@/components/screen-header";
@@ -179,8 +183,8 @@ export function LinhaGasto({
           : null;
   const semComprovante =
     !compacta &&
-    ((g.servidor && g.servidor.fotos.length === 0 && g.servidor.justificativaSemFoto) ||
-      (g.pendente && g.pendente.fotos.length === 0 && g.pendente.payload.justificativaSemFoto));
+    ((g.servidor && g.servidor.fotos.length === 0 && g.servidor.semComprovanteMotivo) ||
+      (g.pendente && g.pendente.fotos.length === 0 && g.pendente.payload.semComprovanteMotivo));
   return (
     <Pressable
       onPress={onPress}
@@ -293,10 +297,13 @@ export function GastosDaViagem({
   viagemClientId,
   viagemRotulo,
   veiculoId,
+  perguntaPonte,
 }: {
   viagemClientId: string;
   viagemRotulo?: string | null;
   veiculoId?: string | null;
+  /** Ao fechar a viagem: "Você tem N gastos de hoje sem viagem. São desta?" */
+  perguntaPonte?: boolean;
 }) {
   const { gastos } = useGastos();
   const [aberto, setAberto] = useState(false);
@@ -373,7 +380,7 @@ export function GastosDaViagem({
       )}
 
       {/* Pergunta-ponte: uma vez, nunca liga sozinho. */}
-      {soltosHoje.length > 0 && !ponteVista ? (
+      {perguntaPonte && soltosHoje.length > 0 && !ponteVista ? (
         <View className="mx-4 mb-4 gap-2 rounded-xl bg-sky-50 p-3">
           <Text className="text-base text-foreground">
             Você tem {soltosHoje.length}{" "}
@@ -486,5 +493,98 @@ export function SemGastoDeViagem({ titulo }: { titulo: string }) {
         </Button>
       </View>
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Foto do comprovante (detalhe do gasto)
+// ---------------------------------------------------------------------------
+
+/**
+ * A foto do gasto: a do celular (ainda na fila) ou a do servidor, que vem
+ * pela API com o token. ⚠️ `<Image>` com header de auth só monta com o token
+ * PRONTO — montar antes faz o Fresco cachear o 401 e a imagem fica preta.
+ * Tocar abre grande na própria tela (nunca em aba nova).
+ */
+export function FotoDaDespesa({
+  despesaId,
+  fotoId,
+  uriLocal,
+  titulo,
+}: {
+  despesaId?: string | null;
+  fotoId?: string | null;
+  uriLocal?: string | null;
+  titulo: string;
+}) {
+  const [token, setToken] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
+  const [falhou, setFalhou] = useState(false);
+  const [aberta, setAberta] = useState(false);
+
+  useEffect(() => {
+    if (uriLocal || !despesaId || !fotoId) return;
+    let vivo = true;
+    void (async () => {
+      const dono = await motoristaAtivoId();
+      const t = dono ? await tokensDe(dono) : null;
+      if (vivo) setToken(t?.accessToken ?? null);
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [uriLocal, despesaId, fotoId, tentativa]);
+
+  const remota =
+    despesaId && fotoId
+      ? `${API_URL}${caminhoFotoDespesa(despesaId, fotoId)}${tentativa ? `?t=${tentativa}` : ""}`
+      : null;
+  const source = uriLocal
+    ? { uri: uriLocal }
+    : remota && token
+      ? { uri: remota, headers: { Authorization: `Bearer ${token}` } }
+      : null;
+
+  if (!uriLocal && !remota) return null;
+  if (falhou) {
+    return (
+      <View className="items-center justify-center gap-3 rounded-xl border-2 border-border bg-muted p-6" style={{ height: 240 }}>
+        <Text className="text-center text-base text-foreground">Não deu pra abrir a foto.</Text>
+        <Button
+          variant="outline"
+          onPress={() => {
+            setFalhou(false);
+            setTentativa((t) => t + 1);
+          }}
+        >
+          Tentar de novo
+        </Button>
+      </View>
+    );
+  }
+  return (
+    <>
+      <Pressable
+        onPress={() => setAberta(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Ver a foto de perto"
+        className="overflow-hidden rounded-xl border-2 border-border bg-muted active:opacity-80"
+        style={{ height: 240 }}
+      >
+        {source ? (
+          <Image
+            source={source}
+            style={{ width: "100%", height: "100%" }}
+            resizeMode="cover"
+            onError={() => (tentativa === 0 && !uriLocal ? setTentativa(1) : setFalhou(true))}
+          />
+        ) : (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator />
+          </View>
+        )}
+      </Pressable>
+      <VerDePerto titulo={titulo} aberta={aberta} fechar={() => setAberta(false)} source={source} />
+    </>
   );
 }

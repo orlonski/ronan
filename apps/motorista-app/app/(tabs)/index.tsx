@@ -72,6 +72,8 @@ import { getNavDestino } from "@/lib/nav-destino-storage";
 import { autoLimparCascaOrfa, getLifecycleLocal, hidratarViagemDoServidor } from "@/lib/lifecycle";
 import { startHomeTutorialIfNeeded } from "@/lib/home-tutorial";
 import { usePermite } from "@/lib/acessos-app";
+import { useModuloDespesas, useTiposDespesa } from "@/lib/gastos";
+import { CardPraReceber, FaixaGastoSalvo } from "@/components/gastos";
 import { useMostraHistorico } from "@/lib/mostra-historico";
 
 const statusVariant: Record<
@@ -154,6 +156,12 @@ function HomeDaEmpresa() {
   const podeLifecycle = me.data?.podeViagemLifecycle ?? false;
   const podeChat = me.data?.podeChat ?? false;
   const verPosicao = usePermite("app.posicao.compartilhar");
+  // Gasto de viagem (módulo `despesas`): só com o módulo contratado E a
+  // capacidade ligada. Sem ele a home fica EXATAMENTE como sempre foi.
+  const modulo = useModuloDespesas();
+  const tiposGasto = useTiposDespesa();
+  const permitePedagio = usePermite("app.pedagio.lancar");
+  const permiteAbastecimento = usePermite("app.abastecimento.lancar");
   useFocusEffect(
     useCallback(() => {
       let alive = true;
@@ -197,7 +205,7 @@ function HomeDaEmpresa() {
   useEffect(() => {
     if (tutorialDisparado.current || !me.data) return;
     tutorialDisparado.current = true;
-    startHomeTutorialIfNeeded(me.data);
+    startHomeTutorialIfNeeded(me.data, { gastoDeViagem: modulo.lancar });
   }, [me.data]);
 
   async function iniciarViagem() {
@@ -653,8 +661,21 @@ function HomeDaEmpresa() {
               </CoachTarget>
             )}
 
+            {/* Gasto de viagem: UMA porta no lugar de Pedágio e Abastecimento,
+                só pra quem contratou o módulo (decisão do dono, D5). */}
+            {modulo.lancar ? (
+              <>
+                <FaixaGastoSalvo />
+                <CardGastoDeViagem
+                  pedagio={(me.data?.podeLancarPedagio ?? false) && permitePedagio}
+                  abastecimento={(me.data?.podeLancarAbastecimento ?? false) && permiteAbastecimento}
+                  tipos={tiposGasto.daEmpresa}
+                />
+              </>
+            ) : null}
+
             {/* Botão Pedágio */}
-            {me.data?.podeLancarPedagio && (
+            {!modulo.lancar && me.data?.podeLancarPedagio && (
               <CoachTarget id="coach-pedagio" className="rounded-2xl">
               <Pressable
                 onPress={() => router.push("/novo-pedagio")}
@@ -676,7 +697,7 @@ function HomeDaEmpresa() {
             )}
 
             {/* Botão Abastecimento */}
-            {me.data?.podeLancarAbastecimento && (
+            {!modulo.lancar && me.data?.podeLancarAbastecimento && (
               <CoachTarget id="coach-abastecimento" className="rounded-2xl">
               <Pressable
                 onPress={() => router.push("/novo-abastecimento")}
@@ -710,6 +731,9 @@ function HomeDaEmpresa() {
               </Pressable>
             )}
 
+            {/* Pra receber de volta: aviso, some quando não há nada. */}
+            {modulo.acompanhar ? <CardPraReceber podeLigar={modulo.lancar} /> : null}
+
             {/* Avisar problema no caminhão: quem vê o pneu careca e a luz no
                 painel é quem dirige. Cai em Manutenção, no painel. */}
             {podeAvisarProblema && (
@@ -733,6 +757,7 @@ function HomeDaEmpresa() {
 
             {/* Empty state se todas as 4 funcionalidades estão desabilitadas */}
             {me.data &&
+              !modulo.lancar &&
               !me.data.podeLancarViagem &&
               !me.data.podeIniciarViagem &&
               !me.data.podeLancarPedagio &&
@@ -822,6 +847,59 @@ function HomeDaEmpresa() {
         }
       />
     </SafeAreaView>
+  );
+}
+
+/**
+ * O card "Gasto de viagem" (só com o módulo). Subtítulo = os 3 primeiros da
+ * lista + "…". Com UMA opção só, o card vira o atalho direto pro formulário.
+ */
+function CardGastoDeViagem({
+  pedagio,
+  abastecimento,
+  tipos,
+}: {
+  pedagio: boolean;
+  abastecimento: boolean;
+  tipos: { id: string; nome: string }[];
+}) {
+  const nomes = [
+    ...(pedagio ? ["Pedágio"] : []),
+    ...(abastecimento ? ["diesel"] : []),
+    ...tipos.map((t) => t.nome.toLowerCase()),
+  ];
+  const unico = nomes.length === 1;
+  const subtitulo = unico
+    ? (pedagio ? "Pedágio" : abastecimento ? "Abastecimento" : tipos[0]!.nome)
+    : nomes.length === 0
+      ? "Pedágio, comida, borracharia…"
+      : nomes.slice(0, 3).join(", ") + (nomes.length > 3 ? "…" : "");
+  function abrir() {
+    if (unico && pedagio) return router.push("/novo-pedagio");
+    if (unico && abastecimento) return router.push("/novo-abastecimento");
+    if (unico && tipos[0]) {
+      return router.push({ pathname: "/gasto-novo", params: { tipoId: tipos[0].id, voltar: "1" } });
+    }
+    router.push("/gasto-viagem");
+  }
+  return (
+    <CoachTarget id="coach-gasto-viagem" className="rounded-2xl">
+      <Pressable
+        onPress={abrir}
+        accessibilityRole="button"
+        className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+      >
+        <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+          <Receipt size={26} color="#13316b" strokeWidth={2.5} />
+        </View>
+        <View className="flex-1">
+          <Text className="text-lg font-bold text-foreground">Gasto de viagem</Text>
+          <Text className="text-sm text-muted-foreground" numberOfLines={2}>
+            {subtitulo.charAt(0).toUpperCase() + subtitulo.slice(1)}
+          </Text>
+        </View>
+      </Pressable>
+    </CoachTarget>
   );
 }
 

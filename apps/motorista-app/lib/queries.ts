@@ -621,6 +621,9 @@ export async function forcarAtualizarDados(qc?: QueryClient): Promise<void> {
  * (prefetchQuery engole o erro) e o staleTime deduplica chamadas seguidas.
  */
 export async function prefetchDadosBase(qc: QueryClient): Promise<void> {
+  // O catálogo já traz os tipos de gasto de viagem (`tiposDespesa`, módulo
+  // `despesas`): baixá-los aqui é o que faz "O que você pagou?" abrir sem
+  // sinal. Lidos sempre por `lerTiposDespesa` (lib/despesas.ts).
   const cat = offlineCacheQuery<Catalogos>("catalogos", "/m/catalogos", {
     staleTime: 5 * 60_000,
     normalize: normalizarCatalogos,

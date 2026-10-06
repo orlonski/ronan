@@ -23,7 +23,10 @@ function primeiroNome(nome: string): string {
   return nome.trim().split(/\s+/)[0] ?? nome;
 }
 
-function buildSteps(me: TutorialMe): TutorialStep[] {
+/** Com o módulo de gasto de viagem, Pedágio e Abastecimento viram um card só. */
+type TutorialOpcoes = { gastoDeViagem?: boolean };
+
+function buildSteps(me: TutorialMe, opcoes: TutorialOpcoes = {}): TutorialStep[] {
   const steps: TutorialStep[] = [
     {
       id: "boas-vindas",
@@ -48,7 +51,15 @@ function buildSteps(me: TutorialMe): TutorialStep[] {
       body: "Antes de pegar a estrada, ligue o GPS por aqui. Ele acompanha o trajeto e calcula o KM real sozinho.",
     });
   }
-  if (me.podeLancarPedagio) {
+  if (opcoes.gastoDeViagem) {
+    steps.push({
+      id: "gasto-viagem",
+      targetId: "coach-gasto-viagem",
+      title: "Gasto de viagem",
+      body: "Pagou pedágio, diesel, comida ou borracharia? Lance aqui com a foto do papel e o valor volta pra você no acerto.",
+    });
+  }
+  if (me.podeLancarPedagio && !opcoes.gastoDeViagem) {
     steps.push({
       id: "pedagio",
       targetId: "coach-pedagio",
@@ -56,7 +67,7 @@ function buildSteps(me: TutorialMe): TutorialStep[] {
       body: "Passou numa praça de pedágio? Registre a passagem aqui, é rapidinho.",
     });
   }
-  if (me.podeLancarAbastecimento) {
+  if (me.podeLancarAbastecimento && !opcoes.gastoDeViagem) {
     steps.push({
       id: "abastecimento",
       targetId: "coach-abastecimento",
@@ -83,11 +94,11 @@ function buildSteps(me: TutorialMe): TutorialStep[] {
 }
 
 /** Dispara no primeiro uso (se ainda não viu). */
-export function startHomeTutorialIfNeeded(me: TutorialMe): void {
-  void startTutorialIfUnseen(HOME_TUTORIAL_KEY, buildSteps(me));
+export function startHomeTutorialIfNeeded(me: TutorialMe, opcoes?: TutorialOpcoes): void {
+  void startTutorialIfUnseen(HOME_TUTORIAL_KEY, buildSteps(me, opcoes));
 }
 
 /** Força o replay (botão "Rever tutorial" no Perfil). */
-export function replayHomeTutorial(me: TutorialMe): void {
-  startTutorial(HOME_TUTORIAL_KEY, buildSteps(me));
+export function replayHomeTutorial(me: TutorialMe, opcoes?: TutorialOpcoes): void {
+  startTutorial(HOME_TUTORIAL_KEY, buildSteps(me, opcoes));
 }

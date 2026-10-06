@@ -20,6 +20,8 @@ import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { AvisoKmEstimado } from "@/components/aviso-km-estimado";
 import { AssinaturaPad } from "@/components/assinatura-pad";
 import { usePermite } from "@/lib/acessos-app";
+import { useModuloDespesas } from "@/lib/gastos";
+import { GastosDaViagem } from "@/components/gastos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -77,6 +79,8 @@ export default function FinalizarViagem() {
   const [observacao, setObservacao] = useState("");
   // Prova de entrega, opcional: quem recebeu e a assinatura no dedo.
   const pedeAssinatura = usePermite("app.viagem.assinatura");
+  // Gasto de viagem (módulo `despesas`): sem o módulo a tela fica como sempre.
+  const moduloGastos = useModuloDespesas();
   const [recebedorNome, setRecebedorNome] = useState("");
   const [recebedorDoc, setRecebedorDoc] = useState("");
   const [assinatura, setAssinatura] = useState("");
@@ -893,6 +897,17 @@ export default function FinalizarViagem() {
               />
               {val.erroDe("toneladas") ? <ErroCampo msg={val.erroDe("toneladas")!} /> : null}
             </View>
+
+            {/* Gastos desta viagem: compacto, nunca obrigatório. Os gastos
+                sobem amarrados ao clientId desta viagem. */}
+            {moduloGastos.lancar && ciclo ? (
+              <GastosDaViagem
+                perguntaPonte
+                viagemClientId={ciclo.clientId}
+                viagemRotulo={ciclo.localCargaNome ?? ciclo.clienteNome ?? null}
+                veiculoId={ciclo.veiculoId}
+              />
+            ) : null}
 
             <View
               className="gap-2"

@@ -29,8 +29,11 @@ import {
   type PendingDocumentoAdmissao,
   type PendingProblemaVeiculo,
   type PendingChecklist,
+  type PendingDespesa,
+  type PendingVinculoGasto,
   type ZodIssueSaved,
 } from "@/db/database";
+import { usePendingDespesas, usePendingVinculosGasto } from "@/lib/gastos";
 import { usePendingViagens } from "@/hooks/use-pending-viagens";
 import { usePendingPedagios } from "@/hooks/use-pending-pedagios";
 import { usePendingAbastecimentos } from "@/hooks/use-pending-abastecimentos";
@@ -66,6 +69,10 @@ import {
   tentarNovamenteDocumentoAdmissaoPendente,
   tentarNovamenteProblemaVeiculoPendente,
   tentarNovamenteChecklistPendente,
+  descartarDespesaPendente,
+  tentarNovamenteDespesaPendente,
+  descartarVinculoGastoPendente,
+  tentarNovamenteVinculoGastoPendente,
 } from "@/lib/sync";
 import { descartarViagemGuiada } from "@/lib/lifecycle";
 import { useCatalogos } from "@/lib/queries";
@@ -87,7 +94,12 @@ type PendingRow =
   | { kind: "story"; item: PendingStory }
   | { kind: "documento"; item: PendingDocumentoAdmissao }
   | { kind: "problema"; item: PendingProblemaVeiculo }
-  | { kind: "checklist"; item: PendingChecklist };
+  | { kind: "checklist"; item: PendingChecklist }
+  // Gasto de viagem: o gasto (com as fotos) e a ligação dele com a viagem.
+  // Tipo novo TEM que entrar aqui — senão some da tela e fica contando em
+  // "X com erro" (a armadilha do CLAUDE.md).
+  | { kind: "despesa"; item: PendingDespesa }
+  | { kind: "vinculo"; item: PendingVinculoGasto };
 
 const TIPO_COMBUSTIVEL_LABEL: Record<string, string> = {
   DIESEL_S10: "Diesel S10",
@@ -108,6 +120,8 @@ export default function Pendentes() {
   const documentos = usePendingDocumentos();
   const problemas = usePendingProblemas();
   const checklists = usePendingChecklists();
+  const despesas = usePendingDespesas();
+  const vinculosGasto = usePendingVinculosGasto();
   const cat = useCatalogos();
   const [sincronizando, setSincronizando] = useState(false);
 
@@ -197,9 +211,11 @@ export default function Pendentes() {
       ...documentos.map((item) => ({ kind: "documento" as const, item })),
       ...problemas.map((item) => ({ kind: "problema" as const, item })),
       ...checklists.map((item) => ({ kind: "checklist" as const, item })),
+      ...despesas.map((item) => ({ kind: "despesa" as const, item })),
+      ...vinculosGasto.map((item) => ({ kind: "vinculo" as const, item })),
     ];
     return all.sort((a, b) => a.item.createdAt - b.item.createdAt);
-  }, [viagens, pedagios, abastecimentos, outros, documentos, problemas, checklists]);
+  }, [viagens, pedagios, abastecimentos, outros, documentos, problemas, checklists, despesas, vinculosGasto]);
 
   // Helpers de lookup por id no catalogo
   const lookups = useMemo(() => {
@@ -222,6 +238,8 @@ export default function Pendentes() {
     documento: "este documento",
     problema: "este aviso",
     checklist: "este checklist",
+    despesa: "este gasto",
+    vinculo: "esta ligação do gasto com a viagem",
   };
 
   async function confirmarExcluir(row: PendingRow) {
@@ -242,6 +260,8 @@ export default function Pendentes() {
     else if (row.kind === "documento") await descartarDocumentoAdmissaoPendente(id);
     else if (row.kind === "problema") await descartarProblemaVeiculoPendente(id);
     else if (row.kind === "checklist") await descartarChecklistPendente(id);
+    else if (row.kind === "despesa") await descartarDespesaPendente(id);
+    else if (row.kind === "vinculo") await descartarVinculoGastoPendente(id);
     else await descartarStoryPendente(id);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
@@ -257,6 +277,8 @@ export default function Pendentes() {
     else if (row.kind === "documento") await tentarNovamenteDocumentoAdmissaoPendente(id);
     else if (row.kind === "problema") await tentarNovamenteProblemaVeiculoPendente(id);
     else if (row.kind === "checklist") await tentarNovamenteChecklistPendente(id);
+    else if (row.kind === "despesa") await tentarNovamenteDespesaPendente(id);
+    else if (row.kind === "vinculo") await tentarNovamenteVinculoGastoPendente(id);
     else await tentarNovamenteStoryPendente(id);
   }
 
@@ -581,8 +603,11 @@ function PendingCard({
   // Viagem, abastecimento e pedágio abrem o próprio form em modo correção
   // (`editarClientId`). Pedágio entrou por último: sem ele, um lançamento
   // recusado (placa fora do cadastro) só tinha "excluir" como saída.
+  const fotoRecusada = row.kind === "despesa" && !!row.item.fotoRecusada;
   const editarRota =
-    row.kind === "viagem"
+    row.kind === "despesa"
+      ? "/gasto-novo"
+      : row.kind === "viagem"
       ? "/nova-viagem"
       : row.kind === "abastecimento"
         ? "/novo-abastecimento"
@@ -680,7 +705,24 @@ function PendingCard({
           <Button variant="outline" size="sm" onPress={onVerDetalhes}>
             Ver detalhes
           </Button>
-          {temErro && (
+          {temErro && fotoRecusada && row.kind === "despesa" ? (
+            <Button
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({
+                  pathname: "/gasto-novo",
+                  params: {
+                    editarClientId: item.clientId,
+                    tipoId: String(row.item.payload.tipoDespesaId ?? ""),
+                    fotoDeNovo: "1",
+                  },
+                });
+              }}
+            >
+              Tirar a foto de novo
+            </Button>
+          ) : null}
+          {temErro && !fotoRecusada && (
             <View className="flex-row gap-2">
               {editarRota && (
                 <Button
@@ -691,7 +733,13 @@ function PendingCard({
                     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     router.push({
                       pathname: editarRota,
-                      params: { editarClientId: item.clientId },
+                      params:
+                        row.kind === "despesa"
+                          ? {
+                              editarClientId: item.clientId,
+                              tipoId: String(row.item.payload.tipoDespesaId ?? ""),
+                            }
+                          : { editarClientId: item.clientId },
                     });
                   }}
                 >
@@ -762,6 +810,36 @@ function resumoCard(
       linha3: reprovados > 0 ? `${reprovados} item(ns) com problema` : "Tudo certo",
     };
   }
+  if (row.kind === "despesa") {
+    const pl = row.item.payload as Record<string, unknown>;
+    const r = row.item.resumo;
+    return {
+      tipoLabel: "Gasto de viagem",
+      titulo: r.tipoNome,
+      subtitulo: `${fmtData(String(pl.data ?? ""))} · R$ ${fmtValor(pl.valor)}`,
+      linha3: row.item.fotoRecusada
+        ? `A foto do gasto de ${r.tipoNome} não subiu. Tire de novo.`
+        : r.viagemRotulo
+          ? `Viagem: ${r.viagemRotulo}`
+          : row.item.fotos.length > 0
+            ? "Com foto do comprovante"
+            : undefined,
+    };
+  }
+  if (row.kind === "vinculo") {
+    const r = row.item.resumo;
+    const titulo =
+      row.item.acao === "VIAGEM"
+        ? `Ligar à viagem ${r.viagemRotulo ?? ""}`.trim()
+        : row.item.acao === "FORA_DE_VIAGEM"
+          ? "Marcar como fora de viagem"
+          : "Desfazer ligação com a viagem";
+    return {
+      tipoLabel: "Gasto de viagem",
+      titulo,
+      subtitulo: `${r.quantos} ${r.quantos === 1 ? "gasto" : "gastos"} · R$ ${fmtValor(r.valor)}`,
+    };
+  }
   if (row.kind === "local") {
     return {
       tipoLabel: "Local novo",
@@ -820,7 +898,7 @@ type PendingComum = {
   /** Formato legado (item enfileirado antes das fotos tipadas). */
   fotoUri?: string;
   /** Formato novo do abastecimento: até três comprovantes. */
-  fotos?: { tipo: string; uri: string }[];
+  fotos?: { tipo?: string; uri: string }[];
 };
 
 function DetalheModal({
