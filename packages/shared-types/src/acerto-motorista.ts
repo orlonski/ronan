@@ -161,6 +161,46 @@ export const DecidirPedagioDobroInput = z.object({
 });
 export type DecidirPedagioDobroInput = z.infer<typeof DecidirPedagioDobroInput>;
 
+/**
+ * Conferência da tag: quanto a empresa devolve do pedágio que o motorista lançou
+ * numa viagem em que a tag (ou o vale) pagou passagens. Valor diferente da
+ * sugestão exige motivo escrito — é dinheiro de parceiro autônomo.
+ */
+export const DecidirPedagioTagInput = z.object({
+  viagemId: z.string().uuid(),
+  valorReembolso: z.number().min(0).max(999999.99),
+  motivo: z.string().trim().max(500).optional(),
+});
+export type DecidirPedagioTagInput = z.infer<typeof DecidirPedagioTagInput>;
+
+/** Uma viagem com pedágio lançado e passagens da tag ligadas a ela. */
+export type ViagemConferenciaTag = {
+  viagemId: string;
+  dia: string;
+  rota: string | null;
+  /** O que o motorista lançou de pedágio na viagem. */
+  lancado: string;
+  /** Tag e vale nas passagens ligadas à viagem. */
+  tag: string;
+  vale: string;
+  /** A volta vazia ligada à viagem passou isto na tag. Fora da sugestão. */
+  retorno: string;
+  /** Lançado menos tag e vale da ida, nunca negativo. */
+  sugestao: string;
+  /** Valor do reembolso desta viagem NESTE acerto (null = não está aqui). */
+  noAcerto: string | null;
+  /** Já reembolsado num acerto fechado: a decisão vira ajuste neste. */
+  jaPago: { valor: string; acerto: string } | null;
+  decisao: {
+    valorReembolso: string;
+    motivo: string | null;
+    decididoPor: string | null;
+    decididoEm: string;
+  } | null;
+  /** O ajuste desta decisão já está num acerto fechado: não muda mais. */
+  travada: boolean;
+};
+
 /** O que a tela do acerto precisa conferir antes de fechar. Só leitura. */
 export type ConferenciaDoAcerto = {
   /** Possível pedágio em dobro, por dia. */
@@ -204,6 +244,17 @@ export type ConferenciaDoAcerto = {
     valor: string;
     data: string;
   }>;
+  /**
+   * Pedágio lançado × o que a tag pagou (módulo `tag-pedagio`). null = a conta
+   * não tem o módulo, ou a régua do motorista não devolve pedágio.
+   */
+  pedagioTag: {
+    viagens: ViagemConferenciaTag[];
+    /** Viagens com pedágio lançado em caminhão com tag cuja fatura do dia ainda não chegou. */
+    faturaNaoChegou: number;
+    /** A fatura cobre o dia, mas nenhuma passagem foi ligada à viagem. */
+    naoCasadas: number;
+  } | null;
 };
 
 /** A régua de pagamento, usada no cadastro de modalidade e de motorista. */

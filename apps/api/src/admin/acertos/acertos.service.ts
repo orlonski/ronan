@@ -4,6 +4,7 @@ import type {
   AdicionarItemAcertoInput,
   ConferenciaDoAcerto,
   DecidirPedagioDobroInput,
+  DecidirPedagioTagInput,
   DescartarAcertoInput,
   GerarAcertoInput,
   GerarAcertosEmLoteInput,
@@ -23,6 +24,7 @@ import {
   calcularAcerto,
   descricaoPedagioAvulso,
   itensReembolsoDespesa,
+  pedagioDaViagem,
   resolverRemuneracao,
   totalizarAcerto,
   type AbastecimentoParaAcerto,
@@ -31,6 +33,7 @@ import {
 } from "../../common/acerto-motorista";
 import {
   chaveDoItem,
+  diaMesDeData,
   detectarPedagioEmDobro,
   ficaramDeFora,
   rotuloDoAcerto,
@@ -39,6 +42,15 @@ import {
   type OcupacaoItem,
 } from "../../common/acerto-selecao";
 import { conciliarCartao } from "../../common/cartao-combustivel";
+import {
+  ajusteDaDecisao,
+  decisaoAindaVale,
+  pagoNaIda,
+  situacaoTagDaViagem,
+  sugestaoDeReembolso,
+} from "../../common/tag-pedagio/pedagio-lancado";
+import { tagDasViagens } from "../../common/tag-pedagio/tag-das-viagens";
+import { contaIdAtual } from "../../common/conta/conta-context";
 
 type ListParams = PaginationQuery & {
   motoristaId?: string;
@@ -155,6 +167,8 @@ export class AcertosService {
     },
     deYmd: string,
     ateYmd: string,
+    /** O acerto sendo (re)gerado, quando já existe — o ajuste da tag precisa saber onde está. */
+    acertoAtualId: string | null = null,
   ) {
     const de = diaUtc(deYmd);
     const ate = diaUtc(ateYmd);
@@ -194,6 +208,7 @@ export class AcertosService {
           km: true,
           toneladas: true,
           valorPedagioTotal: true,
+          veiculoId: true,
           cliente: { select: { nome: true } },
           valor: { select: { valorFrete: true } },
           pedagios: { select: { id: true, valor: true, pracaPedagio: true } },
@@ -278,6 +293,18 @@ export class AcertosService {
     const despesas = await this.despesasDoPeriodo(motorista.id, deYmd, ateYmd, foraDoEmprego);
     calculado.itens.push(...itensReembolsoDespesa(despesas, regra));
 
+    // Conferência da tag (módulo `tag-pedagio`): o reembolso de pedágio da
+    // viagem segue a decisão da empresa, e decisão tomada depois de o acerto
+    // fechar vira ajuste aqui.
+    if (regra.reembolsaPedagio) {
+      await this.aplicarConferenciaTag(
+        calculado.itens,
+        motorista.id,
+        viagens.filter((v) => v.data != null).map((v) => ({ id: v.id, data: v.data, veiculoId: v.veiculoId })),
+        acertoAtualId,
+      );
+    }
+
     // A data de cada lançamento, pra lista "Ficou de fora" dizer de quando é.
     const dataPorRef = new Map<string, Date>();
     for (const v of viagensParaAcerto) dataPorRef.set(v.id, v.data);
@@ -301,6 +328,10 @@ export class AcertosService {
     if (abastIds.length) ou.push({ abastecimentoId: { in: abastIds } });
     const despesaIds = [...new Set(itens.map((i) => i.despesaId).filter((x): x is string => !!x))];
     if (despesaIds.length) ou.push({ despesaId: { in: despesaIds } });
+    const decisaoIds = [
+      ...new Set(itens.map((i) => i.decisaoPedagioTagId).filter((x): x is string => !!x)),
+    ];
+    if (decisaoIds.length) ou.push({ decisaoPedagioTagId: { in: decisaoIds } });
     if (ou.length === 0) return [];
 
     const linhas = await this.prisma.itemAcerto.findMany({
@@ -312,6 +343,7 @@ export class AcertosService {
         pedagioId: true,
         abastecimentoId: true,
         despesaId: true,
+        decisaoPedagioTagId: true,
         automatico: true,
         puxadoDe: true,
         acerto: { select: { id: true, status: true, periodoInicio: true, periodoFim: true } },
@@ -372,6 +404,7 @@ export class AcertosService {
       motorista,
       input.periodoInicio,
       input.periodoFim,
+      existente?.id ?? null,
     );
     // Período inteiro dentro do vínculo: não é acerto vazio, é acerto que não
     // existe. Vazio o operador leria como "ele não rodou".
@@ -434,8 +467,10 @@ export class AcertosService {
             pedagioId: i.pedagioId ?? null,
             abastecimentoId: i.abastecimentoId ?? null,
             despesaId: i.despesaId ?? null,
+            decisaoPedagioTagId: i.decisaoPedagioTagId ?? null,
             descricao: i.descricao,
             valor: i.valor,
+            motivo: i.motivo ?? null,
             automatico: true,
             puxadoDe: i.puxadoDe,
           })),
@@ -904,10 +939,11 @@ export class AcertosService {
     });
     if (!acerto) throw new NotFoundException("Acerto não encontrado");
 
-    const [pedagio, cartao, deFora] = await Promise.all([
+    const [pedagio, cartao, deFora, pedagioTag] = await Promise.all([
       this.conferirPedagioEmDobro(acerto.id, acerto.itens),
       this.conferirCartao(acerto.itens),
       acerto.status === "ABERTO" ? this.listarDeFora(acerto) : Promise.resolve([]),
+      this.conferirPedagioTag(acerto),
     ]);
 
     return {
@@ -933,6 +969,7 @@ export class AcertosService {
         valor: i.valor,
         data: i.data.toISOString(),
       })),
+      pedagioTag,
     };
   }
 
@@ -1139,7 +1176,9 @@ export class AcertosService {
     const { calculado, dataPorRef } = await this.calcularCandidatos(motorista, deYmd, ateYmd);
     const ocupadas = new Set((await this.ocupacoesDe(calculado.itens)).map((o) => o.chave));
 
-    return ficaramDeFora(calculado.itens, ocupadas).map((i) => ({
+    // O ajuste da tag não tem data de período: entra sozinho no acerto que gerar.
+    const candidatos = calculado.itens.filter((i) => i.tipo !== "AJUSTE");
+    return ficaramDeFora(candidatos, ocupadas).map((i) => ({
       ...i,
       data:
         dataPorRef.get(i.viagemId ?? i.pedagioId ?? i.abastecimentoId ?? "") ?? acerto.periodoInicio,
@@ -1275,6 +1314,325 @@ export class AcertosService {
       );
     }
     return this.conferencia(id);
+  }
+
+  // ------------------------------------------------- conferência da tag
+
+  /**
+   * O reembolso de pedágio da viagem segue a decisão da empresa sobre o que a
+   * tag pagou — enquanto o lançado e o pago pela tag forem os mesmos da
+   * decisão. Decisão sobre viagem já reembolsada num acerto FECHADO/PAGO vira
+   * AJUSTE no acerto que está sendo gerado (acerto fechado não reabre). Sem o
+   * módulo, não faz nada.
+   */
+  private async aplicarConferenciaTag(
+    itens: ItemCalculado[],
+    motoristaId: string,
+    viagens: Array<{ id: string; data: Date | null; veiculoId: string | null }>,
+    acertoAtualId: string | null,
+  ) {
+    const tag = await tagDasViagens(this.prisma, viagens);
+    if (!tag) return;
+
+    const doPeriodo = itens.filter((i) => i.tipo === "REEMBOLSO_PEDAGIO" && i.viagemId);
+    const decisoes = doPeriodo.length
+      ? await this.prisma.decisaoPedagioTag.findMany({
+          where: { viagemId: { in: doPeriodo.map((i) => i.viagemId!) } },
+          include: { itensAcerto: { select: { acertoId: true } } },
+        })
+      : [];
+    const decisaoDe = new Map(decisoes.map((d) => [d.viagemId, d]));
+    for (const item of doPeriodo) {
+      const d = decisaoDe.get(item.viagemId!);
+      if (!d || !decisaoAindaVale(d, item.valor, tag.get(item.viagemId!)?.cobertura)) continue;
+      // A decisão já virou AJUSTE em outro acerto, calculado sobre o que ESTE
+      // pagou. Aplicar aqui também (acerto reaberto e regerado) descontaria a
+      // mesma diferença duas vezes.
+      if (d.itensAcerto.some((i) => i.acertoId !== acertoAtualId)) continue;
+      if (d.valorReembolso.lte(0)) {
+        itens.splice(itens.indexOf(item), 1);
+        continue;
+      }
+      item.valor = d.valorReembolso.toFixed(2);
+      item.descricao = `${item.descricao} · conferido com a tag`;
+    }
+
+    const fechados = await this.prisma.itemAcerto.findMany({
+      where: {
+        tipo: "REEMBOLSO_PEDAGIO",
+        acerto: { motoristaId, status: { in: ["FECHADO", "PAGO"] } },
+        viagem: { decisaoPedagioTag: { some: {} } },
+      },
+      select: {
+        viagemId: true,
+        valor: true,
+        acerto: { select: { periodoInicio: true, periodoFim: true } },
+        viagem: {
+          select: {
+            id: true,
+            data: true,
+            veiculoId: true,
+            valorPedagioTotal: true,
+            pedagios: { select: { id: true, valor: true } },
+            decisaoPedagioTag: {
+              include: { itensAcerto: { select: { acertoId: true, acerto: { select: { status: true } } } } },
+            },
+          },
+        },
+      },
+    });
+    const viagensFechadas = fechados.flatMap((f) => (f.viagem ? [f.viagem] : []));
+    const tagFechadas = viagensFechadas.length ? await tagDasViagens(this.prisma, viagensFechadas) : null;
+    for (const f of fechados) {
+      const v = f.viagem;
+      const d = v?.decisaoPedagioTag[0];
+      if (!v || !d || !f.viagemId) continue;
+      if (!decisaoAindaVale(d, pedagioDaViagem(v).valor, tagFechadas?.get(v.id)?.cobertura)) continue;
+      // Já está em outro acerto ABERTO: fica lá (senão todo acerto gerado o puxava pra si).
+      if (d.itensAcerto.some((i) => i.acertoId !== acertoAtualId && i.acerto.status === "ABERTO")) continue;
+      const ajuste = ajusteDaDecisao(d.valorReembolso, f.valor);
+      if (ajuste.eq(0)) continue;
+      const dia = v.data ? diaMesDeData(v.data) : "?";
+      itens.push({
+        tipo: "AJUSTE",
+        viagemId: f.viagemId,
+        decisaoPedagioTagId: d.id,
+        valor: ajuste.toFixed(2),
+        descricao: `Pedágio da viagem de ${dia} conferido com a tag — reembolsado antes no ${rotuloDoAcerto(f.acerto)}`,
+        motivo:
+          d.motivo ??
+          `Conferência da tag: devolver R$ ${d.valorReembolso.toFixed(2)} dos R$ ${d.valorLancado.toFixed(2)} lançados`,
+      });
+    }
+  }
+
+  /** Viagens com pedágio lançado em que a tag pagou passagens — deste período e já acertadas. */
+  private async conferirPedagioTag(acerto: {
+    id: string;
+    motoristaId: string;
+    periodoInicio: Date;
+    periodoFim: Date;
+  }): Promise<ConferenciaDoAcerto["pedagioTag"]> {
+    const motorista = await this.prisma.motorista.findUnique({
+      where: { id: acerto.motoristaId },
+      include: { modalidade: true },
+    });
+    if (!motorista || !resolverRemuneracao(motorista, motorista.modalidade).reembolsaPedagio) return null;
+
+    // Ajuste de acerto anterior: olha uma janela de 4 meses pra trás, que é o
+    // que uma fatura atrasada alcança.
+    const desde = new Date(acerto.periodoInicio.getTime() - 120 * 86_400_000);
+    const viagens = await this.prisma.viagem.findMany({
+      where: {
+        motoristaId: acerto.motoristaId,
+        data: { gte: desde, lte: acerto.periodoFim },
+        status: { notIn: STATUS_FORA_FECHAMENTO },
+      },
+      select: {
+        id: true,
+        data: true,
+        veiculoId: true,
+        valorPedagioTotal: true,
+        pedagios: { select: { id: true, valor: true } },
+        localCarga: { select: { nome: true } },
+        localDescarga: { select: { nome: true } },
+      },
+    });
+    const tag = await tagDasViagens(this.prisma, viagens);
+    if (!tag) return null;
+
+    const comLancado = viagens.filter((v) => pedagioDaViagem(v).valor.gt(0));
+    const ids = comLancado.map((v) => v.id);
+    const [itens, decisoes] = ids.length
+      ? await Promise.all([
+          this.prisma.itemAcerto.findMany({
+            where: { viagemId: { in: ids }, tipo: "REEMBOLSO_PEDAGIO" },
+            select: {
+              viagemId: true,
+              valor: true,
+              acerto: { select: { id: true, status: true, periodoInicio: true, periodoFim: true } },
+            },
+          }),
+          this.prisma.decisaoPedagioTag.findMany({
+            where: { viagemId: { in: ids } },
+            include: {
+              decididoPor: { select: { nome: true } },
+              itensAcerto: { select: { acerto: { select: { status: true } } } },
+            },
+          }),
+        ])
+      : [[], []];
+    const decisaoDe = new Map(decisoes.map((d) => [d.viagemId, d]));
+
+    const out: NonNullable<ConferenciaDoAcerto["pedagioTag"]> = { viagens: [], faturaNaoChegou: 0, naoCasadas: 0 };
+    for (const v of comLancado) {
+      const lancado = pedagioDaViagem(v).valor;
+      const t = tag.get(v.id)!;
+      const sit = situacaoTagDaViagem({ ...t, lancado });
+      const doPeriodo = v.data! >= acerto.periodoInicio && v.data! <= acerto.periodoFim;
+      const daqui = itens.find((i) => i.viagemId === v.id && i.acerto.id === acerto.id);
+      const fechado = itens.find((i) => i.viagemId === v.id && i.acerto.status !== "ABERTO");
+      const d = decisaoDe.get(v.id);
+      const decisaoValida = d && decisaoAindaVale(d, lancado, t.cobertura) ? d : null;
+      // Ajuste já num acerto fechado: não muda mais, mesmo que os números mudem.
+      const travada = !!d?.itensAcerto.some((i) => i.acerto.status !== "ABERTO");
+
+      if (sit.situacao !== "TAG_PAGOU") {
+        if (doPeriodo && sit.situacao === "FATURA_NAO_CHEGOU") out.faturaNaoChegou++;
+        if (doPeriodo && sit.situacao === "NAO_CASADA") out.naoCasadas++;
+        continue;
+      }
+      // De acerto anterior só aparece o que ainda pede decisão ou ajuste.
+      if (!doPeriodo && (!fechado || travada)) continue;
+      if (!doPeriodo && decisaoValida && ajusteDaDecisao(decisaoValida.valorReembolso, fechado!.valor).eq(0)) continue;
+
+      out.viagens.push({
+        viagemId: v.id,
+        dia: v.data!.toISOString().slice(0, 10),
+        rota: v.localCarga && v.localDescarga ? `${v.localCarga.nome} → ${v.localDescarga.nome}` : null,
+        lancado: lancado.toFixed(2),
+        tag: sit.tag,
+        vale: sit.vale,
+        retorno: sit.retorno,
+        sugestao: sit.sugestao,
+        noAcerto: daqui ? daqui.valor.toFixed(2) : null,
+        jaPago: fechado ? { valor: fechado.valor.toFixed(2), acerto: rotuloDoAcerto(fechado.acerto) } : null,
+        decisao: decisaoValida
+          ? {
+              valorReembolso: decisaoValida.valorReembolso.toFixed(2),
+              motivo: decisaoValida.motivo,
+              decididoPor: decisaoValida.decididoPor?.nome ?? null,
+              decididoEm: decisaoValida.decididoEm.toISOString(),
+            }
+          : null,
+        travada,
+      });
+    }
+    out.viagens.sort((a, b) => a.dia.localeCompare(b.dia));
+    return out;
+  }
+
+  async decidirPedagioTag(id: string, input: DecidirPedagioTagInput, usuarioId: string) {
+    const acerto = await this.exigirAberto(id);
+    const viagem = await this.prisma.viagem.findFirst({
+      where: { id: input.viagemId, motoristaId: acerto.motoristaId },
+      select: {
+        id: true,
+        data: true,
+        veiculoId: true,
+        valorPedagioTotal: true,
+        pedagios: { select: { id: true, valor: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada neste acerto.");
+    const tag = await tagDasViagens(this.prisma, [viagem]);
+    if (!tag) throw new BadRequestException("A conferência da tag não está contratada nesta empresa.");
+    const cobertura = tag.get(viagem.id)?.cobertura;
+    if (!cobertura) throw new BadRequestException("Nenhuma passagem da tag está ligada a esta viagem.");
+
+    const lancado = pedagioDaViagem(viagem).valor;
+    const valor = new Prisma.Decimal(input.valorReembolso.toFixed(2));
+    if (valor.gt(lancado)) {
+      throw new BadRequestException(`O reembolso não pode passar do que foi lançado (R$ ${lancado.toFixed(2)}).`);
+    }
+    const sugestao = sugestaoDeReembolso(lancado, cobertura);
+    // Fora da sugestão é decisão de gente sobre dinheiro de parceiro: por escrito.
+    const motivo = input.motivo?.trim() || null;
+    if (!valor.eq(sugestao) && (!motivo || motivo.length < 10)) {
+      throw new BadRequestException("Valor diferente da sugestão: escreva o motivo (pelo menos 10 letras).");
+    }
+
+    const anterior = await this.prisma.decisaoPedagioTag.findFirst({
+      where: { viagemId: viagem.id },
+      include: { itensAcerto: { select: { acerto: { select: { status: true } } } } },
+    });
+    if (anterior?.itensAcerto.some((i) => i.acerto.status !== "ABERTO")) {
+      throw new ConflictException("O ajuste desta viagem já está num acerto fechado e não muda mais.");
+    }
+    const dados = {
+      valorLancado: lancado,
+      valorTag: pagoNaIda(cobertura),
+      valorReembolso: valor,
+      motivo,
+      acertoId: id,
+      decididoPorId: usuarioId,
+      decididoEm: new Date(),
+    };
+    await this.prisma.$transaction(async (tx) => {
+      // Ajuste da decisão antiga que estava em outro acerto aberto sai de lá:
+      // a decisão nova gera o seu (senão ficavam os dois).
+      if (anterior) await this.tirarAjustesAbertos(tx, anterior.id);
+      await tx.decisaoPedagioTag.upsert({
+        where: { contaId_viagemId: { contaId: contaIdAtual(), viagemId: viagem.id } },
+        create: { viagemId: viagem.id, ...dados },
+        update: dados,
+      });
+    });
+
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "AcertoMotorista",
+      entidadeId: id,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "pedagioTag",
+      valorAntes: anterior ? { viagemId: viagem.id, valorReembolso: anterior.valorReembolso.toFixed(2) } : null,
+      valorDepois: { viagemId: viagem.id, valorReembolso: valor.toFixed(2), lancado: lancado.toFixed(2) },
+      motivo: motivo ?? `Conferência da tag: devolver R$ ${valor.toFixed(2)} dos R$ ${lancado.toFixed(2)} lançados`,
+    });
+    await this.regerar(acerto, usuarioId);
+    return this.conferencia(id);
+  }
+
+  async desfazerDecisaoPedagioTag(id: string, viagemId: string, usuarioId: string) {
+    const acerto = await this.exigirAberto(id);
+    const d = await this.prisma.decisaoPedagioTag.findFirst({
+      where: { viagemId, viagem: { motoristaId: acerto.motoristaId } },
+      include: { itensAcerto: { select: { acerto: { select: { status: true } } } } },
+    });
+    if (!d) throw new NotFoundException("Não há decisão sobre o pedágio desta viagem.");
+    if (d.itensAcerto.some((i) => i.acerto.status !== "ABERTO")) {
+      throw new ConflictException("O ajuste desta viagem já está num acerto fechado e não muda mais.");
+    }
+    await this.prisma.$transaction(async (tx) => {
+      // Sem isto o ajuste ficava órfão (a FK vira null) num acerto aberto, e
+      // decidir de novo descontava duas vezes.
+      await this.tirarAjustesAbertos(tx, d.id);
+      await tx.decisaoPedagioTag.delete({ where: { id: d.id } });
+    });
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "AcertoMotorista",
+      entidadeId: id,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "pedagioTag",
+      valorAntes: { viagemId, valorReembolso: d.valorReembolso.toFixed(2) },
+      valorDepois: null,
+      motivo: "Desfez a conferência do pedágio com a tag",
+    });
+    await this.regerar(acerto, usuarioId);
+    return this.conferencia(id);
+  }
+
+  /** Tira os ajustes desta decisão dos acertos ABERTOS e refaz o total de cada um. */
+  private async tirarAjustesAbertos(tx: Prisma.TransactionClient, decisaoId: string) {
+    const itens = await tx.itemAcerto.findMany({
+      where: { decisaoPedagioTagId: decisaoId, acerto: { status: "ABERTO" } },
+      select: { id: true, acertoId: true },
+    });
+    if (itens.length === 0) return;
+    await tx.itemAcerto.deleteMany({ where: { id: { in: itens.map((i) => i.id) } } });
+    for (const acertoId of new Set(itens.map((i) => i.acertoId))) await this.recalcularTotais(tx, acertoId);
+  }
+
+  private regerar(acerto: { motoristaId: string; periodoInicio: Date; periodoFim: Date }, usuarioId: string) {
+    return this.gerar(
+      {
+        motoristaId: acerto.motoristaId,
+        periodoInicio: acerto.periodoInicio.toISOString().slice(0, 10),
+        periodoFim: acerto.periodoFim.toISOString().slice(0, 10),
+      },
+      usuarioId,
+    );
   }
 
   private async exigirAberto(id: string) {

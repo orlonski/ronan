@@ -260,3 +260,38 @@ describe("custoFixoNoPeriodo", () => {
     expect(v.toFixed(2)).toBe((1500 + (3000 * 15) / 31).toFixed(2));
   });
 });
+
+describe("lucro com a fatura da tag (Onda 2)", () => {
+  it("sem tag, o pedágio é o lançado, como antes", () => {
+    const r = calcularLucroVeiculo(entrada({ viagens: [viagem({ valorPedagioTotal: 120 })] }));
+    expect(r.custos.pedagio).toBe("120.00");
+  });
+
+  it("com a tag, conta a fatura e só a parte do lançado que a tag não pagou — nunca as duas inteiras", () => {
+    const r = calcularLucroVeiculo(
+      entrada({
+        viagens: [viagem({ valorPedagioTotal: 120, pedagioConferidoTag: 42 })],
+        tagFatura: 78 + 65.55,
+      }),
+    );
+    expect(r.custos.pedagio).toBe("185.55");
+  });
+
+  it("régua que não devolve pedágio: o resto do bolso vai pro fora-da-conta, a fatura fica na empresa", () => {
+    const r = calcularLucroVeiculo(
+      entrada({
+        viagens: [viagem({ valorPedagioTotal: 120, pedagioConferidoTag: 42, regra: regra({ reembolsaPedagio: false }) })],
+        tagFatura: 78,
+      }),
+    );
+    expect(r.custos.pedagio).toBe("78.00");
+    expect(r.foraDaConta.pedagio).toBe("42.00");
+  });
+
+  it("pedágio lançado ainda não conferido com a tag vira aviso", () => {
+    const r = calcularLucroVeiculo(
+      entrada({ viagens: [viagem({ valorPedagioTotal: 120, pedagioTagSemConferencia: true })], tagFatura: 120 }),
+    );
+    expect(r.avisos.pedagioTagSemConferencia).toBe(1);
+  });
+});

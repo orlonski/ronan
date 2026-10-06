@@ -63,6 +63,9 @@ function ressalvas(r: RelatorioLucroResposta): string[] {
       `${a.viagensEmMaisDeUmAcerto} viagem(ns) aparecem em mais de um acerto do motorista — pode ter sido paga duas vezes. Aqui contou uma vez só.`,
     );
   }
+  if (a.pedagioTagSemConferencia) {
+    f.push(`${a.pedagioTagSemConferencia} viagem(ns) com pedágio lançado ainda não conferido com a fatura da tag — o pedágio pode estar contado duas vezes (o lançado e a fatura). Confira no acerto do motorista ou case em Tag de pedágio.`);
+  }
   const fora = Number(r.frota.foraDaConta.combustivel) + Number(r.frota.foraDaConta.pedagio);
   if (fora > 0) {
     f.push(`${fmtBRL(String(fora))} de combustível e pedágio pagos pelo motorista sem reembolso ficaram fora da conta.`);

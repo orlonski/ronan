@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   AdicionarItemAcertoInput,
   DecidirPedagioDobroInput,
+  DecidirPedagioTagInput,
   DescartarAcertoInput,
   GerarAcertoInput,
   GerarAcertosEmLoteInput,
@@ -190,6 +191,31 @@ export class AcertosController {
   ) {
     await this.service.detalhe(id, user.escopo);
     return this.service.desfazerDecisaoPedagio(id, pedagioId, user.id);
+  }
+
+  /** Conferência da tag: quanto devolver do pedágio lançado numa viagem que a tag pagou. */
+  @EscopoPor("motorista")
+  @RequerPermissao("acertos.gerar")
+  @Post(":id/pedagio-tag")
+  async decidirPedagioTag(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(DecidirPedagioTagInput)) body: DecidirPedagioTagInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    await this.service.detalhe(id, user.escopo);
+    return this.service.decidirPedagioTag(id, body, user.id);
+  }
+
+  @EscopoPor("motorista")
+  @RequerPermissao("acertos.gerar")
+  @Delete(":id/pedagio-tag/:viagemId")
+  async desfazerDecisaoPedagioTag(
+    @Param("id") id: string,
+    @Param("viagemId") viagemId: string,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    await this.service.detalhe(id, user.escopo);
+    return this.service.desfazerDecisaoPedagioTag(id, viagemId, user.id);
   }
 
   // Fechar e pagar são chaves próprias, separadas de `gerar`: montar o acerto é

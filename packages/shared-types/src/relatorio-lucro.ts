@@ -48,6 +48,11 @@ export type AvisosLucro = {
    * dizer que o motorista pode ter recebido duas vezes — conferir os acertos.
    */
   viagensEmMaisDeUmAcerto: number;
+  /**
+   * Viagem com pedágio lançado ainda não conferido com a fatura da tag que
+   * cobre o dia: o pedágio pode estar contado duas vezes (lançado + fatura).
+   */
+  pedagioTagSemConferencia: number;
 };
 
 export type ItemDespesaLucro = {

@@ -109,6 +109,13 @@ function frasesDeAviso(a: AvisosLucro): { texto: string; href?: string; acao?: s
       acao: "Conferir acertos",
     });
   }
+  if (a.pedagioTagSemConferencia) {
+    f.push({
+      texto: `${a.pedagioTagSemConferencia} viagem(ns) com pedágio lançado ainda não conferido com a fatura da tag — o pedágio pode estar contado duas vezes (o lançado e a fatura).`,
+      href: "/tag-pedagio?aba=casar",
+      acao: "Casar passagens",
+    });
+  }
   return f;
 }
 

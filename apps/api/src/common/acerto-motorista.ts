@@ -110,13 +110,17 @@ export type ItemCalculado = {
     | "FRETE"
     | "REEMBOLSO_PEDAGIO"
     | "REEMBOLSO_ABASTECIMENTO"
-    | "REEMBOLSO_DESPESA";
+    | "REEMBOLSO_DESPESA"
+    /** Só o ajuste da conferência da tag (decisão tomada depois do acerto fechar). */
+    | "AJUSTE";
   viagemId?: string;
   despesaId?: string;
   pedagioId?: string;
   abastecimentoId?: string;
+  decisaoPedagioTagId?: string;
   descricao: string;
   valor: string;
+  motivo?: string;
 };
 
 export type AcertoCalculado = {

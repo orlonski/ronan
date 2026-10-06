@@ -8,7 +8,9 @@ import type {
   RelatorioLucroResposta,
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
-import { resolverRemuneracao, type RegraRemuneracao } from "../../common/acerto-motorista";
+import { pedagioDaViagem, resolverRemuneracao, type RegraRemuneracao } from "../../common/acerto-motorista";
+import { decisaoAindaVale, situacaoTagDaViagem } from "../../common/tag-pedagio/pedagio-lancado";
+import { tagDasViagens } from "../../common/tag-pedagio/tag-das-viagens";
 import type { EscopoAdmin } from "../../common/escopo/escopo";
 import { comEscopo } from "../../common/escopo/escopo";
 import {
@@ -275,6 +277,8 @@ export class RelatoriosLucroService {
       if (s.litros.gt(0)) precoMedioLitro[tipo] = s.valor.div(s.litros).toFixed(4);
     }
 
+    const tag = await this.tagDoPeriodo(viagens, ids, diaDe, diaAte, instanteDe, instanteAte);
+
     // ---- agrupa por caminhão ----------------------------------------------
     const porVeiculo = <T extends { veiculoId: string | null }>(lista: T[]) => {
       const m = new Map<string, T[]>();
@@ -325,6 +329,8 @@ export class RelatoriosLucroService {
               : null,
           pedagioCobrado: x.valor?.valorPedagio ?? null,
           estadia: null,
+          pedagioConferidoTag: tag?.conferido.get(x.id),
+          pedagioTagSemConferencia: tag?.semConferencia.has(x.id) ?? false,
         }));
 
       const abs: AbastecimentoParaLucro[] = (abastPor.get(v.id) ?? []).map((a) => {
@@ -392,10 +398,87 @@ export class RelatoriosLucroService {
           outrasContas: outras,
           custosFixos: fixos,
           precoMedioLitro,
+          tagFatura: tag?.fatura.get(v.id),
         },
       });
     }
     return saida;
+  }
+
+  /**
+   * Conferência da tag no lucro (módulo `tag-pedagio`; sem ele, null e nada
+   * muda). O que a fatura cobrou do caminhão é custo da empresa. Do pedágio
+   * lançado na viagem, conta o que o acerto devolve: o decidido, quando alguém
+   * conferiu; senão o lançado inteiro (é o que o acerto paga), e a viagem vira
+   * aviso de que o pedágio pode estar contado duas vezes. Sugestão nunca vira número.
+   */
+  private async tagDoPeriodo(
+    viagens: Array<{
+      id: string;
+      data: Date | null;
+      veiculoId: string | null;
+      valorPedagioTotal: Prisma.Decimal | null;
+      pedagios: { id: string; valor: Prisma.Decimal }[];
+    }>,
+    veiculoIds: string[],
+    diaDe: Date,
+    diaAte: Date,
+    instanteDe: Date,
+    instanteAte: Date,
+  ) {
+    const situacoes = await tagDasViagens(this.prisma, viagens);
+    if (!situacoes) return null;
+
+    const decisoes = viagens.length
+      ? await this.prisma.decisaoPedagioTag.findMany({ where: { viagemId: { in: viagens.map((v) => v.id) } } })
+      : [];
+    const decisaoDe = new Map(decisoes.map((d) => [d.viagemId, d]));
+    const conferido = new Map<string, Prisma.Decimal>();
+    const semConferencia = new Set<string>();
+    for (const v of viagens) {
+      const lancado = pedagioDaViagem(v).valor;
+      if (lancado.lte(0)) continue;
+      const t = situacoes.get(v.id)!;
+      const sit = situacaoTagDaViagem({ ...t, lancado });
+      const d = decisaoDe.get(v.id);
+      if (sit.situacao === "TAG_PAGOU" && d && decisaoAindaVale(d, lancado, t.cobertura)) {
+        conferido.set(v.id, d.valorReembolso);
+      } else if (sit.situacao === "TAG_PAGOU" || sit.situacao === "NAO_CASADA") {
+        semConferencia.add(v.id);
+      }
+    }
+
+    const [passagens, resumos] = veiculoIds.length
+      ? await Promise.all([
+          this.prisma.passagemTag.findMany({
+            where: {
+              veiculoId: { in: veiculoIds },
+              tipo: "PEDAGIO",
+              ocorridoEm: { gte: instanteDe, lt: instanteAte },
+              extrato: { status: { not: "FALHOU" } },
+            },
+            select: { veiculoId: true, dc: true, valor: true },
+          }),
+          this.prisma.extratoTagVeiculo.findMany({
+            where: {
+              veiculoId: { in: veiculoIds },
+              extrato: { status: { not: "FALHOU" }, periodoAte: { gte: diaDe, lte: diaAte } },
+            },
+            select: { veiculoId: true, plano: true, outras: true, ajuste: true },
+          }),
+        ])
+      : [[], []];
+    const fatura = new Map<string, Prisma.Decimal>();
+    const soma = (veiculoId: string | null, valor: Prisma.Decimal) => {
+      if (!veiculoId) return;
+      fatura.set(veiculoId, (fatura.get(veiculoId) ?? new Prisma.Decimal(0)).add(valor));
+    };
+    // Custo é o que foi COBRADO: a mesma passagem cobrada em duas faturas foi
+    // paga duas vezes (o achado "cobrada em outra fatura" é pra contestar).
+    for (const p of passagens) soma(p.veiculoId, p.dc === "C" ? p.valor.neg() : p.valor);
+    // Plano, taxas e o ajuste não detalhado entram uma vez, no período em que a fatura fecha.
+    for (const r of resumos) soma(r.veiculoId, r.plano.add(r.outras).add(r.ajuste));
+    return { conferido, semConferencia, fatura };
   }
 }
 
@@ -422,6 +505,7 @@ function totalizar(linhas: LinhaLucroVeiculo[]): RelatorioLucroResposta["frota"]
     "abastecimentosSemPreco",
     "manutencoesSemValor",
     "viagensEmMaisDeUmAcerto",
+    "pedagioTagSemConferencia",
   ];
   const avisos = Object.fromEntries(
     chavesAviso.map((k) => [k, linhas.reduce((s, l) => s + l.avisos[k], 0)]),

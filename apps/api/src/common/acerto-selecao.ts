@@ -36,6 +36,8 @@ export type RefItemAcerto = {
   pedagioId?: string | null;
   abastecimentoId?: string | null;
   despesaId?: string | null;
+  /** Ajuste da conferência da tag levado pra um acerto seguinte. */
+  decisaoPedagioTagId?: string | null;
 };
 
 /**
@@ -58,6 +60,8 @@ export function chaveDoItem(i: RefItemAcerto): string | null {
     return `ABASTECIMENTO:${i.abastecimentoId}`;
   }
   if (i.tipo === "REEMBOLSO_DESPESA" && i.despesaId) return `DESPESA:${i.despesaId}`;
+  // O ajuste da tag é UM por decisão: entra num acerto só, nunca em dois.
+  if (i.tipo === "AJUSTE" && i.decisaoPedagioTagId) return `AJUSTE_TAG:${i.decisaoPedagioTagId}`;
   return null;
 }
 

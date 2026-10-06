@@ -1,5 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 import { AcertosService } from "./acertos.service";
+
+// A conferência da tag só existe com o módulo: aqui ela começa desligada (null),
+// e os testes dela ligam devolvendo um mapa.
+const tagMock = vi.hoisted(() => ({ atual: null as Map<string, unknown> | null }));
+vi.mock("../../common/tag-pedagio/tag-das-viagens", () => ({
+  tagDasViagens: async () => tagMock.atual,
+}));
+beforeEach(() => {
+  tagMock.atual = null;
+});
 
 /**
  * DIA EM QUE A PESSOA ERA EMPREGADA NÃO ENTRA NO ACERTO.
@@ -25,6 +36,12 @@ function servico(estado: {
   itensExistentes?: Record<string, unknown>[];
   /** Gastos de viagem já APROVADOS que a busca devolveria. */
   despesas?: { id: string; data: Date; valorAprovado: string }[];
+  /** Pedágio que o motorista lançou em cada viagem (valorPedagioTotal). */
+  pedagioLancado?: Record<string, string>;
+  /** Decisões da conferência da tag. */
+  decisoesTag?: Record<string, unknown>[];
+  /** Reembolsos de pedágio já em acerto FECHADO/PAGO (consulta do ajuste da tag). */
+  pedagiosFechados?: Record<string, unknown>[];
 }) {
   const criados: Record<string, unknown>[] = [];
   const apagados: unknown[] = [];
@@ -36,7 +53,8 @@ function servico(estado: {
     ticket: null,
     km: dec("100"),
     toneladas: dec("30"),
-    valorPedagioTotal: dec("0"),
+    valorPedagioTotal: dec(estado.pedagioLancado?.[v.id] ?? "0"),
+    veiculoId: "cam1",
     tipoServico: { medicao: "PESO" },
     cliente: { nome: "Pedreira" },
     valor: { valorFrete: dec("1000") },
@@ -89,8 +107,12 @@ function servico(estado: {
         criados.push(...data);
         return { count: data.length };
       },
-      findMany: async () => estado.itensExistentes ?? [],
+      findMany: async ({ where }: { where: Record<string, unknown> }) =>
+        where.tipo === "REEMBOLSO_PEDAGIO" && where.acerto
+          ? (estado.pedagiosFechados ?? [])
+          : (estado.itensExistentes ?? []),
     },
+    decisaoPedagioTag: { findMany: async () => estado.decisoesTag ?? [] },
   } as Record<string, unknown>;
   prisma.$transaction = async (fn: (tx: unknown) => unknown) => fn(prisma);
 
@@ -238,5 +260,145 @@ describe("gasto de viagem no acerto (B10: dia de emprego CLT não entra)", () =>
     });
     await s.gerar(periodo as never, "user1");
     expect(despesasPagas()).toEqual(["noite"]);
+  });
+});
+
+describe("conferência da tag no acerto (Onda 2)", () => {
+  const decisao = (valorReembolso: string, valorLancado = "120.00") => ({
+    id: "dec1",
+    viagemId: "v1",
+    valorLancado: new Prisma.Decimal(valorLancado),
+    valorTag: new Prisma.Decimal("78"),
+    valorReembolso: new Prisma.Decimal(valorReembolso),
+    motivo: null,
+    itensAcerto: [] as { acertoId: string; acerto: { status: string } }[],
+  });
+  // A tag pagou R$ 78 na ida de v1 e de v9 — os números sobre os quais a decisão foi tomada.
+  const ligado = () => {
+    const pagou = { temTag: true, faturaCobreODia: true, cobertura: { tag: "78", vale: "0", trechos: 1 } };
+    tagMock.atual = new Map([
+      ["v1", pagou],
+      ["v9", pagou],
+    ]);
+  };
+  const pedagioDe = (criados: Record<string, unknown>[]) =>
+    criados.filter((i) => i.tipo === "REEMBOLSO_PEDAGIO").map((i) => i.valor);
+
+  it("sem o módulo, o reembolso é o lançado, como sempre foi", async () => {
+    const { s, criados } = servico({
+      viagens: [{ id: "v1", data: em("2026-03-10") }],
+      pedagioLancado: { v1: "120" },
+      decisoesTag: [decisao("42")],
+    });
+    await s.gerar(periodo as never, "user1");
+    expect(pedagioDe(criados)).toEqual(["120.00"]);
+  });
+
+  it("com decisão, o reembolso é o decidido: só o que a tag não pagou", async () => {
+    ligado();
+    const { s, criados } = servico({
+      viagens: [{ id: "v1", data: em("2026-03-10") }],
+      pedagioLancado: { v1: "120" },
+      decisoesTag: [decisao("42")],
+    });
+    await s.gerar(periodo as never, "user1");
+    expect(pedagioDe(criados)).toEqual(["42.00"]);
+  });
+
+  it("a tag pagou tudo: o reembolso sai do acerto", async () => {
+    ligado();
+    const { s, criados } = servico({
+      viagens: [{ id: "v1", data: em("2026-03-10") }],
+      pedagioLancado: { v1: "120" },
+      decisoesTag: [decisao("0")],
+    });
+    await s.gerar(periodo as never, "user1");
+    expect(pedagioDe(criados)).toEqual([]);
+  });
+
+  it("motorista mudou o lançado depois da decisão: volta a valer o lançado", async () => {
+    ligado();
+    const { s, criados } = servico({
+      viagens: [{ id: "v1", data: em("2026-03-10") }],
+      pedagioLancado: { v1: "150" },
+      decisoesTag: [decisao("42", "120.00")],
+    });
+    await s.gerar(periodo as never, "user1");
+    expect(pedagioDe(criados)).toEqual(["150.00"]);
+  });
+
+  it("já reembolsado em acerto fechado: a decisão vira ajuste neste, sem reabrir o outro", async () => {
+    ligado();
+    const { s, criados } = servico({
+      viagens: [],
+      pedagiosFechados: [
+        {
+          viagemId: "v9",
+          valor: new Prisma.Decimal("120"),
+          acerto: { periodoInicio: em("2026-02-01"), periodoFim: em("2026-02-28") },
+          viagem: {
+            id: "v9",
+            data: em("2026-02-10"),
+            veiculoId: "cam1",
+            valorPedagioTotal: new Prisma.Decimal("120"),
+            pedagios: [],
+            decisaoPedagioTag: [{ ...decisao("42"), viagemId: "v9" }],
+          },
+        },
+      ],
+    });
+    await s.gerar(periodo as never, "user1");
+    const ajuste = criados.find((i) => i.tipo === "AJUSTE");
+    expect(ajuste).toMatchObject({ viagemId: "v9", decisaoPedagioTagId: "dec1", valor: "-78.00" });
+    expect(String(ajuste?.descricao)).toContain("acerto de 01/02 a 28/02");
+    expect(ajuste?.motivo).toBeTruthy();
+  });
+
+  it("a ligação da tag foi desfeita depois da decisão: volta a valer o lançado", async () => {
+    tagMock.atual = new Map([["v1", { temTag: true, faturaCobreODia: true, cobertura: null }]]);
+    const { s, criados } = servico({
+      viagens: [{ id: "v1", data: em("2026-03-10") }],
+      pedagioLancado: { v1: "120" },
+      decisoesTag: [decisao("42")],
+    });
+    await s.gerar(periodo as never, "user1");
+    expect(pedagioDe(criados)).toEqual(["120.00"]);
+  });
+
+  it("acerto reaberto cuja decisão já virou ajuste em outro: não desconta de novo aqui", async () => {
+    ligado();
+    const { s, criados } = servico({
+      viagens: [{ id: "v1", data: em("2026-03-10") }],
+      pedagioLancado: { v1: "120" },
+      decisoesTag: [{ ...decisao("42"), itensAcerto: [{ acertoId: "acB", acerto: { status: "FECHADO" } }] }],
+    });
+    await s.gerar(periodo as never, "user1");
+    expect(pedagioDe(criados)).toEqual(["120.00"]);
+  });
+
+  it("ajuste que já está em outro acerto aberto fica lá — não muda de acerto a cada geração", async () => {
+    ligado();
+    const { s, criados } = servico({
+      viagens: [],
+      pedagiosFechados: [
+        {
+          viagemId: "v9",
+          valor: new Prisma.Decimal("120"),
+          acerto: { periodoInicio: em("2026-02-01"), periodoFim: em("2026-02-28") },
+          viagem: {
+            id: "v9",
+            data: em("2026-02-10"),
+            veiculoId: "cam1",
+            valorPedagioTotal: new Prisma.Decimal("120"),
+            pedagios: [],
+            decisaoPedagioTag: [
+              { ...decisao("42"), viagemId: "v9", itensAcerto: [{ acertoId: "acOutro", acerto: { status: "ABERTO" } }] },
+            ],
+          },
+        },
+      ],
+    });
+    await s.gerar(periodo as never, "user1");
+    expect(criados.find((i) => i.tipo === "AJUSTE")).toBeUndefined();
   });
 });

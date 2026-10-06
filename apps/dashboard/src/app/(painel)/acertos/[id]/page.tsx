@@ -2,6 +2,7 @@
 
 import { GastosNoAcerto } from "../../gastos-viagem/_components/cartoes";
 import { use, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -293,6 +294,13 @@ function Conteudo({ id }: { id: string }) {
           onMudou={recarregar}
         />
       )}
+
+      {conf?.pedagioTag &&
+        (conf.pedagioTag.viagens.length > 0 ||
+          conf.pedagioTag.faturaNaoChegou > 0 ||
+          conf.pedagioTag.naoCasadas > 0) && (
+          <PedagioDaTag acertoId={id} aberto={aberto} conf={conf.pedagioTag} onMudou={recarregar} />
+        )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ListaItens
@@ -745,6 +753,203 @@ function PedagioEmDobro({
         ))}
       </ul>
     </Card>
+  );
+}
+
+/**
+ * Conferência da tag: o pedágio que o motorista lançou numa viagem em que a
+ * tag (ou o vale do contratante) pagou passagens. Devolver o lançado inteiro é
+ * pagar o mesmo pedágio duas vezes; a sugestão tira o que a tag pagou, e quem
+ * decide é o escritório. Acerto que já fechou não reabre: vira ajuste aqui.
+ */
+function PedagioDaTag({
+  acertoId,
+  aberto,
+  conf,
+  onMudou,
+}: {
+  acertoId: string;
+  aberto: boolean;
+  conf: NonNullable<ConferenciaDoAcerto["pedagioTag"]>;
+  onMudou: () => void;
+}) {
+  const pendentes = conf.viagens.filter((v) => !v.decisao).length;
+  return (
+    <Card className={`p-0 ${pendentes > 0 ? "border-l-4 border-l-amber-500" : ""}`}>
+      <div className="flex items-start gap-2 border-b px-4 py-3">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        <div>
+          <p className="text-sm font-semibold">
+            {pendentes > 0 ? "Pedágio que a tag pagou — conferir" : "Pedágio conferido com a tag"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            O motorista lançou pedágio em viagens em que a tag (ou o vale do contratante) já pagou praças.
+            Devolver tudo seria pagar o mesmo pedágio duas vezes. A sugestão desconta o que a tag pagou —
+            você decide.
+          </p>
+        </div>
+      </div>
+      <ul className="divide-y">
+        {conf.viagens.map((v) => (
+          <ViagemDaTag key={v.viagemId} acertoId={acertoId} aberto={aberto} v={v} onMudou={onMudou} />
+        ))}
+        {conf.faturaNaoChegou > 0 && (
+          <li className="px-4 py-3 text-xs text-muted-foreground">
+            {conf.faturaNaoChegou} viagem(ns) com pedágio lançado em caminhão com tag ainda sem conferência: a
+            fatura do Sem Parar desses dias não foi importada. Não trava o acerto.
+          </li>
+        )}
+        {conf.naoCasadas > 0 && (
+          <li className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-xs text-muted-foreground">
+            <span>
+              {conf.naoCasadas} viagem(ns) com pedágio lançado num dia que a fatura cobre, sem nenhuma passagem
+              ligada a elas.
+            </span>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/tag-pedagio?aba=casar">Casar passagens</Link>
+            </Button>
+          </li>
+        )}
+      </ul>
+    </Card>
+  );
+}
+
+function ViagemDaTag({
+  acertoId,
+  aberto,
+  v,
+  onMudou,
+}: {
+  acertoId: string;
+  aberto: boolean;
+  v: NonNullable<ConferenciaDoAcerto["pedagioTag"]>["viagens"][number];
+  onMudou: () => void;
+}) {
+  const token = useAuthToken();
+  const [ocupado, setOcupado] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [outro, setOutro] = useState(false);
+  const [valor, setValor] = useState("");
+  const [motivo, setMotivo] = useState("");
+
+  async function chamar(caminho: string, init: RequestInit) {
+    if (!token) return;
+    setOcupado(true);
+    setErro(null);
+    try {
+      await fetchApi(`/admin/acertos/${acertoId}/${caminho}`, { token, ...init });
+      setOutro(false);
+      onMudou();
+    } catch (e) {
+      setErro((e as Error).message);
+    } finally {
+      setOcupado(false);
+    }
+  }
+  const decidir = (valorReembolso: number, motivoTexto?: string) =>
+    chamar("pedagio-tag", {
+      method: "POST",
+      body: JSON.stringify({ viagemId: v.viagemId, valorReembolso, motivo: motivoTexto || undefined }),
+    });
+  function salvarOutro() {
+    const lido = lerNumero(valor);
+    if (!lido.ok || lido.valor == null) return setErro("Não entendi esse valor. Ex.: 42,50");
+    if (motivo.trim().length < 10) return setErro("Valor diferente da sugestão: escreva o motivo (pelo menos 10 letras).");
+    void decidir(lido.valor, motivo.trim());
+  }
+
+  const tagTexto =
+    Number(v.vale) > 0 ? `${brl(v.tag)} na tag + ${brl(v.vale)} de vale` : `${brl(v.tag)} na tag`;
+
+  return (
+    <li className="space-y-2 px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-medium">
+          {dataBR(v.dia)}
+          {v.rota ? ` · ${v.rota}` : ""}
+        </p>
+        <p className="text-xs tabular-nums text-muted-foreground">
+          lançou {brl(v.lancado)} · pago {tagTexto}
+        </p>
+      </div>
+      {Number(v.retorno) > 0 && (
+        <p className="text-xs text-muted-foreground">
+          A volta vazia passou {brl(v.retorno)} na tag. Não entra na sugestão: se ele lançou a volta também,
+          desconte com &quot;Outro valor&quot;.
+        </p>
+      )}
+      {v.jaPago && (
+        <p className="text-xs text-muted-foreground">
+          Já reembolsado {brl(v.jaPago.valor)} no {v.jaPago.acerto}. A diferença entra neste acerto como ajuste.
+        </p>
+      )}
+      {erro && <p className="text-xs text-destructive">{erro}</p>}
+      {v.decisao ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="text-emerald-700">
+            Devolver {brl(v.decisao.valorReembolso)}
+            {v.decisao.motivo ? ` (${v.decisao.motivo})` : ""}
+            {v.decisao.decididoPor ? ` — conferido por ${v.decisao.decididoPor}` : ""} em{" "}
+            {dataHoraBR(v.decisao.decididoEm)}
+          </span>
+          {aberto && !v.travada && (
+            <Permitido chave="acertos.gerar">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={ocupado}
+                onClick={() => void chamar(`pedagio-tag/${v.viagemId}`, { method: "DELETE" })}
+              >
+                <Undo2 className="h-4 w-4" /> Desfazer
+              </Button>
+            </Permitido>
+          )}
+          {v.travada && <span className="text-muted-foreground">O ajuste já está num acerto fechado.</span>}
+        </div>
+      ) : aberto ? (
+        <Permitido chave="acertos.gerar">
+          {outro ? (
+            <div className="grid gap-2 sm:grid-cols-[10rem_1fr_auto_auto] sm:items-end">
+              <div>
+                <Label className="text-xs">Devolver (R$)</Label>
+                <Input inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Motivo</Label>
+                <Input
+                  value={motivo}
+                  placeholder="Ex.: a tag não leu em Campo Verde, ele pagou em dinheiro"
+                  onChange={(e) => setMotivo(e.target.value)}
+                />
+              </div>
+              <Button size="sm" variant="success" disabled={ocupado} onClick={salvarOutro}>
+                <Check className="h-4 w-4" /> Salvar
+              </Button>
+              <Button size="sm" variant="outline" disabled={ocupado} onClick={() => setOutro(false)}>
+                Voltar
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button size="sm" variant="outline" disabled={ocupado} onClick={() => setOutro(true)}>
+                Outro valor
+              </Button>
+              <Button
+                size="sm"
+                variant="success"
+                disabled={ocupado}
+                onClick={() => void decidir(Number(v.sugestao))}
+              >
+                <Check className="h-4 w-4" /> Devolver {brl(v.sugestao)}
+              </Button>
+            </div>
+          )}
+        </Permitido>
+      ) : (
+        <p className="text-xs text-muted-foreground">Acerto fechado: decida no próximo acerto aberto.</p>
+      )}
+    </li>
   );
 }
 

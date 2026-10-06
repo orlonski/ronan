@@ -566,6 +566,7 @@ model Conta {
   acertosMotorista               AcertoMotorista[]
   itensAcerto                    ItemAcerto[]
   decisoesPedagioDobro           DecisaoPedagioDobro[]
+  decisoesPedagioTag             DecisaoPedagioTag[]
   pedidos                        Pedido[]
   orcamentos                     Orcamento[]
   orcamentoItens                 OrcamentoItem[]
@@ -807,6 +808,7 @@ model User {
   acertosPagos              AcertoMotorista[]     @relation("PagouAcerto")
   itensAcertoCriados        ItemAcerto[]          @relation("CriouItemAcerto")
   decisoesPedagioDobro      DecisaoPedagioDobro[] @relation("DecidiuPedagioDobro")
+  decisoesPedagioTag        DecisaoPedagioTag[]   @relation("DecidiuPedagioTag")
   despesasDecididas         Despesa[]             @relation("DecidiuDespesa")
   pedidosCriados            Pedido[]              @relation("CriouPedido")
   anexosPedidoEnviados      AnexoPedido[]         @relation("EnviouAnexoPedido")
@@ -2727,42 +2729,46 @@ model AcertoMotorista {
  * preenchida.
  */
 model ItemAcerto {
-  contaId         String          @default("__SEM_CONTA__")
-  conta           Conta           @relation(fields: [contaId], references: [id])
-  id              String          @id @default(uuid())
-  acerto          AcertoMotorista @relation(fields: [acertoId], references: [id], onDelete: Cascade)
-  acertoId        String
-  tipo            TipoItemAcerto
-  viagem          Viagem?         @relation(fields: [viagemId], references: [id], onDelete: SetNull)
-  viagemId        String?
-  pedagio         Pedagio?        @relation(fields: [pedagioId], references: [id], onDelete: SetNull)
-  pedagioId       String?
-  abastecimento   Abastecimento?  @relation(fields: [abastecimentoId], references: [id], onDelete: SetNull)
-  abastecimentoId String?
+  contaId             String             @default("__SEM_CONTA__")
+  conta               Conta              @relation(fields: [contaId], references: [id])
+  id                  String             @id @default(uuid())
+  acerto              AcertoMotorista    @relation(fields: [acertoId], references: [id], onDelete: Cascade)
+  acertoId            String
+  tipo                TipoItemAcerto
+  viagem              Viagem?            @relation(fields: [viagemId], references: [id], onDelete: SetNull)
+  viagemId            String?
+  pedagio             Pedagio?           @relation(fields: [pedagioId], references: [id], onDelete: SetNull)
+  pedagioId           String?
+  abastecimento       Abastecimento?     @relation(fields: [abastecimentoId], references: [id], onDelete: SetNull)
+  abastecimentoId     String?
   /// Gasto de viagem reembolsado (módulo `despesas`).
-  despesa         Despesa?        @relation(fields: [despesaId], references: [id], onDelete: SetNull)
-  despesaId       String?
+  despesa             Despesa?           @relation(fields: [despesaId], references: [id], onDelete: SetNull)
+  despesaId           String?
   /// O que o motorista lê na linha. Snapshot: sobrevive à viagem ser editada.
-  descricao       String
+  descricao           String
   /// Um sinal só, positivo credita e negativo desconta — assim a soma do extrato
   /// não depende de lembrar o sinal de cada tipo.
-  valor           Decimal         @db.Decimal(12, 2)
+  valor               Decimal            @db.Decimal(12, 2)
   /// Obrigatório em desconto lançado à mão. Tirar dinheiro de parceiro autônomo
   /// sem justificativa escrita é a mesma doutrina do km: não pode.
-  motivo          String?
+  motivo              String?
   /// True = a regra gerou. False = alguém digitou. O regerar só mexe no automático.
-  automatico      Boolean         @default(true)
-  criadoPor       User?           @relation("CriouItemAcerto", fields: [criadoPorId], references: [id], onDelete: SetNull)
-  criadoPorId     String?
-  criadoEm        DateTime        @default(now())
+  automatico          Boolean            @default(true)
+  criadoPor           User?              @relation("CriouItemAcerto", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId         String?
+  criadoEm            DateTime           @default(now())
   /// "Este item saiu do acerto de 01/09 a 15/09": o item estava em outro acerto
   /// ABERTO e foi puxado pra este ao gerar. Texto pra tela, não regra.
-  puxadoDe        String?
+  puxadoDe            String?
   /// A trava contra pagar o mesmo lançamento duas vezes. Preenchida SÓ quando o
   /// acerto fecha (e limpa ao reabrir): "FRETE:<viagemId>", "PEDAGIO:<id>"…
   /// (ver `chaveDoItem` em common/acerto-selecao.ts). O unique faz o banco
   /// recusar o mesmo lançamento em dois acertos FECHADO/PAGO.
-  chaveFechada    String?
+  chaveFechada        String?
+  /// Ajuste que leva a decisão da tag pra um acerto seguinte: o reembolso de
+  /// pedágio já tinha sido pago num acerto FECHADO quando a fatura chegou.
+  decisaoPedagioTag   DecisaoPedagioTag? @relation(fields: [decisaoPedagioTagId], references: [id], onDelete: SetNull)
+  decisaoPedagioTagId String?
 
   @@unique([contaId, chaveFechada])
   @@index([acertoId])
@@ -2772,6 +2778,35 @@ model ItemAcerto {
   @@index([despesaId])
   @@index([contaId])
   @@map("itens_acerto")
+}
+
+/// O pedágio que o motorista lançou numa viagem × o que a tag (e o vale) pagou
+/// nas passagens ligadas a ela (conferência da tag, Onda 2). A empresa decide
+/// quanto devolve — parcial é o caso comum: "dos R$ 120, a tag pagou R$ 78".
+/// Guarda o lançado e o da tag do momento: se o motorista mudar o lançado, a
+/// decisão deixa de valer e a viagem volta pra conferência.
+model DecisaoPedagioTag {
+  contaId        String       @default("__SEM_CONTA__")
+  conta          Conta        @relation(fields: [contaId], references: [id])
+  id             String       @id @default(uuid())
+  viagem         Viagem       @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId       String
+  valorLancado   Decimal      @db.Decimal(12, 2)
+  /// Tag + vale nas passagens ligadas à viagem, no momento da decisão.
+  valorTag       Decimal      @db.Decimal(12, 2)
+  /// O que a empresa devolve ao motorista por esta viagem.
+  valorReembolso Decimal      @db.Decimal(12, 2)
+  motivo         String?
+  /// Em que acerto foi decidido (rastro, não regra).
+  acertoId       String?
+  decididoPor    User?        @relation("DecidiuPedagioTag", fields: [decididoPorId], references: [id], onDelete: SetNull)
+  decididoPorId  String?
+  decididoEm     DateTime     @default(now())
+  itensAcerto    ItemAcerto[]
+
+  @@unique([contaId, viagemId])
+  @@index([contaId])
+  @@map("decisoes_pedagio_tag")
 }
 
 /// Decisão humana sobre um possível pedágio em dobro: o avulso (sem viagem) caiu
@@ -4712,6 +4747,7 @@ model Viagem {
   alertas           AlertaOperacional[]
   documentosFiscais DocumentoFiscal[]
   ligacoesTag       LigacaoTagViagem[]
+  decisaoPedagioTag DecisaoPedagioTag[]
 
   @@index([transportadoraId, data])
   @@index([motoristaId, data])

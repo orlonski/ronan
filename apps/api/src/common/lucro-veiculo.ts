@@ -54,6 +54,15 @@ export type ViagemParaLucro = ViagemParaAcerto & {
    * o que ele recebe é salário, e salário entra como custo fixo do caminhão.
    */
   regra: RegraRemuneracao | null;
+  /**
+   * Conferência da tag (módulo `tag-pedagio`): o que a empresa decidiu devolver
+   * do pedágio lançado nesta viagem, depois de ver o que a tag e o vale pagaram.
+   * Undefined = ninguém decidiu: vale o lançado (é o que o acerto paga). O que a
+   * tag cobrou entra por `tagFatura`.
+   */
+  pedagioConferidoTag?: DecimalLike;
+  /** Pedágio lançado ainda não conferido com a fatura da tag que cobre o dia: pode estar contado duas vezes. */
+  pedagioTagSemConferencia?: boolean;
 };
 
 export type AbastecimentoParaLucro = {
@@ -106,6 +115,12 @@ export type EntradaLucroVeiculo = {
    * caminhão-tanque sairia de graça e o caminhão pareceria mais lucrativo.
    */
   precoMedioLitro: Record<string, DecimalLike>;
+  /**
+   * O que a fatura da tag cobrou do caminhão no período: as passagens pela tag
+   * (vale-pedágio não, quem pagou foi o contratante) e o plano/taxas das
+   * faturas que fecham no período. É custo da empresa, sempre.
+   */
+  tagFatura?: DecimalLike;
 };
 
 export type ItemDespesa = { id: string; data: string; descricao: string; valor: string | null };
@@ -146,6 +161,7 @@ export type LucroVeiculo = {
     abastecimentosSemPreco: number;
     manutencoesSemValor: number;
     viagensEmMaisDeUmAcerto: number;
+    pedagioTagSemConferencia: number;
   };
   detalhe: {
     manutencoes: ItemDespesa[];
@@ -250,7 +266,7 @@ export function pedagioDaViagemNaConta(v: ViagemParaLucro): {
   empresa: Prisma.Decimal;
   fora: Prisma.Decimal;
 } {
-  const { valor } = pedagioDaViagem(v);
+  const valor = v.pedagioConferidoTag != null ? dec(v.pedagioConferidoTag) : pedagioDaViagem(v).valor;
   if (v.regra == null || v.regra.reembolsaPedagio) return { empresa: valor, fora: ZERO() };
   return { empresa: ZERO(), fora: valor };
 }
@@ -264,6 +280,7 @@ export function calcularLucroVeiculo(e: EntradaLucroVeiculo): LucroVeiculo {
   let viagensSemCustoMotorista = 0;
   let viagensEmpregado = 0;
   let viagensEmMaisDeUmAcerto = 0;
+  let pedagioTagSemConferencia = 0;
 
   for (const v of e.viagens) {
     if ((v.itensDeFreteNoAcerto ?? 0) > 1) viagensEmMaisDeUmAcerto++;
@@ -278,7 +295,9 @@ export function calcularLucroVeiculo(e: EntradaLucroVeiculo): LucroVeiculo {
     const p = pedagioDaViagemNaConta(v);
     pedagio = pedagio.add(p.empresa);
     pedagioFora = pedagioFora.add(p.fora);
+    if (v.pedagioTagSemConferencia) pedagioTagSemConferencia++;
   }
+  pedagio = pedagio.add(dec(e.tagFatura));
 
   for (const p of e.pedagiosAvulsos) {
     if (p.empresaPaga) pedagio = pedagio.add(dec(p.valor));
@@ -387,6 +406,7 @@ export function calcularLucroVeiculo(e: EntradaLucroVeiculo): LucroVeiculo {
       abastecimentosSemPreco,
       manutencoesSemValor: manut.semValor,
       viagensEmMaisDeUmAcerto,
+      pedagioTagSemConferencia,
     },
     detalhe: {
       manutencoes: e.manutencoes.map(itemDespesa),
