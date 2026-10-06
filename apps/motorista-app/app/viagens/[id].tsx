@@ -209,9 +209,9 @@ export default function ViagemDetalheScreen() {
                   Cliente
                 </Text>
                 <Text className="mt-0.5 text-xl font-bold text-foreground">
-                  {detalhe.data.cliente.nome}
+                  {detalhe.data.cliente?.nome ?? "Sem cliente"}
                 </Text>
-                {detalhe.data.cliente.empresa && (
+                {detalhe.data.cliente?.empresa && (
                   <View className="mt-1 flex-row items-center gap-1.5">
                     <Building2 size={14} color="#64748b" />
                     <Text className="text-sm text-muted-foreground">

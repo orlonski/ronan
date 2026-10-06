@@ -262,7 +262,9 @@ export type Viagem = {
   camposDivergentes?: CampoDivergente[];
   sincronizadoEm: string;
   veiculo: Veiculo;
-  cliente: { id: string; nome: string };
+  // Nulo na viagem guiada (o cliente vem da carga ou da programação) e no modo
+  // que não exige cliente. Sem isso o card da home quebrava a tela inteira.
+  cliente: { id: string; nome: string } | null;
   // Nulos quando o modo de serviço não os exige.
   // Declarados assim de propósito: o compilador força cada tela a tratar o
   // caso, em vez de a tela quebrar no celular do motorista.
@@ -1017,7 +1019,7 @@ export type ViagemDetalhe = Viagem & {
   kmRecalculadoEm: string | null;
   kmAntesRecalculo: string | null;
   pontos: { lat: number; lng: number; capturadoEm: string }[];
-  cliente: { id: string; nome: string; empresa?: { id: string; nome: string } };
+  cliente: { id: string; nome: string; empresa?: { id: string; nome: string } } | null;
   localCarga: Viagem["localCarga"] & { logradouro: string; lat: number | null; lng: number | null };
   // NonNullable + `| null` explícito: `X | null & {...}` colapsaria o null e a
   // tela acharia que a descarga sempre existe (some no typecheck, quebra no
