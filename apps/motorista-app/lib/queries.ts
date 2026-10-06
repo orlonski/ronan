@@ -216,6 +216,12 @@ export type Viagem = {
   id: string;
   clientId: string;
   data: string;
+  /**
+   * Quando ele tocou Iniciar (viagem guiada). A API sempre mandou (a lista usa
+   * `include`); o tipo só passou a declarar pra sugestão de viagem do gasto.
+   * Cache antigo/manual = ausente.
+   */
+  iniciadoEm?: string | null;
   toneladas: string;
   /**
    * Modo de serviço da viagem. Ausente = frete por tonelada — é assim que todo

@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
+import { sugerirViagens } from "@ronan/shared-types";
 import {
   cacheGetAt,
   cachePut,
@@ -543,9 +544,11 @@ export type ViagemConhecida = {
   clientId: string | null;
   rotulo: string;
   dia: string;
-  /** Início (guiada) — ISO. */
+  /** Início (guiada) — ISO. Sem ele, a viagem vale pelo dia inteiro. */
   inicio: string | null;
   emAndamento: boolean;
+  /** Status do servidor (CANCELADA nunca é sugerida); null = ainda no celular. */
+  status?: string | null;
   veiculoId: string | null;
   placa: string | null;
 };
@@ -605,6 +608,7 @@ export function useViagensConhecidas(): ViagemConhecida[] {
         dia: diaSP(andamento.iniciadoEm),
         inicio: andamento.iniciadoEm,
         emAndamento: true,
+        status: "EM_ANDAMENTO",
         veiculoId: andamento.veiculoId ?? null,
         placa: placas.get(andamento.veiculoId) ?? null,
       });
@@ -621,6 +625,7 @@ export function useViagensConhecidas(): ViagemConhecida[] {
         dia: diaSP(inicio),
         inicio,
         emAndamento: false,
+        status: null,
         veiculoId: veic,
         placa: veic ? (placas.get(veic) ?? null) : null,
       });
@@ -639,6 +644,7 @@ export function useViagensConhecidas(): ViagemConhecida[] {
         dia,
         inicio: null,
         emAndamento: false,
+        status: null,
         veiculoId: veic,
         placa: veic ? (placas.get(veic) ?? null) : null,
       });
@@ -650,8 +656,11 @@ export function useViagensConhecidas(): ViagemConhecida[] {
         clientId: v.clientId ?? null,
         rotulo: rotuloDaViagemServidor(v),
         dia: (v.data ?? "").slice(0, 10),
-        inicio: null,
+        // A guiada vem com `iniciadoEm` da API: é ela que dá a janela de horas.
+        // Sem isso (manual, ou cache de antes), vale o dia inteiro.
+        inicio: typeof v.iniciadoEm === "string" ? v.iniciadoEm : null,
         emAndamento: v.status === "EM_ANDAMENTO",
+        status: v.status ?? null,
         veiculoId: v.veiculo?.id ?? null,
         placa: v.veiculo?.placa ?? null,
       });
@@ -661,21 +670,39 @@ export function useViagensConhecidas(): ViagemConhecida[] {
 }
 
 /**
- * A viagem candidata pro "Foi nesta viagem?" — só com o que está no celular:
- * (1) a em andamento; senão (2) a de hoje (a guiada que começou antes da hora
- * do gasto, ou a lançada hoje); senão (3) a das últimas 24 h. Nunca marca nada:
- * só sugere.
+ * A viagem candidata pro "Foi nesta viagem?" — a MESMA regra do painel
+ * (`sugerirViagens` do shared-types, pura e sem Intl: roda no Hermes), com o
+ * que o celular sabe: a em andamento (espelho local, com `iniciadoEm`), as
+ * guardadas na fila e o histórico em cache. Nunca marca nada: só sugere.
+ *
+ * O que o celular NÃO tem e como fica:
+ * - `motoristaId`: não precisa — tudo aqui já é dele.
+ * - `veiculoId` do gasto: o gasto não tem caminhão no app, então qualquer
+ *   caminhão conta como "o mesmo" (a função trata ausente assim).
+ * - `finalizadoEm`: a viagem não guarda; a função cai no fim do dia (igual ao
+ *   painel). Guiada que ainda está na fila de "Iniciar" (sem status do
+ *   servidor) também fica até o fim do dia.
+ * - `iniciadoEm` de viagem do cache gravado antes deste campo: ausente → a
+ *   viagem é lida como manual (dia inteiro) até o cache revalidar.
+ *
+ * A em andamento continua sendo a primeira quando o gasto cai na janela dela
+ * (do Iniciar − tolerância até agora + tolerância); fora disso, vale a ordem
+ * da função oficial.
  */
 export function sugerirViagem(viagens: ViagemConhecida[], instanteISO: string): ViagemConhecida | null {
-  const andando = viagens.find((v) => v.emAndamento);
-  if (andando) return andando;
-  const dia = diaSP(instanteISO);
-  const t = new Date(instanteISO).getTime();
-  const deHoje = viagens.filter((v) => v.dia === dia && (!v.inicio || new Date(v.inicio).getTime() <= t));
-  if (deHoje.length > 0) return deHoje[0]!;
-  const ontem = diaSP(t - 24 * 60 * 60 * 1000);
-  const recente = viagens.find((v) => v.dia === ontem);
-  return recente ?? null;
+  const r = sugerirViagens(
+    { data: instanteISO },
+    viagens.map((v) => ({
+      id: v.chave,
+      veiculoId: v.veiculoId,
+      data: v.dia || null,
+      iniciadoEm: v.inicio,
+      status: v.emAndamento ? "EM_ANDAMENTO" : v.status,
+      conhecida: v,
+    })),
+  );
+  const andando = r.find((s) => s.viagem.conhecida.emAndamento && s.forca === "FORTE");
+  return (andando ?? r[0])?.viagem.conhecida ?? null;
 }
 
 /** As viagens dos últimos `dias` dias (pra "Em qual viagem foi?"). */
