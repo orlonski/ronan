@@ -24,6 +24,7 @@ import {
   Package,
   Plus,
   Receipt,
+  ReceiptText,
   Route,
   Ship,
   SquareParking,
@@ -48,6 +49,7 @@ import {
   horaSP,
   pegarAvisoGastoSalvo,
   resumirGastos,
+  useAbaGastos,
   useDespesasAtualizadasEm,
   useGastos,
   useModuloDespesas,
@@ -556,6 +558,26 @@ export function FaixaGastoSalvo() {
 // ---------------------------------------------------------------------------
 // Guarda das telas (abrem também por link ou por pilha antiga)
 // ---------------------------------------------------------------------------
+
+/**
+ * PORTA DUPLA: na empresa com o módulo, o caderno pessoal continua existindo
+ * (no Perfil) — e é fácil anotar ali o gasto que deveria voltar no acerto.
+ * Este aviso fica no topo do caderno e do "Anotar gasto" pessoal. Sem o
+ * módulo, não aparece: lá não há outro lugar pra mandar.
+ */
+export function AvisoCadernoSoSeu() {
+  if (!useAbaGastos()) return null;
+  return (
+    <View className="gap-3 rounded-2xl border-2 border-warning bg-warning/10 p-4">
+      <Text className="text-base font-semibold text-foreground">
+        Isto é só seu: o escritório não vê. Pra receber de volta no acerto, lance em Gastos.
+      </Text>
+      <BotaoAcao Icone={ReceiptText} onPress={() => router.dismissTo("/gastos")}>
+        Ir pra Gastos
+      </BotaoAcao>
+    </View>
+  );
+}
 
 export function SemGastoDeViagem({ titulo }: { titulo: string }) {
   return (

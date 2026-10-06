@@ -40,6 +40,7 @@ import {
   onSyncChange,
   vincularDespesasPendentes,
 } from "./sync";
+import { useVisao } from "./visao";
 
 // ---------------------------------------------------------------------------
 // Módulo ligado?
@@ -70,6 +71,26 @@ export function useModuloDespesas(): { lancar: boolean; acompanhar: boolean } {
     // achar o gasto depois foi exatamente a reclamação do motorista.
     acompanhar: lancar || (capAcompanhar && (contratado || temHistorico)),
   };
+}
+
+/**
+ * A aba "Gastos" ocupa o lugar da aba "Caderno" (decisão do dono, 06/10/2026)?
+ *
+ * Só em empresa com o módulo: lá o gasto da estrada é o que volta no acerto, e
+ * o caderno pessoal (o que nenhuma empresa vê) desce pro Perfil como "Meu
+ * caderno pessoal". Sem o módulo, e pra quem não tem empresa, nada muda.
+ *
+ * Só a visão "empresa": quem é registrado e NÃO dirige não tem gasto de
+ * viagem, e as rotas de despesa são de motorista.
+ *
+ * Enquanto catálogo e acessos carregam, `useModuloDespesas` responde "não" —
+ * então a barra fica como sempre foi (Caderno) até o módulo se confirmar, sem
+ * piscar pra uma aba que depois some.
+ */
+export function useAbaGastos(): boolean {
+  const visao = useVisao();
+  const modulo = useModuloDespesas();
+  return visao === "empresa" && (modulo.lancar || modulo.acompanhar);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Calendar, Clock, House, MessageCircle, NotebookPen, User } from "lucide-react-native";
+import { Calendar, Clock, House, MessageCircle, NotebookPen, ReceiptText, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBadgeChat } from "@/lib/chat";
 import { useMe } from "@/lib/queries";
@@ -7,6 +7,7 @@ import { useVisao } from "@/lib/visao";
 import { useEhFuncionario } from "@/hooks/use-eh-funcionario";
 import { usePermite } from "@/lib/acessos-app";
 import { useMostraHistorico } from "@/lib/mostra-historico";
+import { useAbaGastos } from "@/lib/gastos";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -24,6 +25,8 @@ export default function TabsLayout() {
   const ehFuncionario = usePermite("app.ponto.bater", useEhFuncionario());
   // Quem não pode lançar nada e nunca lançou não tem histórico pra ver.
   const mostraHistorico = useMostraHistorico();
+  // Empresa com o módulo "Gasto de viagem": Gastos no lugar do Caderno.
+  const abaGastos = useAbaGastos();
 
   return (
     <Tabs
@@ -81,13 +84,25 @@ export default function TabsLayout() {
       />
       {/* CADERNO: o dinheiro dele por fora, que a empresa não vê. Não tem
           liberação — é dele. Some pra quem não tem empresa porque, pra ele,
-          o Histórico já é o caderno. */}
+          o Histórico já é o caderno — e dá lugar à aba Gastos logo abaixo. */}
       <Tabs.Screen
         name="caderno"
         options={{
           title: "Caderno",
-          href: visao === "empresa" || visao === "registrado" ? undefined : null,
+          href: !abaGastos && (visao === "empresa" || visao === "registrado") ? undefined : null,
           tabBarIcon: ({ color, size }) => <NotebookPen color={color} size={size} />,
+        }}
+      />
+      {/* GASTOS: no MESMO lugar do Caderno, só em empresa com o módulo (decisão
+          do dono, 06/10/2026). O caderno não some: vai pro Perfil, como "Meu
+          caderno pessoal" (app/caderno-pessoal.tsx). Enquanto o módulo não se
+          confirma, fica o Caderno de sempre (ver `useAbaGastos`). */}
+      <Tabs.Screen
+        name="gastos"
+        options={{
+          title: "Gastos",
+          href: abaGastos ? undefined : null,
+          tabBarIcon: ({ color, size }) => <ReceiptText color={color} size={size} />,
         }}
       />
       <Tabs.Screen

@@ -56,10 +56,17 @@ type Linha =
 export function HistoricoPessoal({
   titulo = "Histórico",
   acoes,
+  cabecalho,
 }: {
   titulo?: string;
   /** Na aba Caderno, os botões de anotar vêm antes da lista. */
   acoes?: ReactNode;
+  /**
+   * Cabeçalho próprio (ex.: `ScreenHeader` com voltar, na rota empilhada do
+   * caderno pessoal). Substitui o título; os meses continuam embaixo dele, no
+   * mesmo azul.
+   */
+  cabecalho?: ReactNode;
 } = {}) {
   const meses = useMemo(() => ultimosMeses(6), []);
   const [mes, setMes] = useState(mesAtual());
@@ -152,11 +159,14 @@ export function HistoricoPessoal({
     <View className="flex-1 bg-background">
       {/* Cabeçalho azul: a barra de status do iPhone é branca (ver _layout), e
           topo claro apagaria hora, sinal e bateria. */}
-      <SafeAreaView edges={["top"]} className="bg-brand">
-        <View className="px-4 pb-4 pt-2">
-          <Text className="mb-3 text-2xl font-extrabold tracking-tight text-white">
-            {titulo}
-          </Text>
+      {cabecalho}
+      <SafeAreaView edges={cabecalho ? [] : ["top"]} className="bg-brand">
+        <View className={cabecalho ? "px-4 pb-4" : "px-4 pb-4 pt-2"}>
+          {cabecalho ? null : (
+            <Text className="mb-3 text-2xl font-extrabold tracking-tight text-white">
+              {titulo}
+            </Text>
+          )}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-1">
             {meses.map((m) => (
               <Pressable

@@ -17,6 +17,7 @@ import {
   LogOut,
   MapPin,
   MessageCircle,
+  NotebookPen,
   User as UserIcon,
 } from "lucide-react-native";
 import {
@@ -54,7 +55,7 @@ import {
   type StatusPermissaoNotificacao,
 } from "@/lib/notifications";
 import { usePermite } from "@/lib/acessos-app";
-import { useModuloDespesas } from "@/lib/gastos";
+import { useAbaGastos, useModuloDespesas } from "@/lib/gastos";
 
 export default function Perfil() {
   const visao = useVisao();
@@ -80,6 +81,7 @@ function PerfilDaEmpresa() {
   const verAcertos = usePermite("app.acertos.ver", !ehRegistrado);
   // Gasto de viagem (módulo `despesas`): só com a capacidade ligada.
   const moduloGastos = useModuloDespesas();
+  const abaGastos = useAbaGastos();
   const verDocumentos = usePermite("app.documentos.enviar");
   // Motorista CLT também avisa: quem corta é o acesso (mora no cadastro de motorista).
   const verAvisos = usePermite("app.problema.avisar");
@@ -337,6 +339,20 @@ function PerfilDaEmpresa() {
                   />
                 </>
               ) : null}
+              {/* O caderno pessoal desce pra cá quando a aba Gastos ocupa o
+                  lugar da aba Caderno (empresa com o módulo). Sem a aba
+                  escondida, a porta já está no tab bar. */}
+              {abaGastos ? (
+                <>
+                  <View className="h-px bg-border" />
+                  <ActionRow
+                    icon={<NotebookPen size={20} color="#13316b" />}
+                    title="Meu caderno pessoal"
+                    subtitle="Fretes por conta própria e anotações suas"
+                    onPress={() => router.push("/caderno-pessoal")}
+                  />
+                </>
+              ) : null}
               {/* A porta fixa dos documentos, pelo MESMO motivo dos convites
                   logo abaixo: o bloco da home some quando não falta nada, e
                   aí a tela existiria sem porta — ele não teria como rever o
@@ -570,10 +586,12 @@ function ToggleRow({
 function ActionRow({
   icon,
   title,
+  subtitle,
   onPress,
 }: {
   icon: ReactNode;
   title: string;
+  subtitle?: string;
   onPress: () => void;
 }) {
   return (
@@ -584,7 +602,10 @@ function ActionRow({
       <View className="h-10 w-10 items-center justify-center rounded-full bg-secondary">
         {icon}
       </View>
-      <Text className="flex-1 text-base font-semibold text-foreground">{title}</Text>
+      <View className="flex-1">
+        <Text className="text-base font-semibold text-foreground">{title}</Text>
+        {subtitle ? <Text className="text-sm text-muted-foreground">{subtitle}</Text> : null}
+      </View>
       <ChevronRight size={20} color="#94a3b8" />
     </Pressable>
   );

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScreenHeader } from "@/components/screen-header";
+import { AvisoCadernoSoSeu } from "@/components/gastos";
 import { cacheDoMes, hojeISO, lancar, mesAtual, type ItemPessoal } from "@/lib/pessoal";
 
 const dinheiro = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -91,6 +92,9 @@ export default function LancarGastoScreen() {
           />
 
           <View className="flex-1 gap-5 px-5 py-6">
+            {/* Empresa com o módulo: o gasto que volta no acerto é na aba Gastos. */}
+            <AvisoCadernoSoSeu />
+
             <View className="flex-row flex-wrap gap-2">
               {TIPOS_LANCAMENTO_PESSOAL.map((t) => (
                 <Pressable
