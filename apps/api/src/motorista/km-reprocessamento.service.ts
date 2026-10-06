@@ -44,6 +44,7 @@ export class KmReprocessamentoService {
         where: { id: viagemId },
         select: {
           id: true,
+          clientId: true,
           motoristaId: true,
           status: true,
           km: true,
@@ -108,6 +109,10 @@ export class KmReprocessamentoService {
             }
           : {};
       const kmAtual = Number(v.km ?? 0);
+      // Viagem que veio da planilha de importação é histórico que o escritório
+      // trouxe, não lançamento do motorista: não tem "você lançou sem sinal" pra
+      // avisar, e um aviso por linha importada é uma enxurrada de push.
+      const importada = v.clientId.startsWith(PREFIXO_IMPORTACAO);
       const mudou = Math.abs(novoKm - kmAtual) > TOLERANCIA_KM;
       const agora = new Date();
 
@@ -120,7 +125,11 @@ export class KmReprocessamentoService {
       // ROTA_ESCOLHIDA entra na mesma guarda: escolher a estrada no mapa é
       // decisão do motorista tanto quanto digitar o número. Sem isso o cron
       // trocava a rota que ele escolheu pela mais curta do OSRM, calado.
+      // O km que a planilha trouxe é o que foi faturado na época: vale como o
+      // digitado na mão — só atualiza a referência, nunca troca o faturado.
+      const kmDaPlanilha = importada && v.km != null;
       if (
+        kmDaPlanilha ||
         v.kmEditadoManual === true ||
         v.kmFonte === "HISTORICO" ||
         v.kmFonte === "ROTA_ESCOLHIDA"
@@ -133,7 +142,7 @@ export class KmReprocessamentoService {
             ...atualizarTrechos,
           },
         });
-        if (mudou) {
+        if (mudou && !importada) {
           await this.notificar(v.id, v.motoristaId, v.motorista?.expoPushToken, {
             titulo: "Confere o km da sua viagem",
             corpo: `Você marcou ${fmtKm(kmAtual)} km. Pelo trajeto certo deu ${fmtKm(
@@ -157,7 +166,7 @@ export class KmReprocessamentoService {
           ...atualizarTrechos,
         },
       });
-      if (mudou) {
+      if (mudou && !importada) {
         const mat = v.material?.nome ? `de ${v.material.nome} ` : "";
         await this.notificar(v.id, v.motoristaId, v.motorista?.expoPushToken, {
           titulo: "Acertamos o km da sua viagem",
@@ -238,6 +247,9 @@ export class KmReprocessamentoService {
     }
   }
 }
+
+/** Prefixo do clientId das viagens criadas pela importação (ver importacao.service). */
+const PREFIXO_IMPORTACAO = "import:";
 
 /** Km amigável pro motorista: inteiro (sem casas), com sufixo tratado no caller. */
 function fmtKm(km: number): string {
