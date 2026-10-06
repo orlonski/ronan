@@ -27,15 +27,29 @@ export const InputDinheiro = forwardRef<TextInput, Props>(
     const interno = useRef<TextInput>(null);
     useImperativeHandle(ref, () => interno.current as TextInput);
     const texto = centavos > 0 ? fmtReais(centavos / 100) : "";
+    // O tamanho do texto que está NA TELA agora. O evento de seleção pode chegar
+    // antes da renderização com o texto novo (ao apagar, o nativo já encolheu e
+    // a closure ainda tem o texto antigo, maior). Mandar o cursor pra além do fim
+    // estoura no Android — por isso o ajuste espera um frame e lê daqui.
+    const tamanhoAtual = useRef(texto.length);
+    tamanhoAtual.current = texto.length;
+    // Enquanto ele digita/apaga, o cursor não importa (`proximoCentavos` ignora a
+    // posição) e o texto nativo pode estar um passo atrás: não mexe na seleção.
+    // A correção só serve pro toque no meio do número.
+    const digitando = useRef(false);
 
     const aoMudarSelecao = useCallback<NonNullable<TextInputProps["onSelectionChange"]>>(
       (e) => {
         onSelectionChange?.(e);
         const { start, end } = e.nativeEvent.selection;
-        const n = texto.length;
-        if (start !== n || end !== n) interno.current?.setSelection?.(n, n);
+        if (digitando.current) return;
+        if (start === tamanhoAtual.current && end === tamanhoAtual.current) return;
+        requestAnimationFrame(() => {
+          const n = tamanhoAtual.current;
+          interno.current?.setSelection?.(n, n);
+        });
       },
-      [texto, onSelectionChange],
+      [onSelectionChange],
     );
 
     return (
@@ -47,7 +61,16 @@ export const InputDinheiro = forwardRef<TextInput, Props>(
         // Colar/selecionar trecho não faz sentido num número que cresce pela direita.
         contextMenuHidden
         onSelectionChange={aoMudarSelecao}
-        onChangeText={(t) => onChangeCentavos(proximoCentavos(texto, t, centavos))}
+        onChangeText={(t) => {
+          digitando.current = true;
+          onChangeCentavos(proximoCentavos(texto, t, centavos));
+          // Dois frames: o texto novo já foi pra tela antes de voltar a corrigir.
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              digitando.current = false;
+            }),
+          );
+        }}
       />
     );
   },
