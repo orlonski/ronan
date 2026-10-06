@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Platform, View } from "react-native";
+import { View } from "react-native";
 import polylineLib from "@mapbox/polyline";
 
 /**
@@ -64,25 +64,41 @@ export function MapaCargaDescarga({
     }
   }, [geometria]);
 
+  // Onde a viagem foi lançada só entra no enquadramento se estiver perto do
+  // trajeto. Viagem lançada depois (de casa, a 1.000 km) encolhia a rota num
+  // risco no canto do mapa — o pino segue no mapa, só não manda no zoom.
+  const lancamentoNoQuadro = useMemo(() => {
+    if (!lancamento) return null;
+    const ref = [
+      ...(carga ? [{ lat: carga.lat, lng: carga.lng }] : []),
+      ...(descarga ? [{ lat: descarga.lat, lng: descarga.lng }] : []),
+    ];
+    if (ref.length === 0) return lancamento;
+    const perto = ref.some(
+      (r) => Math.abs(r.lat - lancamento.lat) < 0.5 && Math.abs(r.lng - lancamento.lng) < 0.5,
+    );
+    return perto ? lancamento : null;
+  }, [carga, descarga, lancamento]);
+
   const todosLats = useMemo(() => {
     const lats: number[] = [];
     if (carga) lats.push(carga.lat);
     if (descarga) lats.push(descarga.lat);
-    if (lancamento) lats.push(lancamento.lat);
+    if (lancamentoNoQuadro) lats.push(lancamentoNoQuadro.lat);
     traçado.forEach((p) => lats.push(p.latitude));
     pedagios.forEach((p) => lats.push(p.lat));
     return lats;
-  }, [carga, descarga, lancamento, traçado, pedagios]);
+  }, [carga, descarga, lancamentoNoQuadro, traçado, pedagios]);
 
   const todosLngs = useMemo(() => {
     const lngs: number[] = [];
     if (carga) lngs.push(carga.lng);
     if (descarga) lngs.push(descarga.lng);
-    if (lancamento) lngs.push(lancamento.lng);
+    if (lancamentoNoQuadro) lngs.push(lancamentoNoQuadro.lng);
     traçado.forEach((p) => lngs.push(p.longitude));
     pedagios.forEach((p) => lngs.push(p.lng));
     return lngs;
-  }, [carga, descarga, lancamento, traçado, pedagios]);
+  }, [carga, descarga, lancamentoNoQuadro, traçado, pedagios]);
 
   if (todosLats.length === 0 || !mod) {
     return <View className="rounded-xl bg-muted/40" style={{ height }} />;
@@ -91,12 +107,12 @@ export function MapaCargaDescarga({
   const MapView = mod.default;
   const Marker = mod.Marker;
   const Polyline = mod.Polyline;
-  // iOS: usar Apple Maps (default, sem provider). PROVIDER_GOOGLE exigiria
-  // Google Maps SDK iOS configurado nativamente (chave + Info.plist + linkagem
-  // AirGoogleMaps), que e' bem mais trabalhoso. Apple Maps cobre o caso de
-  // uso (mostrar pinos + polyline) sem custo adicional.
-  // Android: continua com Google Maps (ja configurado via google-services).
-  const provider = Platform.OS === "android" ? mod.PROVIDER_GOOGLE : undefined;
+  // Google Maps nas DUAS plataformas: no iOS o Apple Maps não desenhava a
+  // polilinha (mesma correção do mapa-viagem).
+  const provider = mod.PROVIDER_GOOGLE;
+  // A rota e os pedágios chegam depois do mapa montar; `initialRegion` só vale
+  // na montagem e a polilinha nova não aparece no iPhone. Remonta quando mudam.
+  const chaveMapa = `${geometria?.length ?? 0}:${geometria?.slice(-8) ?? ""}:${pedagios.length}`;
 
   const minLat = Math.min(...todosLats);
   const maxLat = Math.max(...todosLats);
@@ -117,7 +133,7 @@ export function MapaCargaDescarga({
 
   return (
     <View className="overflow-hidden rounded-xl" style={{ height }}>
-      <MapView {...mapProps}>
+      <MapView key={chaveMapa} {...mapProps}>
         {traçado.length >= 2 && (
           <Polyline coordinates={traçado} strokeColor="#ea580c" strokeWidth={4} />
         )}
