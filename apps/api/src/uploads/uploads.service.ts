@@ -6,6 +6,7 @@ import type { Readable } from "node:stream";
 import { contaIdAtual } from "../common/conta/conta-context";
 import { chaveParaStorage } from "../common/chave-documento";
 import { inicioDoDiaData } from "../common/timezone";
+import { extDoMime, MIME_POR_EXT } from "../common/etapa-regras";
 
 /**
  * A pasta do dia dentro do bucket, no calendário de Brasília.
@@ -126,6 +127,42 @@ export class UploadsService implements OnModuleInit {
       "Content-Type": mimetype,
     });
     return { storageKey: key, sha256 };
+  }
+
+  /**
+   * Documento de ETAPA DA VIAGEM (foto ou PDF). O sha256 vai no nome e o
+   * motorista no caminho: o POST /m/etapas confere o prefixo (conta + motorista)
+   * antes de aceitar a chave (`common/etapa-regras.ts`, `dadosDaChaveEtapa`).
+   * A extensão diz o tipo na hora de servir de volta.
+   */
+  async putEtapaArquivo(
+    buffer: Buffer,
+    mimetype: string,
+    motoristaId: string,
+  ): Promise<{ storageKey: string; sha256: string; mime: string; tamanho: number }> {
+    const ext = extDoMime(mimetype);
+    const mime = MIME_POR_EXT[ext]!;
+    const sha256 = createHash("sha256").update(buffer).digest("hex");
+    const key = `${contaIdAtual()}/etapas/${diaBR()}/${motoristaId}/${sha256}_${randomUUID()}.${ext}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, { "Content-Type": mime });
+    return { storageKey: key, sha256, mime, tamanho: buffer.length };
+  }
+
+  /**
+   * Documento de etapa anexado PELO ESCRITÓRIO (ex.: comprovante de
+   * encerramento do MDF-e, que nasce lá). Fora da pasta do motorista.
+   */
+  async putEtapaAnexoEscritorio(
+    buffer: Buffer,
+    mimetype: string,
+    viagemId: string,
+  ): Promise<{ storageKey: string; sha256: string; mime: string; tamanho: number }> {
+    const ext = extDoMime(mimetype);
+    const mime = MIME_POR_EXT[ext]!;
+    const sha256 = createHash("sha256").update(buffer).digest("hex");
+    const key = `${contaIdAtual()}/etapas-escritorio/${viagemId}/${sha256}_${randomUUID()}.${ext}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, { "Content-Type": mime });
+    return { storageKey: key, sha256, mime, tamanho: buffer.length };
   }
 
   /**

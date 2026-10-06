@@ -1,10 +1,11 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { inicioDoDiaData, inicioDiasAtras } from "../common/timezone";
 import { comoSistema, contaIdAtual } from "../common/conta/conta-context";
 import { contaTemModuloDespesas } from "../common/despesa-acesso";
-import type { TipoDespesaCatalogo } from "@ronan/shared-types";
+import type { ModeloEtapaCatalogo, TipoDespesaCatalogo } from "@ronan/shared-types";
+import { EtapasNucleoService } from "../etapas/etapas-nucleo.service";
 
 export type CatalogoTipo = "material" | "cliente" | "local" | "veiculo";
 
@@ -38,7 +39,11 @@ export class MotoristaService {
    */
   private escolhasPendentes = new Map<string, EscolhaPendente[]>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Etapas da viagem no /m/catalogos. Opcional pros testes que montam o serviço na mão.
+    @Optional() private readonly etapas?: EtapasNucleoService,
+  ) {}
 
   private normalizar(s: string): string {
     return s
@@ -1129,6 +1134,14 @@ export class MotoristaService {
         ).map((t) => ({ ...t, devolveNoMaximo: t.devolveNoMaximo ? t.devolveNoMaximo.toFixed(2) : null }))
       : [];
 
+    // Etapas da viagem: só com o módulo `etapas`. Sem ele, lista vazia e o app
+    // fica exatamente como hoje. O app lê `definicao` SEMPRE por
+    // `lerDefinicaoEtapa` (o cache dele pode ser de outra versão do código).
+    // Lista no catálogo pra o app ter os formulários SEM internet (pré-baixado
+    // no login); a capacidade `app.viagem.etapas` é quem decide se a tela aparece.
+    const temEtapas = this.etapas ? await this.etapas.contaTemModulo(contaIdAtual()) : false;
+    const modelosEtapa: ModeloEtapaCatalogo[] = temEtapas && this.etapas ? await this.etapas.catalogo() : [];
+
     const odometroMap = new Map(ultimosAbast.map((a) => [a.veiculoId, a.odometro]));
     const veiculosComOdometro = veiculos.map((v) => ({
       ...v,
@@ -1143,6 +1156,7 @@ export class MotoristaService {
       materiais,
       tiposServico,
       tiposDespesa,
+      modelosEtapa,
       clientes,
       locais: locaisFlat,
       empresas,
@@ -1150,6 +1164,7 @@ export class MotoristaService {
         exigeFotoViagem: conta?.exigeFotoViagem === true,
         exigeFotoAbastecimento: conta?.exigeFotoAbastecimento === true,
         despesas: temDespesas,
+        etapas: temEtapas,
       },
     };
   }

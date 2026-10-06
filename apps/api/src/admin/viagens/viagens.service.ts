@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import {
   AcaoAuditoria,
@@ -44,6 +45,7 @@ import { GeocodingService } from "../../geocoding/geocoding.service";
 import { KmAtipicoService } from "../../km-atipico/km-atipico.service";
 import { PrecificacaoService } from "../tabelas-preco/precificacao.service";
 import { ViagemMensagensService } from "../../viagem-mensagens/viagem-mensagens.service";
+import { EtapasNucleoService } from "../../etapas/etapas-nucleo.service";
 
 type ListViagensParams = PaginationQuery & {
   motoristaId?: string;
@@ -62,6 +64,12 @@ type ListViagensParams = PaginationQuery & {
   /** true = só viagens com ticket repetido ainda não conferido. */
   ticketDuplicado?: boolean;
   comDivergencia?: boolean;
+  /**
+   * true = só viagens com documento de etapa faltando (módulo `etapas`).
+   * SEPARADO de `comDivergencia` de propósito: documento atrasado não é
+   * divergência pro conferente de ticket (I10 do QA).
+   */
+  documentoFaltando?: boolean;
   /** true = só viagens sem nenhuma foto anexada (cobrança de comprovante). */
   semFoto?: boolean;
   de?: string;
@@ -81,6 +89,9 @@ export class ViagensAdminService {
     private readonly kmAtipico: KmAtipicoService,
     private readonly precificacao: PrecificacaoService,
     private readonly mensagens: ViagemMensagensService,
+    // Etapas da viagem: selo e filtro "Documento faltando". Opcional pros
+    // testes que montam o serviço na mão.
+    @Optional() private readonly etapas?: EtapasNucleoService,
   ) {}
 
   /**
@@ -227,6 +238,12 @@ export class ViagensAdminService {
       if (params.de) where.data.gte = new Date(params.de);
       if (params.ate) where.data.lte = new Date(params.ate);
     }
+    // "Documento faltando": o que falta é calculado na leitura (nunca gravado),
+    // então o filtro resolve os ids antes de paginar. Só olha viagem que tem
+    // formulário fixado ou resposta — as outras não devem documento nenhum.
+    if (params.documentoFaltando) {
+      where.id = { in: await this.idsComDocumentoFaltando(where, escopo) };
+    }
 
     const result = await paginate<
       Prisma.ViagemGetPayload<{
@@ -299,16 +316,53 @@ export class ViagensAdminService {
 
     const comAlertaPedagio = await this.marcarPedagiosSemValor(result.data);
     const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
+    const faltando = await this.documentosFaltandoDaPagina(result.data);
     return {
       ...result,
       data: filtrarComercial(
         comAlertaPedagio.map((v) => ({
           ...serializarViagemComMinimos(v, regras),
           temPedagioSemValor: v.temPedagioSemValor,
+          // Selo "Documento faltando" — próprio, fora das divergências.
+          documentosFaltando: faltando.get(v.id) ?? 0,
         })),
         podeVerComercial,
       ),
     };
+  }
+
+  /** Quantos documentos de etapa faltam em cada viagem da página (0 = selo nenhum). */
+  private async documentosFaltandoDaPagina(
+    viagens: { id: string; clientId: string; status: StatusViagem; etapasAplicaveis: string[] }[],
+  ): Promise<Map<string, number>> {
+    const r = new Map<string, number>();
+    if (!this.etapas || !viagens.length) return r;
+    try {
+      const estados = await this.etapas.estadoDasViagens(viagens);
+      for (const [id, e] of estados) r.set(id, e.documentosFaltando);
+    } catch {
+      /* selo é conveniência: nunca derruba a lista */
+    }
+    return r;
+  }
+
+  /** Ids das viagens (no filtro e no escopo) com documento de etapa faltando. Teto de 3000 candidatas. */
+  private async idsComDocumentoFaltando(where: Prisma.ViagemWhereInput, escopo: EscopoAdmin): Promise<string[]> {
+    if (!this.etapas) return [];
+    const candidatas = await this.prisma.viagem.findMany({
+      where: {
+        AND: [
+          where,
+          filtroEscopo(escopo),
+          { OR: [{ etapasAplicaveis: { isEmpty: false } }, { respostasEtapa: { some: {} } }] },
+        ],
+      },
+      select: { id: true, clientId: true, status: true, etapasAplicaveis: true },
+      orderBy: { sincronizadoEm: "desc" },
+      take: 3000,
+    });
+    const estados = await this.etapas.estadoDasViagens(candidatas);
+    return candidatas.filter((c) => (estados.get(c.id)?.documentosFaltando ?? 0) > 0).map((c) => c.id);
   }
 
   async detalhe(id: string, escopo: EscopoAdmin, podeVerComercial: boolean) {

@@ -8,6 +8,7 @@ import { GeocodingModule } from "../../geocoding/geocoding.module";
 import { KmAtipicoModule } from "../../km-atipico/km-atipico.module";
 import { TabelasPrecoModule } from "../tabelas-preco/tabelas-preco.module";
 import { ViagemMensagensModule } from "../../viagem-mensagens/viagem-mensagens.module";
+import { EtapasNucleoModule } from "../../etapas/etapas-nucleo.module";
 import { ViagensAdminController } from "./viagens.controller";
 import { ViagensAdminService } from "./viagens.service";
 
@@ -22,6 +23,7 @@ import { ViagensAdminService } from "./viagens.service";
     KmAtipicoModule,
     TabelasPrecoModule,
     ViagemMensagensModule,
+    EtapasNucleoModule,
   ],
   controllers: [ViagensAdminController],
   providers: [ViagensAdminService],

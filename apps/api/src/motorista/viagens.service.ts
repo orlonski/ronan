@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { AcaoAuditoria, MotivoDivergencia, Prisma, type StatusViagem } from "@prisma/client";
 import type {
@@ -23,6 +24,7 @@ import { garantirCadastro, ItemInexistenteException } from "../common/item-inexi
 import { aplicarDivergencias, Divergencias } from "../common/divergencias";
 import { resolverTransportadora } from "../common/transportadora";
 import { contaIdAtual } from "../common/conta/conta-context";
+import { EtapasNucleoService } from "../etapas/etapas-nucleo.service";
 import { carimbarFaltasDoModo, resolverModoServico } from "../common/tipo-servico";
 import { exigeFotoDaViagem, resolverJustificativaSemFoto } from "../common/exige-foto";
 import {
@@ -178,6 +180,9 @@ export class ViagensMotoristaService {
     private readonly programacao: ProgramacaoService,
     private readonly mensagens: ViagemMensagensService,
     private readonly resgates: LancamentosResgatadosService,
+    // Etapas da viagem: fotografa os formulários que valem pra viagem que
+    // nasce. Opcional pros testes que montam o serviço na mão.
+    @Optional() private readonly etapas?: EtapasNucleoService,
   ) {}
 
   /** Regras de mínimo por faixa ativas (empresa+material+faixa de km). */
@@ -1666,6 +1671,10 @@ export class ViagensMotoristaService {
 
     void this.resgates.marcarQueSubiu(clientId);
 
+    // Etapas da viagem: a lançada depois do fato também deve os documentos de
+    // carga e descarga (o app oferece no fim do lançamento). Best-effort.
+    await this.etapas?.fixarNaViagem(viagem.id, motoristaId, contaIdAtual());
+
     // Por que a viagem já entrou aprovada, escrito onde os dois lados leem.
     //
     // O chat é o único lugar que o motorista e o painel enxergam juntos. Sem
@@ -2158,6 +2167,10 @@ export class ViagensMotoristaService {
     });
 
     void this.resgates.marcarQueSubiu(input.clientId);
+
+    // Os formulários de documentos que valem pra ESTA viagem (módulo `etapas`).
+    // Best-effort: nunca derruba o iniciar.
+    await this.etapas?.fixarNaViagem(viagem.id, motoristaId, contaIdAtual());
 
     // Eventos disparados offline antes da viagem existir linkam por clientId.
     try {

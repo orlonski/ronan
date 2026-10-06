@@ -31,7 +31,8 @@ export type CampoCadastro =
   | "localId"
   | "viagemId"
   | "tipoServicoId"
-  | "tipoDespesaId";
+  | "tipoDespesaId"
+  | "modeloEtapaId";
 
 /**
  * Texto padrão por campo. Fala o cadastro pelo nome que o motorista usa
@@ -54,6 +55,8 @@ const MENSAGEM: Record<CampoCadastro, string> = {
     "O tipo de serviço desse lançamento não existe mais. Toque em Editar e escolha outro.",
   tipoDespesaId:
     "O tipo desse gasto não existe mais no escritório. Toque em Editar e escolha outro tipo.",
+  modeloEtapaId:
+    "Esse formulário de documentos não existe mais no escritório. Fale com o escritório.",
 };
 
 export class ItemInexistenteException extends ConflictException {

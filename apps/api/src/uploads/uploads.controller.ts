@@ -12,7 +12,8 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { UploadsService } from "./uploads.service";
-import { checarArquivoEnviado, MIMES_IMAGEM } from "../common/arquivo-enviado";
+import { checarArquivoEnviado, MIMES_DOCUMENTO, MIMES_IMAGEM } from "../common/arquivo-enviado";
+import { ETAPA_ARQUIVO_MAX_BYTES } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { contaIdAtual } from "../common/conta/conta-context";
 import { exigirModuloDespesas, exigirMotoristaAprovado } from "../common/despesa-acesso";
@@ -84,6 +85,28 @@ export class UploadsController {
       comoDizer: "Isso não é uma foto. Mande uma imagem.",
     });
     return this.uploads.putDespesaFoto(file.buffer, file.mimetype, user.id);
+  }
+
+  /**
+   * Documento de ETAPA DA VIAGEM: foto OU PDF (CT-e, MDF-e e o comprovante de
+   * encerramento chegam em PDF pelo WhatsApp do escritório). Campo `arquivo`.
+   * Só checa o cadastro aprovado: sem o módulo o POST /m/etapas aceita e
+   * carimba, então o arquivo também precisa entrar (nunca 403 por contrato).
+   */
+  @Roles("MOTORISTA")
+  @Post("m/uploads/etapa")
+  @UseInterceptors(FileInterceptor("arquivo", { limits: { fileSize: ETAPA_ARQUIVO_MAX_BYTES, files: 1 } }))
+  async uploadEtapa(
+    @CurrentUser() user: AuthMotorista,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    await exigirMotoristaAprovado(this.prisma, user.id);
+    checarArquivoEnviado(file, {
+      mimes: MIMES_DOCUMENTO,
+      maxBytes: ETAPA_ARQUIVO_MAX_BYTES,
+      comoDizer: "Mande uma foto ou um PDF.",
+    });
+    return this.uploads.putEtapaArquivo(file.buffer, file.mimetype, user.id);
   }
 
   @Roles("MOTORISTA")

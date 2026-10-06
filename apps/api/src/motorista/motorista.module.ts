@@ -52,6 +52,9 @@ import { AcertosMotoristaController } from "./acertos.controller";
 import { DespesasMotoristaController } from "./despesas.controller";
 import { DespesasMotoristaService } from "./despesas.service";
 import { DespesasNucleoModule } from "../despesas/despesas-nucleo.module";
+import { EtapasNucleoModule } from "../etapas/etapas-nucleo.module";
+import { EtapasMotoristaController } from "./etapas.controller";
+import { EtapasMotoristaService } from "./etapas.service";
 import { ProgramacaoMotoristaController } from "./programacao.controller";
 import {
   AnexoPedidoPublicoController,
@@ -79,6 +82,7 @@ import {
     ViagemMensagensModule,
     LocaisImagemModule,
     DespesasNucleoModule,
+    EtapasNucleoModule,
   ],
   controllers: [
     PixMotoristaController,
@@ -100,6 +104,7 @@ import {
     LancamentosResgatadosMotoristaController,
     AcertosMotoristaController,
     DespesasMotoristaController,
+    EtapasMotoristaController,
     ProgramacaoMotoristaController,
     AnexosPedidoMotoristaController,
     AnexoPedidoPublicoController,
@@ -120,6 +125,7 @@ import {
     StoriesMotoristaService,
     StoriesCleanupService,
     DespesasMotoristaService,
+    EtapasMotoristaService,
   ],
   exports: [
     MotoristaService,

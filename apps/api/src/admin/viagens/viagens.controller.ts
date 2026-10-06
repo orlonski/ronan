@@ -120,6 +120,8 @@ const ListViagensQuery = paginationQuerySchema.extend({
   semFoto: z.coerce.boolean().optional(),
   // Viagens que entraram com pendência carimbada (ver common/divergencias.ts).
   comDivergencia: z.coerce.boolean().optional(),
+  // Documento de etapa faltando (módulo `etapas`). Filtro próprio, fora das divergências.
+  documentoFaltando: z.coerce.boolean().optional(),
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
