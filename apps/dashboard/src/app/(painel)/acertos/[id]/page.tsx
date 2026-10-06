@@ -65,11 +65,11 @@ type Acerto = {
   itens: Item[];
 };
 
-function brl(v: string): string {
+function brl(v: string | number): string {
   const n = Number(v);
   return Number.isFinite(n)
     ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-    : v;
+    : String(v);
 }
 
 function dataBR(v: string): string {
@@ -213,7 +213,7 @@ function Conteudo({ id }: { id: string }) {
             <p className="text-xs uppercase tracking-wide text-muted-foreground">A receber</p>
             <p className="text-3xl font-bold tabular-nums">{brl(a.liquido)}</p>
             <p className="mt-1 text-sm text-muted-foreground tabular-nums">
-              {brl(a.creditos)} de ganhos
+              {composicaoDosCreditos(a.itens, a.creditos)}
               {Number(a.debitos) > 0 && <> − {brl(a.debitos)} de descontos</>}
             </p>
           </div>
@@ -919,4 +919,29 @@ function DescartarAcerto({ acertoId, nome }: { acertoId: string; nome: string })
       </div>
     </Card>
   );
+}
+
+/**
+ * "R$ X de frete · R$ Y de reembolsos · R$ Z de bônus e ajustes" — o que compõe
+ * os créditos do acerto, separado. Reembolso não é ganho: é o dinheiro dele
+ * voltando (pedágio, abastecimento, gasto de viagem). Parte zerada some.
+ * Sem item positivo nenhum, mostra o crédito total como veio da API.
+ */
+function composicaoDosCreditos(itens: Item[], creditosTotal: string): string {
+  let frete = 0;
+  let reembolsos = 0;
+  let outros = 0;
+  for (const i of itens) {
+    const v = Number(i.valor);
+    if (!(v > 0)) continue;
+    if (i.tipo === "FRETE") frete += v;
+    else if (i.tipo.startsWith("REEMBOLSO_")) reembolsos += v;
+    else outros += v;
+  }
+  const partes = [
+    frete > 0 ? `${brl(frete)} de frete` : null,
+    reembolsos > 0 ? `${brl(reembolsos)} de reembolsos` : null,
+    outros > 0 ? `${brl(outros)} de bônus e ajustes` : null,
+  ].filter(Boolean);
+  return partes.length > 0 ? partes.join(" · ") : `${brl(creditosTotal)} de créditos`;
 }
