@@ -91,6 +91,7 @@ import {
   type ReferenciaKmDetalhe,
 } from "./_components/referencia-km-card";
 import { FaturamentoCard, type RegraMinimo } from "./_components/faturamento-card";
+import { PedagioTagCard } from "./_components/pedagio-tag-card";
 import { ConversaViagemCard } from "./_components/conversa-viagem-card";
 import { EscolherRotaModal } from "./_components/escolher-rota-modal";
 import { CompartilharViagemModal } from "./_components/compartilhar-modal";
@@ -1033,6 +1034,7 @@ export default function ViagemDetalhePage({
                   onAceitarKm={() => aceitarKm.mutate()}
                   aceitando={aceitarKm.isPending}
                 />
+                <PedagioTagCard viagemId={id} />
               </div>
             </div>
 

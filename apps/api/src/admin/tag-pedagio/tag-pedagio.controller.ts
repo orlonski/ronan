@@ -33,6 +33,7 @@ import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { TagPedagioService } from "./tag-pedagio.service";
+import { EscopoPor } from "../../common/escopo/escopo.decorator";
 
 const UPLOAD = FileInterceptor("arquivo", { limits: { fileSize: 15 * 1024 * 1024, files: 1 } });
 const CasamentoQuery = z.object({
@@ -55,6 +56,14 @@ const CasamentoQuery = z.object({
 @Controller("admin/tag-pedagio")
 export class TagPedagioController {
   constructor(private readonly service: TagPedagioService) {}
+
+  /** O quadro "Pedágio pela tag" da ficha da viagem. */
+  @EscopoPor("viagem")
+  @RequerPermissao("tag.ver")
+  @Get("viagens/:id")
+  daViagem(@Param("id") id: string) {
+    return this.service.daViagem(id);
+  }
 
   @RequerPermissao("tag.ver")
   @Get("extratos")

@@ -25,8 +25,14 @@ export type ViagemParaCruzar = {
   id: string;
   /** Placa normalizada do caminhão da viagem. */
   placa: string;
-  /** AAAA-MM-DD (o dia do lançamento manual). */
+  /** AAAA-MM-DD (o dia do lançamento manual — a data da CARGA). */
   data: string | null;
+  /**
+   * Quanto o roteador diz que a rota carga→descarga leva, em minutos. Serve pra
+   * viagem lançada sem horário: uma viagem de 2 dias passa praça no 2º dia, e
+   * sem isto a passagem caía em "um dia de diferença" e nunca ligava sozinha.
+   */
+  duracaoMin?: number | null;
   /** Viagem guiada: iniciou e o último evento (epoch ms). */
   ini?: number | null;
   fim?: number | null;
@@ -50,7 +56,7 @@ export const CONFIG_CRUZAMENTO_PADRAO: ConfigCruzamento = {
   ligacaoAutomatica: false,
 };
 
-export type Janela = "GUIADA" | "GUIADA_PARCIAL" | "DIA" | "MADRUGADA" | "DIA_MAIS_MENOS_1";
+export type Janela = "GUIADA" | "GUIADA_PARCIAL" | "DIA" | "NO_TEMPO_DA_ROTA" | "MADRUGADA" | "DIA_MAIS_MENOS_1";
 
 export type Candidata = {
   viagemId: string;
@@ -84,6 +90,7 @@ const JANELA_TEXTO: Record<Janela, string> = {
   GUIADA: "dentro do horário da viagem",
   GUIADA_PARCIAL: "encostando no horário da viagem",
   DIA: "mesmo dia",
+  NO_TEMPO_DA_ROTA: "dentro do tempo da rota depois da carga",
   MADRUGADA: "na madrugada seguinte",
   DIA_MAIS_MENOS_1: "um dia de diferença",
 };
@@ -105,6 +112,13 @@ function janela(t: Trecho, v: ViagemParaCruzar): { tipo: Janela; pts: number } |
   if (!v.data) return null;
   const d0 = meiaNoite(v.data, t.passagens[0]!.offsetMin);
   if (t.ini >= d0 && t.ini < d0 + DIA) return { tipo: "DIA", pts: 2 };
+  // A data lançada é a da carga, sem hora: carregou em algum momento do dia e
+  // rodou o tempo da rota. Caminhão pesado anda mais devagar que o roteador e
+  // para pra dormir — por isso 1,5× o tempo e mais 6 h de folga.
+  if (v.duracaoMin != null && v.duracaoMin > 0) {
+    const fim = d0 + DIA + v.duracaoMin * 1.5 * MIN + 6 * HORA;
+    if (t.ini >= d0 + DIA && t.ini < fim) return { tipo: "NO_TEMPO_DA_ROTA", pts: 1.5 };
+  }
   if (t.ini >= d0 + DIA && t.ini < d0 + 36 * HORA) return { tipo: "MADRUGADA", pts: 1 };
   if (t.ini >= d0 - DIA && t.ini < d0 + 60 * HORA) return { tipo: "DIA_MAIS_MENOS_1", pts: 0 };
   return null;

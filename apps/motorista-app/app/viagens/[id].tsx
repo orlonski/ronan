@@ -227,7 +227,7 @@ export default function ViagemDetalheScreen() {
             </View>
 
             <View className="mt-4 flex-row gap-6 border-t-2 border-border pt-3">
-              <Info label="Data" value={fmtDataBR(detalhe.data.data)} />
+              <Info label="Data da carga" value={fmtDataBR(detalhe.data.data)} />
               <Info label="Placa" value={detalhe.data.veiculo.placa} mono />
               {detalhe.data.material ? (
                 <Info label="Material" value={detalhe.data.material.nome} />

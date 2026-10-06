@@ -1462,7 +1462,7 @@ export default function NovaViagem() {
   );
 
   const secaoData = (
-    <Field label="Data">
+    <Field label="Data da carga">
       <DateField
         value={form.data}
         onChange={(v) => {

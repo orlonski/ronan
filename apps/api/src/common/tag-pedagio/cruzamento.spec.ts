@@ -75,6 +75,41 @@ describe("cruzamento passagem × viagem", () => {
     expect(r.motivo).toMatch(/um dia de diferença/);
   });
 
+  it("viagem longa lançada sem hora: praça no 2º dia, dentro do tempo da rota, liga sozinha", () => {
+    const ts = trechosDe([
+      px("AAA", "06/03 14:10", "JG", "SUL", 7, 5670),
+      px("AAA", "06/03 16:30", "SA", "SUL", 7, 4200),
+      px("AAA", "06/03 17:40", "CV", "SUL", 7, 4200),
+    ]);
+    // Carregou dia 05; a rota leva 20 h.
+    const r = cruzar(ts, [v("V1", "AAA", "2027-03-05", ida, { duracaoMin: 1200 })], AUTO).get(ts[0]!.ancoraId)!;
+    expect(r).toMatchObject({ status: "AUTO", viagemId: "V1" });
+    expect(r.candidatas[0]!.razao).toMatch(/dentro do tempo da rota/);
+  });
+
+  it("a mesma praça no 2º dia, sem saber o tempo da rota, segue só como sugestão", () => {
+    const ts = trechosDe([
+      px("AAA", "06/03 14:10", "JG", "SUL", 7, 5670),
+      px("AAA", "06/03 16:30", "SA", "SUL", 7, 4200),
+    ]);
+    const r = cruzar(ts, [v("V1", "AAA", "2027-03-05", ida)], AUTO).get(ts[0]!.ancoraId)!;
+    expect(r.status).toBe("SUGESTAO");
+    expect(r.motivo).toMatch(/um dia de diferença/);
+  });
+
+  it("tempo da rota não abre a janela pra trás: passagem ANTES da carga nunca liga sozinha", () => {
+    const ts = trechosDe([px("AAA", "04/03 17:00", "JG", "SUL", 7, 5670), px("AAA", "04/03 19:00", "SA", "SUL", 7, 4200)]);
+    const r = cruzar(ts, [v("V1", "AAA", "2027-03-05", ida, { duracaoMin: 1200 })], AUTO).get(ts[0]!.ancoraId)!;
+    expect(r.status).toBe("SUGESTAO");
+  });
+
+  it("rota curta: o tempo da rota não estica a janela além de ~1 dia e meio", () => {
+    const ts = trechosDe([px("AAA", "07/03 10:00", "JG", "SUL", 7, 5670), px("AAA", "07/03 11:00", "SA", "SUL", 7, 4200)]);
+    // Carregou dia 05, rota de 2 h: fim da janela = 06/03 00:00 + 3 h + 6 h.
+    const r = cruzar(ts, [v("V1", "AAA", "2027-03-05", ida, { duracaoMin: 120 })], AUTO).get(ts[0]!.ancoraId)!;
+    expect(r.status).not.toBe("AUTO");
+  });
+
   it("três viagens no dia, só duas por praça: as praças separam, não a hora", () => {
     const ps = [
       px("BBB", "17/04 14:10", "ROS", "OESTE", 7, 7980),

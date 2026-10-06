@@ -39,6 +39,9 @@ import {
   type LinhaParaChave,
 } from "../../common/tag-pedagio/normalizacao";
 import { TagProcessamentoService } from "./tag-processamento.service";
+import { pedagioDaViagem } from "../../common/acerto-motorista";
+import { decisaoAindaVale, situacaoTagDaViagem } from "../../common/tag-pedagio/pedagio-lancado";
+import { tagDasViagens } from "../../common/tag-pedagio/tag-das-viagens";
 
 type Arquivo = { buffer: Buffer; originalname: string; mimetype: string; size?: number };
 
@@ -635,6 +638,99 @@ export class TagPedagioService {
   }
 
   /** "Casar passagens com viagens": um caminhão, um dia. */
+  /**
+   * O quadro "Pedágio pela tag" da ficha da viagem: as passagens ligadas a ela
+   * (ida e volta vazia), o que ficou como sugestão esperando alguém, o que o
+   * motorista lançou e o que o acerto sugere devolver. Só leitura.
+   */
+  async daViagem(viagemId: string) {
+    const v = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: {
+        id: true,
+        data: true,
+        veiculoId: true,
+        valorPedagioTotal: true,
+        pedagios: { select: { id: true, valor: true } },
+        veiculo: { select: { placa: true } },
+      },
+    });
+    if (!v) throw new NotFoundException("Viagem não encontrada.");
+    const tag = await tagDasViagens(this.prisma, [v]);
+    if (!tag) return { modulo: false as const };
+    const t = tag.get(v.id)!;
+    const lancado = pedagioDaViagem(v).valor;
+    const sit = situacaoTagDaViagem({ ...t, lancado });
+
+    const ligs = await this.prisma.ligacaoTagViagem.findMany({
+      where: { viagemId: v.id, desfeitaEm: null, tipo: { not: "NAO_E_VIAGEM" } },
+      select: { passagemAncoraId: true, tipo: true, criadoEm: true },
+    });
+    // Sugestões que apontam pra esta viagem e ninguém decidiu: o caminhão, numa
+    // janela larga em volta da data (viagem longa passa praça dias depois).
+    const d0 = v.data ?? new Date();
+    const vizinhos = v.veiculoId
+      ? await this.prisma.trechoTag.findMany({
+          where: {
+            veiculoId: v.veiculoId,
+            ini: { gte: new Date(d0.getTime() - 2 * 86_400_000), lte: new Date(d0.getTime() + 6 * 86_400_000) },
+          },
+        })
+      : [];
+    const ligadas = new Set(ligs.map((l) => l.passagemAncoraId));
+    const ativasDosVizinhos = await this.ligacoesAtivas(vizinhos.map((x) => x.passagemAncoraId));
+    const pendentes = vizinhos.filter(
+      (x) =>
+        !ligadas.has(x.passagemAncoraId) &&
+        !ativasDosVizinhos.has(x.passagemAncoraId) &&
+        (x.cruzamento as Cruzamento).viagemId === v.id,
+    );
+    const trechosLigados = ligs.length
+      ? await this.prisma.trechoTag.findMany({ where: { passagemAncoraId: { in: [...ligadas] } } })
+      : [];
+    const passagens = await this.passagensPorId([...trechosLigados, ...pendentes].flatMap((x) => x.passagemIds));
+    const tipoDe = new Map(ligs.map((l) => [l.passagemAncoraId, l.tipo]));
+    const trecho = (x: (typeof vizinhos)[number]) => ({
+      passagemAncoraId: x.passagemAncoraId,
+      estado: x.estado,
+      ini: x.ini,
+      fim: x.fim,
+      valorTag: Number(x.valorTag),
+      valorVale: Number(x.valorVale),
+      passagens: x.passagemIds.map((id) => passagens.get(id)).filter(Boolean),
+    });
+
+    const decisao = await this.prisma.decisaoPedagioTag.findFirst({
+      where: { viagemId: v.id },
+      include: { decididoPor: { select: { nome: true } } },
+    });
+    const valida = decisao && decisaoAindaVale(decisao, lancado, t.cobertura) ? decisao : null;
+    return {
+      modulo: true as const,
+      placa: v.veiculo?.placa ?? null,
+      situacao: sit.situacao,
+      lancado: lancado.toFixed(2),
+      tag: sit.situacao === "TAG_PAGOU" ? sit.tag : "0.00",
+      vale: sit.situacao === "TAG_PAGOU" ? sit.vale : "0.00",
+      retorno: sit.situacao === "TAG_PAGOU" ? sit.retorno : "0.00",
+      sugestao: sit.situacao === "TAG_PAGOU" ? sit.sugestao : null,
+      ligados: trechosLigados
+        .sort((a, b) => a.ini.getTime() - b.ini.getTime())
+        .map((x) => ({ ...trecho(x), ligacao: tipoDe.get(x.passagemAncoraId) ?? null })),
+      pendentes: pendentes
+        .sort((a, b) => a.ini.getTime() - b.ini.getTime())
+        .map((x) => ({ ...trecho(x), status: (x.cruzamento as Cruzamento).status })),
+      decisao: valida
+        ? {
+            valorReembolso: valida.valorReembolso.toFixed(2),
+            motivo: valida.motivo,
+            decididoPor: valida.decididoPor?.nome ?? null,
+            decididoEm: valida.decididoEm,
+          }
+        : null,
+    };
+  }
+
   async casamento(placa: string, dia?: string) {
     const p = normalizarPlaca(placa);
     const trechos = await this.prisma.trechoTag.findMany({ where: { placaTexto: p }, orderBy: { ini: "asc" } });

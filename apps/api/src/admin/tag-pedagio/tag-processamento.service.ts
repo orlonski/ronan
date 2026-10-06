@@ -396,7 +396,7 @@ export class TagProcessamentoService {
           },
         })
       : [];
-    await this.garantirRotas(viagensDb);
+    const duracaoDoPar = await this.garantirRotas(viagensDb);
     const emOrdem = await this.pedagios.pracasEmOrdemDasViagens(viagensDb.map((v) => v.id));
     const chaveDoPonto = (lat: number, lng: number): string | null => {
       for (const r of pracas.values()) {
@@ -421,6 +421,8 @@ export class TagProcessamentoService {
         data: v.data ? v.data.toISOString().slice(0, 10) : null,
         ini: v.iniciadoEm ? v.iniciadoEm.getTime() : null,
         fim: v.iniciadoEm && ultimoEvento ? ultimoEvento.getTime() : null,
+        duracaoMin:
+          v.localCargaId && v.localDescargaId ? (duracaoDoPar.get(`${v.localCargaId}>${v.localDescargaId}`) ?? null) : null,
         pracas: lista,
       };
     });
@@ -463,23 +465,27 @@ export class TagProcessamentoService {
    * — é o caso da viagem importada, ou lançada sem sinal, antes de o cron de km
    * passar por ela. Calcula aqui a rota que faltar (o cálculo grava no cache),
    * em vez de dizer "sem viagem lançada" pra uma viagem que está lá.
+   *
+   * Devolve quanto cada par carga→descarga leva (minutos): é a janela da
+   * viagem lançada sem horário (ver `duracaoMin` no cruzamento).
    */
   private async garantirRotas(
-    viagens: Array<{ localCargaId: string | null; localDescargaId: string | null; rotaGeometria: string | null }>,
-  ) {
-    const pares = new Set<string>();
+    viagens: Array<{ localCargaId: string | null; localDescargaId: string | null }>,
+  ): Promise<Map<string, number | null>> {
+    const duracao = new Map<string, number | null>();
     for (const v of viagens) {
-      if (v.rotaGeometria || !v.localCargaId || !v.localDescargaId) continue;
-      pares.add(`${v.localCargaId}>${v.localDescargaId}`);
-    }
-    for (const par of pares) {
-      const [a, b] = par.split(">") as [string, string];
+      if (!v.localCargaId || !v.localDescargaId) continue;
+      const par = `${v.localCargaId}>${v.localDescargaId}`;
+      if (duracao.has(par)) continue;
       try {
-        await this.roteamento.calcularKm(a, b);
+        const r = await this.roteamento.calcularKm(v.localCargaId, v.localDescargaId);
+        duracao.set(par, r.km != null && "duracaoSegundos" in r && r.duracaoSegundos != null ? r.duracaoSegundos / 60 : null);
       } catch (err) {
+        duracao.set(par, null);
         this.log.warn(`rota ${par} falhou: ${(err as Error).message}`);
       }
     }
+    return duracao;
   }
 
   /** AUTO (só com a ligação automática ligada) vira ligação do sistema — nunca por cima de gente. */
