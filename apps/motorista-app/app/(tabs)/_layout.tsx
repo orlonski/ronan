@@ -7,7 +7,7 @@ import { useVisao } from "@/lib/visao";
 import { useEhFuncionario } from "@/hooks/use-eh-funcionario";
 import { usePermite } from "@/lib/acessos-app";
 import { useMostraHistorico } from "@/lib/mostra-historico";
-import { useAbaGastos } from "@/lib/gastos";
+import { gastosSemViagem, useAbaGastos, useGastos, useModuloDespesas } from "@/lib/gastos";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -27,6 +27,11 @@ export default function TabsLayout() {
   const mostraHistorico = useMostraHistorico();
   // Empresa com o módulo "Gasto de viagem": Gastos no lugar do Caderno.
   const abaGastos = useAbaGastos();
+  // "N gastos sem viagem" virou número na aba Gastos (saiu o card da home):
+  // é aviso — o gasto pode ir pro acerto errado se ninguém ligar.
+  const moduloGastos = useModuloDespesas();
+  const { gastos } = useGastos({ enabled: abaGastos && moduloGastos.lancar });
+  const semViagem = abaGastos && moduloGastos.lancar ? gastosSemViagem(gastos).length : 0;
 
   return (
     <Tabs
@@ -102,6 +107,8 @@ export default function TabsLayout() {
         options={{
           title: "Gastos",
           href: abaGastos ? undefined : null,
+          tabBarBadge: semViagem > 0 ? (semViagem > 99 ? "99+" : semViagem) : undefined,
+          tabBarBadgeStyle: { backgroundColor: "#dc2626", fontSize: 11 },
           tabBarIcon: ({ color, size }) => <ReceiptText color={color} size={size} />,
         }}
       />

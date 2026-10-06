@@ -1,16 +1,18 @@
 import { useMemo, useState } from "react";
 import { router } from "expo-router";
-import { Link, Plus, ReceiptText, RefreshCw } from "lucide-react-native";
+import { HandCoins, Link, ReceiptText, RefreshCw } from "lucide-react-native";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
-import { abrirGasto, BotaoAcao, LinhaGasto, SemGastoDeViagem } from "@/components/gastos";
+import { abrirGasto, BotaoAcao, gastoAbre, LinhaGasto, SemGastoDeViagem } from "@/components/gastos";
+import { usePermite } from "@/lib/acessos-app";
 import {
   fmtReais,
   horaSP,
   resumirGastos,
   useDespesasAtualizadasEm,
   useGastos,
+  useLancamentosDoAcerto,
   useModuloDespesas,
   type GastoVisto,
 } from "@/lib/gastos";
@@ -35,17 +37,19 @@ const MESES = [
  * cada gasto. "Pra receber de volta", nunca "a empresa me deve": é o dinheiro
  * dele voltando, sem tom de dívida nem de cobrança.
  *
- * Mora em dois lugares com o MESMO código:
- * - a aba "Gastos" (`naAba`): sem voltar, e com o botão de lançar no topo —
- *   a aba é o lugar de lançar E de acompanhar;
- * - a rota `/meus-reembolsos` (botão "Ver meus gastos" da home, Perfil...),
- *   empilhada, com voltar.
+ * Tela empilhada (`/meus-reembolsos`, o "Ver meus gastos" da aba Gastos).
+ * Sem botão de lançar: o voltar leva pra aba, onde está a lista de tipos.
+ *
+ * "Todos" mostra também pedágio e abastecimento que ele lançou (moram na aba
+ * Gastos, então têm que aparecer aqui), FORA da soma: quem paga é o acerto.
  *
  * Offline: lista do cache + o que está no celular; nada some.
  */
-export function MeusGastos({ naAba = false }: { naAba?: boolean }) {
+export function MeusGastos() {
   const modulo = useModuloDespesas();
   const { gastos, query } = useGastos({ enabled: modulo.acompanhar });
+  const doAcerto = useLancamentosDoAcerto(modulo.acompanhar);
+  const verAcertos = usePermite("app.acertos.ver");
   const resumo = useMemo(() => resumirGastos(gastos), [gastos]);
   const atualizadoEm = useDespesasAtualizadasEm();
   const [aba, setAba] = useState<"receber" | "todos">("receber");
@@ -53,8 +57,11 @@ export function MeusGastos({ naAba = false }: { naAba?: boolean }) {
   const [puxando, setPuxando] = useState(false);
 
   const lista = useMemo(
-    () => (aba === "receber" ? gastos.filter((g) => g.status.soma > 0) : gastos),
-    [aba, gastos],
+    () =>
+      aba === "receber"
+        ? gastos.filter((g) => g.status.soma > 0)
+        : [...gastos, ...doAcerto].sort((a, b) => b.data.localeCompare(a.data)),
+    [aba, gastos, doAcerto],
   );
   const grupos = useMemo(() => {
     const m = new Map<string, GastoVisto[]>();
@@ -67,7 +74,7 @@ export function MeusGastos({ naAba = false }: { naAba?: boolean }) {
     return [...m.entries()];
   }, [lista]);
 
-  const titulo = naAba ? "Gastos" : "Meus gastos";
+  const titulo = "Meus gastos";
   if (!modulo.acompanhar) return <SemGastoDeViagem titulo={titulo} />;
 
   const semCacheEErro = query.isError && !query.data && gastos.length === 0;
@@ -75,9 +82,8 @@ export function MeusGastos({ naAba = false }: { naAba?: boolean }) {
     atualizadoEm != null && (query.isError || Date.now() - atualizadoEm > 5 * 60_000);
 
   return (
-    // Na aba, o tab bar já cuida do rodapé.
-    <SafeAreaView className="flex-1 bg-background" edges={naAba ? [] : ["bottom"]}>
-      <ScreenHeader title={titulo} semVoltar={naAba} />
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+      <ScreenHeader title={titulo} />
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
         refreshControl={
@@ -90,12 +96,6 @@ export function MeusGastos({ naAba = false }: { naAba?: boolean }) {
           />
         }
       >
-        {naAba && modulo.lancar ? (
-          <BotaoAcao Icone={Plus} variant="default" className="h-16" onPress={() => router.push("/gasto-viagem")}>
-            Lançar gasto de viagem
-          </BotaoAcao>
-        ) : null}
-
         <View>
           <Text className="text-sm font-semibold text-muted-foreground">Pra receber de volta</Text>
           <Text className="text-[32px] font-bold text-foreground" style={{ fontVariant: ["tabular-nums"] }}>
@@ -121,6 +121,19 @@ export function MeusGastos({ naAba = false }: { naAba?: boolean }) {
                 {fmtReais(resumo.comEscritorio)} com o escritório
               </Text>
             </View>
+          ) : null}
+        </View>
+
+        {/* Pedágio e diesel aparecem em "Todos" sem somar aqui: sem esta
+            frase ele leria que não voltam (o acerto já devolve por padrão). */}
+        <View className="gap-3 rounded-2xl bg-muted p-4">
+          <Text className="text-[15px] text-foreground">
+            Pedágio e diesel são pagos no acerto, conforme o combinado com a empresa.
+          </Text>
+          {verAcertos ? (
+            <BotaoAcao Icone={HandCoins} onPress={() => router.push("/meus-acertos")}>
+              Ver meus acertos
+            </BotaoAcao>
           ) : null}
         </View>
 
@@ -178,20 +191,10 @@ export function MeusGastos({ naAba = false }: { naAba?: boolean }) {
               Nenhum gasto por aqui ainda.
             </Text>
             <Text className="text-center text-base text-muted-foreground">
-              Pagou alguma coisa na estrada? Lance com a foto do papel e ele volta pra você no acerto.
+              {modulo.lancar
+                ? "Pagou do seu bolso? Lance na aba Gastos com a foto."
+                : "O que você lançar aparece aqui."}
             </Text>
-            {/* Na aba o botão de lançar já está no topo — repetir aqui é
-                dois botões iguais na mesma tela. */}
-            {modulo.lancar && !naAba ? (
-              <BotaoAcao
-                Icone={Plus}
-                variant="default"
-                className="mt-2 self-stretch"
-                onPress={() => router.push("/gasto-viagem")}
-              >
-                Lançar gasto de viagem
-              </BotaoAcao>
-            ) : null}
           </View>
         ) : (
           grupos.map(([mes, itens]) => (
@@ -203,7 +206,7 @@ export function MeusGastos({ naAba = false }: { naAba?: boolean }) {
                 {itens.map((g, i) => (
                   <View key={g.chave}>
                     {i > 0 ? <View className="h-px bg-border" /> : null}
-                    <LinhaGasto g={g} onPress={() => abrirGasto(g)} />
+                    <LinhaGasto g={g} onPress={gastoAbre(g) ? () => abrirGasto(g) : undefined} />
                   </View>
                 ))}
               </View>

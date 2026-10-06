@@ -327,9 +327,10 @@ function PerfilDaEmpresa() {
                   />
                 </>
               )}
-              {/* Ao lado de "Meus acertos": o que ele tem pra receber de volta
-                  dos gastos de viagem. */}
-              {moduloGastos.acompanhar ? (
+              {/* Com a aba Gastos no rodapé, ela é a ÚNICA casa do gasto (decisão
+                  do dono, 06/10/2026): a linha aqui só existe pra quem acompanha
+                  gasto SEM ter a aba (ex.: visão registrado) — nunca tira a porta. */}
+              {moduloGastos.acompanhar && !abaGastos ? (
                 <>
                   <View className="h-px bg-border" />
                   <ActionRow

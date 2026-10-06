@@ -411,6 +411,11 @@ export type DespesaApp = {
   acerto: { id: string; periodoFim: string | null; status: string | null; pagoEm: string | null } | null;
   /** Entra no "pra receber de volta"? (o servidor decide) */
   somaPraReceber: boolean;
+  /**
+   * O combinado dele com a empresa (modalidade) não devolve gasto de viagem:
+   * vem junto de `situacao: "POR_SUA_CONTA"`. Servidor antigo não manda = false.
+   */
+  naoVoltaNoAcerto: boolean;
   /** Ainda dá pra corrigir/apagar pelo app. */
   editavel: boolean;
 };
@@ -494,6 +499,7 @@ export function lerDespesa(raw: unknown): DespesaApp | null {
           }
         : null,
     somaPraReceber: r.somaPraReceber === true,
+    naoVoltaNoAcerto: r.naoVoltaNoAcerto === true,
     editavel: r.editavel === true,
   };
 }

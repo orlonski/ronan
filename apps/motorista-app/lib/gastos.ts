@@ -14,11 +14,15 @@ import { sugerirViagens } from "@ronan/shared-types";
 import {
   cacheGetAt,
   cachePut,
+  listPendingAbastecimentos,
   listPendingDespesas,
+  listPendingPedagios,
   listPendingViagemIniciar,
   listPendingViagens,
   listPendingVinculosGasto,
+  type PendingAbastecimento,
   type PendingDespesa,
+  type PendingPedagio,
   type PendingViagem,
   type PendingViagemIniciar,
   type PendingVinculoGasto,
@@ -33,6 +37,7 @@ import {
   type TipoDespesaApp,
 } from "./despesas";
 import { useCapacidadeNova } from "./acessos-app";
+import { api } from "./api";
 import { getLifecycleLocal, type LifecycleLocal } from "./lifecycle";
 import { cacheFirst, useCatalogos, useViagens, type Viagem } from "./queries";
 import {
@@ -292,6 +297,16 @@ export type StatusExibido = {
 
 export type GastoVisto = {
   chave: string;
+  /**
+   * "despesa" = gasto do módulo (soma no "pra receber"). Pedágio e
+   * abastecimento só aparecem em Meus gastos › Todos, NUNCA na soma: quem
+   * diz se volta é o acerto (ver `useLancamentosDoAcerto`).
+   */
+  categoria: "despesa" | "pedagio" | "abastecimento";
+  /** Linha de baixo no lugar da viagem (ex.: a praça do pedágio, o posto). */
+  detalhe?: string | null;
+  /** Texto do valor no lugar do R$ (ex.: comboio, que não tem valor). */
+  valorTexto?: string | null;
   origem: "celular" | "servidor";
   despesaId: string | null;
   clientId: string | null;
@@ -329,7 +344,15 @@ export function statusDoServidor(d: DespesaApp): StatusExibido {
   const soma = d.somaPraReceber ? aprovado : 0;
   switch (d.situacao) {
     case "POR_SUA_CONTA":
-      return { texto: "Por sua conta", cor: "cinza", motivo: null, soma: 0, grupo: "fora" };
+      return {
+        // O tipo devolve, mas o combinado dele com a empresa não: o servidor
+        // avisa, pra tela não dizer "Por sua conta" como se fosse o tipo.
+        texto: d.naoVoltaNoAcerto ? "Não volta no acerto (combinado da empresa)" : "Por sua conta",
+        cor: "cinza",
+        motivo: null,
+        soma: 0,
+        grupo: "fora",
+      };
     case "NAO_REEMBOLSADA":
       return { texto: "Não vai ser reembolsado", cor: "ambar", motivo: d.motivo, soma: 0, grupo: "fora" };
     case "PAGO":
@@ -405,6 +428,7 @@ function doCelular(p: PendingDespesa): GastoVisto {
       : { texto: "Guardado no celular", cor: "cinza", motivo: null, soma: valor, grupo: "escritorio" };
   return {
     chave: `c:${p.clientId}`,
+    categoria: "despesa",
     origem: "celular",
     despesaId: null,
     clientId: p.clientId,
@@ -455,6 +479,7 @@ function doServidor(d: DespesaApp, vinculos: PendingVinculoGasto[]): GastoVisto 
   }
   return {
     chave: `s:${d.id}`,
+    categoria: "despesa",
     origem: "servidor",
     despesaId: d.id,
     clientId: d.clientId,
@@ -541,6 +566,227 @@ export function gastosSemViagem(gastos: GastoVisto[]): GastoVisto[] {
       (g.origem === "celular" ||
         (g.servidor && g.servidor.situacao !== "NO_ACERTO" && g.servidor.situacao !== "PAGO")),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Pedágio e abastecimento em "Meus gastos › Todos"
+// ---------------------------------------------------------------------------
+
+/**
+ * Pedágio e diesel moram na aba Gastos ("O que você pagou?"), então têm que
+ * APARECER em Meus gastos — senão volta o "lancei e não achei". Mas NUNCA
+ * entram na soma "Pra receber de volta": quem devolve (ou não) é o acerto,
+ * pela régua da empresa (comboio, cartão da empresa, pedágio em dobro...), e
+ * o app não sabe a régua. Status neutro até o acerto fechar.
+ */
+type AcertoDoLancamento = { periodoFim: string | null; status: string | null; pagoEm: string | null } | null;
+
+function lerAcertoDoLancamento(x: unknown): AcertoDoLancamento {
+  if (!x || typeof x !== "object") return null;
+  const r = x as Record<string, unknown>;
+  const t = (v: unknown) => (typeof v === "string" && v ? v : null);
+  return { periodoFim: t(r.periodoFim), status: t(r.status), pagoEm: t(r.pagoEm) };
+}
+
+function numero(v: unknown): number | null {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmtDia(ymd: string): string {
+  const [, m, d] = ymd.slice(0, 10).split("-");
+  return `${d}/${m}`;
+}
+
+const STATUS_CONFERE: StatusExibido = {
+  texto: "O escritório confere no acerto",
+  cor: "cinza",
+  motivo: null,
+  soma: 0,
+  grupo: "fora",
+};
+
+function statusDoAcerto(a: AcertoDoLancamento): StatusExibido {
+  if (a?.status === "PAGO") {
+    return { texto: a.pagoEm ? `Pago em ${fmtDM(a.pagoEm)}` : "Pago", cor: "verde", motivo: null, soma: 0, grupo: "fora" };
+  }
+  if (a?.status === "FECHADO") {
+    return {
+      texto: a.periodoFim ? `No acerto de ${fmtDia(a.periodoFim)}` : "No acerto",
+      cor: "verde",
+      motivo: null,
+      soma: 0,
+      grupo: "fora",
+    };
+  }
+  return STATUS_CONFERE;
+}
+
+function statusDaFila(p: { status: string; errorStatus?: number; errorPermanenteLocal?: boolean }): StatusExibido {
+  const travado =
+    p.status === "error" &&
+    (p.errorPermanenteLocal || (p.errorStatus != null && p.errorStatus >= 400 && p.errorStatus < 500));
+  return travado
+    ? { texto: "Precisa corrigir — veja Pendentes", cor: "ambar", motivo: null, soma: 0, grupo: "fora" }
+    : { texto: "Guardado no celular", cor: "cinza", motivo: null, soma: 0, grupo: "fora" };
+}
+
+function base(chave: string, categoria: "pedagio" | "abastecimento"): Omit<GastoVisto, "data" | "dia" | "valorInformado" | "status" | "origem" | "clientId"> {
+  return {
+    chave,
+    categoria,
+    despesaId: null,
+    tipoId: null,
+    tipoNome: categoria === "pedagio" ? "Pedágio" : "Abastecimento",
+    tipoIcone: categoria === "pedagio" ? "pedagio" : "diesel",
+    reembolsa: false,
+    viagemId: null,
+    viagemClientId: null,
+    viagemRotulo: null,
+    naoFoiEmViagem: false,
+    semResposta: false,
+    editavel: false,
+    servidor: null,
+    pendente: null,
+  };
+}
+
+/** Pedágio é dia (@db.Date): meio-dia de SP pra ordenar junto dos instantes. */
+function instanteDoDia(ymd: string): string {
+  return `${ymd.slice(0, 10)}T15:00:00.000Z`;
+}
+
+function pedagioDoServidor(r: Record<string, unknown>): GastoVisto | null {
+  const id = typeof r.id === "string" ? r.id : null;
+  const dia = typeof r.data === "string" ? r.data.slice(0, 10) : null;
+  if (!id || !dia) return null;
+  return {
+    ...base(`ps:${id}`, "pedagio"),
+    origem: "servidor",
+    clientId: typeof r.clientId === "string" ? r.clientId : null,
+    data: instanteDoDia(dia),
+    dia,
+    valorInformado: numero(r.valor) ?? 0,
+    detalhe: typeof r.pracaPedagio === "string" ? r.pracaPedagio : null,
+    status: statusDoAcerto(lerAcertoDoLancamento(r.acerto)),
+  };
+}
+
+function abastecimentoDoServidor(r: Record<string, unknown>): GastoVisto | null {
+  const id = typeof r.id === "string" ? r.id : null;
+  const data = typeof r.data === "string" ? r.data : null;
+  if (!id || !data) return null;
+  const comboio = r.emComboio === true;
+  const valor = numero(r.valorTotal);
+  return {
+    ...base(`as:${id}`, "abastecimento"),
+    origem: "servidor",
+    clientId: typeof r.clientId === "string" ? r.clientId : null,
+    data,
+    dia: diaSP(data),
+    valorInformado: valor ?? 0,
+    valorTexto: valor == null ? "sem valor" : null,
+    detalhe: comboio ? "comboio" : typeof r.postoNome === "string" ? r.postoNome : null,
+    // Comboio é diesel da empresa entregue no caminhão-tanque: ele não pagou.
+    status: comboio
+      ? { texto: "Diesel da empresa", cor: "cinza", motivo: null, soma: 0, grupo: "fora" }
+      : statusDoAcerto(lerAcertoDoLancamento(r.acerto)),
+  };
+}
+
+function pedagioDoCelular(p: PendingPedagio): GastoVisto {
+  const pl = p.payload;
+  const dia = typeof pl.data === "string" ? pl.data.slice(0, 10) : diaSP(p.createdAt);
+  return {
+    ...base(`pc:${p.clientId}`, "pedagio"),
+    origem: "celular",
+    clientId: p.clientId,
+    data: instanteDoDia(dia),
+    dia,
+    valorInformado: numero(pl.valor) ?? 0,
+    detalhe: typeof pl.pracaPedagio === "string" ? pl.pracaPedagio : null,
+    editavel: true,
+    status: statusDaFila(p),
+  };
+}
+
+function abastecimentoDoCelular(p: PendingAbastecimento): GastoVisto {
+  const pl = p.payload;
+  const data = typeof pl.data === "string" ? pl.data : new Date(p.createdAt).toISOString();
+  const comboio = pl.emComboio === true;
+  const valor = numero(pl.valorTotal);
+  return {
+    ...base(`ac:${p.clientId}`, "abastecimento"),
+    origem: "celular",
+    clientId: p.clientId,
+    data,
+    dia: diaSP(data),
+    valorInformado: valor ?? 0,
+    valorTexto: valor == null ? "sem valor" : null,
+    detalhe: comboio ? "comboio" : typeof pl.postoNome === "string" ? pl.postoNome : null,
+    editavel: true,
+    status: statusDaFila(p),
+  };
+}
+
+function itensDaLista(raw: unknown): Record<string, unknown>[] {
+  const arr =
+    raw && typeof raw === "object" && Array.isArray((raw as { itens?: unknown }).itens)
+      ? (raw as { itens: unknown[] }).itens
+      : Array.isArray(raw)
+        ? raw
+        : [];
+  return arr.filter((x): x is Record<string, unknown> => !!x && typeof x === "object");
+}
+
+const CACHE_PEDAGIOS_GASTOS = "q:gastos:pedagios";
+const CACHE_ABAST_GASTOS = "q:gastos:abastecimentos";
+
+/**
+ * Os últimos 100 de cada (uma página cobre bem mais que um acerto). A chave
+ * começa por "pedagios"/"abastecimentos" de propósito: o lançar já invalida
+ * esses prefixos.
+ */
+function useListaDoMotorista(chave: "pedagios" | "abastecimentos", cache: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [chave, "gastos"],
+    staleTime: 60_000,
+    enabled,
+    queryFn: () =>
+      cacheFirst<Record<string, unknown>[]>(
+        [chave, "gastos"],
+        cache,
+        async () => {
+          const fresh = itensDaLista(await api.get<unknown>(`/m/${chave}?limit=100`));
+          void cachePut(cache, fresh).catch(() => {});
+          return fresh;
+        },
+        (x) => itensDaLista(x),
+      ),
+  });
+}
+
+export function useLancamentosDoAcerto(enabled = true): GastoVisto[] {
+  const qp = useListaDoMotorista("pedagios", CACHE_PEDAGIOS_GASTOS, enabled);
+  const qa = useListaDoMotorista("abastecimentos", CACHE_ABAST_GASTOS, enabled);
+  const pendP = useFilaLocal<PendingPedagio>(listPendingPedagios);
+  const pendA = useFilaLocal<PendingAbastecimento>(listPendingAbastecimentos);
+  // Saiu da fila = subiu: revalida, senão ele some por um instante.
+  const qtd = useRef({ p: pendP.length, a: pendA.length });
+  useEffect(() => {
+    if (enabled && pendP.length < qtd.current.p) void qp.refetch();
+    if (enabled && pendA.length < qtd.current.a) void qa.refetch();
+    qtd.current = { p: pendP.length, a: pendA.length };
+  }, [pendP.length, pendA.length, enabled, qp, qa]);
+  return useMemo(() => {
+    if (!enabled) return [];
+    const naFila = new Set([...pendP.map((p) => p.clientId), ...pendA.map((a) => a.clientId)]);
+    const remotos = [
+      ...(qp.data ?? []).map(pedagioDoServidor),
+      ...(qa.data ?? []).map(abastecimentoDoServidor),
+    ].filter((g): g is GastoVisto => !!g && !(g.clientId && naFila.has(g.clientId)));
+    return [...pendP.map(pedagioDoCelular), ...pendA.map(abastecimentoDoCelular), ...remotos];
+  }, [enabled, pendP, pendA, qp.data, qa.data]);
 }
 
 // ---------------------------------------------------------------------------
@@ -743,6 +989,12 @@ export function viagensRecentes(viagens: ViagemConhecida[], dias: number): Viage
 
 export type AvisoGastoSalvo = {
   clientId: string;
+  /**
+   * De qual fila ele é: cada um tem a sua no outbox, e a faixa só diz
+   * "enviado" depois de olhar a fila CERTA (olhar só a de despesas fazia o
+   * pedágio sem sinal aparecer como enviado). Ausente = despesa.
+   */
+  tipo?: "despesa" | "pedagio" | "abastecimento";
   /** Pra o "Lançar outro" abrir a lista no mesmo contexto. */
   params: Record<string, string>;
   em: number;

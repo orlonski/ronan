@@ -37,6 +37,8 @@ import { VerDePerto } from "@/components/miniatura-documento";
 import { API_URL } from "@/lib/api-url";
 import { caminhoFotoDespesa } from "@/lib/despesas";
 import { motoristaAtivoId, tokensDe } from "@/lib/sessoes";
+import { onSyncChange } from "@/lib/sync";
+import { listPendingAbastecimentos, listPendingDespesas, listPendingPedagios } from "@/db/database";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { ScreenHeader } from "@/components/screen-header";
@@ -53,7 +55,6 @@ import {
   useDespesasAtualizadasEm,
   useGastos,
   useModuloDespesas,
-  usePendingDespesas,
   type AvisoGastoSalvo,
   type CorStatus,
   type GastoVisto,
@@ -244,7 +245,9 @@ export function LinhaGasto({
   const quando = compacta ? horaSP(g.data) : diaFalado(g.dia);
   const onde = compacta
     ? null
-    : g.viagemRotulo
+    : g.detalhe
+      ? g.detalhe
+      : g.viagemRotulo
       ? g.viagemRotulo
       : g.naoFoiEmViagem
         ? "fora de viagem"
@@ -270,7 +273,7 @@ export function LinhaGasto({
             {g.tipoNome}
           </Text>
           <Text className="text-base font-bold text-foreground" style={{ fontVariant: ["tabular-nums"] }}>
-            {fmtReais(g.valorInformado)}
+            {g.valorTexto ?? fmtReais(g.valorInformado)}
           </Text>
         </View>
         <Text className="text-sm text-muted-foreground" numberOfLines={1}>
@@ -283,7 +286,7 @@ export function LinhaGasto({
 }
 
 // ---------------------------------------------------------------------------
-// Home: "Pra receber de volta"
+// Aba Gastos: "Pra receber de volta" (compacto, no topo)
 // ---------------------------------------------------------------------------
 
 function fmtHoraLocal(ts: number): string {
@@ -291,51 +294,57 @@ function fmtHoraLocal(ts: number): string {
 }
 
 /**
- * Aviso, não tarefa: SOME quando não há nada (nem com R$ 0,00). Só "sem
- * viagem" e nada a receber (tipo que não devolve) → só a linha de ligar.
- *
- * Sem botão "Ver meus gastos" aqui dentro: a home já tem um logo abaixo do
- * card "Gasto de viagem", sob a MESMA condição (`acompanhar`) em que este card
- * aparece — eram dois iguais na tela. Tocar no valor continua abrindo Meus gastos.
+ * O topo da aba Gastos: quanto volta pra ele e as duas portas — "Ver meus
+ * gastos" SEMPRE (mesmo com R$ 0,00: quem lançou só pedágio acha ele lá) e
+ * "Ligar à viagem (N)" só quando há gasto sem viagem. Compacto de propósito:
+ * a lista "O que você pagou?" vem logo abaixo e o valor não pode cair
+ * abaixo da dobra (12-qa-portas, achado 1).
  */
-export function CardPraReceber({ podeLigar }: { podeLigar: boolean }) {
+export function ResumoPraReceber({ podeLigar }: { podeLigar: boolean }) {
   const { gastos, query } = useGastos();
   const resumo = useMemo(() => resumirGastos(gastos), [gastos]);
   const atualizadoEm = useDespesasAtualizadasEm();
   const semViagem = podeLigar ? resumo.semViagem : 0;
-  if (resumo.total <= 0 && semViagem === 0) return null;
+  const desatualizado =
+    atualizadoEm != null && (query.isError || Date.now() - atualizadoEm > 5 * 60_000);
   return (
-    <View className="rounded-2xl border border-border bg-card p-4">
-      {resumo.total > 0 ? (
-        <Pressable onPress={() => router.push("/meus-reembolsos")} className="active:opacity-75">
-          <Text className="text-sm font-semibold text-muted-foreground">Pra receber de volta</Text>
-          <Text className="text-3xl font-bold text-foreground" style={{ fontVariant: ["tabular-nums"] }}>
-            {fmtReais(resumo.total)}
-          </Text>
-          {query.isError || (atualizadoEm && Date.now() - atualizadoEm > 5 * 60_000) ? (
-            atualizadoEm ? (
-              <Text className="text-xs text-muted-foreground">
-                Atualizado às {fmtHoraLocal(atualizadoEm)}
-              </Text>
-            ) : null
-          ) : null}
-          {resumo.aprovado > 0 ? (
-            <Text className="mt-1 text-sm text-foreground">{fmtReais(resumo.aprovado)} aprovado</Text>
-          ) : null}
-          {resumo.comEscritorio > 0 ? (
-            <Text className="text-sm text-foreground">{fmtReais(resumo.comEscritorio)} com o escritório</Text>
-          ) : null}
-        </Pressable>
-      ) : null}
+    <View className="gap-3 rounded-2xl border-2 border-border bg-card p-4">
+      <View>
+        <Text className="text-sm font-semibold text-muted-foreground">Pra receber de volta</Text>
+        <Text className="text-3xl font-bold text-foreground" style={{ fontVariant: ["tabular-nums"] }}>
+          {fmtReais(resumo.total)}
+        </Text>
+        {desatualizado ? (
+          <Text className="text-xs text-muted-foreground">Atualizado às {fmtHoraLocal(atualizadoEm!)}</Text>
+        ) : null}
+        {resumo.aprovado > 0 ? (
+          <View className="mt-1 flex-row items-start gap-2">
+            <View className="mt-1.5 h-2.5 w-2.5 rounded-full bg-success" />
+            <Text className="flex-1 text-[15px] text-foreground">
+              {fmtReais(resumo.aprovado)} aprovado — entra no próximo acerto
+            </Text>
+          </View>
+        ) : null}
+        {resumo.comEscritorio > 0 ? (
+          <View className="mt-1 flex-row items-start gap-2">
+            <View className="mt-1.5 h-2.5 w-2.5 rounded-full bg-sky-400" />
+            <Text className="flex-1 text-[15px] text-foreground">
+              {fmtReais(resumo.comEscritorio)} com o escritório
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      <BotaoAcao Icone={ListChecks} onPress={() => router.push("/meus-reembolsos")}>
+        Ver meus gastos
+      </BotaoAcao>
       {semViagem > 0 ? (
-        <View className={`gap-2 ${resumo.total > 0 ? "mt-3 border-t border-border pt-3" : ""}`}>
-          <Text className="text-base text-foreground">
-            {semViagem} {semViagem === 1 ? "gasto sem viagem" : "gastos sem viagem"}
-          </Text>
-          <BotaoAcao Icone={Link} onPress={() => router.push("/gastos-sem-viagem")}>
-            Ligar à viagem
-          </BotaoAcao>
-        </View>
+        <BotaoAcao
+          Icone={Link}
+          onPress={() => router.push("/gastos-sem-viagem")}
+          accessibilityLabel={`Ligar à viagem: ${semViagem} ${semViagem === 1 ? "gasto sem viagem" : "gastos sem viagem"}`}
+        >
+          {`Ligar à viagem (${semViagem})`}
+        </BotaoAcao>
       ) : null}
     </View>
   );
@@ -469,8 +478,25 @@ export function GastosDaViagem({
   );
 }
 
+/** Tem pra onde ir ao tocar? (sem isso a linha não finge ser botão) */
+export function gastoAbre(g: GastoVisto): boolean {
+  if (g.categoria === "pedagio" || g.categoria === "abastecimento") return g.origem === "celular" && !!g.clientId;
+  return (g.origem === "celular" && !!g.clientId && !!g.tipoId) || !!g.despesaId;
+}
+
 /** Toque num gasto: no celular abre o formulário pra corrigir; enviado, o detalhe. */
 export function abrirGasto(g: GastoVisto): void {
+  // Pedágio e abastecimento: só o que ainda está no celular abre (pra corrigir
+  // no formulário de sempre); o enviado é só linha de consulta.
+  if (g.categoria === "pedagio" || g.categoria === "abastecimento") {
+    if (g.origem === "celular" && g.clientId) {
+      router.push({
+        pathname: g.categoria === "pedagio" ? "/novo-pedagio" : "/novo-abastecimento",
+        params: { editarClientId: g.clientId },
+      });
+    }
+    return;
+  }
   if (g.origem === "celular" && g.clientId && g.tipoId) {
     router.push({ pathname: "/gasto-novo", params: { tipoId: g.tipoId, editarClientId: g.clientId } });
     return;
@@ -482,14 +508,58 @@ export function abrirGasto(g: GastoVisto): void {
 // Faixa verde depois de salvar (8 s)
 // ---------------------------------------------------------------------------
 
+const NOME_DO_AVISO: Record<NonNullable<AvisoGastoSalvo["tipo"]>, string> = {
+  despesa: "Gasto",
+  pedagio: "Pedágio",
+  abastecimento: "Abastecimento",
+};
+
 /**
- * "Gasto guardado…" ou "Gasto enviado…" — e só diz "enviado" quando o item
- * saiu mesmo da fila do celular (nunca promete o que não fez).
+ * O item do aviso ainda está na fila do celular? Cada tipo tem a SUA fila no
+ * outbox. `null` = ainda não sei (a fila não carregou) — e aí a faixa diz
+ * "guardado", nunca "enviado": dizer enviado sem ter enviado é mentir.
  */
-export function FaixaGastoSalvo() {
+function useAindaNaFila(aviso: AvisoGastoSalvo | null): boolean | null {
+  const [naFila, setNaFila] = useState<boolean | null>(null);
+  useEffect(() => {
+    setNaFila(null);
+    if (!aviso) return;
+    let vivo = true;
+    const listar =
+      aviso.tipo === "pedagio"
+        ? listPendingPedagios
+        : aviso.tipo === "abastecimento"
+          ? listPendingAbastecimentos
+          : listPendingDespesas;
+    const conferir = async () => {
+      try {
+        const l = await listar();
+        if (vivo) setNaFila(l.some((p) => p.clientId === aviso.clientId));
+      } catch {
+        /* storage indisponível: fica "não sei" */
+      }
+    };
+    void conferir();
+    const off = onSyncChange(conferir);
+    return () => {
+      vivo = false;
+      off();
+    };
+  }, [aviso]);
+  return naFila;
+}
+
+/**
+ * "Gasto guardado…" ou "Gasto enviado…" (ou Pedágio/Abastecimento) — e só
+ * diz "enviado" quando o item saiu mesmo da fila CERTA do celular.
+ *
+ * `semBotoes` (aba Gastos): só a frase — o "lançar outro" é a lista logo
+ * abaixo e o "ver" é o "Pra receber de volta" logo acima. Dentro da viagem
+ * continua com os botões.
+ */
+export function FaixaGastoSalvo({ semBotoes = false }: { semBotoes?: boolean }) {
   const modulo = useModuloDespesas();
   const [aviso, setAviso] = useState<AvisoGastoSalvo | null>(null);
-  const pend = usePendingDespesas();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useFocusEffect(
@@ -503,49 +573,57 @@ export function FaixaGastoSalvo() {
       return undefined;
     }, []),
   );
+
   useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
     },
     [],
   );
+  const naFila = useAindaNaFila(aviso);
 
   if (!aviso) return null;
-  const naFila = pend.some((p) => p.clientId === aviso.clientId);
+  const nome = NOME_DO_AVISO[aviso.tipo ?? "despesa"];
   return (
-    <View className="m-3 gap-3 rounded-xl bg-green-50 px-4 py-3">
+    <View
+      className={`${semBotoes ? "mx-4 mt-3" : "m-3"} gap-3 rounded-xl bg-green-50 px-4 py-3`}
+    >
       <View className="flex-row items-center gap-3">
         <Check size={20} color="#15803d" />
         <Text className="flex-1 text-base font-semibold text-green-900">
-          {naFila ? "Gasto guardado. Vai pro escritório quando tiver sinal." : "Gasto enviado pro escritório."}
+          {naFila === false
+            ? `${nome} enviado pro escritório.`
+            : `${nome} guardado. Vai pro escritório quando tiver sinal.`}
         </Text>
       </View>
-      <View className="flex-row gap-2">
-        {modulo.acompanhar ? (
+      {semBotoes ? null : (
+        <View className="flex-row gap-2">
+          {modulo.acompanhar ? (
+            <BotaoAcao
+              Icone={ListChecks}
+              size="sm"
+              className="flex-1 px-2"
+              onPress={() => {
+                setAviso(null);
+                router.push("/meus-reembolsos");
+              }}
+            >
+              Ver meus gastos
+            </BotaoAcao>
+          ) : null}
           <BotaoAcao
-            Icone={ListChecks}
+            Icone={Plus}
             size="sm"
             className="flex-1 px-2"
             onPress={() => {
               setAviso(null);
-              router.push("/meus-reembolsos");
+              router.push({ pathname: "/gasto-viagem", params: aviso.params });
             }}
           >
-            Ver meus gastos
+            Lançar outro
           </BotaoAcao>
-        ) : null}
-        <BotaoAcao
-          Icone={Plus}
-          size="sm"
-          className="flex-1 px-2"
-          onPress={() => {
-            setAviso(null);
-            router.push({ pathname: "/gasto-viagem", params: aviso.params });
-          }}
-        >
-          Lançar outro
-        </BotaoAcao>
-      </View>
+        </View>
+      )}
     </View>
   );
 }

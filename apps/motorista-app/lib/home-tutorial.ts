@@ -23,7 +23,7 @@ function primeiroNome(nome: string): string {
   return nome.trim().split(/\s+/)[0] ?? nome;
 }
 
-/** Com o módulo de gasto de viagem, Pedágio e Abastecimento viram um card só. */
+/** Com o módulo de gasto de viagem, Pedágio e Abastecimento moram na aba Gastos. */
 type TutorialOpcoes = { gastoDeViagem?: boolean };
 
 function buildSteps(me: TutorialMe, opcoes: TutorialOpcoes = {}): TutorialStep[] {
@@ -52,11 +52,12 @@ function buildSteps(me: TutorialMe, opcoes: TutorialOpcoes = {}): TutorialStep[]
     });
   }
   if (opcoes.gastoDeViagem) {
+    // Sem alvo: a home não tem mais card de gasto — a casa é a aba Gastos,
+    // que o tab bar já mostra com o nome escrito.
     steps.push({
       id: "gasto-viagem",
-      targetId: "coach-gasto-viagem",
-      title: "Gasto de viagem",
-      body: "Pagou pedágio, diesel, comida ou borracharia? Lance aqui com a foto do papel e o valor volta pra você no acerto.",
+      title: "Gastos",
+      body: "Pagou pedágio, diesel ou comida? Lance na aba Gastos, aqui embaixo.",
     });
   }
   if (me.podeLancarPedagio && !opcoes.gastoDeViagem) {

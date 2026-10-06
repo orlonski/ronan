@@ -24,6 +24,7 @@ import { CriarPedagioInput } from "@ronan/shared-types";
 import { useCatalogos, useCriarPedagio, useMe } from "@/lib/queries";
 import { atualizarPedagioPendente } from "@/lib/sync";
 import { listPendingPedagios } from "@/db/database";
+import { marcarGastoSalvo } from "@/lib/gastos";
 
 const today = hojeISO;
 
@@ -150,6 +151,8 @@ export default function NovoPedagio() {
         }
       } else {
         await criar(payload);
+        // Faixa verde na aba Gastos (com o módulo), olhando a fila de PEDÁGIO.
+        marcarGastoSalvo({ clientId: payload.clientId, tipo: "pedagio", params: {} });
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();

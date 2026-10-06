@@ -44,6 +44,7 @@ import {
 import { listPendingAbastecimentos } from "@/db/database";
 import { usePendingAbastecimentos } from "@/hooks/use-pending-abastecimentos";
 import { pegarCoordsPrecisa } from "@/lib/geo";
+import { marcarGastoSalvo } from "@/lib/gastos";
 
 type TipoCombustivel =
   | "DIESEL_S10"
@@ -441,6 +442,8 @@ export default function NovoAbastecimento() {
         }
       } else {
         await criar({ payload, fotos: fotosPendentes() });
+        // Faixa verde na aba Gastos (com o módulo), olhando a fila de ABASTECIMENTO.
+        marcarGastoSalvo({ clientId: payload.clientId, tipo: "abastecimento", params: {} });
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
