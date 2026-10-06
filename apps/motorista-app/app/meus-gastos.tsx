@@ -34,9 +34,11 @@ export default function LancarGastoScreen() {
   const params = useLocalSearchParams<{ tipo?: string }>();
   const tipoInicial = TIPOS_LANCAMENTO_PESSOAL.includes(params.tipo as TipoLancamentoPessoal)
     ? (params.tipo as TipoLancamentoPessoal)
-    : "ABASTECIMENTO";
+    : null;
 
-  const [tipo, setTipo] = useState<TipoLancamentoPessoal>(tipoInicial);
+  // Sem tipo na rota, nada vem marcado: quem escolhe é ele. Vindo do card
+  // "Abastecer", a escolha já foi dele (o toque no card).
+  const [tipo, setTipo] = useState<TipoLancamentoPessoal | null>(tipoInicial);
   const [valor, setValor] = useState("");
   const [litros, setLitros] = useState("");
   const [odometro, setOdometro] = useState("");
@@ -56,6 +58,7 @@ export default function LancarGastoScreen() {
 
   async function salvar() {
     setErro(null);
+    if (!tipo) return setErro("Escolha o que foi.");
     const valorNum = Number(valor.replace(/\./g, "").replace(",", "."));
     if (!valorNum || valorNum <= 0) return setErro("Informe o valor.");
     setSalvando(true);
