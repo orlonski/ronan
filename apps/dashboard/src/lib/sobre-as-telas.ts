@@ -1142,6 +1142,23 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
+  "/chamadas-externas": {
+    oQue:
+      "Tudo que a plataforma pede pra fora — IA, ANTT, IBGE, mapas, WhatsApp — " +
+      "com o que foi enviado e o que voltou. Entra sozinho: integração nova " +
+      "aparece aqui sem ninguém precisar registrar.",
+    faz: [
+      "Ver por serviço quantas chamadas, quantos erros, o tempo médio e os tokens de IA no período",
+      "Filtrar por serviço, só os erros, ou buscar pelo endereço, pelo erro ou por quem disparou",
+      "Abrir uma chamada pra ver o pedido e a resposta, com chave e dado pessoal escondidos",
+    ],
+    naoEAqui: {
+      procurando: "os erros que os usuários estão batendo agora",
+      vaEm: "Erros",
+      href: "/erros",
+    },
+  },
+
   "/erros": {
     oQue:
       "Os erros que estouraram de verdade no app, no painel e no servidor, " +

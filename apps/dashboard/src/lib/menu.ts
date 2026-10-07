@@ -2,6 +2,7 @@ import {
   Activity,
   Compass,
   AlertCircle,
+  ArrowLeftRight,
   ArrowUpCircle,
   BarChart3,
   Bell,
@@ -441,6 +442,9 @@ export const GRUPOS: Grupo[] = [
       { href: "/prospeccao", label: "Captação de clientes", icon: Target, perm: "prospeccao.ver" },
       { href: "/marketing", label: "Instagram da Movatruck", icon: Instagram, perm: "marketing.ver" },
       { href: "/erros", label: "Erros", icon: AlertCircle, perm: "erros.ver" },
+      // Sem chave de permissão: o gate é a flag `plataforma` do grupo, e a API
+      // tem PlataformaGuard. Chamada externa mostra dado de toda empresa.
+      { href: "/chamadas-externas", label: "Chamadas externas", icon: ArrowLeftRight },
       { href: "/diagnosticos", label: "Diagnóstico do app", icon: Activity, perm: "diagnosticos.ver" },
       { href: "/configuracoes/forca-atualizacao", label: "Força-atualização do app", icon: ArrowUpCircle, perm: "config-forca-atualizacao.ver" },
       /**

@@ -82,6 +82,9 @@ export const MODELS_GLOBAIS = new Set<string>([
   // dono. Sem estar aqui, a trava punha `contaId` no where de uma tabela que
   // não tem a coluna e a sincronização morria na 1ª consulta.
   "PracaOficial",
+  // Registro de chamadas externas: é da plataforma (quem vê é só a equipe). O
+  // `contaId` ali é informação, não dono — por isso fica fora da trava.
+  "ChamadaExterna",
   // Praça do extrato da tag → praça do mapa, valendo pra TODAS as empresas.
   // Praça é dado público; só a equipe da plataforma confirma aqui (a empresa
   // confirma pra ela em `PracaTagDeParaConta`, que é escopado). Toda leitura

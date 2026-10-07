@@ -1,4 +1,5 @@
 import { Logger } from "@nestjs/common";
+import { comGatilho } from "./chamadas-externas/interceptor";
 
 /**
  * Roda um job de cron em UMA instância só, usando advisory lock do Postgres.
@@ -65,6 +66,9 @@ export async function comLockDeCron(
   fn: () => Promise<void>,
 ): Promise<boolean> {
   const chave = chaveDoLock(nome);
+  // Toda chamada externa que o job fizer aparece como disparada por ele.
+  const tarefa = fn;
+  fn = () => comGatilho(`cron:${nome}`, tarefa);
 
   /**
    * Com o Prisma de verdade, o lock é de TRANSAÇÃO e mora numa conexão só.

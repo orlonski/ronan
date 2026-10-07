@@ -1,3 +1,8 @@
+import { instalarRegistroDeChamadas, comGatilho } from "./common/chamadas-externas/interceptor";
+import { rotaSemIds } from "./common/chamadas-externas/registro";
+// Antes de qualquer SDK guardar a referência do `fetch`: tudo que sai pra fora
+// passa pelo registro de chamadas externas (tela da plataforma).
+instalarRegistroDeChamadas();
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, Logger } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -33,6 +38,10 @@ async function bootstrap() {
   // Gzip nas respostas. Crítico pro app móvel em rede 3G/4G —
   // reduz /catalogos de ~300KB pra ~40KB. Threshold default ignora
   // payloads pequenos (<1KB), então rotas leves não pagam custo de CPU.
+  // Cada chamada externa sabe qual requisição a disparou ("POST /admin/…").
+  app.use((req: { method: string; originalUrl?: string; url: string }, _res: unknown, next: () => void) =>
+    comGatilho(rotaSemIds(req.method, req.originalUrl ?? req.url), next),
+  );
   app.use(compression());
 
   // aumenta limite do body-parser pra aceitar uploads de planilhas e fotos

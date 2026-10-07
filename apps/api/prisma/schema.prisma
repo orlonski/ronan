@@ -1893,6 +1893,41 @@ model MotoristaPosicaoConfig {
 /// sincronizada todo mês. É com ela que a praça da fatura da tag casa por
 /// rodovia + estado + km; o que falta no mapa entra como `PedagioRodovia`
 /// (fonte "antt"). Global: dado público, igual pra toda empresa.
+/// Toda chamada que a API faz pra fora — IA, ANTT, IBGE, mapas, WhatsApp…
+/// Capturada no `fetch` global e no canal de diagnóstico do `http`
+/// (common/chamadas-externas/interceptor.ts): ninguém registra à mão, nem a
+/// integração que alguém criar amanhã. Pedido e resposta saem mascarados (sem
+/// chave, token, senha, foto; CPF/telefone/e-mail escondidos) e cortados, e
+/// são apagados em 30 dias; o resumo fica 12 meses. Global: só a plataforma vê.
+model ChamadaExterna {
+  id              String   @id @default(uuid())
+  criadoEm        DateTime @default(now())
+  /// A empresa no contexto da chamada (sem FK de propósito: o registro é da plataforma).
+  contaId         String?
+  /// O que disparou: "POST /admin/…" ou "cron:nome".
+  gatilho         String?
+  servico         String
+  host            String
+  metodo          String
+  caminho         String
+  status          Int?
+  ok              Boolean
+  duracaoMs       Int
+  bytesEnvio      Int?
+  bytesResposta   Int?
+  pedido          Json?
+  resposta        Json?
+  erro            String?
+  iaModelo        String?
+  iaTokensEntrada Int?
+  iaTokensSaida   Int?
+
+  @@index([criadoEm(sort: Desc)])
+  @@index([servico, criadoEm(sort: Desc)])
+  @@index([contaId, criadoEm(sort: Desc)])
+  @@map("chamadas_externas")
+}
+
 model PracaOficial {
   id             String   @id @default(uuid())
   fonte          String

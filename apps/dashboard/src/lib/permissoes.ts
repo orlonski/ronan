@@ -208,6 +208,10 @@ export const ROTAS_ABERTAS: { rota: string; porque: string }[] = [
   },
   { rota: "/inbox", porque: "Caixa do sininho: os avisos da própria pessoa." },
   { rota: "/contas", porque: "Assinantes: só da plataforma — a própria tela checa `plataforma`, fora da matriz de papéis." },
+  {
+    rota: "/chamadas-externas",
+    porque: "Chamadas externas: só da plataforma — a tela checa `plataforma` e a API tem PlataformaGuard; mostra dado de toda empresa, então não pode virar chave concedível.",
+  },
 ];
 
 /** A rota está entre as abertas de propósito? "/" só vale exata. */

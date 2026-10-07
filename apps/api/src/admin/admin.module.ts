@@ -32,6 +32,7 @@ import { ViagensAdminModule } from "./viagens/viagens.module";
 import { AbastecimentosAdminModule } from "./abastecimentos/abastecimentos.module";
 import { CartaoCombustivelModule } from "./cartao-combustivel/cartao-combustivel.module";
 import { TagPedagioModule } from "./tag-pedagio/tag-pedagio.module";
+import { ChamadasExternasModule } from "./chamadas-externas/chamadas-externas.module";
 import { TrackingConfigModule } from "./tracking-config/tracking-config.module";
 import { AgenteConfigModule } from "./agente-config/agente-config.module";
 import { BuscaLocaisConfigModule } from "./busca-locais-config/busca-locais-config.module";
@@ -88,6 +89,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     AbastecimentosAdminModule,
     CartaoCombustivelModule,
     TagPedagioModule,
+    ChamadasExternasModule,
     TrackingConfigModule,
     AgenteConfigModule,
     BuscaLocaisConfigModule,
