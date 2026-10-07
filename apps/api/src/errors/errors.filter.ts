@@ -1,3 +1,4 @@
+import { conteudoParaGuardar, urlSemSegredo } from "../common/chamadas-externas/registro";
 import {
   ArgumentsHost,
   Catch,
@@ -46,20 +47,22 @@ export class ErrorsExceptionFilter implements ExceptionFilter {
           origem: "api",
           message: err.message ?? String(exception),
           stack: err.stack,
-          url: `${req.method} ${req.url}`,
+          // Sem segredo no endereço: `?access_token=` (o JWT aceita token na
+          // query) ia inteiro pro error_logs, que a equipe lê na tela de Erros.
+          url: `${req.method} ${urlSemSegredo(`http://api${req.url}`).caminho}`,
           userAgent: req.headers["user-agent"],
           userId,
           userType,
           extra: {
             body: this.sanitizar(req.body as unknown),
-            query: req.query,
+            query: this.sanitizar(req.query as unknown),
           },
         });
       } catch (logErr) {
         this.log.error("Falhou ao registrar erro no error_logs", logErr);
       }
 
-      this.log.error(`5xx em ${req.method} ${req.url}: ${err.message}`, err.stack);
+      this.log.error(`5xx em ${req.method} ${urlSemSegredo(`http://api${req.url}`).caminho}: ${err.message}`, err.stack);
     }
 
     // Resposta padrão NestJS
@@ -74,13 +77,13 @@ export class ErrorsExceptionFilter implements ExceptionFilter {
   }
 
   /** Remove campos sensíveis do body antes de salvar. */
+  /**
+   * A mesma limpeza do registro de chamadas externas: senha, token, chave e
+   * cookie em QUALQUER nível (antes só o 1º nível e 5 nomes fixos), foto em
+   * base64 fora, CPF/telefone/e-mail mascarados, corte de tamanho.
+   */
   private sanitizar(body: unknown): unknown {
     if (!body || typeof body !== "object") return body;
-    const SENSIVEIS = ["senha", "password", "token", "accessToken", "refreshToken"];
-    const copy: Record<string, unknown> = { ...(body as Record<string, unknown>) };
-    for (const k of SENSIVEIS) {
-      if (k in copy) copy[k] = "[REDACTED]";
-    }
-    return copy;
+    return conteudoParaGuardar(body);
   }
 }

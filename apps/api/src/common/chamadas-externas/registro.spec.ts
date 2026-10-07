@@ -42,6 +42,20 @@ describe("registro de chamadas externas", () => {
     });
   });
 
+  it("segredo no CAMINHO some: webhooks conhecidos e pedaço com cara de chave", () => {
+    expect(urlSemSegredo("https://hooks.zapier.com/hooks/catch/1234567/3xyz8kq/").caminho).toBe("/hooks/catch/***");
+    expect(urlSemSegredo("https://hooks.slack.com/services/T000/B000/XXXXxxxx1234YYYY5678zz").caminho).toBe("/services/***");
+    expect(urlSemSegredo("https://discord.com/api/webhooks/123/abcDEF456ghi").caminho).toBe("/api/webhooks/***");
+    expect(urlSemSegredo("https://api.telegram.org/bot123456:AAH-segredo9x/sendMessage").caminho).toBe("/***/sendMessage");
+    expect(urlSemSegredo("https://exemplo.com/receber/a8F3kL9pQ2xZ7vB4nM6tR1sE/eventos").caminho).toBe("/receber/***/eventos");
+    // Id de registro não é segredo.
+    expect(urlSemSegredo("https://exemplo.com/viagens/3701a585-f51e-47bb-8950-1e0af637e56d").caminho).toBe(
+      "/viagens/3701a585-f51e-47bb-8950-1e0af637e56d",
+    );
+    // Token na query (o JWT aceita ?access_token=).
+    expect(urlSemSegredo("http://api/admin/x?access_token=eyJabc&pagina=2").caminho).toBe("/admin/x?access_token=***&pagina=2");
+  });
+
   it("lê tokens da Anthropic, OpenAI e Gemini", () => {
     expect(usoDeIa({ model: "claude-haiku", usage: { input_tokens: 10, output_tokens: 5 } })).toEqual({ modelo: "claude-haiku", tokensEntrada: 10, tokensSaida: 5 });
     expect(usoDeIa({ model: "gpt", usage: { prompt_tokens: 3, completion_tokens: 2 } })?.tokensSaida).toBe(2);

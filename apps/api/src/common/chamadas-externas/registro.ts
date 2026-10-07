@@ -117,15 +117,50 @@ export function conteudoParaGuardar(bruto: unknown): unknown {
   return { cortado: true, tamanho: s.length, inicio: s.slice(0, LIMITE_CONTEUDO) };
 }
 
-/** URL sem segredo na query (`?key=…` do Google, `?token=…`). */
+/**
+ * Serviço de webhook que põe a CHAVE no próprio caminho (e às vezes curta, tipo
+ * o "3xyz8kq" do Zapier): depois do prefixo, o caminho inteiro some.
+ */
+const WEBHOOK_COM_SEGREDO_NO_CAMINHO: [RegExp, RegExp][] = [
+  [/(^|\.)hooks\.zapier\.com$/, /^(\/hooks\/catch)\/.*/],
+  [/(^|\.)make\.com$|(^|\.)integromat\.com$/, /^()\/.*/],
+  [/(^|\.)hooks\.slack\.com$/, /^(\/services|\/workflows|\/triggers)\/.*/],
+  [/(^|\.)discord(app)?\.com$/, /^(\/api\/webhooks)\/.*/],
+  [/(^|\.)api\.telegram\.org$/, /^()\/bot[^/]+(.*)$/],
+  [/(^|\.)webhook\.office\.com$|(^|\.)logic\.azure\.com$/, /^()\/.*/],
+];
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Pedaço do caminho com cara de segredo: longo (≥ 20), só caractere de token e
+ * misturando letra com número. UUID é id de registro, não segredo — fica.
+ */
+function pareceSegredo(seg: string): boolean {
+  return seg.length >= 20 && /^[A-Za-z0-9_\-:.~]+$/.test(seg) && /[A-Za-z]/.test(seg) && /\d/.test(seg) && !UUID.test(seg);
+}
+
+/** URL sem segredo: na query (`?key=…`, `?access_token=…`) e no caminho (webhooks). */
 export function urlSemSegredo(url: string): { host: string; caminho: string } {
   try {
     const u = new URL(url);
     for (const k of [...u.searchParams.keys()]) if (CHAVE_SECRETA.test(k) || k === "key") u.searchParams.set(k, "***");
     const q = u.searchParams.toString();
-    return { host: u.host, caminho: mascararTexto(decodeURIComponent(u.pathname)) + (q ? `?${q}` : "") };
+    let caminho = decodeURIComponent(u.pathname);
+    const conhecido = WEBHOOK_COM_SEGREDO_NO_CAMINHO.find(([h]) => h.test(u.host.toLowerCase()));
+    if (conhecido) {
+      const [, prefixo] = conhecido;
+      // 2º grupo, quando o padrão tem, é o que vem DEPOIS do segredo (Telegram: /sendMessage).
+      caminho = caminho.replace(prefixo, (_m, p: string, resto: unknown) => `${p ?? ""}/***${typeof resto === "string" ? resto : ""}`);
+    } else {
+      caminho = caminho
+        .split("/")
+        .map((seg) => (pareceSegredo(seg) ? "***" : seg))
+        .join("/");
+    }
+    return { host: u.host, caminho: mascararTexto(caminho) + (q ? `?${q}` : "") };
   } catch {
-    return { host: "?", caminho: url.slice(0, 300) };
+    return { host: "?", caminho: mascararTexto(url.slice(0, 300)) };
   }
 }
 

@@ -16,7 +16,7 @@ nome da conta. Ficam com o nome antigo, e não dá pra trocar: o bundle ID
 ## Estrutura
 
 ```
-apps/api/             Backend Nest.js 10 + Prisma 6 + Postgres (porta 3000, Swagger em /docs)
+apps/api/             Backend Nest.js 10 + Prisma 6 + Postgres (porta 3000, Swagger em /docs — em produção só com DOCS_USUARIO/DOCS_SENHA)
 apps/dashboard/       Painel admin Next.js 15 App Router (porta 3001, deploy: app.schaba.com.br)
 apps/motorista-app/   App nativo Expo 54/RN — Android + iOS (deploy: EAS Update OTA)
 apps/site/            Site institucional Vite/React estático (porta 3003, www.movatruck.com.br)

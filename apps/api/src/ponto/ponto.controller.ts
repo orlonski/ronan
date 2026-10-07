@@ -1,3 +1,4 @@
+import { ipDaRequisicao } from "../common/rate-limit/ip";
 import {
   Body,
   Controller,
@@ -136,7 +137,8 @@ export class PontoMotoristaController {
     @Req() req: Request,
   ) {
     return this.service.conferirEspelho(funcionarioDe(user), body, {
-      ip: (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.ip,
+      // O IP é prova da marcação: o que o proxy viu, não o que o celular declarou.
+      ip: ipDaRequisicao(req),
       userAgent: req.headers["user-agent"],
     });
   }

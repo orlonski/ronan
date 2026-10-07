@@ -8,6 +8,7 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, Logger } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import compression from "compression";
+import { timingSafeEqual } from "node:crypto";
 import { json, urlencoded } from "express";
 import { AppModule } from "./app.module";
 
@@ -74,8 +75,20 @@ async function bootstrap() {
     .setVersion("0.1.0")
     .addBearerAuth()
     .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup("docs", app, document);
+  // ⚠️ /docs é a API INTERNA inteira (todas as rotas do painel e do app). Em
+  // produção ele só existe atrás de usuário e senha (DOCS_USUARIO/DOCS_SENHA no
+  // Easypanel); sem os dois, não sobe — fechado por padrão. A documentação pro
+  // cliente de integração vai ser outra, só com a API pública.
+  const emProducao = process.env.NODE_ENV === "production";
+  const docsUsuario = process.env.DOCS_USUARIO?.trim();
+  const docsSenha = process.env.DOCS_SENHA?.trim();
+  if (!emProducao || (docsUsuario && docsSenha)) {
+    if (emProducao) app.use(["/docs", "/docs-json", "/docs-yaml"], protegerDocs(docsUsuario!, docsSenha!));
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup("docs", app, document);
+  } else {
+    Logger.warn("/docs desligado em produção: defina DOCS_USUARIO e DOCS_SENHA pra abrir com senha.", "Bootstrap");
+  }
 
   const port = Number(process.env.PORT ?? 3000);
   // O que os módulos pedem pra fora enquanto ligam (onModuleInit: ex.: conferir
@@ -87,3 +100,15 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+/** Usuário e senha (HTTP Basic) na frente do /docs, com comparação em tempo constante. */
+function protegerDocs(usuario: string, senha: string) {
+  const esperado = Buffer.from(`${usuario}:${senha}`);
+  return (req: { headers: Record<string, string | string[] | undefined> }, res: { setHeader: (k: string, v: string) => void; status: (n: number) => { end: (s?: string) => void } }, next: () => void) => {
+    const h = String(req.headers.authorization ?? "");
+    const recebido = h.startsWith("Basic ") ? Buffer.from(h.slice(6), "base64") : Buffer.alloc(0);
+    if (recebido.length === esperado.length && timingSafeEqual(recebido, esperado)) return next();
+    res.setHeader("WWW-Authenticate", 'Basic realm="Movatruck API interna"');
+    res.status(401).end("Documentação interna: precisa de usuário e senha.");
+  };
+}
