@@ -337,7 +337,9 @@ function Conteudo({ titulo, valor }: { titulo: string; valor: unknown }) {
       ? "Não guardado (serviço de alto volume, sem corpo, ou mais de 30 dias)."
       : typeof valor === "string"
         ? valor
-        : JSON.stringify(valor, null, 2);
+        : // Texto de IA (instruções, resposta) vem cheio de quebras de linha: mostra
+          // como texto, não como "\n" escapado — é pra gente ler, não pra copiar JSON.
+          JSON.stringify(valor, null, 2).replace(/\\n/g, "\n");
   return (
     <div>
       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</p>
