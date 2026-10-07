@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import diagnosticsChannel from "node:diagnostics_channel";
+import { createRequire } from "node:module";
 import { contaAtual } from "../conta/conta-context";
 import { conteudoParaGuardar, servicoDoHost, urlSemSegredo, usoDeIa } from "./registro";
 
@@ -41,6 +42,10 @@ export type RegistroChamada = {
 const gatilhos = new AsyncLocalStorage<string>();
 export function comGatilho<T>(gatilho: string, fn: () => T): T {
   return gatilhos.run(gatilho, fn);
+}
+/** O rótulo em vigor (null fora de requisição, robô ou fila rotulada). */
+export function gatilhoAtual(): string | null {
+  return gatilhos.getStore() ?? null;
 }
 
 const fila: RegistroChamada[] = [];
@@ -279,4 +284,33 @@ export async function gravarAgora(): Promise<void> {
   if (!gravador) return;
   const lote = tirarDaFila();
   if (lote.length) await gravador(lote);
+}
+
+/**
+ * Todo robô agendado (`@Cron`) aparece como "cron:nome" — os que existem e os
+ * que alguém criar amanhã, sem lembrar de nada: o rótulo entra no disparo da
+ * biblioteca `cron` (a MESMA instância que o @nestjs/schedule usa). Robô que
+ * roda com `comLockDeCron` ganha o nome do lock por dentro, que é mais preciso.
+ * Sem nome no @Cron, vale o nome do método.
+ */
+export function rotularRobosAgendados(): void {
+  try {
+    const exigir = createRequire(require.resolve("@nestjs/schedule"));
+    const { CronJob } = exigir("cron") as {
+      CronJob: { prototype: { fireOnTick: (...a: unknown[]) => unknown; name?: string; _callbacks?: { name?: string }[] } };
+    };
+    const proto = CronJob.prototype as unknown as {
+      fireOnTick: (...a: unknown[]) => unknown;
+      __rotulado?: boolean;
+    };
+    if (proto.__rotulado) return;
+    proto.__rotulado = true;
+    const original = proto.fireOnTick;
+    proto.fireOnTick = function (this: { name?: string; _callbacks?: { name?: string }[] }, ...a: unknown[]) {
+      const nome = this.name || (this._callbacks?.[0]?.name ?? "").replace(/^bound /, "") || "sem-nome";
+      return comGatilho(`cron:${nome}`, () => original.apply(this, a));
+    };
+  } catch {
+    /* sem a biblioteca: os robôs só ficam sem rótulo */
+  }
 }

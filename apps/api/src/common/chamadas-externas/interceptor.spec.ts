@@ -61,3 +61,23 @@ describe("interceptador de chamadas externas", () => {
     expect(c).toMatchObject({ metodo: "GET", status: 200, ok: true, pedido: null, resposta: null });
   });
 });
+
+describe("robôs agendados rotulados", () => {
+  it("todo @Cron dispara com o rótulo cron:nome (nome do job, senão o do método)", async () => {
+    const { createRequire } = await import("node:module");
+    const { gatilhoAtual, rotularRobosAgendados } = await import("./interceptor");
+    rotularRobosAgendados();
+    const { CronJob } = createRequire(require.resolve("@nestjs/schedule"))("cron") as {
+      CronJob: { from: (o: Record<string, unknown>) => { fireOnTick: () => Promise<void> | void } };
+    };
+    const vistos: (string | null)[] = [];
+    const comNome = CronJob.from({ cronTime: "0 0 1 1 *", onTick: () => void vistos.push(gatilhoAtual()), name: "limpar-coisas" });
+    await comNome.fireOnTick();
+    function sweep() {
+      vistos.push(gatilhoAtual());
+    }
+    const semNome = CronJob.from({ cronTime: "0 0 1 1 *", onTick: sweep.bind({}) });
+    await semNome.fireOnTick();
+    expect(vistos).toEqual(["cron:limpar-coisas", "cron:sweep"]);
+  });
+});

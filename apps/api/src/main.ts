@@ -1,8 +1,9 @@
-import { instalarRegistroDeChamadas, comGatilho } from "./common/chamadas-externas/interceptor";
+import { instalarRegistroDeChamadas, comGatilho, rotularRobosAgendados } from "./common/chamadas-externas/interceptor";
 import { rotaSemIds } from "./common/chamadas-externas/registro";
 // Antes de qualquer SDK guardar a referência do `fetch`: tudo que sai pra fora
 // passa pelo registro de chamadas externas (tela da plataforma).
 instalarRegistroDeChamadas();
+rotularRobosAgendados();
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, Logger } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";

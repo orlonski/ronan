@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { comGatilho } from "../common/chamadas-externas/interceptor";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { Prisma, StatusConferenciaTicket, type ConferenciaTicket } from "@prisma/client";
@@ -77,7 +78,8 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     this.config.descreverNoBoot();
     if (!this.config.habilitado) return;
-    this.laco = setInterval(() => void this.tick(), this.config.intervaloMs);
+    // Rótulo na tela "Chamadas externas": a IA e as fotos que o worker pede.
+    this.laco = setInterval(() => void comGatilho("fila:conferencia-ticket", () => this.tick()), this.config.intervaloMs);
     // Não segura o processo: aqui existe servidor HTTP, diferente do worker do
     // agente, então o timer pode ser unref.
     this.laco.unref?.();
