@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
+import { TagProcessamentoService } from "../tag-pedagio/tag-processamento.service";
 import { AcaoAuditoria, Prisma, type TipoRemuneracao } from "@prisma/client";
 import type {
   AdicionarItemAcertoInput,
@@ -91,7 +92,14 @@ export class AcertosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditoria: AuditoriaService,
+    /** Rota × passagens da tag — a prova da sugestão de reembolso. Opcional nos testes. */
+    @Optional() private readonly tagMotor?: TagProcessamentoService,
   ) {}
+
+  /** Praças da rota que a tag não registrou, por viagem (vazio sem o motor da tag). */
+  private pracasSemPassagem(ids: string[]): Promise<Map<string, string[] | null>> {
+    return this.tagMotor && ids.length ? this.tagMotor.pracasSemPassagem(ids) : Promise.resolve(new Map());
+  }
 
   list(params: ListParams, escopo: EscopoAdmin) {
     const where: Prisma.AcertoMotoristaWhereInput = {};
@@ -1463,12 +1471,13 @@ export class AcertosService {
         ])
       : [[], []];
     const decisaoDe = new Map(decisoes.map((d) => [d.viagemId, d]));
+    const semPassagem = await this.pracasSemPassagem(comLancado.filter((v) => tag.get(v.id)?.cobertura).map((v) => v.id));
 
     const out: NonNullable<ConferenciaDoAcerto["pedagioTag"]> = { viagens: [], faturaNaoChegou: 0, naoCasadas: 0 };
     for (const v of comLancado) {
       const lancado = pedagioDaViagem(v).valor;
       const t = tag.get(v.id)!;
-      const sit = situacaoTagDaViagem({ ...t, lancado });
+      const sit = situacaoTagDaViagem({ ...t, lancado, pracasSemPassagem: semPassagem.get(v.id) ?? null });
       const doPeriodo = v.data! >= acerto.periodoInicio && v.data! <= acerto.periodoFim;
       const daqui = itens.find((i) => i.viagemId === v.id && i.acerto.id === acerto.id);
       const fechado = itens.find((i) => i.viagemId === v.id && i.acerto.status !== "ABERTO");
@@ -1495,6 +1504,8 @@ export class AcertosService {
         vale: sit.vale,
         retorno: sit.retorno,
         sugestao: sit.sugestao,
+        diferenca: sit.diferenca,
+        pracasSemPassagem: sit.pracasSemPassagem ?? null,
         noAcerto: daqui ? daqui.valor.toFixed(2) : null,
         jaPago: fechado ? { valor: fechado.valor.toFixed(2), acerto: rotuloDoAcerto(fechado.acerto) } : null,
         decisao: decisaoValida
@@ -1535,7 +1546,7 @@ export class AcertosService {
     if (valor.gt(lancado)) {
       throw new BadRequestException(`O reembolso não pode passar do que foi lançado (R$ ${lancado.toFixed(2)}).`);
     }
-    const sugestao = sugestaoDeReembolso(lancado, cobertura);
+    const sugestao = sugestaoDeReembolso(lancado, cobertura, (await this.pracasSemPassagem([viagem.id])).get(viagem.id) ?? null);
     // Fora da sugestão é decisão de gente sobre dinheiro de parceiro: por escrito.
     const motivo = input.motivo?.trim() || null;
     if (!valor.eq(sugestao) && (!motivo || motivo.length < 10)) {

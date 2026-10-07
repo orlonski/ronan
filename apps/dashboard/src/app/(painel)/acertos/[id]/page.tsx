@@ -873,6 +873,21 @@ function ViagemDaTag({
           lançou {brl(v.lancado)} · pago {tagTexto}
         </p>
       </div>
+      {Number(v.diferenca) > 0 &&
+        (v.pracasSemPassagem && v.pracasSemPassagem.length > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Diferença de {brl(v.diferenca)}: a rota passa por {v.pracasSemPassagem.join(", ")} e a tag não registrou —
+            ele pode ter pago em dinheiro.
+          </p>
+        ) : (
+          <p className="text-xs text-amber-700">
+            Diferença de {brl(v.diferenca)} sem explicação:{" "}
+            {v.pracasSemPassagem
+              ? "todas as praças da rota foram pagas pela tag."
+              : "não deu pra conferir a rota desta viagem."}{" "}
+            Pra devolver, use &quot;Outro valor&quot; com o motivo (ex.: recibo do motorista).
+          </p>
+        ))}
       {Number(v.retorno) > 0 && (
         <p className="text-xs text-muted-foreground">
           A volta vazia passou {brl(v.retorno)} na tag. Não entra na sugestão: se ele lançou a volta também,

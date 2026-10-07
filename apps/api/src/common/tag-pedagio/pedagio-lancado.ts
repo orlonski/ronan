@@ -72,15 +72,39 @@ export type SituacaoTagDaViagem =
   /** A fatura cobre o dia, e nenhuma passagem foi ligada a esta viagem. */
   | { situacao: "NAO_CASADA" }
   /** Passagens ligadas: a tag e/ou o vale pagaram parte (ou tudo) do lançado. */
-  | { situacao: "TAG_PAGOU"; tag: string; vale: string; retorno: string; sugestao: string };
+  | {
+      situacao: "TAG_PAGOU";
+      tag: string;
+      vale: string;
+      retorno: string;
+      sugestao: string;
+      /** Praças da rota que a tag não registrou. null = rota desconhecida; undefined = não conferido. */
+      pracasSemPassagem?: string[] | null;
+      /** Lançou mais do que a tag e o vale pagaram (a diferença que a sugestão explica ou zera). */
+      diferenca: string;
+    };
 
 /**
  * Quanto sugerir devolver: o lançado menos o que a tag e o vale cobriram,
- * nunca negativo (a tag ter pago MAIS do que ele lançou não é dívida dele).
+ * nunca negativo (a tag ter pago MAIS do que ele lançou não é dívida dele) —
+ * e só COM PROVA. A diferença só vira sugestão se a rota da viagem atravessa
+ * praça que a tag não registrou (onde ele pode ter pago em dinheiro). Sem praça
+ * faltando — ou sem rota pra conferir — a diferença não tem explicação e a
+ * sugestão é zero: o botão verde nunca paga o que ninguém consegue mostrar.
+ * Devolver mesmo assim é "Outro valor", com motivo escrito.
+ *
+ * `pracasSemPassagem` ausente (undefined) = quem chama não conferiu a rota:
+ * só a conta, sem a prova (uso de teste e de quem não tem rota).
  */
-export function sugestaoDeReembolso(lancado: DecimalLike, cobertura: CoberturaTag): Prisma.Decimal {
+export function sugestaoDeReembolso(
+  lancado: DecimalLike,
+  cobertura: CoberturaTag,
+  pracasSemPassagem?: string[] | null,
+): Prisma.Decimal {
   const resto = dec(lancado).sub(dec(cobertura.tag)).sub(dec(cobertura.vale));
-  return resto.gt(0) ? resto : new Prisma.Decimal(0);
+  if (!resto.gt(0)) return new Prisma.Decimal(0);
+  if (pracasSemPassagem === undefined) return resto;
+  return pracasSemPassagem && pracasSemPassagem.length > 0 ? resto : new Prisma.Decimal(0);
 }
 
 export function situacaoTagDaViagem(args: {
@@ -90,14 +114,18 @@ export function situacaoTagDaViagem(args: {
   faturaCobreODia: boolean;
   cobertura: CoberturaTag | null;
   lancado: DecimalLike;
+  pracasSemPassagem?: string[] | null;
 }): SituacaoTagDaViagem {
   if (args.cobertura && args.cobertura.trechos > 0) {
+    const diferenca = sugestaoDeReembolso(args.lancado, args.cobertura);
     return {
       situacao: "TAG_PAGOU",
       tag: dec(args.cobertura.tag).toFixed(2),
       vale: dec(args.cobertura.vale).toFixed(2),
       retorno: dec(args.cobertura.retorno).toFixed(2),
-      sugestao: sugestaoDeReembolso(args.lancado, args.cobertura).toFixed(2),
+      sugestao: sugestaoDeReembolso(args.lancado, args.cobertura, args.pracasSemPassagem).toFixed(2),
+      ...(args.pracasSemPassagem !== undefined ? { pracasSemPassagem: args.pracasSemPassagem } : {}),
+      diferenca: diferenca.toFixed(2),
     };
   }
   if (!args.temTag) return { situacao: "SEM_TAG" };

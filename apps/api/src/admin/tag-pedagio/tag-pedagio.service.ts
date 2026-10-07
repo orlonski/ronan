@@ -662,7 +662,9 @@ export class TagPedagioService {
     if (!tag) return { modulo: false as const };
     const t = tag.get(v.id)!;
     const lancado = pedagioDaViagem(v).valor;
-    const sit = situacaoTagDaViagem({ ...t, lancado });
+    // A mesma prova do acerto: a diferença só vira sugestão com praça da rota sem passagem.
+    const pracasSemPassagem = t.cobertura ? ((await this.motor.pracasSemPassagem([v.id])).get(v.id) ?? null) : undefined;
+    const sit = situacaoTagDaViagem({ ...t, lancado, pracasSemPassagem });
 
     const ligs = await this.prisma.ligacaoTagViagem.findMany({
       where: { viagemId: v.id, desfeitaEm: null, tipo: { not: "NAO_E_VIAGEM" } },
@@ -716,6 +718,8 @@ export class TagPedagioService {
       vale: sit.situacao === "TAG_PAGOU" ? sit.vale : "0.00",
       retorno: sit.situacao === "TAG_PAGOU" ? sit.retorno : "0.00",
       sugestao: sit.situacao === "TAG_PAGOU" ? sit.sugestao : null,
+      diferenca: sit.situacao === "TAG_PAGOU" ? sit.diferenca : "0.00",
+      pracasSemPassagem: sit.situacao === "TAG_PAGOU" ? (sit.pracasSemPassagem ?? null) : null,
       // O que vai pra fatura do cliente: o da tag na régua dele, ou o lançado.
       cliente: {
         nome: v.cliente?.empresa?.nome ?? null,

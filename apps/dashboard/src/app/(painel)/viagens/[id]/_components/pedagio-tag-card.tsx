@@ -28,6 +28,8 @@ type Resposta =
       vale: string;
       retorno: string;
       sugestao: string | null;
+      diferenca: string;
+      pracasSemPassagem: string[] | null;
       cliente: { nome: string | null; regua: "IDA" | "VOLTA" | "IDA_E_VOLTA"; pedagio: string; pelaTag: boolean };
       ligados: Array<Trecho & { ligacao: string | null }>;
       pendentes: Array<Trecho & { status: string }>;
@@ -109,8 +111,12 @@ export function PedagioTagCard({ viagemId }: { viagemId: string }) {
             </span>
           ) : (
             <>
-              Sugestão pro acerto: devolver <strong>{brl(d.sugestao)}</strong> (o lançado menos o que a tag e o vale
-              pagaram na ida). Quem decide é o acerto do motorista.
+              Sugestão pro acerto: devolver <strong>{brl(d.sugestao)}</strong>.{" "}
+              {Number(d.diferenca) > 0 &&
+                (d.pracasSemPassagem && d.pracasSemPassagem.length > 0
+                  ? `A diferença de ${brl(d.diferenca)} tem explicação: a rota passa por ${d.pracasSemPassagem.join(", ")} e a tag não registrou.`
+                  : `A diferença de ${brl(d.diferenca)} não tem explicação: ${d.pracasSemPassagem ? "todas as praças da rota foram pagas pela tag" : "não deu pra conferir a rota"}.`)}{" "}
+              Quem decide é o acerto do motorista.
             </>
           )}
         </p>

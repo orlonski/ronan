@@ -623,6 +623,39 @@ export class TagProcessamentoService {
   }
 
   /** As praças (do extrato) na rota de cada viagem, na ordem; null = não sei. */
+  /**
+   * Praças da rota de cada viagem (ida) que nenhuma passagem LIGADA a ela
+   * registrou — onde o motorista pode ter pago em dinheiro. É a prova que a
+   * sugestão do acerto exige pra devolver a diferença entre o lançado e a tag.
+   * null = rota desconhecida (sem geometria): não dá pra provar nada.
+   */
+  async pracasSemPassagem(viagemIds: string[]): Promise<Map<string, string[] | null>> {
+    const out = new Map<string, string[] | null>();
+    if (viagemIds.length === 0) return out;
+    const rotas = await this.pracasDasViagens(viagemIds);
+    const ligs = await this.prisma.ligacaoTagViagem.findMany({
+      where: { viagemId: { in: viagemIds }, desfeitaEm: null, tipo: { notIn: ["NAO_E_VIAGEM", "RETORNO"] } },
+      select: { viagemId: true, passagemAncoraId: true },
+    });
+    const trechos = ligs.length
+      ? await this.prisma.trechoTag.findMany({
+          where: { passagemAncoraId: { in: ligs.map((l) => l.passagemAncoraId) } },
+          select: { passagemAncoraId: true, cruzamento: true },
+        })
+      : [];
+    const pracasDoTrecho = new Map(trechos.map((t) => [t.passagemAncoraId, (t.cruzamento as { pracas?: string[] }).pracas ?? []]));
+    for (const id of viagemIds) {
+      const rota = rotas.get(id);
+      if (!rota) {
+        out.set(id, null);
+        continue;
+      }
+      const passou = new Set(ligs.filter((l) => l.viagemId === id).flatMap((l) => pracasDoTrecho.get(l.passagemAncoraId) ?? []));
+      out.set(id, rota.filter((p) => !passou.has(p.chave)).map((p) => p.nome));
+    }
+    return out;
+  }
+
   async pracasDasViagens(viagemIds: string[]): Promise<Map<string, { chave: string; nome: string }[] | null>> {
     const emOrdem = await this.pedagios.pracasEmOrdemDasViagens(viagemIds);
     const deParas = [

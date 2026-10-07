@@ -185,8 +185,15 @@ export type ViagemConferenciaTag = {
   vale: string;
   /** A volta vazia ligada à viagem passou isto na tag. Fora da sugestão. */
   retorno: string;
-  /** Lançado menos tag e vale da ida, nunca negativo. */
+  /**
+   * O que sugerir devolver: a diferença (lançado − tag − vale da ida) SÓ quando a
+   * rota tem praça que a tag não registrou; senão zero — diferença sem prova.
+   */
   sugestao: string;
+  /** Lançado − tag − vale da ida, nunca negativo (com ou sem prova). */
+  diferenca: string;
+  /** Praças da rota sem passagem na tag (onde ele pode ter pago em dinheiro). null = rota desconhecida. */
+  pracasSemPassagem: string[] | null;
   /** Valor do reembolso desta viagem NESTE acerto (null = não está aqui). */
   noAcerto: string | null;
   /** Já reembolsado num acerto fechado: a decisão vira ajuste neste. */

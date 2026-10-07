@@ -14,6 +14,17 @@ describe("pedágio lançado × tag", () => {
     expect(sugestaoDeReembolso("120", { tag: "50", vale: "30", trechos: 2 }).toFixed(2)).toBe("40.00");
   });
 
+  it("lançou R$ 200, a tag pagou R$ 180: os R$ 20 só viram sugestão com praça da rota que a tag não registrou", () => {
+    const c = { tag: "180", vale: "0", trechos: 1, trechosIda: 1 };
+    expect(sugestaoDeReembolso("200", c, ["Campo Verde (BR-364)"]).toFixed(2)).toBe("20.00");
+    // Todas as praças da rota passaram pela tag: a diferença não tem explicação.
+    expect(sugestaoDeReembolso("200", c, []).toFixed(2)).toBe("0.00");
+    // Sem rota pra conferir, também não tem prova.
+    expect(sugestaoDeReembolso("200", c, null).toFixed(2)).toBe("0.00");
+    const s = situacaoTagDaViagem({ temTag: true, faturaCobreODia: true, cobertura: c, lancado: "200", pracasSemPassagem: [] });
+    expect(s).toMatchObject({ situacao: "TAG_PAGOU", sugestao: "0.00", diferenca: "20.00", pracasSemPassagem: [] });
+  });
+
   it("tag que pagou mais do que o lançado não vira dívida do motorista", () => {
     expect(sugestaoDeReembolso("50", { tag: "136.50", vale: "0", trechos: 1 }).toFixed(2)).toBe("0.00");
   });
@@ -25,7 +36,7 @@ describe("pedágio lançado × tag", () => {
       cobertura: { tag: "0", vale: "136.50", trechos: 1 },
       lancado: "136.50",
     });
-    expect(s).toEqual({ situacao: "TAG_PAGOU", tag: "0.00", vale: "136.50", retorno: "0.00", sugestao: "0.00" });
+    expect(s).toEqual({ situacao: "TAG_PAGOU", tag: "0.00", vale: "136.50", retorno: "0.00", sugestao: "0.00", diferenca: "0.00" });
   });
 
   it("sem passagem ligada: diz por quê (sem tag, fatura não chegou, não casada)", () => {

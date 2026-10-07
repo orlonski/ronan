@@ -13,5 +13,6 @@ import { TagProcessamentoService } from "./tag-processamento.service";
   imports: [UploadsModule, RoteamentoModule, GeocodingModule, PedagiosRodoviaModule, TabelasPrecoModule],
   controllers: [TagPedagioController],
   providers: [TagPedagioService, TagProcessamentoService],
+  exports: [TagProcessamentoService],
 })
 export class TagPedagioModule {}
