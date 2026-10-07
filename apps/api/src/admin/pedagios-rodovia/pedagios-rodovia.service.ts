@@ -1,5 +1,15 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
 import type { Prisma } from "@prisma/client";
+import { comLockDeCron } from "../../common/cron-exclusivo";
+import { comoSistema } from "../../common/conta/conta-context";
+import { distanciaMetros } from "../../common/geo";
+import {
+  lerCsvAntt,
+  nomeNoMapa,
+  pracasQueFaltamNoMapa,
+  rodoviaNoMapa,
+} from "../../common/tag-pedagio/antt-sincronizacao";
 import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
@@ -63,6 +73,7 @@ export class PedagiosRodoviaService {
         lat: input.lat,
         lng: input.lng,
         valorBase: input.valorBase ?? null,
+        ...(input.valorBase != null ? { valorBaseFonte: "manual", valorBaseEm: new Date() } : {}),
         fonte: "manual",
       },
     });
@@ -75,8 +86,95 @@ export class PedagiosRodoviaService {
       data: {
         ...input,
         uf: input.uf?.toUpperCase() ?? input.uf,
+        // Tarifa digitada no painel é a palavra final: a aprendida da fatura
+        // da tag nunca passa por cima dela.
+        ...(input.valorBase !== undefined ? { valorBaseFonte: "manual", valorBaseEm: new Date() } : {}),
       },
     });
+  }
+
+  // ------------------------------------------------- fontes automáticas
+
+  /**
+   * Todo mês: a lista oficial da ANTT e o OpenStreetMap. Concessão nova entra
+   * no mapa sem ninguém lembrar de importar. Uma instância só (lock), e a
+   * falha de uma fonte não derruba a outra.
+   */
+  @Cron("0 0 4 5 * *", { name: "sincronizar-pracas", timeZone: "America/Sao_Paulo" })
+  async sincronizarFontes(): Promise<void> {
+    await comLockDeCron(this.prisma, "sincronizar-pracas", async () => {
+      await comoSistema(async () => {
+        try {
+          const r = await this.sincronizarAntt();
+          this.log.log(`ANTT: ${r.lidas} praças na lista, ${r.novasNoMapa} novas no mapa`);
+        } catch (e) {
+          this.log.error(`Sincronização da ANTT falhou: ${(e as Error).message}`);
+        }
+        try {
+          const r = await this.importarOSM();
+          this.log.log(`OSM: ${r.criados} criados, ${r.atualizados} atualizados`);
+        } catch (e) {
+          this.log.error(`Importação do OSM falhou: ${(e as Error).message}`);
+        }
+      });
+    });
+  }
+
+  /**
+   * Baixa a lista de praças da ANTT (pela API do portal de dados — o nome do
+   * arquivo muda a cada versão), guarda como lista oficial e acrescenta ao
+   * mapa o que falta. Lista suspeita (menos de 100 praças: arquivo cortado,
+   * colunas renomeadas) não substitui a que já existe.
+   */
+  async sincronizarAntt(): Promise<{ lidas: number; novasNoMapa: number }> {
+    const ua = { "User-Agent": "movatruck/1.0 (contato@movatruck.com.br)" };
+    const pkg = (await (
+      await fetch("https://dados.antt.gov.br/api/3/action/package_show?id=praca-de-pedagio", {
+        headers: ua,
+        signal: AbortSignal.timeout(30_000),
+      })
+    ).json()) as { result?: { resources?: { format?: string; url?: string }[] } };
+    const recurso = pkg.result?.resources?.find((r) => (r.format ?? "").toUpperCase() === "CSV" && r.url);
+    if (!recurso?.url) throw new Error("Portal da ANTT não trouxe o CSV de praças.");
+    const bytes = await (await fetch(recurso.url, { headers: ua, signal: AbortSignal.timeout(60_000) })).arrayBuffer();
+    // A ANTT publica em ISO-8859-1.
+    const linhas = lerCsvAntt(new TextDecoder("latin1").decode(bytes));
+    if (linhas.length < 100) throw new Error(`Lista da ANTT suspeita (${linhas.length} praças): mantida a anterior.`);
+
+    await this.prisma.$transaction([
+      this.prisma.pracaOficial.deleteMany({ where: { fonte: "ANTT" } }),
+      this.prisma.pracaOficial.createMany({
+        data: linhas.map((l) => ({
+          fonte: "ANTT",
+          concessionaria: l.concessionaria,
+          praca: l.praca,
+          rodovia: l.rodovia,
+          uf: l.uf,
+          km: l.km,
+          municipio: l.municipio,
+          lat: l.lat,
+          lng: l.lng,
+        })),
+      }),
+    ]);
+
+    const mapa = await this.prisma.pedagioRodovia.findMany({ where: { ativo: true }, select: { lat: true, lng: true } });
+    const novas = pracasQueFaltamNoMapa(linhas, mapa);
+    for (const l of novas) {
+      await this.prisma.pedagioRodovia.create({
+        data: {
+          nome: nomeNoMapa(l),
+          concessionaria: l.concessionaria,
+          rodovia: rodoviaNoMapa(l),
+          cidade: l.municipio || null,
+          uf: l.uf,
+          lat: l.lat,
+          lng: l.lng,
+          fonte: "antt",
+        },
+      });
+    }
+    return { lidas: linhas.length, novasNoMapa: novas.length };
   }
 
   async excluir(id: string) {
@@ -181,12 +279,27 @@ out body;
       }
     }
 
+    // Praça que entrou por outra fonte (ANTT, cadastro manual): a cabine do OSM
+    // nova colada nela é a MESMA praça — criar de novo viraria pedágio em dobro
+    // na rota. Só vale pra criação; o que já é do OSM segue atualizando.
+    const deOutraFonte = await this.prisma.pedagioRodovia.findMany({
+      where: { ativo: true, osmId: null },
+      select: { lat: true, lng: true },
+    });
+    const jaConhecidos = new Set(
+      (await this.prisma.pedagioRodovia.findMany({ where: { osmId: { not: null } }, select: { osmId: true } })).map((x) => x.osmId),
+    );
+
     let criados = 0;
     let atualizados = 0;
     let pulados = 0;
     for (const el of nodes) {
       if (typeof el.lat !== "number" || typeof el.lon !== "number") continue;
       const osmId = String(el.id);
+      if (!jaConhecidos.has(osmId) && deOutraFonte.some((p) => distanciaMetros(p.lat, p.lng, el.lat, el.lon) < 3000)) {
+        pulados++;
+        continue;
+      }
       const tags = el.tags ?? {};
       const refWay = refDoNode.get(el.id);
       const rodovia = tags["ref"] ?? refWay?.ref ?? null;

@@ -107,6 +107,21 @@ export class PedagiosRodoviaController {
   }
 
   /**
+   * Roda agora a sincronização que o robô faz todo dia 5: lista oficial da
+   * ANTT (e o que falta no mapa). A do OSM segue no botão próprio.
+   */
+  @Roles("ADMIN_USER")
+  @RequerPermissao("pedagios.importar")
+  @Post("sincronizar-antt")
+  async sincronizarAntt() {
+    try {
+      return await this.service.sincronizarAntt();
+    } catch (err) {
+      throw new BadGatewayException(`Falha ao sincronizar com a ANTT: ${(err as Error).message}`);
+    }
+  }
+
+  /**
    * Importa pedágios do OpenStreetMap via Overpass API. Roda síncrono
    * porque o volume é pequeno (~poucas centenas pra BR todo). Idempotente.
    */

@@ -1889,8 +1889,29 @@ model MotoristaPosicaoConfig {
 /// si — coordenada GPS + valor base — usada pra detectar quais pedágios
 /// uma rota carga→descarga atravessa (haversine ponto vs polyline OSRM
 /// cacheada). Cadastro manual ou importado do OpenStreetMap.
-model PedagioRodovia {
+/// Lista oficial de praças de pedágio (hoje só a ANTT — concessões federais),
+/// sincronizada todo mês. É com ela que a praça da fatura da tag casa por
+/// rodovia + estado + km; o que falta no mapa entra como `PedagioRodovia`
+/// (fonte "antt"). Global: dado público, igual pra toda empresa.
+model PracaOficial {
   id             String   @id @default(uuid())
+  fonte          String
+  concessionaria String
+  praca          String
+  rodovia        String
+  uf             String
+  km             Float
+  municipio      String
+  lat            Float
+  lng            Float
+  sincronizadoEm DateTime @default(now())
+
+  @@index([fonte, rodovia, uf])
+  @@map("pracas_oficiais")
+}
+
+model PedagioRodovia {
+  id             String    @id @default(uuid())
   nome           String // ex: "Praça Reg. Norte BR-376 Ponta Grossa"
   concessionaria String? // ex: "Arteris", "CCR ViaSul"
   rodovia        String? // ex: "BR-376"
@@ -1900,14 +1921,19 @@ model PedagioRodovia {
   lng            Float
   /// Valor base por eixo simples em R$. Caminhão com N eixos = valorBase * N.
   /// Null se ainda não cadastrado (vem da importação OSM sem valor).
-  valorBase      Decimal? @db.Decimal(8, 2)
-  ativo          Boolean  @default(true)
+  valorBase      Decimal?  @db.Decimal(8, 2)
+  /// De onde veio a tarifa: "manual" (painel) ou "fatura" (aprendida da fatura
+  /// da tag: valor ÷ eixos cobrados). A da fatura nunca passa por cima da manual.
+  valorBaseFonte String?
+  /// Quando a tarifa foi observada/cadastrada — a da fatura só troca por uma mais nova.
+  valorBaseEm    DateTime?
+  ativo          Boolean   @default(true)
   /// Origem do registro: "osm" (importado do OpenStreetMap) ou "manual".
-  fonte          String   @default("manual")
+  fonte          String    @default("manual")
   /// ID original do OSM pra dedup em re-importação. Null pra cadastros manuais.
-  osmId          String?  @unique
-  criadoEm       DateTime @default(now())
-  alteradoEm     DateTime @updatedAt
+  osmId          String?   @unique
+  criadoEm       DateTime  @default(now())
+  alteradoEm     DateTime  @updatedAt
 
   deParaTag      PracaTagDePara[]
   deParaTagConta PracaTagDeParaConta[]

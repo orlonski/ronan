@@ -54,6 +54,8 @@ export type PracaDoExtrato = {
   uf: string | null;
   /** Tarifa por eixo observada (a mais recente), em centavos. */
   tarifaEixoCent: number | null;
+  /** Quando essa tarifa foi cobrada (a passagem mais recente que a mostrou). */
+  tarifaEm?: Date | null;
 };
 
 export const RAIO_CANDIDATO_KM = 40;

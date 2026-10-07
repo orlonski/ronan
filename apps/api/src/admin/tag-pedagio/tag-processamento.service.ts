@@ -6,6 +6,7 @@ import { GeocodingService } from "../../geocoding/geocoding.service";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { PrecificacaoService } from "../tabelas-preco/precificacao.service";
 import { atualizarPedagioPelaTag } from "../../common/tag-pedagio/pedagio-do-cliente";
+import { PRACAS_ANTT, type PracaAntt } from "../../common/tag-pedagio/antt-pracas";
 import { distanciaMetros } from "../../common/geo";
 import { contaIdAtual } from "../../common/conta/conta-context";
 import { calcularAchados, type EntradaPlaca, type PassagemComFatos } from "../../common/tag-pedagio/achados";
@@ -29,6 +30,7 @@ import {
   pelasVizinhas as pelasVizinhasPura,
   pracaNaAntt,
   RAIO_ANTT_MAPA_M,
+  RAIO_MESMA_PRACA_M,
   tarifaConfere,
   vizinhasNaRodovia,
   type GrupoPraca,
@@ -143,8 +145,9 @@ export class TagProcessamentoService {
     }
 
     // 1º a lista oficial da ANTT: rodovia + estado + km, a mesma língua do extrato.
+    const lista = await this.listaAntt();
     for (const p of pracas.filter((x) => !out.get(x.chave)!.pedagioRodoviaId)) {
-      const g = await this.pelaAntt(p);
+      const g = await this.pelaAntt(p, lista);
       if (!g) continue;
       out.set(p.chave, { ...out.get(p.chave)!, pedagioRodoviaId: g.grupo.id, lat: g.grupo.lat, lng: g.grupo.lng, nome: g.grupo.nome, origem: "AUTOMATICA" });
     }
@@ -181,8 +184,14 @@ export class TagProcessamentoService {
    * global como AUTOMATICA, com a evidência. Sem praça no mapa perto, não casa
    * — vai pra fila como sempre.
    */
-  private async pelaAntt(p: PracaDoExtrato): Promise<{ grupo: GrupoPraca } | null> {
-    const a = pracaNaAntt(p);
+  /** A lista oficial sincronizada (banco); sem sincronização ainda, a cópia do código. */
+  private async listaAntt(): Promise<PracaAntt[]> {
+    const doBanco = await this.prisma.pracaOficial.findMany({ where: { fonte: "ANTT" } });
+    return doBanco.length ? doBanco : PRACAS_ANTT;
+  }
+
+  private async pelaAntt(p: PracaDoExtrato, lista: PracaAntt[]): Promise<{ grupo: GrupoPraca } | null> {
+    const a = pracaNaAntt(p, lista);
     if (!a) return null;
     const d = 0.05;
     const nos = await this.prisma.pedagioRodovia.findMany({
@@ -364,12 +373,16 @@ export class TagProcessamentoService {
 
   /** As praças distintas das passagens, com a tarifa por eixo mais recente. */
   pracasDasPassagens(ps: PassagemCarregada[]): PracaDoExtrato[] {
-    const m = new Map<string, PracaDoExtrato & { t: number }>();
+    const m = new Map<string, PracaDoExtrato & { t: number; tTarifa: number }>();
     for (const p of ps) {
       const atual = m.get(p.chavePraca);
       const t = p.ocorridoEm.getTime();
-      const tarifa = p.eixosCobrados ? Math.round(cent(p.valor) / p.eixosCobrados) : null;
-      if (!atual || t >= atual.t)
+      // Tarifa só de cobrança DE VERDADE: a passagem coberta pelo vale vem com
+      // R$ 0,00 na tag, e "0 ÷ eixos" virava tarifa zero — a prova pela tarifa
+      // recusava a praça certa, e o mapa aprenderia pedágio de graça.
+      const tarifa = p.eixosCobrados && p.dc === "D" && cent(p.valor) > 0 ? Math.round(cent(p.valor) / p.eixosCobrados) : null;
+      const tarifaNova = tarifa != null && (!atual || t >= atual.tTarifa);
+      if (!atual || t >= atual.t || tarifaNova)
         m.set(p.chavePraca, {
           operadora: OPERADORA,
           chave: p.chavePraca,
@@ -378,11 +391,48 @@ export class TagProcessamentoService {
           cidade: p.cidade,
           concessionaria: p.concessionaria ?? atual?.concessionaria ?? null,
           uf: p.uf ?? atual?.uf ?? null,
-          tarifaEixoCent: tarifa ?? atual?.tarifaEixoCent ?? null,
-          t,
+          tarifaEixoCent: tarifaNova ? tarifa : (atual?.tarifaEixoCent ?? null),
+          tarifaEm: tarifaNova ? p.ocorridoEm : (atual?.tarifaEm ?? null),
+          t: Math.max(t, atual?.t ?? 0),
+          tTarifa: tarifaNova ? t : (atual?.tTarifa ?? 0),
         });
     }
-    return [...m.values()].map(({ t: _t, ...p }) => (void _t, p));
+    return [...m.values()].map(({ t: _t, tTarifa: _tt, ...p }) => (void _t, void _tt, p));
+  }
+
+  /**
+   * A tarifa que a fatura mostrou (valor ÷ eixos cobrados) vira a tarifa da
+   * praça no mapa — hoje nenhuma praça tem tarifa, e a calculadora de frete do
+   * autônomo só dizia "sem tarifa". Regras: nunca por cima de tarifa digitada no
+   * painel ("manual"); só troca por observação mais nova; vale pras cabines da
+   * mesma praça (a 2 km). É o preço com TAG — em concessão com desconto pra tag,
+   * fica um pouco abaixo do preço em dinheiro.
+   */
+  async aprenderTarifas(pracas: Iterable<PracaResolvida>): Promise<number> {
+    let gravadas = 0;
+    for (const p of pracas) {
+      if (!p.pedagioRodoviaId || p.lat == null || p.lng == null || !p.tarifaEixoCent || !p.tarifaEm) continue;
+      const d = 0.02;
+      const cabines = (
+        await this.prisma.pedagioRodovia.findMany({
+          where: { lat: { gte: p.lat - d, lte: p.lat + d }, lng: { gte: p.lng - d, lte: p.lng + d } },
+          select: { id: true, lat: true, lng: true },
+        })
+      ).filter((c) => distanciaMetros(c.lat, c.lng, p.lat!, p.lng!) < RAIO_MESMA_PRACA_M);
+      if (!cabines.length) continue;
+      const r = await this.prisma.pedagioRodovia.updateMany({
+        where: {
+          id: { in: cabines.map((c) => c.id) },
+          AND: [
+            { OR: [{ valorBaseFonte: null }, { valorBaseFonte: "fatura" }] },
+            { OR: [{ valorBaseEm: null }, { valorBaseEm: { lt: p.tarifaEm } }] },
+          ],
+        },
+        data: { valorBase: p.tarifaEixoCent / 100, valorBaseFonte: "fatura", valorBaseEm: p.tarifaEm },
+      });
+      gravadas += r.count;
+    }
+    return gravadas;
   }
 
   // -------------------------------------------------------- processamento
@@ -424,6 +474,7 @@ export class TagProcessamentoService {
     }
 
     const pracas = await this.resolverPracas(this.pracasDasPassagens(ps));
+    await this.aprenderTarifas(pracas.values());
     const gps = (chave: string) => {
       const r = pracas.get(chave);
       return r?.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
