@@ -17,8 +17,7 @@ import {
   Truck,
   UserPlus,
   Wallet,
-  Wrench,
-} from "lucide-react";
+  Wrench, Plug } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -255,6 +254,8 @@ export function IconeTipo({ tipo }: { tipo: string }) {
     return <ClipboardCheck className={`${cls} text-amber-600`} />;
   if (tipo === "pedido-obra")
     return <Truck className={`${cls} text-blue-600`} />;
+  if (tipo === "integracao")
+    return <Plug className={`${cls} text-amber-600`} />;
   if (tipo === "cobranca-cliente")
     return <Wallet className={`${cls} text-emerald-600`} />;
   if (tipo === "conferencia-diaria")
@@ -310,6 +311,8 @@ export function rotaParaNotificacao(n: AdminNotificacao): string | null {
   if (n.tipo === "documento-vencendo") return dados.de === "de caminhão" ? "/frota?aba=documentos" : "/motoristas";
   // Estado de template da Meta se confere na tela WhatsApp → Templates na Meta.
   if (n.tipo === "template-whatsapp") return "/whatsapp";
+  // Avisos de uma conexão desligados: religa na tela da conexão.
+  if (n.tipo === "integracao") return "/configuracoes/integracoes";
   // As sugestões da conferência se decidem na aba "Fila do gestor".
   if (n.tipo === "conferencia-diaria") return "/conferencia-diaria?aba=fila";
   // Pedido de correção se decide na tela "Acerto de ponto".

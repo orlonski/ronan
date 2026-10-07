@@ -6,7 +6,7 @@ import { ERROS_PUBLICOS } from "./erros";
 import { ROTAS_V1 } from "./rota-v1";
 
 /** Versão do contrato. Mudou o que entra ou sai? Sobe aqui e anota em docs/api-publica/CHANGELOG.md. */
-export const VERSAO_CONTRATO = "2026-10-08";
+export const VERSAO_CONTRATO = "2026-10-08.1";
 
 const DESCRICAO = `
 A API do Movatruck pro sistema de vocês (ERP, sistema de frete, app próprio) mandar viagens sem ninguém digitar.
@@ -24,6 +24,11 @@ vocês (\`/externo/{idExterno}\`). Mandar de novo com o mesmo número atualiza, 
 - Uma pessoa conferiu, fechou ou corrigiu no painel? A integração não desfaz.
 - Referência não achada (material, obra, local) não recusa a viagem: ela entra com pendência e a resposta traz \`avisos\`.
   Só motorista e caminhão são obrigatórios.
+
+**Sincronizar.** Pra espelhar o que muda aqui no sistema de vocês: avisos automáticos (cadastre o endereço no painel; cada
+aviso diz qual viagem mudou, assinado no padrão Standard Webhooks — cabeçalhos \`webhook-id\`, \`webhook-timestamp\`,
+\`webhook-signature\`) e, pra nunca perder nada, \`GET /v1/alteracoes\` com o cursor guardado. O aviso é o "corra buscar";
+o \`/alteracoes\` é a garantia.
 
 **Erros.** Sempre \`{ "erro": { "codigo", "mensagem", "detalhes"?, "requisicaoId" } }\`. O \`codigo\` é estável.
 Campo que não existe no contrato é recusado (400), nunca ignorado.

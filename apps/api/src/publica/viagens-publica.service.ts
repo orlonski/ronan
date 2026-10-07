@@ -13,10 +13,13 @@ import { resolverTransportadora } from "../common/transportadora";
 import { carimbosDaDispensa, dispensaConferencia } from "../common/conferencia-dispensada";
 import { ehRecenteParaProgramacao, POLITICA_DA_ORIGEM, type CampoDaIntegracao } from "../common/viagem-origem";
 import { ymdSaoPaulo } from "../common/timezone";
-import { contaIdAtual } from "../common/conta/conta-context";
+import { comoSistema, contaIdAtual } from "../common/conta/conta-context";
 import type { AuthIntegracao } from "./integracao.guard";
 import { ErroPublico, type DetalheErro } from "./erros";
-import type { AtualizarViagemV1, CriarViagemV1, ViagemV1 } from "./contrato";
+import type { z } from "zod";
+import type { AlteracoesQuery, AlteracoesV1, AtualizarViagemV1, CriarViagemV1, ListarViagensQuery, ListaViagensV1, ViagemV1 } from "./contrato";
+import { STATUS_FORA_FECHAMENTO } from "../common/viagem-status";
+import { aplicarMinimos, resolverRegraMinimo } from "../common/viagem-minimos";
 import { externosPorIds, idPorExterno, travarNumero, vincular } from "./vinculos";
 
 type Aviso = { codigo: string; mensagem: string };
@@ -40,7 +43,12 @@ const VIAGEM_SELECT = {
   toneladas: true,
   km: true,
   kmOrigem: true,
+  kmMotorista: true,
   ticket: true,
+  revisadoEm: true,
+  revisadoPorId: true,
+  conferidoPorIaEm: true,
+  conferenciaDispensadaEm: true,
   sincronizadoEm: true,
   alteradoEm: true,
   motorista: { select: { id: true, nome: true } },
@@ -48,7 +56,8 @@ const VIAGEM_SELECT = {
   localCarga: { select: { id: true, nome: true } },
   localDescarga: { select: { id: true, nome: true } },
   material: { select: { id: true, nome: true } },
-  cliente: { select: { id: true, nome: true } },
+  cliente: { select: { id: true, nome: true, empresaId: true } },
+  valor: { select: { valorFrete: true, valorPedagio: true, valorTotal: true } },
   divergencias: { where: { resolvidoEm: null }, select: { motivo: true, detalhe: true } },
 } satisfies Prisma.ViagemSelect;
 type ViagemLida = Prisma.ViagemGetPayload<{ select: typeof VIAGEM_SELECT }>;
@@ -113,6 +122,9 @@ export class ViagensPublicaService {
     const contaId = contaIdAtual();
 
     const { viagemId, criada, mudouKm } = await this.prisma.$transaction(async (tx) => {
+      // Marca a transação: o gatilho anota que foi ESTA integração, e o aviso
+      // não volta pra ela. `true` = só nesta transação (não gruda na conexão).
+      await tx.$executeRaw`SELECT set_config('movatruck.integracao', ${integ.integracaoId}, true)`;
       if (idExterno) {
         await travarNumero(tx, contaId, integ.sistema, "viagem", idExterno);
         const existente = await idPorExterno(tx, integ.sistema, "viagem", idExterno);
@@ -416,42 +428,163 @@ export class ViagensPublicaService {
     return this.lerPorId(integ, id);
   }
 
+  /**
+   * Lista paginada por cursor (alteradoEm, id). Por padrão SEM as viagens que
+   * ainda não podem ser faturadas (STATUS_FORA_FECHAMENTO, a mesma régua do
+   * fechamento): um ERP que somasse a lista padrão faturaria 0 t.
+   */
+  async listar(integ: AuthIntegracao, q: z.infer<typeof ListarViagensQuery>): Promise<z.infer<typeof ListaViagensV1>> {
+    const limite = q.limite ?? 50;
+    const where: Prisma.ViagemWhereInput[] = [];
+    if (q.incluirIncompletas !== "true") where.push({ status: { notIn: STATUS_FORA_FECHAMENTO } });
+    if (q.dataDe) where.push({ data: { gte: new Date(`${q.dataDe}T00:00:00Z`) } });
+    if (q.dataAte) where.push({ data: { lte: new Date(`${q.dataAte}T00:00:00Z`) } });
+    if (q.motorista) where.push({ motoristaId: q.motorista });
+    if (q.placa) where.push({ veiculo: { placa: q.placa } });
+    if (q.situacao) where.push({ status: { in: STATUS_DA_SITUACAO[q.situacao] } });
+    if (q.cursor) {
+      const c = lerCursorLista(q.cursor);
+      where.push({ OR: [{ alteradoEm: { gt: c.em } }, { alteradoEm: c.em, id: { gt: c.id } }] });
+    }
+    const linhas = await this.prisma.viagem.findMany({
+      where: { AND: where },
+      orderBy: [{ alteradoEm: "asc" }, { id: "asc" }],
+      take: limite + 1,
+      select: VIAGEM_SELECT,
+    });
+    const temMais = linhas.length > limite;
+    const pagina = linhas.slice(0, limite);
+    const ultima = pagina[pagina.length - 1];
+    return {
+      dados: await this.serializar(integ, pagina),
+      proximoCursor: temMais && ultima ? cursorLista(ultima.alteradoEm, ultima.id) : null,
+    };
+  }
+
+  /**
+   * "O que mudou desde": o registro que o gatilho do banco escreve, na ordem
+   * em que o robô numerou. Inclui exclusão (que a lista não tem como mostrar)
+   * e mudança feita por robô, IA ou conferente.
+   */
+  async alteracoes(integ: AuthIntegracao, q: z.infer<typeof AlteracoesQuery>): Promise<z.infer<typeof AlteracoesV1>> {
+    const limite = q.limite ?? 50;
+    const config = await comoSistema(() =>
+      this.prisma.configuracaoPlataforma.findUnique({
+        where: { id: "singleton" },
+        select: { registroAlteracoesOrdemMinima: true, registroAlteracoesDesligadoEm: true },
+      }),
+    );
+    const geracao = config?.registroAlteracoesOrdemMinima?.toString() ?? "0";
+    let desde = 0n;
+    if (q.cursor) {
+      const c = lerCursorAlteracoes(q.cursor);
+      // Cursor de antes de uma pausa do registro: o que mudou durante a pausa
+      // não existe aqui, e seguir dali seria mentir por omissão.
+      if (c.geracao !== geracao && config?.registroAlteracoesOrdemMinima != null && c.ordem <= config.registroAlteracoesOrdemMinima) {
+        throw new ErroPublico("CURSOR_EXPIRADO");
+      }
+      // Cursor mais velho que o que guardamos (30 dias).
+      const maisVelha = await comoSistema(() =>
+        this.prisma.registroAlteracao.findFirst({ where: { ordem: { not: null } }, orderBy: { ordem: "asc" }, select: { ordem: true } }),
+      );
+      if (maisVelha?.ordem != null && c.ordem < maisVelha.ordem - 1n) throw new ErroPublico("CURSOR_EXPIRADO");
+      desde = c.ordem;
+    }
+    const linhas = await this.prisma.registroAlteracao.findMany({
+      where: { ordem: { gt: desde } },
+      orderBy: { ordem: "asc" },
+      take: limite + 1,
+    });
+    const pagina = linhas.slice(0, limite);
+    const externos = await externosPorIds(this.prisma, integ.sistema, "viagem", [...new Set(pagina.map((l) => l.entidadeId))]);
+    const ultima = pagina[pagina.length - 1]?.ordem ?? desde;
+    return {
+      dados: pagina.map((l) => ({
+        entidade: "viagem" as const,
+        id: l.entidadeId,
+        externo: externos.get(l.entidadeId) ?? null,
+        mudanca: l.operacao as "CRIADA" | "ATUALIZADA" | "EXCLUIDA",
+        eventos: l.eventos,
+        porEstaIntegracao: l.integracaoId === integ.integracaoId,
+        quando: l.criadoEm.toISOString(),
+      })),
+      proximoCursor: cursorAlteracoes(ultima, geracao),
+      temMais: linhas.length > limite,
+    };
+  }
+
   /** Whitelist campo a campo: o que não está aqui não sai, inclusive campo novo do banco. */
   private async ler(integ: AuthIntegracao, id: string): Promise<ViagemV1 | null> {
     // Id de outra empresa: a trava filtra, e a resposta é o mesmo "não existe".
     const v = await this.prisma.viagem.findUnique({ where: { id }, select: VIAGEM_SELECT });
     if (!v) return null;
-    return this.serializar(integ, v);
+    return (await this.serializar(integ, [v]))[0]!;
   }
 
-  private async serializar(integ: AuthIntegracao, v: ViagemLida): Promise<ViagemV1> {
-    const [viagens, motoristas, veiculos, locais] = await Promise.all([
-      externosPorIds(this.prisma, integ.sistema, "viagem", [v.id]),
-      externosPorIds(this.prisma, integ.sistema, "motorista", [v.motorista.id]),
-      externosPorIds(this.prisma, integ.sistema, "veiculo", [v.veiculo.id]),
-      externosPorIds(this.prisma, integ.sistema, "local", [v.localCarga?.id, v.localDescarga?.id].filter(Boolean) as string[]),
+  private async serializar(integ: AuthIntegracao, vs: ViagemLida[]): Promise<ViagemV1[]> {
+    if (vs.length === 0) return [];
+    const [viagens, motoristas, veiculos, locais, regras] = await Promise.all([
+      externosPorIds(this.prisma, integ.sistema, "viagem", vs.map((v) => v.id)),
+      externosPorIds(this.prisma, integ.sistema, "motorista", [...new Set(vs.map((v) => v.motorista.id))]),
+      externosPorIds(this.prisma, integ.sistema, "veiculo", [...new Set(vs.map((v) => v.veiculo.id))]),
+      externosPorIds(
+        this.prisma,
+        integ.sistema,
+        "local",
+        [...new Set(vs.flatMap((v) => [v.localCarga?.id, v.localDescarga?.id]).filter((x): x is string => !!x))],
+      ),
+      this.prisma.regraMinimo.findMany({
+        where: { ativo: true },
+        select: { empresaId: true, materialId: true, kmFaixaDe: true, kmFaixaAte: true, kmMinimo: true, toneladasMinimo: true },
+      }),
     ]);
+    const veValor = integ.escopos.includes("valores:ler");
     const local = (l: { id: string; nome: string } | null) => (l ? { id: l.id, nome: l.nome, externo: locais.get(l.id) ?? null } : null);
-    return {
-      id: v.id,
-      externo: viagens.get(v.id) ?? null,
-      situacao: situacaoPublica(v.status),
-      origem: v.origemIntegracaoId ? "INTEGRACAO" : v.clientId.startsWith("import:") ? "PAINEL" : "APP",
-      data: v.data ? v.data.toISOString().slice(0, 10) : null,
-      motorista: { id: v.motorista.id, nome: v.motorista.nome, externo: motoristas.get(v.motorista.id) ?? null },
-      veiculo: { id: v.veiculo.id, placa: v.veiculo.placa, externo: veiculos.get(v.veiculo.id) ?? null },
-      localCarga: local(v.localCarga),
-      localDescarga: local(v.localDescarga),
-      material: v.material ? { id: v.material.id, nome: v.material.nome } : null,
-      obra: v.cliente ? { id: v.cliente.id, nome: v.cliente.nome } : null,
-      toneladas: v.toneladas?.toString() ?? null,
-      km: v.km?.toString() ?? null,
-      kmSistemaOrigem: v.kmOrigem?.toString() ?? null,
-      ticket: v.ticket,
-      pendencias: v.divergencias.map((d) => ({ motivo: d.motivo, detalhe: d.detalhe })),
-      criadoEm: v.sincronizadoEm.toISOString(),
-      alteradoEm: v.alteradoEm.toISOString(),
-    };
+
+    return vs.map((v) => {
+      // Mínimo conta, preço vale — e só pra viagem que pode ser faturada.
+      const faturavel = !STATUS_FORA_FECHAMENTO.includes(v.status);
+      const override =
+        faturavel && v.cliente?.empresaId && v.material ? resolverRegraMinimo(regras, v.cliente.empresaId, v.material.id, v.km ?? 0) : null;
+      const min = faturavel ? aplicarMinimos({ toneladas: v.toneladas, km: v.km }, override ?? undefined) : null;
+      return {
+        id: v.id,
+        externo: viagens.get(v.id) ?? null,
+        situacao: situacaoPublica(v.status),
+        origem: v.origemIntegracaoId ? "INTEGRACAO" : v.clientId.startsWith("import:") ? "PAINEL" : "APP",
+        data: v.data ? v.data.toISOString().slice(0, 10) : null,
+        motorista: { id: v.motorista.id, nome: v.motorista.nome, externo: motoristas.get(v.motorista.id) ?? null },
+        veiculo: { id: v.veiculo.id, placa: v.veiculo.placa, externo: veiculos.get(v.veiculo.id) ?? null },
+        localCarga: local(v.localCarga),
+        localDescarga: local(v.localDescarga),
+        material: v.material ? { id: v.material.id, nome: v.material.nome } : null,
+        obra: v.cliente ? { id: v.cliente.id, nome: v.cliente.nome } : null,
+        toneladas: v.toneladas?.toString() ?? null,
+        toneladasFaturadas: min && v.toneladas != null ? min.toneladasEfetiva : null,
+        km: v.km?.toString() ?? null,
+        kmFaturado: min && v.km != null ? min.kmEfetivo : null,
+        kmMotorista: v.kmMotorista?.toString() ?? null,
+        kmSistemaOrigem: v.kmOrigem?.toString() ?? null,
+        conferidaPor: !v.revisadoEm
+          ? null
+          : v.conferenciaDispensadaEm
+            ? "DISPENSADA"
+            : v.conferidoPorIaEm && !v.revisadoPorId
+              ? "AUTOMATICA"
+              : "PESSOA",
+        ...(veValor
+          ? {
+              valor: v.valor
+                ? { frete: v.valor.valorFrete.toFixed(2), pedagioCobradoCliente: v.valor.valorPedagio.toFixed(2), total: v.valor.valorTotal.toFixed(2) }
+                : null,
+            }
+          : {}),
+        ticket: v.ticket,
+        pendencias: v.divergencias.map((d) => ({ motivo: d.motivo, detalhe: d.detalhe })),
+        criadoEm: v.sincronizadoEm.toISOString(),
+        alteradoEm: v.alteradoEm.toISOString(),
+      };
+    });
   }
 
   // --------------------------------------------------------- idempotência --
@@ -527,4 +660,32 @@ export function situacaoPublica(s: StatusViagem): ViagemV1["situacao"] {
     default:
       return "A_CONFERIR";
   }
+}
+
+const STATUS_DA_SITUACAO: Record<ViagemV1["situacao"], StatusViagem[]> = {
+  EM_ANDAMENTO: [StatusViagem.EM_ANDAMENTO],
+  AGUARDANDO_PESO: [StatusViagem.AGUARDANDO_PESO],
+  INCOMPLETA: [StatusViagem.INCOMPLETA],
+  A_CONFERIR: [StatusViagem.ENVIADA, StatusViagem.EM_CONFERENCIA, StatusViagem.RASCUNHO_OFFLINE],
+  COM_DIVERGENCIA: [StatusViagem.DIVERGENTE],
+  CONFERIDA: [StatusViagem.OK, StatusViagem.AJUSTADA],
+};
+
+/** Cursor opaco: o integrador guarda e devolve, não interpreta. */
+function cursorLista(em: Date, id: string): string {
+  return Buffer.from(`l|${em.toISOString()}|${id}`).toString("base64url");
+}
+function lerCursorLista(c: string): { em: Date; id: string } {
+  const [tipo, em, id] = Buffer.from(c, "base64url").toString().split("|");
+  const d = new Date(em ?? "");
+  if (tipo !== "l" || !id || Number.isNaN(d.getTime())) throw new ErroPublico("VALIDACAO", "Cursor inválido.");
+  return { em: d, id };
+}
+function cursorAlteracoes(ordem: bigint, geracao: string): string {
+  return Buffer.from(`a|${ordem}|${geracao}`).toString("base64url");
+}
+function lerCursorAlteracoes(c: string): { ordem: bigint; geracao: string } {
+  const [tipo, ordem, geracao] = Buffer.from(c, "base64url").toString().split("|");
+  if (tipo !== "a" || !ordem || !/^\d+$/.test(ordem) || geracao === undefined) throw new ErroPublico("VALIDACAO", "Cursor inválido.");
+  return { ordem: BigInt(ordem), geracao };
 }

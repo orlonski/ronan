@@ -238,7 +238,11 @@ export function instalarRegistroDeChamadas(): void {
       if (!marca) return;
       inicios.delete(req);
       const host = String(req.host ?? "?");
-      const { caminho } = urlSemSegredo(`${req.protocol ?? "http:"}//${host}${req.path ?? "/"}`);
+      // Aviso pro endereço do CLIENTE (webhook): só o host. O caminho é dele e
+      // pode carregar segredo (token no path é comum em webhook).
+      const caminho = marca.ctx.gatilho?.startsWith("aviso:")
+        ? "/[endereço do cliente — não guardado]"
+        : urlSemSegredo(`${req.protocol ?? "http:"}//${host}${req.path ?? "/"}`).caminho;
       enfileirar({
         criadoEm: new Date(),
         ...marca.ctx,

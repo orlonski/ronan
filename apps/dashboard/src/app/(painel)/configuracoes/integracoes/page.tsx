@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Check, Copy, KeyRound, Plug, Plus, Power, X } from "lucide-react";
-import type { ChaveGerada, IntegracaoResumo } from "@ronan/shared-types";
+import { Bell, BookOpen, Check, Copy, KeyRound, Plug, Plus, Power, RotateCcw, Send, X } from "lucide-react";
+import { EVENTOS_INTEGRACAO, type AvisoResumo, type ChaveGerada, type EntregaAvisoResumo, type IntegracaoResumo } from "@ronan/shared-types";
 import { RequerTela } from "@/components/requer-tela";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -359,6 +359,238 @@ function CartaoConexao({
           Pra trocar a chave sem parar o sistema: gere outra, troque lá, e só então desligue a antiga.
         </p>
       )}
+      <AvisosDaConexao integ={integ} pode={pode} />
     </Card>
+  );
+}
+
+type Avisos = { disponivel: boolean; aviso: AvisoResumo | null; entregas: EntregaAvisoResumo[] };
+
+const SITUACAO_ENTREGA: Record<EntregaAvisoResumo["status"], string> = {
+  PENDENTE: "Tentando",
+  ENTREGUE: "Entregue",
+  FALHOU: "Não entregou",
+  DESCARTADA: "Não enviado",
+};
+
+/**
+ * Avisos automáticos: o Movatruck chama o sistema de vocês quando uma viagem
+ * muda. O aviso diz QUAL viagem mudou; o sistema busca os dados com a chave.
+ */
+function AvisosDaConexao({ integ, pode }: { integ: IntegracaoResumo; pode: boolean }) {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const chave = [PATH, integ.id, "avisos"];
+  const avisos = useQuery({
+    queryKey: chave,
+    enabled: !!token,
+    queryFn: () => fetchApi<Avisos>(`${PATH}/${integ.id}/avisos`, { token }),
+    refetchInterval: 15_000,
+  });
+  const recarregar = () => void qc.invalidateQueries({ queryKey: chave });
+  const [editando, setEditando] = useState(false);
+  const [url, setUrl] = useState("");
+  const [eventos, setEventos] = useState<string[]>([]);
+  const [segredo, setSegredo] = useState<string | null>(null);
+  const [desligando, setDesligando] = useState(false);
+  const [motivo, setMotivo] = useState("");
+
+  const salvar = useMutation({
+    mutationFn: () =>
+      fetchApi<{ segredo: string | null }>(`${PATH}/${integ.id}/avisos`, { method: "PUT", token, body: JSON.stringify({ url, eventos }) }),
+    onSuccess: (r) => {
+      setEditando(false);
+      if (r.segredo) setSegredo(r.segredo);
+      recarregar();
+    },
+  });
+  const testar = useMutation({
+    mutationFn: () => fetchApi<{ ok: boolean; status: number | null; erro: string | null }>(`${PATH}/${integ.id}/avisos/teste`, { method: "POST", token }),
+    onSettled: recarregar,
+  });
+  const desligar = useMutation({
+    mutationFn: () => fetchApi(`${PATH}/${integ.id}/avisos/desligar`, { method: "POST", token, body: JSON.stringify({ motivo }) }),
+    onSuccess: () => {
+      setDesligando(false);
+      setMotivo("");
+      recarregar();
+    },
+  });
+  const religar = useMutation({
+    mutationFn: () => fetchApi(`${PATH}/${integ.id}/avisos/religar`, { method: "POST", token }),
+    onSuccess: recarregar,
+  });
+  const reentregar = useMutation({
+    mutationFn: (id: string) => fetchApi(`${PATH}/${integ.id}/avisos/entregas/${id}/reentregar`, { method: "POST", token }),
+    onSuccess: recarregar,
+  });
+
+  const d = avisos.data;
+  if (!d) return null;
+  const a = d.aviso;
+  const podeLer = integ.escopos.includes("viagens:ler");
+
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div className="flex items-center gap-2">
+        <Bell className="h-4 w-4" />
+        <p className="text-sm font-medium">Avisos automáticos</p>
+        {a && (
+          <Badge className={a.ativo ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-red-300 bg-red-50 text-red-800"}>
+            {a.ativo ? "Ligados" : "Desligados"}
+          </Badge>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        O Movatruck chama o sistema de vocês quando uma viagem muda — e o sistema busca os dados com a chave. Se o sistema de vocês
+        ficar fora do ar, tentamos de novo por até 3 dias.
+      </p>
+
+      {!d.disponivel && <p className="text-sm text-muted-foreground">Os avisos ainda não foram ativados no servidor. Fale com a Movatruck.</p>}
+      {d.disponivel && !podeLer && (
+        <p className="text-sm text-muted-foreground">Pra receber avisos, a conexão precisa poder ver viagens (“Vê viagens”).</p>
+      )}
+
+      {segredo && (
+        <div className="space-y-2 rounded-md border border-amber-400 bg-amber-50 p-3 dark:bg-amber-950/30">
+          <p className="text-sm font-medium">Copie o segredo de assinatura agora — ele não aparece de novo</p>
+          <p className="text-xs">Com ele, o sistema de vocês confere que o aviso veio mesmo do Movatruck (padrão Standard Webhooks).</p>
+          <div className="flex flex-wrap gap-2">
+            <Input readOnly value={segredo} className="max-w-xl font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+            <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(segredo)}>
+              <Copy className="h-4 w-4" /> Copiar
+            </Button>
+            <Button variant="success" size="sm" onClick={() => setSegredo(null)}>
+              <Check className="h-4 w-4" /> Já guardei
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {a && !editando && (
+        <div className="space-y-1 text-sm">
+          <p className="break-all font-mono text-xs">{a.url}</p>
+          <p className="text-xs text-muted-foreground">
+            {a.eventos.map((e) => EVENTOS_INTEGRACAO.find((x) => x.chave === e)?.titulo ?? e).join(" · ")}
+          </p>
+          {!a.ativo && a.motivoDesligamento && <p className="text-xs text-destructive">Desligados: {a.motivoDesligamento}</p>}
+          {a.ativo && a.falhasSeguidas > 0 && (
+            <p className="text-xs text-amber-700">{a.falhasSeguidas} tentativa(s) seguida(s) sem conseguir entregar.</p>
+          )}
+        </div>
+      )}
+
+      {editando && (
+        <div className="space-y-3 rounded-md border p-3">
+          <div className="space-y-1">
+            <Label htmlFor={`url-${integ.id}`}>Endereço do sistema de vocês</Label>
+            <Input id={`url-${integ.id}`} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://erp.suaempresa.com.br/movatruck/avisos" />
+          </div>
+          <div className="space-y-2">
+            <Label>Quais avisos mandar</Label>
+            {EVENTOS_INTEGRACAO.map((e) => (
+              <label key={e.chave} className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={eventos.includes(e.chave)}
+                  onChange={(ev) => setEventos((m) => (ev.target.checked ? [...m, e.chave] : m.filter((x) => x !== e.chave)))}
+                />
+                <span>
+                  <span className="block font-medium">{e.titulo}</span>
+                  <span className="block text-xs text-muted-foreground">{e.descricao}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          {salvar.error && <p className="text-sm text-destructive">{mensagem(salvar.error)}</p>}
+          <div className="flex gap-2">
+            <Button size="sm" variant="success" disabled={!url.startsWith("https://") || eventos.length === 0 || salvar.isPending} onClick={() => salvar.mutate()}>
+              <Check className="h-4 w-4" /> {a ? "Salvar avisos" : "Ligar avisos"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setEditando(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {desligando && (
+        <div className="space-y-2 rounded-md border border-destructive/40 p-3">
+          <Label htmlFor={`motivo-aviso-${integ.id}`}>Por que desligar os avisos? O sistema de vocês ainda pode buscar o que mudou pela chave.</Label>
+          <Input id={`motivo-aviso-${integ.id}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: sistema em manutenção" />
+          {desligar.error && <p className="text-sm text-destructive">{mensagem(desligar.error)}</p>}
+          <div className="flex gap-2">
+            <Button size="sm" variant="destructive" disabled={motivo.trim().length < 5 || desligar.isPending} onClick={() => desligar.mutate()}>
+              <Power className="h-4 w-4" /> Confirmar: desligar avisos
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setDesligando(false)}>
+              Voltar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {pode && d.disponivel && podeLer && !editando && !desligando && (
+        <div className="flex flex-wrap gap-2">
+          {!a && (
+            <Button size="sm" onClick={() => { setUrl(""); setEventos(EVENTOS_INTEGRACAO.map((e) => e.chave)); setEditando(true); }}>
+              <Bell className="h-4 w-4" /> Ligar avisos automáticos
+            </Button>
+          )}
+          {a && (
+            <>
+              <Button size="sm" disabled={testar.isPending} onClick={() => testar.mutate()}>
+                <Send className="h-4 w-4" /> Enviar teste
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => { setUrl(a.url); setEventos(a.eventos); setEditando(true); }}>
+                Alterar
+              </Button>
+              {a.ativo ? (
+                <Button size="sm" variant="outline" className="text-destructive" onClick={() => setDesligando(true)}>
+                  <Power className="h-4 w-4" /> Desligar avisos
+                </Button>
+              ) : (
+                <Button size="sm" variant="success" disabled={religar.isPending} onClick={() => religar.mutate()}>
+                  <Power className="h-4 w-4" /> Religar avisos
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {testar.data && (
+        <p className={`text-sm ${testar.data.ok ? "text-emerald-700" : "text-destructive"}`}>
+          {testar.data.ok ? `Teste entregue (HTTP ${testar.data.status}).` : `O teste não chegou: ${testar.data.erro}`}
+        </p>
+      )}
+      {testar.error && <p className="text-sm text-destructive">{mensagem(testar.error)}</p>}
+
+      {d.entregas.length > 0 && (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-muted-foreground">Últimas entregas ({d.entregas.length})</summary>
+          <div className="mt-2 space-y-1">
+            {d.entregas.map((e) => (
+              <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 rounded border px-2 py-1 text-xs">
+                <span className="font-mono">{e.tipo}</span>
+                <span className="text-muted-foreground">{quando(e.criadoEm)}</span>
+                <span className={e.status === "ENTREGUE" ? "text-emerald-700" : e.status === "PENDENTE" ? "text-amber-700" : "text-destructive"}>
+                  {SITUACAO_ENTREGA[e.status]}
+                  {e.ultimoStatusHttp ? ` · HTTP ${e.ultimoStatusHttp}` : ""}
+                  {e.tentativas > 1 ? ` · ${e.tentativas} tentativas` : ""}
+                  {e.status === "PENDENTE" && e.proximaTentativaEm ? ` · próxima ${quando(e.proximaTentativaEm)}` : ""}
+                </span>
+                {e.ultimoErro && e.status !== "ENTREGUE" && <span className="w-full text-muted-foreground">{e.ultimoErro}</span>}
+                {pode && (e.status === "FALHOU" || e.status === "DESCARTADA") && e.tipo !== "teste" && (
+                  <Button size="sm" variant="outline" disabled={reentregar.isPending} onClick={() => reentregar.mutate(e.id)}>
+                    <RotateCcw className="h-3 w-3" /> Mandar de novo
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
   );
 }

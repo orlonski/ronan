@@ -40,7 +40,9 @@ export type TipoNotificacaoAdmin =
   // O encarregado da obra pediu caminhão pelo portal.
   | "pedido-obra"
   // O Asaas da transportadora avisou: cliente pagou, boleto venceu, estorno.
-  | "cobranca-cliente";
+  | "cobranca-cliente"
+  // Os avisos automáticos de uma conexão (API pública) desligaram por falha.
+  | "integracao";
 
 /**
  * As abas do filtro do sininho. Agrupa por ASSUNTO, não por tipo técnico:
@@ -85,6 +87,7 @@ export const CATEGORIAS_INBOX = [
       "template-whatsapp",
     ],
   },
+  { chave: "integracoes", label: "Conexões", tipos: ["integracao"] },
 ] as const;
 
 export type ChaveCategoriaInbox = (typeof CATEGORIAS_INBOX)[number]["chave"];

@@ -733,6 +733,8 @@ model Conta {
   idempotenciasIntegracao IdempotenciaIntegracao[]
   vinculosExternos        VinculoExterno[]
   usosIntegracao          UsoIntegracao[]
+  avisosIntegracao        AvisoIntegracao[]
+  entregasAviso           EntregaAviso[]
 
   @@index([ativa])
   @@map("contas")
@@ -1125,6 +1127,12 @@ model ConfiguracaoPlataforma {
   metaWabaId String?
 
   alteradoEm DateTime @updatedAt
+
+  /// Interruptor do registro de mudanças da API pública (gatilho no banco).
+  /// Desligado em = quando foi desligado; ao religar, cursor anterior a
+  /// `registroAlteracoesOrdemMinima` recebe 410 (o "o que mudou desde" não mente por omissão).
+  registroAlteracoesDesligadoEm DateTime?
+  registroAlteracoesOrdemMinima BigInt?
 
   @@map("configuracao_plataforma")
 }
@@ -9793,6 +9801,7 @@ model Integracao {
   revogacaoMotivo   String?
 
   chaves        ChaveIntegracao[]
+  avisos        AvisoIntegracao[]
   idempotencias IdempotenciaIntegracao[]
   usos          UsoIntegracao[]
   viagens       Viagem[]                 @relation("ViagemDaIntegracao")
@@ -9897,4 +9906,87 @@ model UsoIntegracao {
   @@unique([integracaoId, hora, metodo, rota, status])
   @@index([contaId, hora])
   @@map("usos_integracao")
+}
+
+/// Uma mudança que a API pública conta pra quem integra. Gravada SÓ pelo gatilho
+/// do banco (viagens, viagem_valores), e só em empresa com integração ligada.
+/// `ordem` é dada depois, por um robô único, em sequência: quem lê "o que mudou
+/// desde" pela ordem nunca pula linha gravada por uma transação que demorou.
+model RegistroAlteracao {
+  seq          BigInt    @id @default(autoincrement())
+  contaId      String
+  entidade     String
+  entidadeId   String
+  /// CRIADA | ATUALIZADA | EXCLUIDA
+  operacao     String
+  /// Fatos além da operação: viagem.finalizada, viagem.conferida.
+  eventos      String[]  @default([])
+  /// A integração que fez a escrita (set_config na transação): não volta como aviso pra ela.
+  integracaoId String?
+  criadoEm     DateTime  @default(now())
+  ordem        BigInt?
+  publicadoEm  DateTime?
+
+  @@index([contaId, ordem])
+  @@index([ordem])
+  @@index([criadoEm])
+  @@map("registro_alteracoes")
+}
+
+/// Para onde a integração quer receber os avisos (webhook). Um por integração.
+model AvisoIntegracao {
+  contaId            String     @default("__SEM_CONTA__")
+  conta              Conta      @relation(fields: [contaId], references: [id])
+  id                 String     @id @default(uuid())
+  integracao         Integracao @relation(fields: [integracaoId], references: [id], onDelete: Cascade)
+  integracaoId       String     @unique
+  url                String
+  eventos            String[]
+  /// whsec_… cifrado (WEBHOOK_CRIPTO_SECRET). Volta em claro só pra assinar.
+  segredoCifrado     String
+  ativo              Boolean    @default(true)
+  desligadoEm        DateTime?
+  motivoDesligamento String?
+  falhasSeguidas     Int        @default(0)
+  primeiraFalhaEm    DateTime?
+  ultimoSucessoEm    DateTime?
+  criadoPorId        String?
+  criadoEm           DateTime   @default(now())
+  alteradoEm         DateTime   @updatedAt
+
+  entregas EntregaAviso[]
+
+  @@index([contaId])
+  @@map("avisos_integracao")
+}
+
+/// Uma entrega de aviso. O `eventoId` é o mesmo em toda tentativa e na reentrega
+/// manual: é por ele que o sistema de fora descarta repetido.
+model EntregaAviso {
+  contaId            String          @default("__SEM_CONTA__")
+  conta              Conta           @relation(fields: [contaId], references: [id])
+  id                 String          @id @default(uuid())
+  aviso              AvisoIntegracao @relation(fields: [avisoId], references: [id], onDelete: Cascade)
+  avisoId            String
+  eventoId           String
+  tipo               String
+  entidadeId         String?
+  payload            Json
+  /// PENDENTE | ENTREGUE | FALHOU | DESCARTADA
+  status             String          @default("PENDENTE")
+  tentativas         Int             @default(0)
+  proximaTentativaEm DateTime?       @default(now())
+  ultimoStatusHttp   Int?
+  /// Sem o corpo da resposta: o que o servidor de fora devolve não é nosso pra guardar.
+  ultimoErro         String?
+  duracaoMs          Int?
+  entregueEm         DateTime?
+  reentregaDeId      String?
+  criadoEm           DateTime        @default(now())
+
+  @@index([status, proximaTentativaEm])
+  @@index([avisoId, criadoEm(sort: Desc)])
+  @@index([avisoId, entidadeId, tipo, status])
+  @@index([contaId])
+  @@map("entregas_aviso")
 }

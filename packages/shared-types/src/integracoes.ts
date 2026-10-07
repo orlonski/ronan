@@ -32,6 +32,12 @@ export const ESCOPOS_INTEGRACAO = [
     permissoes: ["viagens.ver"],
   },
   {
+    chave: "valores:ler",
+    titulo: "Vê valores (R$)",
+    descricao: "Junto com a viagem, o valor do frete e do pedágio cobrado do cliente, pela tabela de preço da empresa.",
+    permissoes: ["viagens.ver-comercial"],
+  },
+  {
     chave: "viagens:escrever",
     titulo: "Cria viagens",
     descricao:
@@ -124,3 +130,55 @@ export type IntegracaoResumo = {
 
 /** A resposta de "gerar chave": o ÚNICO momento em que o segredo existe fora do cliente. */
 export type ChaveGerada = { chave: string; resumo: ChaveIntegracaoResumo };
+
+/**
+ * Os avisos automáticos (webhooks) que a integração pode receber. MAGROS: dizem
+ * "a viagem X mudou", e o sistema de fora busca o estado atual com a chave. Assim
+ * escopo revogado não vaza nada que esteja parado numa fila de tentativas.
+ */
+export const EVENTOS_INTEGRACAO = [
+  { chave: "viagem.criada", titulo: "Viagem nova", descricao: "Uma viagem entrou (pelo app, pelo painel ou por outro sistema)." },
+  { chave: "viagem.atualizada", titulo: "Viagem alterada", descricao: "Mudou algo que sai na API: peso, km, local, valor, situação…" },
+  { chave: "viagem.finalizada", titulo: "Viagem completa", descricao: "Saiu de em andamento, aguardando peso ou incompleta: já pode ser faturada depois da conferência." },
+  { chave: "viagem.conferida", titulo: "Viagem conferida", descricao: "Uma pessoa conferiu, a IA aprovou ou o material dispensa conferência (o aviso diz qual)." },
+  { chave: "viagem.excluida", titulo: "Viagem excluída", descricao: "A viagem foi apagada no Movatruck." },
+] as const;
+export type EventoIntegracao = (typeof EVENTOS_INTEGRACAO)[number]["chave"];
+export const EventoIntegracaoSchema = z.enum(EVENTOS_INTEGRACAO.map((e) => e.chave) as [EventoIntegracao, ...EventoIntegracao[]]);
+
+export const SalvarAvisoInput = z
+  .object({
+    url: z
+      .string()
+      .trim()
+      .url("Endereço inválido.")
+      .max(500)
+      .refine((u) => u.startsWith("https://"), "O endereço precisa começar com https://."),
+    eventos: z.array(EventoIntegracaoSchema).min(1, "Marque pelo menos um aviso."),
+  })
+  .strict();
+export type SalvarAvisoInput = z.infer<typeof SalvarAvisoInput>;
+
+export type EntregaAvisoResumo = {
+  id: string;
+  eventoId: string;
+  tipo: string;
+  status: "PENDENTE" | "ENTREGUE" | "FALHOU" | "DESCARTADA";
+  tentativas: number;
+  ultimoStatusHttp: number | null;
+  ultimoErro: string | null;
+  duracaoMs: number | null;
+  criadoEm: string;
+  entregueEm: string | null;
+  proximaTentativaEm: string | null;
+};
+
+export type AvisoResumo = {
+  url: string;
+  eventos: EventoIntegracao[];
+  ativo: boolean;
+  desligadoEm: string | null;
+  motivoDesligamento: string | null;
+  falhasSeguidas: number;
+  ultimoSucessoEm: string | null;
+};

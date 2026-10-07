@@ -41,6 +41,7 @@ const TIPO_LABEL: Record<string, string> = {
   "documento-vencendo": "Documento vencendo",
   "pedido-obra": "Pedido da obra",
   "cobranca-cliente": "Cobrança pelo Asaas",
+  integracao: "Conexão com outro sistema",
 };
 
 export default function InboxPage() {

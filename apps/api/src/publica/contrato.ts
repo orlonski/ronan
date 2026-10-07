@@ -146,9 +146,25 @@ export const ViagemV1 = objeto({
   localDescarga: RefSaida().nullable(),
   material: objeto({ id: z.string(), nome: z.string() }).nullable(),
   obra: objeto({ id: z.string(), nome: z.string() }).nullable(),
-  toneladas: Decimal.nullable(),
-  km: Decimal.nullable().openapi({ description: "Km que vale pro faturamento (pode ter sido corrigido no painel)." }),
+  toneladas: Decimal.nullable().openapi({ description: "Peso real da viagem." }),
+  toneladasFaturadas: Decimal.nullable().openapi({
+    description: "O peso que se fatura: o real, ou o mínimo do contrato quando o real ficou abaixo. Null enquanto a viagem não pode ser faturada.",
+  }),
+  km: Decimal.nullable().openapi({ description: "Km da viagem (pode ter sido corrigido no painel, sempre com motivo)." }),
+  kmFaturado: Decimal.nullable().openapi({ description: "O km que se fatura: o real, ou o mínimo do contrato. Null enquanto a viagem não pode ser faturada." }),
+  kmMotorista: Decimal.nullable().openapi({ description: "O km que o motorista informou no app (nunca muda). Null em viagem que não veio do app." }),
   kmSistemaOrigem: Decimal.nullable().openapi({ description: "O km que o sistema de vocês mandou, guardado como veio." }),
+  conferidaPor: z.enum(["PESSOA", "AUTOMATICA", "DISPENSADA"]).nullable().openapi({
+    description: "Quem conferiu: uma pessoa, a leitura automática do ticket, ou ninguém porque o material dispensa conferência.",
+  }),
+  valor: objeto({
+    frete: Decimal,
+    pedagioCobradoCliente: Decimal.openapi({ description: "Pedágio que entra na cobrança do cliente." }),
+    total: Decimal,
+  })
+    .nullable()
+    .optional()
+    .openapi({ description: "Só com o escopo `valores:ler`. Null enquanto a viagem não tem valor calculado." }),
   ticket: z.string().nullable(),
   pendencias: z.array(objeto({ motivo: z.string(), detalhe: z.string() })).openapi({
     description: "O que falta pra viagem poder ser conferida (ex.: material não achado).",
@@ -240,3 +256,49 @@ export const ErroV1 = objeto({
     requisicaoId: z.string().openapi({ example: "req_3f9a0c1d2e4b5a6c7d8e" }),
   }),
 }).openapi("Erro");
+
+// ------------------------------------------------------------ listas --
+
+const Limite = z.coerce.number().int().min(1).max(100).optional().openapi({ description: "Até 100 (padrão 50)." });
+const SimNao = z.enum(["true", "false"]).optional();
+
+export const ListarViagensQuery = objeto({
+  dataDe: Dia.optional(),
+  dataAte: Dia.optional(),
+  situacao: z.enum(SITUACOES_VIAGEM).optional(),
+  motorista: Uuid.optional().openapi({ description: "Id do motorista no Movatruck." }),
+  placa: Placa.optional(),
+  incluirIncompletas: SimNao.openapi({
+    description: "Por padrão a lista NÃO traz viagem que ainda não pode ser faturada (em andamento, aguardando peso, incompleta). `true` traz.",
+  }),
+  cursor: z.string().max(200).optional(),
+  limite: Limite,
+});
+
+export const ListaViagensV1 = objeto({
+  dados: z.array(ViagemV1),
+  proximoCursor: z.string().nullable().openapi({ description: "Mande em `cursor` pra próxima página. Null = acabou." }),
+});
+
+export const AlteracoesQuery = objeto({
+  cursor: z.string().max(200).optional().openapi({
+    description: "O `proximoCursor` da resposta anterior. Sem ele, começa do mais antigo guardado (30 dias).",
+  }),
+  limite: Limite,
+});
+
+export const AlteracoesV1 = objeto({
+  dados: z.array(
+    objeto({
+      entidade: z.enum(["viagem"]),
+      id: z.string(),
+      externo: z.string().nullable(),
+      mudanca: z.enum(["CRIADA", "ATUALIZADA", "EXCLUIDA"]),
+      eventos: z.array(z.string()).openapi({ description: "Além da mudança: viagem.finalizada, viagem.conferida." }),
+      porEstaIntegracao: z.boolean().openapi({ description: "true = foi o sistema de vocês, por esta chave, que mudou." }),
+      quando: z.string(),
+    }),
+  ),
+  proximoCursor: z.string().openapi({ description: "Guarde e mande na próxima consulta, mesmo quando `dados` vier vazio." }),
+  temMais: z.boolean(),
+});

@@ -35,6 +35,10 @@ export const ERROS_PUBLICOS = {
     status: 409,
     mensagem: "A viagem já foi conferida, entrou num fechamento ou num acerto. Correção agora só pelo painel.",
   },
+  CURSOR_EXPIRADO: {
+    status: 410,
+    mensagem: "Este cursor é de antes do que guardamos (30 dias) ou de antes de uma pausa do registro. Recarregue tudo e siga com o cursor novo.",
+  },
   LIMITE_EXCEDIDO: { status: 429, mensagem: "Chamadas demais em pouco tempo. Espere os segundos de Retry-After." },
   CORPO_GRANDE_DEMAIS: { status: 413, mensagem: "O corpo passa de 1 MB." },
   ERRO_INTERNO: { status: 500, mensagem: "Erro do nosso lado. Já ficou registrado; tente de novo em instantes." },

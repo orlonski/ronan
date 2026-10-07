@@ -9,6 +9,10 @@ import { ContratoInterceptor, Entrada, RotaV1 } from "./rota-v1";
 import { ErroPublicoFilter } from "./erro-publico.filter";
 import { ErroPublico } from "./erros";
 import {
+  AlteracoesQuery,
+  AlteracoesV1,
+  ListarViagensQuery,
+  ListaViagensV1,
   AtualizarViagemV1,
   CriarViagemV1,
   EuV1,
@@ -139,6 +143,42 @@ export class ViagensV1Controller {
     const r = await this.viagens.gravarPorExterno(integ, params.idExterno, corpo, chaveIdempotencia(idem));
     res.status(r.status);
     return r.corpo;
+  }
+
+  @RotaV1({
+    metodo: "get",
+    caminho: "/viagens",
+    escopo: "viagens:ler",
+    grupo: "Viagens",
+    resumo: "Lista viagens",
+    descricao:
+      "Por padrão traz só viagem que já pode ser faturada (sem em andamento, aguardando peso e incompleta) — `incluirIncompletas=true` traz todas. " +
+      "Use `toneladasFaturadas` e `kmFaturado` pra faturar: já vêm com o mínimo do contrato aplicado. " +
+      "Pra espelhar tudo o que muda (inclusive exclusão), use GET /v1/alteracoes.",
+    query: ListarViagensQuery,
+    sucesso: { status: 200, descricao: "Uma página.", schema: ListaViagensV1 },
+    erros: [...ERROS_DE_ACESSO, "VALIDACAO"],
+  })
+  listar(@IntegracaoAtual() integ: AuthIntegracao, @Entrada("query") query: z.infer<typeof ListarViagensQuery>) {
+    return this.viagens.listar(integ, query);
+  }
+
+  @RotaV1({
+    metodo: "get",
+    caminho: "/alteracoes",
+    escopo: "viagens:ler",
+    grupo: "Sincronização",
+    resumo: "O que mudou desde a última consulta",
+    descricao:
+      "Todas as mudanças de viagem na ordem em que aconteceram — criação, alteração (inclusive feita pelo conferente, por robô ou pela IA), " +
+      "conclusão, conferência e exclusão. Guarde o `proximoCursor` e mande na próxima consulta: nada se perde, mesmo que um aviso automático falhe. " +
+      "Guardamos 30 dias; cursor mais velho que isso recebe 410 CURSOR_EXPIRADO (recarregue tudo pela lista e siga com o cursor novo).",
+    query: AlteracoesQuery,
+    sucesso: { status: 200, descricao: "As mudanças desde o cursor.", schema: AlteracoesV1 },
+    erros: [...ERROS_DE_ACESSO, "VALIDACAO", "CURSOR_EXPIRADO"],
+  })
+  alteracoes(@IntegracaoAtual() integ: AuthIntegracao, @Entrada("query") query: z.infer<typeof AlteracoesQuery>) {
+    return this.viagens.alteracoes(integ, query);
   }
 
   @RotaV1({

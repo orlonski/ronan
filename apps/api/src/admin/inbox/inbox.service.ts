@@ -7,6 +7,8 @@ import { comoSistema } from "../../common/conta/conta-context";
 import { comLockDeCron } from "../../common/cron-exclusivo";
 
 export type TipoNotificacaoAdmin =
+  // Avisos automáticos de uma integração desligados por falha (API pública).
+  | "integracao"
   | "nova-viagem"
   | "resposta-divergencia-pedagio"
   | "resposta-divergencia-km"

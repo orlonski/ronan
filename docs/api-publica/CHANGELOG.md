@@ -16,3 +16,10 @@ com aviso ao integrador antes.
 - `PUT /v1/motoristas/externo/{idExterno}`, `PUT /v1/veiculos/externo/{idExterno}`, `PUT /v1/locais/externo/{idExterno}`: cadastros que a viagem exige.
 - Escopos: `viagens:ler`, `viagens:escrever`, `cadastros:escrever`.
 - Documentação: `/v1/docs` (página) e `/v1/openapi.json`.
+
+## 2026-10-08.1 — saída (Onda 1B)
+
+- `GET /v1/viagens`: lista paginada por cursor. Padrão sem viagem que ainda não pode ser faturada; `incluirIncompletas=true` traz todas.
+- `GET /v1/alteracoes`: o que mudou desde o cursor (criada, atualizada, excluída + finalizada/conferida), 30 dias guardados; 410 `CURSOR_EXPIRADO`.
+- Viagem ganha (campos novos, nada removido): `toneladasFaturadas`, `kmFaturado` (com o mínimo do contrato), `kmMotorista`, `conferidaPor` e, com o escopo novo `valores:ler`, `valor` (frete, pedágio cobrado do cliente, total).
+- Avisos automáticos (webhooks) magros, assinados no padrão Standard Webhooks: `viagem.criada`, `viagem.atualizada`, `viagem.finalizada`, `viagem.conferida`, `viagem.excluida`.
