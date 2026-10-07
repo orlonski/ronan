@@ -12,7 +12,9 @@ import { json, urlencoded } from "express";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // O que os módulos pedem pra fora enquanto ligam (ex.: conferir o balde do
+  // MinIO) aparece como "subida da API" na tela de chamadas externas.
+  const app = await comGatilho("subida da API", () => NestFactory.create(AppModule, { bufferLogs: true }));
 
   // CORS antes do body-parser — assim mesmo se body-parser falhar com 413,
   // a resposta de erro ainda vem com o header Access-Control-Allow-Origin.
