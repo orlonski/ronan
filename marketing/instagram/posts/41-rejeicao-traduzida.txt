@@ -1,0 +1,11 @@
+Rejeição 610. De novo. E a Sefaz não diz o que corrigir.
+
+Cada CT-e rejeitado é um número da série perdido, uma emissão que não sai, e alguém do financeiro parando o fechamento pra decifrar código de erro.
+
+No Movatruck, antes de mandar pra Sefaz, o sistema já confere o que costuma rejeitar emissão de transportadora: código IBGE do município sem bater com a UF, empresa do Simples destacando ICMS, carga sem valor declarado, CT-e sem valor de frete.
+
+Erro trava a emissão — com a frase de onde corrigir, não o número da rejeição. O número da série só sai depois que está certo.
+
+Chama no direct pra ver o emissor de CT-e rodando.
+
+#movatruck #transportadora #cte #sefaz #fiscal #logistica #transporterodoviario #gestaodefrota #caminhao #frete #documentofiscal
