@@ -1,4 +1,4 @@
-import { conteudoParaGuardar, urlSemSegredo } from "../common/chamadas-externas/registro";
+import { conteudoParaGuardar, mascararTexto, urlSemSegredo } from "../common/chamadas-externas/registro";
 import {
   ArgumentsHost,
   Catch,
@@ -45,8 +45,10 @@ export class ErrorsExceptionFilter implements ExceptionFilter {
       try {
         await this.errors.reportar({
           origem: "api",
-          message: err.message ?? String(exception),
-          stack: err.stack,
+          // Mensagem e rastro também: erro de validação do Prisma imprime o corpo
+          // inteiro (com CPF, telefone) dentro da mensagem.
+          message: mascararTexto(err.message ?? String(exception)),
+          stack: err.stack ? mascararTexto(err.stack) : err.stack,
           // Sem segredo no endereço: `?access_token=` (o JWT aceita token na
           // query) ia inteiro pro error_logs, que a equipe lê na tela de Erros.
           url: `${req.method} ${urlSemSegredo(`http://api${req.url}`).caminho}`,

@@ -130,6 +130,9 @@ const WEBHOOK_COM_SEGREDO_NO_CAMINHO: [RegExp, RegExp][] = [
   [/(^|\.)webhook\.office\.com$|(^|\.)logic\.azure\.com$/, /^()\/.*/],
 ];
 
+/** n8n (qualquer host, quase sempre próprio): o segredo É o UUID depois de /webhook/. */
+const N8N = /^(\/webhook(?:-test)?)\/.*/;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -146,12 +149,21 @@ export function urlSemSegredo(url: string): { host: string; caminho: string } {
     const u = new URL(url);
     for (const k of [...u.searchParams.keys()]) if (CHAVE_SECRETA.test(k) || k === "key") u.searchParams.set(k, "***");
     const q = u.searchParams.toString();
-    let caminho = decodeURIComponent(u.pathname);
+    // `%` malformado faz o decode estourar — e o catch de baixo devolvia a URL
+    // INTEIRA, segredo junto. Sem decode, segue o caminho cru pela mesma limpeza.
+    let caminho: string;
+    try {
+      caminho = decodeURIComponent(u.pathname);
+    } catch {
+      caminho = u.pathname;
+    }
     const conhecido = WEBHOOK_COM_SEGREDO_NO_CAMINHO.find(([h]) => h.test(u.host.toLowerCase()));
     if (conhecido) {
       const [, prefixo] = conhecido;
       // 2º grupo, quando o padrão tem, é o que vem DEPOIS do segredo (Telegram: /sendMessage).
       caminho = caminho.replace(prefixo, (_m, p: string, resto: unknown) => `${p ?? ""}/***${typeof resto === "string" ? resto : ""}`);
+    } else if (N8N.test(caminho)) {
+      caminho = caminho.replace(N8N, "$1/***");
     } else {
       caminho = caminho
         .split("/")
@@ -160,7 +172,8 @@ export function urlSemSegredo(url: string): { host: string; caminho: string } {
     }
     return { host: u.host, caminho: mascararTexto(caminho) + (q ? `?${q}` : "") };
   } catch {
-    return { host: "?", caminho: mascararTexto(url.slice(0, 300)) };
+    // URL que nem dá pra ler: não arrisca guardar caminho nenhum.
+    return { host: "?", caminho: "[endereço ilegível — não guardado]" };
   }
 }
 

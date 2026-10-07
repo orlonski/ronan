@@ -52,6 +52,10 @@ describe("registro de chamadas externas", () => {
     expect(urlSemSegredo("https://exemplo.com/viagens/3701a585-f51e-47bb-8950-1e0af637e56d").caminho).toBe(
       "/viagens/3701a585-f51e-47bb-8950-1e0af637e56d",
     );
+    // n8n: o segredo é o UUID logo depois de /webhook/.
+    expect(urlSemSegredo("https://n8n.cliente.com/webhook/3701a585-f51e-47bb-8950-1e0af637e56d").caminho).toBe("/webhook/***");
+    // `%` malformado não pode devolver o caminho cru com o segredo.
+    expect(urlSemSegredo("https://exemplo.com/receber/a8F3kL9pQ2xZ7vB4nM6tR1sE/%E0%A4%A").caminho).not.toMatch(/a8F3kL9pQ2/);
     // Token na query (o JWT aceita ?access_token=).
     expect(urlSemSegredo("http://api/admin/x?access_token=eyJabc&pagina=2").caminho).toBe("/admin/x?access_token=***&pagina=2");
   });
