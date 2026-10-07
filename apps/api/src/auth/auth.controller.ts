@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpException, HttpStatus, Post, UnauthorizedException, UseGuards } from "@nestjs/common";
+import { TentativasDeLogin } from "../common/rate-limit/tentativas-de-login";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
   CadastroMotoristaInput,
@@ -29,6 +30,11 @@ import type { AuthAdminUser, AuthIdentidade, AuthMotorista } from "./types";
 
 // Cada chamada que passa manda um WhatsApp: sem freio por IP, isto vira disparador.
 const limiteCadastro = criarRateLimitIpGuard({ limitePorMinuto: 10, nome: "cadastro-motorista" });
+
+// Login do painel: sem freio, dava pra testar senha de administrador à vontade.
+// Por IP (muitos e-mails com uma senha comum) e por e-mail (uma conta, muitas senhas).
+const limiteLoginAdminIp = criarRateLimitIpGuard({ limitePorMinuto: 30, nome: "login-admin" });
+const tentativasAdmin = new TentativasDeLogin({ maxFalhas: 10, janelaMs: 15 * 60_000, bloqueioMs: 15 * 60_000 });
 
 @ApiTags("auth")
 @Controller()
@@ -93,8 +99,25 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post("admin/auth/login")
+  @UseGuards(limiteLoginAdminIp)
   async loginAdmin(@Body(new ZodValidationPipe(LoginInput)) body: LoginInput) {
-    return this.auth.loginAdmin(body.email, body.senha);
+    const chave = body.email.trim().toLowerCase();
+    const faltam = tentativasAdmin.bloqueada(chave);
+    if (faltam != null) {
+      throw new HttpException(
+        `Muitas tentativas com este e-mail. Tente de novo em ${faltam} minuto${faltam === 1 ? "" : "s"}, ou use "Esqueci a senha".`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    try {
+      const r = await this.auth.loginAdmin(body.email, body.senha);
+      tentativasAdmin.acertou(chave);
+      return r;
+    } catch (e) {
+      // Só senha/usuário errados contam; queda do banco não bloqueia ninguém.
+      if (e instanceof UnauthorizedException) tentativasAdmin.falhou(chave);
+      throw e;
+    }
   }
 
   @Public()

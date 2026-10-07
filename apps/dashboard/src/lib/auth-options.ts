@@ -84,6 +84,15 @@ export const authOptions: NextAuthOptions = {
           if (corpo?.code?.startsWith("CONTA_") && corpo.message) {
             throw new Error(corpo.message);
           }
+          // Bloqueio por excesso de tentativas também não é senha errada: dizer
+          // "credenciais inválidas" faria a pessoa tentar de novo e piorar.
+          if (e instanceof ApiError && e.status === 429) {
+            throw new Error(
+              corpo?.message && corpo.message !== "Muitas requisições"
+                ? corpo.message
+                : "Muitas tentativas seguidas. Espere um minuto e tente de novo.",
+            );
+          }
           return null;
         }
       },

@@ -233,6 +233,12 @@ assume isso: cancelar o módulo desliga todas as chaves na hora, sem apagar nada
 
 ## 5. Decisões do dono
 
+> **Decidido em 07/10/2026: o dono aprovou as cinco recomendações abaixo como estão.**
+> Falta só ele escolher os clientes piloto (decisão 5). Antes de implementar a Onda 1, os 4
+> BLOQUEIA de `05-qa.md` entram no bloco 1.0 (identidade por CPF entre empresas, km da
+> integração no reprocessamento, viagem da API no app do motorista, efeitos por origem na porta
+> única de entrada).
+
 Juntei as 14 perguntas dos três especialistas. As técnicas a squad resolveu sozinha (estão no anexo).
 Sobram cinco, e cada uma vem com a minha recomendação.
 
