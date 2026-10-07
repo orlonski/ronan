@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 
-type Passagem = { id: string; hora: string; cidade: string; sentido: string; valor: number; vale: { viagem: string | null } | null };
+type Passagem = { id: string; quando: string; hora: string; cidade: string; sentido: string; valor: number; vale: { viagem: string | null } | null };
 type Trecho = {
   passagemAncoraId: string;
   estado: "CARREGADO" | "VAZIO" | string;
@@ -34,8 +34,14 @@ type Resposta =
     };
 
 const brl = (v: string | number) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const diaHora = (iso: string) =>
-  new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+// A hora vem da própria passagem, no fuso da praça (MT é uma hora antes de
+// Brasília) — a mesma que a fatura e a tela da tag mostram.
+const horario = (t: { passagens: Passagem[] }) => {
+  const a = t.passagens[0];
+  const b = t.passagens.at(-1);
+  if (!a || !b) return "";
+  return `${a.quando.slice(0, 5)} ${a.hora}${b !== a ? ` → ${b.hora}` : ""}`;
+};
 
 /**
  * "Pedágio pela tag" na ficha da viagem: o que a fatura do Sem Parar mostra
@@ -142,7 +148,7 @@ function LinhaTrecho({ t, rotulo }: { t: Trecho; rotulo: string }) {
   return (
     <div className="rounded-md border p-2 text-xs">
       <p className="font-medium">
-        {diaHora(t.ini)} · {rotulo} · {brl(t.valorTag)} na tag
+        {horario(t)} · {rotulo} · {brl(t.valorTag)} na tag
         {t.valorVale > 0 ? ` + ${brl(t.valorVale)} de vale` : ""}
       </p>
       <p className="text-muted-foreground">
