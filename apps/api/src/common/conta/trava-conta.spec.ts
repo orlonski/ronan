@@ -170,3 +170,16 @@ describe("trava de conta — model global exige alvo", () => {
     );
   });
 });
+
+describe("toda tabela sem dono está declarada como global", () => {
+  // Tabela sem coluna `contaId` fora da lista: a trava põe `contaId` no where
+  // e a 1ª consulta dentro de uma requisição morre no Prisma — só em produção
+  // (foi o que derrubou a 1ª sincronização com a ANTT, `PracaOficial`).
+  it("o schema e a lista andam juntos", async () => {
+    const { MODELS_GLOBAIS } = await import("./trava-conta");
+    const semConta = Prisma.dmmf.datamodel.models
+      .filter((m) => !m.fields.some((f) => f.name === "contaId"))
+      .map((m) => m.name);
+    expect(semConta.filter((n) => !MODELS_GLOBAIS.has(n))).toEqual([]);
+  });
+});

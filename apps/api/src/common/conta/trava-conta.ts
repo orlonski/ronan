@@ -30,7 +30,7 @@ import { contaAtual } from "./conta-context";
  * ou infra da plataforma. Manter em sincronia com o schema — model novo nasce
  * escopado por padrão, e só entra aqui por decisão consciente.
  */
-const MODELS_GLOBAIS = new Set<string>([
+export const MODELS_GLOBAIS = new Set<string>([
   "Conta", // o próprio tenant
   // A PESSOA (CPF), que existe antes e independente de qualquer empresa — é o
   // que permite cadastro no app sem vínculo. Como a trava não filtra nada aqui,
@@ -77,7 +77,11 @@ const MODELS_GLOBAIS = new Set<string>([
   "ConfiguracaoPlataforma",
   // A tabela de preço do produto. É da casa: nenhuma empresa tem a sua.
   "FaixaPreco",
-  "PedagioRodovia", // praças de pedágio vindas do OSM (dado público)
+  "PedagioRodovia", // praças de pedágio vindas do OSM e da ANTT (dado público)
+  // Lista oficial de praças (ANTT), sincronizada todo mês. Dado público, sem
+  // dono. Sem estar aqui, a trava punha `contaId` no where de uma tabela que
+  // não tem a coluna e a sincronização morria na 1ª consulta.
+  "PracaOficial",
   // Praça do extrato da tag → praça do mapa, valendo pra TODAS as empresas.
   // Praça é dado público; só a equipe da plataforma confirma aqui (a empresa
   // confirma pra ela em `PracaTagDeParaConta`, que é escopado). Toda leitura
@@ -98,6 +102,11 @@ const MODELS_GLOBAIS = new Set<string>([
   // o post sai no perfil da Movatruck, não no de cliente nenhum. Sem contaId,
   // então toda leitura precisa citar o alvo no where ou rodar em comoSistema.
   "PostInstagram",
+  // As artes (slides) de cada post: mesma dona que o PostInstagram.
+  "ArtePostInstagram",
+  // Por qual provedor sai cada mensagem de WhatsApp da plataforma: linha única,
+  // escolha da casa (a mesma pessoa recebe pelo mesmo caminho em toda empresa).
+  "ConfiguracaoRoteamentoPlataforma",
   // O passo a passo guiado sobre a tela do painel. As telas são do produto, não
   // de empresa nenhuma — o que varia por conta é quem VÊ cada passo, e isso sai
   // da permissão. Sem contaId, toda leitura precisa citar o alvo no where ou
