@@ -28,11 +28,13 @@ type Resposta =
       vale: string;
       retorno: string;
       sugestao: string | null;
+      cliente: { nome: string | null; regua: "IDA" | "VOLTA" | "IDA_E_VOLTA"; pedagio: string; pelaTag: boolean };
       ligados: Array<Trecho & { ligacao: string | null }>;
       pendentes: Array<Trecho & { status: string }>;
       decisao: { valorReembolso: string; motivo: string | null; decididoPor: string | null; decididoEm: string } | null;
     };
 
+const REGUA = { IDA: "só a ida", VOLTA: "só a volta", IDA_E_VOLTA: "ida e volta" } as const;
 const brl = (v: string | number) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 // A hora vem da própria passagem, no fuso da praça (MT é uma hora antes de
 // Brasília) — a mesma que a fatura e a tela da tag mostram.
@@ -87,6 +89,15 @@ export function PedagioTagCard({ viagemId }: { viagemId: string }) {
         <Numero rotulo="Vale do contratante" valor={brl(d.vale)} />
         <Numero rotulo="Tag na volta vazia" valor={brl(d.retorno)} />
       </div>
+
+      <p className="text-sm">
+        Pedágio na fatura {d.cliente.nome ? `de ${d.cliente.nome}` : "do cliente"}: <strong>{brl(d.cliente.pedagio)}</strong>{" "}
+        <span className="text-muted-foreground">
+          {d.cliente.pelaTag
+            ? `(pela tag — ${REGUA[d.cliente.regua]}; vale não entra)`
+            : "(o que o motorista lançou — nenhuma passagem da tag ligada)"}
+        </span>
+      </p>
 
       {d.sugestao != null && (
         <p className="text-sm">

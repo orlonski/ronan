@@ -26,8 +26,10 @@ import {
   temEndereco,
 } from "@/components/endereco-cadastro";
 import { CAMPO } from "@/lib/campos";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Papel = "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
+type ReguaTag = "IDA" | "VOLTA" | "IDA_E_VOLTA";
 export type Empresa = {
   id: string;
   nome: string;
@@ -35,6 +37,7 @@ export type Empresa = {
   contato: string | null;
   papel: Papel;
   ativa: boolean;
+  pedagioTagRepasse?: ReguaTag;
   // --- fiscais: quem paga o frete. As colunas têm os nomes da tabela
   // `empresas` (razaoSocial, sem o "Fiscal" do cadastro de obra).
   razaoSocial: string | null;
@@ -56,6 +59,9 @@ type Props = { initial?: Empresa };
 
 export function EmpresaForm({ initial }: Props) {
   const router = useRouter();
+  // A régua da tag só faz sentido pra quem tem a conferência da tag.
+  const { temPermissao } = usePermissoes();
+  const comTag = temPermissao("tag.ver");
   const create = useCreateResource<Record<string, unknown>, Empresa>(PATH, PATH);
   const update = useUpdateResource<Record<string, unknown>, Empresa>(PATH, PATH);
 
@@ -64,6 +70,7 @@ export function EmpresaForm({ initial }: Props) {
     cnpj: maskDocumento(initial?.cnpj ?? ""),
     contato: initial?.contato ?? "",
     papel: (initial?.papel ?? "AMBOS") as Papel,
+    pedagioTagRepasse: (initial?.pedagioTagRepasse ?? "IDA") as ReguaTag,
   });
 
   // O componente fiscal é o mesmo do cadastro de obra, que chama a razão
@@ -95,6 +102,7 @@ export function EmpresaForm({ initial }: Props) {
       cnpj: digitos || undefined,
       contato: form.contato || undefined,
       papel: form.papel,
+      ...(comTag ? { pedagioTagRepasse: form.pedagioTagRepasse } : {}),
       razaoSocial: razaoSocialFiscal,
       ...resto,
       ...enderecoParaEnvio(endereco, { comTelefone: false }),
@@ -150,6 +158,25 @@ export function EmpresaForm({ initial }: Props) {
             </Select>
           </div>
         </div>
+        {comTag && (
+          <div className="space-y-2">
+            <Label htmlFor="empresafor-pedagio-tag">Pedágio pela tag na fatura deste cliente</Label>
+            <Select
+              id="empresafor-pedagio-tag"
+              value={form.pedagioTagRepasse}
+              onChange={(e) => setForm({ ...form, pedagioTagRepasse: e.target.value as ReguaTag })}
+            >
+              <option value="IDA">Só a ida (carregado)</option>
+              <option value="VOLTA">Só a volta (vazio)</option>
+              <option value="IDA_E_VOLTA">Ida e volta</option>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Quando a viagem tem passagem do Sem Parar ligada, o pedágio cobrado deste cliente sai da fatura da tag,
+              nessa régua. Vale-pedágio nunca entra: quem pagou foi o contratante. Só vale onde a tabela de preço
+              repassa pedágio.
+            </p>
+          </div>
+        )}
         <div className="space-y-2">
           <Label htmlFor="empresafor-contato">Contato</Label>
           <Input {...CAMPO.nomeLivre} id="empresafor-contato"

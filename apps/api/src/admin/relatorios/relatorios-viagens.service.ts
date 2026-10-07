@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { pedagioDoCliente } from "../../common/tag-pedagio/pedagio-lancado";
 import { Prisma, StatusViagem } from "@prisma/client";
 import {
   type GrupoRelatorioViagens,
@@ -45,6 +46,7 @@ const SELECT_AGREGACAO = {
   toneladas: true,
   km: true,
   valorPedagioTotal: true,
+  pedagioPelaTag: true,
   // Necessário pro guarda de mínimo em aplicarMinimos (diária não tem mínimo).
 } as const;
 
@@ -53,6 +55,7 @@ type LinhaBruta = LinhaAgregacao & {
   toneladas: Prisma.Decimal | null;
   km: Prisma.Decimal | null;
   valorPedagioTotal: Prisma.Decimal | null;
+  pedagioPelaTag: Prisma.Decimal | null;
 };
 
 type Acumulador = {
@@ -275,6 +278,7 @@ export class RelatoriosViagensService {
         toneladas: true,
         km: true,
         valorPedagioTotal: true,
+        pedagioPelaTag: true,
         motorista: { select: { nome: true } },
         veiculo: { select: { placa: true } },
         cliente: { select: { nome: true, empresaId: true } },
@@ -303,7 +307,7 @@ export class RelatoriosViagensService {
         localDescarga: v.localDescarga?.nome ?? null,
         toneladas: m.toneladasInformada,
         km: m.kmInformado,
-        pedagio: (v.valorPedagioTotal ?? new Prisma.Decimal(0)).toFixed(2),
+        pedagio: pedagioDoCliente(v).toFixed(2),
         // Comerciais — omitidos abaixo quando não pode ver.
         cliente: v.cliente?.nome ?? null,
         toneladasEfetiva: m.toneladasEfetiva,
@@ -381,8 +385,9 @@ function acumular(
   acc.kmEfetivo = acc.kmEfetivo.plus(m.kmEfetivo);
   if (m.kmAjustada) acc.kmAjustados++;
 
-  const pedagio = linha.valorPedagioTotal;
-  if (pedagio && !pedagio.isZero()) acc.pedagio = acc.pedagio.plus(pedagio);
+  // O mesmo pedágio que vai pra fatura do cliente: o da tag quando há.
+  const pedagio = pedagioDoCliente(linha);
+  if (!pedagio.isZero()) acc.pedagio = acc.pedagio.plus(pedagio);
   else acc.viagensSemPedagio++;
 
   if (!STATUS_CONCILIAVEIS.includes(linha.status)) acc.viagensNaoConciliadas++;

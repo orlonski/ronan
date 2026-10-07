@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ajusteDaDecisao,
   decisaoAindaVale,
+  pedagioDoCliente,
+  pedagioPelaTag,
   situacaoTagDaViagem,
   sugestaoDeReembolso,
 } from "./pedagio-lancado";
@@ -49,6 +51,21 @@ describe("pedágio lançado × tag", () => {
 
   it("a volta vazia na tag não entra na sugestão (ele pode ter lançado só a ida)", () => {
     expect(sugestaoDeReembolso("120", { tag: "0", vale: "0", retorno: "78", trechos: 1 }).toFixed(2)).toBe("120.00");
+  });
+
+  it("pedágio pro cliente pela régua: ida, volta, as duas — vale nunca", () => {
+    const c = { tag: "103.60", vale: "40", retorno: "58.50", trechos: 2, trechosIda: 1, trechosVolta: 1 };
+    expect(pedagioPelaTag(c, "IDA")?.toFixed(2)).toBe("103.60");
+    expect(pedagioPelaTag(c, "VOLTA")?.toFixed(2)).toBe("58.50");
+    expect(pedagioPelaTag(c, "IDA_E_VOLTA")?.toFixed(2)).toBe("162.10");
+  });
+
+  it("a parte que a régua pede não está ligada: vale o lançado", () => {
+    const soVolta = { tag: "0", vale: "0", retorno: "58.50", trechos: 1, trechosIda: 0, trechosVolta: 1 };
+    expect(pedagioPelaTag(soVolta, "IDA")).toBeNull();
+    expect(pedagioPelaTag(null, "IDA")).toBeNull();
+    expect(pedagioDoCliente({ pedagioPelaTag: null, valorPedagioTotal: "120" }).toFixed(2)).toBe("120.00");
+    expect(pedagioDoCliente({ pedagioPelaTag: "0", valorPedagioTotal: "120" }).toFixed(2)).toBe("0.00");
   });
 
   it("ajuste no acerto seguinte: o decidido menos o já pago", () => {

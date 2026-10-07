@@ -149,6 +149,23 @@ describe("calcularValorViagem", () => {
     expect(r.valor?.valorTotal).toBe("340.00");
   });
 
+  it("com passagem da tag ligada, repassa o pedágio da fatura, não o lançado", () => {
+    const r = calcularValorViagem(
+      { ...viagem, pedagioPelaTag: "103.60" },
+      { empresaId: EMPRESA, materialId: BRITA, tabelas: [linha({ precoUnitario: 10, repassaPedagio: true })] },
+    );
+    expect(r.valor?.valorPedagio).toBe("103.60");
+    expect(r.valor?.valorTotal).toBe("403.60");
+  });
+
+  it("tag que pagou zero (tudo no vale) repassa zero — o contratante já pagou", () => {
+    const r = calcularValorViagem(
+      { ...viagem, pedagioPelaTag: "0" },
+      { empresaId: EMPRESA, materialId: BRITA, tabelas: [linha({ precoUnitario: 10, repassaPedagio: true })] },
+    );
+    expect(r.valor?.valorPedagio).toBe("0.00");
+  });
+
   it("base KM multiplica o km efetivo", () => {
     const r = calcularValorViagem(viagem, {
       empresaId: EMPRESA,

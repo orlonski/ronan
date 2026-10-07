@@ -40,7 +40,7 @@ import {
 } from "../../common/tag-pedagio/normalizacao";
 import { TagProcessamentoService } from "./tag-processamento.service";
 import { pedagioDaViagem } from "../../common/acerto-motorista";
-import { decisaoAindaVale, situacaoTagDaViagem } from "../../common/tag-pedagio/pedagio-lancado";
+import { decisaoAindaVale, pedagioDoCliente, situacaoTagDaViagem } from "../../common/tag-pedagio/pedagio-lancado";
 import { tagDasViagens } from "../../common/tag-pedagio/tag-das-viagens";
 
 type Arquivo = { buffer: Buffer; originalname: string; mimetype: string; size?: number };
@@ -653,6 +653,8 @@ export class TagPedagioService {
         valorPedagioTotal: true,
         pedagios: { select: { id: true, valor: true } },
         veiculo: { select: { placa: true } },
+        pedagioPelaTag: true,
+        cliente: { select: { empresa: { select: { nome: true, pedagioTagRepasse: true } } } },
       },
     });
     if (!v) throw new NotFoundException("Viagem não encontrada.");
@@ -714,6 +716,13 @@ export class TagPedagioService {
       vale: sit.situacao === "TAG_PAGOU" ? sit.vale : "0.00",
       retorno: sit.situacao === "TAG_PAGOU" ? sit.retorno : "0.00",
       sugestao: sit.situacao === "TAG_PAGOU" ? sit.sugestao : null,
+      // O que vai pra fatura do cliente: o da tag na régua dele, ou o lançado.
+      cliente: {
+        nome: v.cliente?.empresa?.nome ?? null,
+        regua: v.cliente?.empresa?.pedagioTagRepasse ?? "IDA",
+        pedagio: pedagioDoCliente(v).toFixed(2),
+        pelaTag: v.pedagioPelaTag != null,
+      },
       ligados: trechosLigados
         .sort((a, b) => a.ini.getTime() - b.ini.getTime())
         .map((x) => ({ ...trecho(x), ligacao: tipoDe.get(x.passagemAncoraId) ?? null })),
@@ -868,9 +877,12 @@ export class TagPedagioService {
           })
         : null;
 
+    // As viagens que perdem ou ganham passagem têm o pedágio do cliente refeito.
+    const afetadas = ativas.map((a) => a.viagemId).filter((x): x is string => !!x);
     if (input.acao === "DESFAZER") {
       if (!ativas.length) throw new BadRequestException("Não há ligação pra desfazer neste trecho.");
       await desfazer();
+      await this.motor.atualizarPedagioDoCliente(afetadas);
       return { ok: true };
     }
     let viagemId: string | null = null;
@@ -897,6 +909,7 @@ export class TagPedagioService {
     await this.prisma.ligacaoTagViagem.create({
       data: { passagemAncoraId: input.passagemAncoraId, viagemId, tipo, motivo: motivo.slice(0, 500), autorId: user.id },
     });
+    await this.motor.atualizarPedagioDoCliente([...afetadas, ...(viagemId ? [viagemId] : [])]);
     return { ok: true };
   }
 
@@ -904,6 +917,7 @@ export class TagPedagioService {
     const ts = await this.prisma.trechoTag.findMany({ where: { passagemAncoraId: { in: input.passagemAncoraIds } } });
     const ligs = await this.ligacoesAtivas(ts.map((t) => t.passagemAncoraId));
     let aceitas = 0;
+    const afetadas: string[] = [];
     for (const t of ts) {
       const c = t.cruzamento as Cruzamento;
       if (ligs.has(t.passagemAncoraId) || !c.viagemId || !["SUGESTAO", "RETORNO", "IDA_VAZIA"].includes(c.status)) continue;
@@ -919,7 +933,9 @@ export class TagPedagioService {
         },
       });
       aceitas++;
+      afetadas.push(c.viagemId);
     }
+    await this.motor.atualizarPedagioDoCliente(afetadas);
     return { aceitas };
   }
 

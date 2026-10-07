@@ -58,17 +58,31 @@ export async function tagDasViagens(
   const zero = () => new Prisma.Decimal(0);
   const cobertura = new Map<
     string,
-    { tag: Prisma.Decimal; vale: Prisma.Decimal; retorno: Prisma.Decimal; trechos: number }
+    {
+      tag: Prisma.Decimal;
+      vale: Prisma.Decimal;
+      retorno: Prisma.Decimal;
+      trechos: number;
+      trechosIda: number;
+      trechosVolta: number;
+    }
   >();
   for (const l of ligacoes) {
     const t = trechoDe.get(l.passagemAncoraId);
     if (!t || !l.viagemId) continue;
-    const c = cobertura.get(l.viagemId) ?? { tag: zero(), vale: zero(), retorno: zero(), trechos: 0 };
-    // A volta vazia fica à parte: não entra na sugestão (ver CoberturaTag).
+    const c = cobertura.get(l.viagemId) ?? { tag: zero(), vale: zero(), retorno: zero(), trechos: 0, trechosIda: 0, trechosVolta: 0 };
+    // A volta vazia fica à parte: não entra na sugestão (ver CoberturaTag). Só
+    // a tag dela: vale na volta (raro) é do contratante, não pedágio da empresa.
     if (l.tipo === "RETORNO") {
-      cobertura.set(l.viagemId, { ...c, retorno: c.retorno.add(t.valorTag).add(t.valorVale), trechos: c.trechos + 1 });
+      cobertura.set(l.viagemId, { ...c, retorno: c.retorno.add(t.valorTag), trechos: c.trechos + 1, trechosVolta: c.trechosVolta + 1 });
     } else {
-      cobertura.set(l.viagemId, { ...c, tag: c.tag.add(t.valorTag), vale: c.vale.add(t.valorVale), trechos: c.trechos + 1 });
+      cobertura.set(l.viagemId, {
+        ...c,
+        tag: c.tag.add(t.valorTag),
+        vale: c.vale.add(t.valorVale),
+        trechos: c.trechos + 1,
+        trechosIda: c.trechosIda + 1,
+      });
     }
   }
 

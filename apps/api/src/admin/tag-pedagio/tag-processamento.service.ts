@@ -4,6 +4,8 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { GeocodingService } from "../../geocoding/geocoding.service";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
+import { PrecificacaoService } from "../tabelas-preco/precificacao.service";
+import { atualizarPedagioPelaTag } from "../../common/tag-pedagio/pedagio-do-cliente";
 import { distanciaMetros } from "../../common/geo";
 import { contaIdAtual } from "../../common/conta/conta-context";
 import { calcularAchados, type EntradaPlaca, type PassagemComFatos } from "../../common/tag-pedagio/achados";
@@ -65,7 +67,13 @@ export class TagProcessamentoService {
     private readonly roteamento: RoteamentoService,
     private readonly geocoding: GeocodingService,
     private readonly pedagios: PedagiosRodoviaConsultaService,
+    private readonly precificacao: PrecificacaoService,
   ) {}
+
+  /** Pedágio pela tag na régua do cliente (ver common/tag-pedagio/pedagio-do-cliente). */
+  atualizarPedagioDoCliente(ids?: string[]) {
+    return atualizarPedagioPelaTag(this.prisma, (id) => this.precificacao.recalcularSeguro(id), ids);
+  }
 
   // ------------------------------------------------------------------ dados
 
@@ -254,6 +262,7 @@ export class TagProcessamentoService {
     if (ps.length === 0) {
       await this.prisma.trechoTag.deleteMany({});
       await this.prisma.achadoTag.updateMany({ where: { vigente: true }, data: { vigente: false } });
+      await this.atualizarPedagioDoCliente();
       return { trechos: 0, achados: 0 };
     }
 
@@ -442,6 +451,7 @@ export class TagProcessamentoService {
     });
     await this.gravarAchados(achados, veiculoDaPlaca);
     await this.prisma.extratoTag.updateMany({ where: { status: { not: "FALHOU" } }, data: { processadoEm: new Date() } });
+    await this.atualizarPedagioDoCliente();
     return { trechos: todosTrechos.length, achados: achados.length };
   }
 

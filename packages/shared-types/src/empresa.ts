@@ -61,6 +61,8 @@ const EmpresaBase = z.object({
   chaveMatch: z.array(CampoChaveMatch).min(1).nullable().optional(),
   toleranciaKmPct: z.number().int().min(0).max(20).optional(),
   toleranciaTonPct: z.number().int().min(0).max(10).optional(),
+  // Com o módulo da tag: que parte do pedágio pago pela tag vai pra fatura dele.
+  pedagioTagRepasse: z.enum(["IDA", "VOLTA", "IDA_E_VOLTA"]).optional(),
   ...FiscalEmpresa,
 });
 

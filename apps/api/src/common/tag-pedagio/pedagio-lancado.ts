@@ -25,7 +25,43 @@ function dec(v: DecimalLike): Prisma.Decimal {
  * sugestão — o motorista pode ter lançado só a ida, paga em dinheiro, e
  * descontar a volta dele seria tirar dinheiro do parceiro com um clique.
  */
-export type CoberturaTag = { tag: DecimalLike; vale: DecimalLike; retorno?: DecimalLike; trechos: number };
+export type CoberturaTag = {
+  tag: DecimalLike;
+  vale: DecimalLike;
+  /** Tag (só tag, sem vale) nos trechos de volta vazia ligados à viagem. */
+  retorno?: DecimalLike;
+  trechos: number;
+  /** Quantos trechos de ida (não-retorno) estão ligados. */
+  trechosIda?: number;
+  /** Quantos trechos de volta vazia estão ligados. */
+  trechosVolta?: number;
+};
+
+export type ReguaPedagioTag = "IDA" | "VOLTA" | "IDA_E_VOLTA";
+
+/**
+ * O pedágio desta viagem pela fatura da tag, na régua do cliente. Só o que a
+ * TAG pagou — vale-pedágio nunca: quem pagou foi o contratante, e cobrar de
+ * novo do cliente é cobrar duas vezes.
+ *
+ * null = a parte que a régua pede não está ligada (ex.: régua "ida" e só a
+ * volta foi casada): aí vale o que o motorista lançou, como sempre foi.
+ */
+export function pedagioPelaTag(cobertura: CoberturaTag | null | undefined, regua: ReguaPedagioTag): Prisma.Decimal | null {
+  if (!cobertura || cobertura.trechos === 0) return null;
+  const temIda = (cobertura.trechosIda ?? 0) > 0;
+  const temVolta = (cobertura.trechosVolta ?? 0) > 0;
+  const ida = dec(cobertura.tag);
+  const volta = dec(cobertura.retorno);
+  if (regua === "IDA") return temIda ? ida : null;
+  if (regua === "VOLTA") return temVolta ? volta : null;
+  return temIda ? ida.add(volta) : null;
+}
+
+/** O pedágio que vai pro cliente: o da tag quando há, senão o lançado. Fonte única. */
+export function pedagioDoCliente(v: { pedagioPelaTag?: DecimalLike; valorPedagioTotal?: DecimalLike }): Prisma.Decimal {
+  return v.pedagioPelaTag != null ? dec(v.pedagioPelaTag) : dec(v.valorPedagioTotal);
+}
 
 export type SituacaoTagDaViagem =
   /** O caminhão não aparece em fatura nenhuma: não tem tag, ou a empresa não sobe a fatura. */

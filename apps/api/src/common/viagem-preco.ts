@@ -1,4 +1,5 @@
 import { Prisma, StatusViagem, type BasePreco } from "@prisma/client";
+import { pedagioDoCliente } from "./tag-pedagio/pedagio-lancado";
 import { aplicarMinimos, type MinimoOverride, type ViagemBruta } from "./viagem-minimos";
 import { STATUS_FORA_FECHAMENTO } from "./viagem-status";
 import { toneladasParaM3 } from "./volume-material";
@@ -44,6 +45,8 @@ export type ViagemParaPreco = ViagemBruta & {
   status?: StatusViagem | null;
   data?: Date | string | null;
   valorPedagioTotal?: DecimalLike | null;
+  /** Pedágio pela fatura da tag na régua do cliente. Vence o lançado quando existe. */
+  pedagioPelaTag?: DecimalLike | null;
   tipoServicoId?: string | null;
 };
 
@@ -207,7 +210,9 @@ export function calcularValorViagem(
 
   const preco = dec(linha.precoUnitario);
   const valorFrete = quantidade.mul(preco);
-  const valorPedagio = linha.repassaPedagio ? dec(viagem.valorPedagioTotal ?? 0) : new Prisma.Decimal(0);
+  // O pedágio repassado é o da tag quando a viagem tem passagem ligada (o
+  // motorista com tag nem lança pedágio), senão o lançado — `pedagioDoCliente`.
+  const valorPedagio = linha.repassaPedagio ? pedagioDoCliente(viagem) : new Prisma.Decimal(0);
 
   return {
     valor: {

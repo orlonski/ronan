@@ -46,6 +46,7 @@ export class PrecificacaoService {
         km: true,
         toneladas: true,
         valorPedagioTotal: true,
+        pedagioPelaTag: true,
         tipoServicoId: true,
         // Sem este select o mínimo por período volta a valer e a diária fatura
         // tonelada inventada. Mesma pegadinha documentada em viagem-minimos.

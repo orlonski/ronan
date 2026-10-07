@@ -4,6 +4,8 @@ import type { CriarEmpresaInput, AtualizarEmpresaInput } from "@ronan/shared-typ
 import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
+import { PrecificacaoService } from "../tabelas-preco/precificacao.service";
+import { atualizarPedagioPelaTag } from "../../common/tag-pedagio/pedagio-do-cliente";
 
 type ListEmpresasParams = PaginationQuery & {
   ativa?: "true" | "false";
@@ -12,7 +14,10 @@ type ListEmpresasParams = PaginationQuery & {
 
 @Injectable()
 export class EmpresasService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly precificacao: PrecificacaoService,
+  ) {}
 
   list(params: ListEmpresasParams) {
     const where: Prisma.EmpresaWhereInput = {};
@@ -63,7 +68,7 @@ export class EmpresasService {
 
   async update(id: string, data: AtualizarEmpresaInput) {
     const antes = await this.ensureExists(id);
-    return this.prisma.$transaction(async (tx) => {
+    const salva = await this.prisma.$transaction(async (tx) => {
       const empresa = await tx.empresa.update({
         where: { id },
         data: data as Prisma.EmpresaUncheckedUpdateInput,
@@ -84,6 +89,17 @@ export class EmpresasService {
       }
       return empresa;
     });
+    // Mudou a régua do pedágio da tag: refaz o pedágio (e o preço) das viagens
+    // deste cliente que têm passagem ligada. Fechamento já conciliado não muda.
+    if (data.pedagioTagRepasse && data.pedagioTagRepasse !== antes.pedagioTagRepasse) {
+      const ligadas = await this.prisma.ligacaoTagViagem.findMany({
+        where: { desfeitaEm: null, viagem: { cliente: { empresaId: id } } },
+        select: { viagemId: true },
+      });
+      const ids = [...new Set(ligadas.map((l) => l.viagemId).filter((x): x is string => !!x))];
+      if (ids.length) await atualizarPedagioPelaTag(this.prisma, (v) => this.precificacao.recalcularSeguro(v), ids);
+    }
+    return salva;
   }
 
   async remove(id: string) {

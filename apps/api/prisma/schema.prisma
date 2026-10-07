@@ -7,6 +7,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Que parte do pedágio pago pela tag (Sem Parar) vai pra fatura do cliente.
+/// Muda de contrato pra contrato: tem quem pague só a ida carregada, só a
+/// volta, ou as duas. Vale-pedágio nunca entra: quem pagou foi o contratante.
+enum PedagioTagRepasse {
+  IDA
+  VOLTA
+  IDA_E_VOLTA
+}
+
 enum PapelEmpresa {
   RECEBE_PLANILHA
   MANDA_FECHAMENTO
@@ -2331,9 +2340,9 @@ model UsuarioTransportadora {
 }
 
 model Empresa {
-  contaId             String       @default("__SEM_CONTA__")
-  conta               Conta        @relation(fields: [contaId], references: [id])
-  id                  String       @id @default(uuid())
+  contaId             String            @default("__SEM_CONTA__")
+  conta               Conta             @relation(fields: [contaId], references: [id])
+  id                  String            @id @default(uuid())
   nome                String
   cnpj                String?
   contato             String?
@@ -2353,18 +2362,20 @@ model Empresa {
   email               String?
   /// Em quantos dias a empresa paga depois do fechamento. Base do vencimento.
   prazoPagamentoDias  Int?
-  papel               PapelEmpresa @default(AMBOS)
+  papel               PapelEmpresa      @default(AMBOS)
   layoutImport        Json? // mapeamento de colunas do fechamento que ela manda (cached IA inference)
   // Lista de campos que compõem a chave única de match. Default null = ["placa","data","ticket"].
   // Empresa que usa NF como chave seria ["placa","data","nf"] (requer Viagem.nf, V3.1).
   chaveMatch          Json?
   // 0–20 — divergência aceita em km antes de virar DIVERGENCIA. 5 = ±5%.
-  toleranciaKmPct     Int          @default(0)
+  toleranciaKmPct     Int               @default(0)
   // 0–10 — idem pra toneladas
-  toleranciaTonPct    Int          @default(0)
-  ativa               Boolean      @default(true)
-  criadoEm            DateTime     @default(now())
-  alteradoEm          DateTime     @updatedAt
+  toleranciaTonPct    Int               @default(0)
+  /// Com o módulo da tag: que parte do pedágio da tag vai pra fatura deste cliente.
+  pedagioTagRepasse   PedagioTagRepasse @default(IDA)
+  ativa               Boolean           @default(true)
+  criadoEm            DateTime          @default(now())
+  alteradoEm          DateTime          @updatedAt
 
   clientes       Cliente[]
   regrasMinimo   RegraMinimo[]
@@ -4578,6 +4589,12 @@ model Viagem {
   localDescarga           Local?             @relation("LocalDescarga", fields: [localDescargaId], references: [id])
   localDescargaId         String?
   valorPedagioTotal       Decimal?           @db.Decimal(10, 2)
+  /// O pedágio desta viagem pela fatura da tag, na régua do cliente (ida, volta
+  /// ou as duas; vale nunca). Null = nenhuma passagem da tag ligada a ela: vale
+  /// o `valorPedagioTotal` que o motorista lançou. É o que a fatura do cliente,
+  /// a planilha de fechamento e o relatório leem (`pedagioDoCliente`). Mantido
+  /// pela conferência da tag; viagem já conciliada num fechamento não muda.
+  pedagioPelaTag          Decimal?           @db.Decimal(10, 2)
   // Coordenadas GPS capturadas pelo motorista no momento do lançamento
   // (silencioso — null se permissão negada ou GPS indisponível)
   lat                     Float?

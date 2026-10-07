@@ -1,3 +1,4 @@
+import { pedagioDoCliente } from "../common/tag-pedagio/pedagio-lancado";
 import {
   BadRequestException,
   ConflictException,
@@ -501,7 +502,8 @@ function valorParaColuna(
     case "km":
       return Number(aplicarMinimos(viagem, override ?? undefined).kmEfetivo);
     case "valor_pedagio":
-      return viagem.valorPedagioTotal ? Number(viagem.valorPedagioTotal) : 0;
+      // O da tag quando a viagem tem passagem ligada; senão o lançado.
+      return Number(pedagioDoCliente(viagem));
     case "valor_total":
       // Célula VAZIA quando não há preço cadastrado, nunca zero. R$ 0,00 numa
       // planilha de cobrança parece um valor conferido e aceito; vazio parece o
