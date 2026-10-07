@@ -1,3 +1,4 @@
+import { POLITICA_DA_ORIGEM } from "../common/viagem-origem";
 import {
   BadRequestException,
   ConflictException,
@@ -1745,7 +1746,10 @@ export class ViagensMotoristaService {
     // Sem isso, o dashboard nao mostra polilinha no mapa de trajeto e
     // a query de "pedagios na rota" volta vazia. Best-effort em background.
     // Modo sem local de descarga não tem par pra cachear.
-    if (rest.localDescargaId) {
+    // Os efeitos abaixo seguem a linha "APP" de common/viagem-origem.ts (a mesma
+    // tabela que diz o que a planilha e a integração NÃO disparam).
+    const efeitos = POLITICA_DA_ORIGEM.APP;
+    if (efeitos.calcularRota && rest.localDescargaId) {
       void this.roteamento
         .calcularKm(rest.localCargaId, rest.localDescargaId)
         .catch(() => {
@@ -1756,29 +1760,29 @@ export class ViagensMotoristaService {
     // Viagem criada sem sinal (km estimado, kmCalculado null): recalcula pelo
     // trajeto real agora que o backend está online e avisa o motorista se mudou.
     // Self-guarda (só age quando kmCalculado null) — seguro chamar sempre.
-    void this.kmReprocessamento.reprocessar(viagem.id);
+    if (efeitos.reprocessarKm) void this.kmReprocessamento.reprocessar(viagem.id);
 
     // Carimba se o km está fora do padrão do trajeto (backend autoritativo, roda
     // pra todo mundo independente da flag do app). Best-effort, nunca bloqueia.
     // Nota: se o km ainda for haversine (sem sinal), o reprocessamento acima vai
     // recalcular e re-chamar avaliarViagem lá dentro — este carimbo inicial é
     // sobre o que se tem agora e será corrigido quando o km real chegar.
-    void this.kmAtipico.avaliarViagem(viagem.id);
+    if (efeitos.avaliarKmAtipico) void this.kmAtipico.avaliarViagem(viagem.id);
 
     // Confere a foto do ticket contra o que foi declarado. Best-effort e sem
     // `.catch` porque `enfileirar` engole o próprio erro — `void` sobre promise
     // rejeitada derruba o processo.
-    void this.conferencia.enfileirar(viagem.id, "create");
+    if (efeitos.conferirTicketComIa) void this.conferencia.enfileirar(viagem.id, "create");
     // Preço da viagem. `void` como os vizinhos: o app está esperando o 2xx com
     // o outbox aberto, e não pode perder o lançamento porque a tabela de preço
     // deu problema. Se falhar aqui, o cron de reconciliação pega de noite.
-    void this.precificacao.recalcularSeguro(viagem.id);
+    if (efeitos.precificar) void this.precificacao.recalcularSeguro(viagem.id);
     // Casa com a viagem que o painel tinha programado pra ele hoje, se houver.
     // Silencioso: a maior parte das viagens continua nascendo sem plano nenhum,
     // e exigir plano pra lançar quebraria o app.
-    void this.programacao.casarComViagem(viagem.id);
+    if (efeitos.casarProgramacao === "sempre") void this.programacao.casarComViagem(viagem.id);
 
-    void (async () => {
+    if (efeitos.avisarAdministradores === "cada-viagem") void (async () => {
       const m = await this.prisma.motorista.findUnique({
         where: { id: motoristaId },
         select: { nome: true },
@@ -1796,7 +1800,7 @@ export class ViagensMotoristaService {
 
     // Aguardando peso: avisa o próprio motorista (push + WhatsApp) pra ele não
     // esquecer de completar o romaneio no fim do dia. Best-effort em background.
-    if (aguardandoPeso) {
+    if (aguardandoPeso && efeitos.avisarMotorista) {
       void this.avisos.avisarViagemAguardandoPeso(viagem.id, motoristaId);
     }
 

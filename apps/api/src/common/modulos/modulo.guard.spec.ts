@@ -115,3 +115,17 @@ describe("ModuloGuard", () => {
     expect(await g.canActivate(ctx(Fake.prototype.ponto, { kind: "MOTORISTA" }))).toBe(true);
   });
 });
+
+describe("ModuloGuard fecha por padrão pra tipo de acesso novo", () => {
+  it("motorista, funcionário e identidade seguem como sempre (têm as próprias barreiras)", async () => {
+    const g = guard([ligado("operacao")]);
+    for (const kind of ["MOTORISTA", "FUNCIONARIO", "IDENTIDADE"]) {
+      expect(await comConta(nova(), () => g.canActivate(ctx(Fake.prototype.ponto, { kind })))).toBe(true);
+    }
+  });
+
+  it("um tipo que ninguém declarou (ex.: chave de integração) é barrado, mesmo com o módulo contratado", async () => {
+    const g = guard([ligado("operacao"), ligado("ponto")]);
+    expect(await codigo(comConta(nova(), () => g.canActivate(ctx(Fake.prototype.viagens, { kind: "INTEGRACAO" }))))).toBe("403");
+  });
+});

@@ -12,6 +12,9 @@ import { CachePorConta } from "../conta/cache-por-conta";
 import { modulosDaConta } from "../conta/teto-da-conta";
 import type { AuthUser } from "../../auth/types";
 
+/** Tipos de acesso que já existiam e não passam pela cobrança de módulo daqui. */
+const TIPOS_SEM_COBRANCA_DE_MODULO = new Set<string>(["MOTORISTA", "FUNCIONARIO", "IDENTIDADE"]);
+
 /**
  * Barra o acesso a recurso de módulo que a empresa não contratou.
  *
@@ -48,7 +51,15 @@ export class ModuloGuard implements CanActivate {
     if (!exigidas || exigidas.length === 0) return true;
 
     const user = context.switchToHttp().getRequest().user as AuthUser | undefined;
-    if (!user || user.kind !== "ADMIN_USER") return true;
+    if (!user) return true;
+    // Fechado por padrão: motorista/funcionário/identidade têm as próprias
+    // barreiras (RolesGuard, capacidade do app) e seguem como sempre. Um tipo de
+    // acesso NOVO (a chave de integração, amanhã) que não esteja nesta lista é
+    // barrado aqui, em vez de passar sem cobrança de módulo.
+    if (user.kind !== "ADMIN_USER") {
+      if (TIPOS_SEM_COBRANCA_DE_MODULO.has(user.kind)) return true;
+      throw new ForbiddenException("Este tipo de acesso não pode usar esta rota.");
+    }
 
     // Os módulos que as chaves exigidas tocam. `@RequerPermissao` é OR entre
     // chaves, então basta UM módulo contratado pra passar — senão um handler

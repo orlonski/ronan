@@ -1,3 +1,5 @@
+import { POLITICA_DA_ORIGEM } from "../../common/viagem-origem";
+import { PrecificacaoService } from "../tabelas-preco/precificacao.service";
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { TipoLocal } from "@prisma/client";
 import { createHash, randomBytes } from "node:crypto";
@@ -63,6 +65,7 @@ export class ImportacaoService {
     private readonly prisma: PrismaService,
     private readonly identidades: IdentidadeService,
     private readonly acessoApp: AcessoAppService,
+    private readonly precificacao: PrecificacaoService,
   ) {}
 
   /** Lê o arquivo e devolve o que ENTRARIA, sem gravar nada. */
@@ -376,8 +379,19 @@ export class ImportacaoService {
 
     const existente = await this.prisma.viagem.findUnique({
       where: { clientId },
-      select: { id: true },
+      select: { id: true, km: true, kmAlteradoEm: true },
     });
+    // Km corrigido no painel com motivo escrito é decisão de gente (ver
+    // common/km-motorista.ts): reimportar a planilha não passa por cima dele.
+    if (existente?.kmAlteradoEm && dados.km != null && !(existente.km != null && existente.km.eq(dados.km))) {
+      avisos.push(
+        `Linha ${linha.numero}: o km desta viagem foi corrigido no painel com motivo — mantido (${existente.km?.toString() ?? "—"} km), a planilha não sobrescreveu.`,
+      );
+      dados.km = existente.km;
+    }
+    // Planilha sem km não APAGA o km que a viagem já tem (calculado pela rota
+    // ou corrigido no painel): ausência na planilha não é "zere".
+    if (existente && dados.km == null) dados.km = existente.km;
     const viagem = existente
       ? await this.prisma.viagem.update({ where: { id: existente.id }, data: dados })
       : await this.prisma.viagem.create({
@@ -388,6 +402,11 @@ export class ImportacaoService {
         });
 
     await this.gravarValor(viagem.id, v);
+    // Sem valor na planilha: preço da tabela na hora (antes ficava sem valor até
+    // o robô da madrugada). Valor da planilha é histórico e fica como veio.
+    if (v.valorFrete === undefined && POLITICA_DA_ORIGEM.IMPORTACAO.precificar) {
+      await this.precificacao.recalcularSeguro(viagem.id);
+    }
     return existente ? "atualizado" : "criado";
   }
 

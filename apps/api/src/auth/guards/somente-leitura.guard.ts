@@ -34,7 +34,11 @@ export class SomenteLeituraGuard implements CanActivate {
 
     const user = req.user;
     if (!user || user.kind === "IDENTIDADE") return true;
-    if (!user.contaSomenteLeitura) return true;
+    // Fechado por padrão: tipo de acesso NOVO que não diga explicitamente que a
+    // conta NÃO está em somente leitura é tratado como se estivesse. Antes um
+    // `contaSomenteLeitura` ausente deixava escrever.
+    const conhecido = user.kind === "ADMIN_USER" || user.kind === "MOTORISTA" || user.kind === "FUNCIONARIO";
+    if (conhecido ? !user.contaSomenteLeitura : (user as { contaSomenteLeitura?: boolean }).contaSomenteLeitura === false) return true;
 
     const liberado = this.reflector.getAllAndOverride<boolean>(PERMITE_SOMENTE_LEITURA, [
       context.getHandler(),
