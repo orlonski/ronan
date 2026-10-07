@@ -60,10 +60,15 @@ describe("pedágio lançado × tag", () => {
     expect(pedagioPelaTag(c, "IDA_E_VOLTA")?.toFixed(2)).toBe("162.10");
   });
 
-  it("a parte que a régua pede não está ligada: vale o lançado", () => {
-    const soVolta = { tag: "0", vale: "0", retorno: "58.50", trechos: 1, trechosIda: 0, trechosVolta: 1 };
-    expect(pedagioPelaTag(soVolta, "IDA")).toBeNull();
+  it("com passagem ligada a tag é a fonte: a parte que não apareceu conta zero, nunca o lançado", () => {
+    const soIda = { tag: "88.80", vale: "0", retorno: "0", trechos: 1, trechosIda: 1, trechosVolta: 0 };
+    expect(pedagioPelaTag(soIda, "VOLTA")?.toFixed(2)).toBe("0.00");
+    expect(pedagioPelaTag(soIda, "IDA_E_VOLTA")?.toFixed(2)).toBe("88.80");
+  });
+
+  it("sem nenhuma passagem ligada: vale o lançado", () => {
     expect(pedagioPelaTag(null, "IDA")).toBeNull();
+    expect(pedagioPelaTag({ tag: 0, vale: 0, trechos: 0 }, "VOLTA")).toBeNull();
     expect(pedagioDoCliente({ pedagioPelaTag: null, valorPedagioTotal: "120" }).toFixed(2)).toBe("120.00");
     expect(pedagioDoCliente({ pedagioPelaTag: "0", valorPedagioTotal: "120" }).toFixed(2)).toBe("0.00");
   });

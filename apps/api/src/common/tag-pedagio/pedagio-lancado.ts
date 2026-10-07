@@ -44,18 +44,19 @@ export type ReguaPedagioTag = "IDA" | "VOLTA" | "IDA_E_VOLTA";
  * TAG pagou — vale-pedágio nunca: quem pagou foi o contratante, e cobrar de
  * novo do cliente é cobrar duas vezes.
  *
- * null = a parte que a régua pede não está ligada (ex.: régua "ida" e só a
- * volta foi casada): aí vale o que o motorista lançou, como sempre foi.
+ * null = NENHUMA passagem da tag ligada à viagem: aí vale o que o motorista
+ * lançou, como sempre foi. Com alguma passagem ligada, a tag é a fonte da
+ * viagem inteira — a parte que a régua pede e não apareceu conta zero. Cair no
+ * lançado nesse caso misturava as fontes: régua "só a volta" numa viagem sem
+ * volta ligada cobrava do cliente o pedágio da IDA que o motorista digitou.
  */
 export function pedagioPelaTag(cobertura: CoberturaTag | null | undefined, regua: ReguaPedagioTag): Prisma.Decimal | null {
   if (!cobertura || cobertura.trechos === 0) return null;
-  const temIda = (cobertura.trechosIda ?? 0) > 0;
-  const temVolta = (cobertura.trechosVolta ?? 0) > 0;
   const ida = dec(cobertura.tag);
   const volta = dec(cobertura.retorno);
-  if (regua === "IDA") return temIda ? ida : null;
-  if (regua === "VOLTA") return temVolta ? volta : null;
-  return temIda ? ida.add(volta) : null;
+  if (regua === "IDA") return ida;
+  if (regua === "VOLTA") return volta;
+  return ida.add(volta);
 }
 
 /** O pedágio que vai pro cliente: o da tag quando há, senão o lançado. Fonte única. */
