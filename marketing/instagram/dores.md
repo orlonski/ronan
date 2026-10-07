@@ -78,6 +78,16 @@ envelhecida e sem número pra justificar a troca no banco.
 **O que mata:** o real do motorista nunca é sobrescrito; alteração de km exige motivo
 escrito e vira auditoria (`common/km-motorista.ts`).
 
+### 9b. O CT-e volta rejeitado, e a mensagem da Sefaz não ajuda
+**Como ele diz:** "deu erro 610 de novo, e agora?"
+**O que custa:** CT-e rejeitado é número de série perdido, emissão que não sai, e alguém
+do financeiro decifrando código de erro no meio do fechamento — sem saber qual campo do
+cadastro corrigir.
+**O que mata:** `validarCte` (`apps/api/src/common/cte/validar.ts`) confere, antes de
+mandar pra Sefaz, os erros que já custaram emissão de transportadora de verdade — código
+IBGE do município, Simples Nacional destacando ICMS, carga sem valor, frete zerado — e
+devolve a mensagem em português de quem vai corrigir, não o código da rejeição.
+
 ### 9. Manutenção só aparece quando o caminhão já quebrou na estrada
 **Como ele diz:** "sei que troca óleo de tanto em tanto tempo, mas na correria do dia a
 dia ninguém fica de olho nisso pra todo caminhão."
