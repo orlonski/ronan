@@ -42,6 +42,9 @@ COPY --from=build /repo/apps/api/prisma           ./apps/api/prisma
 # junto — e sem eles a validação de leiaute quebra com ENOENT na primeira
 # emissão, em produção, que é o pior lugar pra descobrir.
 COPY --from=build /repo/apps/api/schemas          ./apps/api/schemas
+# O contrato publicado da API pública. O boot compara com o gerado e não sobe
+# se divergirem (publica.boot-check.ts) — sem ele aqui, nada sobe.
+COPY --from=build /repo/apps/api/openapi          ./apps/api/openapi
 COPY --from=build /repo/apps/api/package.json     ./apps/api/
 COPY --from=build /repo/apps/api/node_modules     ./apps/api/node_modules
 

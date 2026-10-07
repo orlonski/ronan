@@ -165,15 +165,16 @@ export class ResumoMotoristaService {
     const [y, mes] = ymdSaoPaulo();
     const mesInicio = new Date(Date.UTC(y, mes - 1, 1));
 
-    const doDia = { motoristaId, data: { gte: hoje00, lt: amanha00 } };
+    // Só o que ele vê no app: viagem do sistema de outra empresa (integração) fica fora do resumo dele.
+    const doDia = { motoristaId, origemIntegracaoId: null, data: { gte: hoje00, lt: amanha00 } };
     const [viagensHoje, agg, aguardandoPeso, divergente, viagensMes] = await Promise.all([
       // data != null exclui EM_ANDAMENTO (rascunho aberto, sem data ainda).
       this.prisma.viagem.count({ where: doDia }),
       this.prisma.viagem.aggregate({ _sum: { toneladas: true, km: true }, where: doDia }),
-      this.prisma.viagem.count({ where: { motoristaId, status: "AGUARDANDO_PESO" } }),
-      this.prisma.viagem.count({ where: { motoristaId, status: "DIVERGENTE" } }),
+      this.prisma.viagem.count({ where: { motoristaId, origemIntegracaoId: null, status: "AGUARDANDO_PESO" } }),
+      this.prisma.viagem.count({ where: { motoristaId, origemIntegracaoId: null, status: "DIVERGENTE" } }),
       this.prisma.viagem.count({
-        where: { motoristaId, data: { gte: mesInicio, lt: amanha00 } },
+        where: { motoristaId, origemIntegracaoId: null, data: { gte: mesInicio, lt: amanha00 } },
       }),
     ]);
 

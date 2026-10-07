@@ -92,3 +92,43 @@ export function ehRecenteParaProgramacao(dataYmd: string, hojeYmd: string): bool
   ontem.setUTCDate(ontem.getUTCDate() - 1);
   return dataYmd >= ontem.toISOString().slice(0, 10);
 }
+
+/**
+ * Os campos da viagem que a integração escreve. Quando uma pessoa corrige um
+ * deles no painel, ele entra em `Viagem.camposTravados` e o sistema de fora não
+ * sobrescreve mais (decisão do dono, 07/10/2026: quem criou manda, mas correção
+ * de gente não é desfeita por máquina).
+ */
+export const CAMPOS_ESCRITOS_PELA_INTEGRACAO = [
+  "data",
+  "motoristaId",
+  "veiculoId",
+  "localCargaId",
+  "localDescargaId",
+  "materialId",
+  "clienteId",
+  "toneladas",
+  "km",
+  "ticket",
+  "observacao",
+] as const;
+export type CampoDaIntegracao = (typeof CAMPOS_ESCRITOS_PELA_INTEGRACAO)[number];
+
+function normalizar(v: unknown): string | null {
+  if (v === undefined || v === null || v === "") return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === "object" && "toString" in (v as object)) return Number(String(v)).toString();
+  if (typeof v === "number") return v.toString();
+  return String(v);
+}
+
+/** Quais campos da integração a edição do painel MUDOU de fato (mandar o mesmo valor não trava). */
+export function camposCorrigidos(antes: Record<string, unknown>, enviados: Record<string, unknown>): CampoDaIntegracao[] {
+  return CAMPOS_ESCRITOS_PELA_INTEGRACAO.filter((c) => {
+    if (!(c in enviados) || enviados[c] === undefined) return false;
+    const a = antes[c];
+    const d = enviados[c];
+    if (c === "data") return normalizar(a) !== (typeof d === "string" ? d.slice(0, 10) : normalizar(d));
+    return normalizar(a) !== normalizar(d);
+  });
+}

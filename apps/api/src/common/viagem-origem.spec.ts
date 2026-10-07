@@ -23,3 +23,13 @@ describe("efeitos da criação de viagem por origem", () => {
     expect(ehRecenteParaProgramacao("2026-10-05", "2026-10-07")).toBe(false);
   });
 });
+
+describe("campos que o painel corrigiu numa viagem da integração", () => {
+  it("só trava o que mudou de verdade", async () => {
+    const { camposCorrigidos } = await import("./viagem-origem");
+    const antes = { km: { toString: () => "42.00" }, toneladas: { toString: () => "30.000" }, ticket: "A1", data: new Date("2026-10-07T00:00:00Z") };
+    expect(camposCorrigidos(antes, { km: 42, toneladas: 31, ticket: "A1", data: "2026-10-07" })).toEqual(["toneladas"]);
+    expect(camposCorrigidos(antes, { observacao: "nova" })).toEqual(["observacao"]);
+    expect(camposCorrigidos(antes, { status: "OK" })).toEqual([]);
+  });
+});

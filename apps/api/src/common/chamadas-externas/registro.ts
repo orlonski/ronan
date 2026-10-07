@@ -62,11 +62,14 @@ export function servicoDoHost(h: string, env: Record<string, string | undefined>
   return { nome: x, soResumo: false };
 }
 
-const CHAVE_SECRETA = /senha|password|passwd|secret|token|apikey|api_key|api-key|authorization|cookie|chave_?pix|private/i;
+const CHAVE_SECRETA = /senha|password|passwd|secret|token|apikey|api_key|api-key|authorization|cookie|chave_?pix|private|idempotency/i;
 
 /** Esconde CPF, telefone e e-mail no meio do texto. */
 export function mascararTexto(s: string): string {
   return s
+    // Chave de integração (mvt_live_…) onde quer que apareça: num corpo mandado
+    // por engano, numa mensagem de erro. O prefixo existe pra isto.
+    .replace(/mvt_(live|test)_[0-9A-Za-z]{49}/g, "mvt_$1_***")
     .replace(/\b(\d{3})\.?(\d{3})\.?(\d{3})-?(\d{2})\b/g, "***.***.***-$4")
     .replace(/\b(55)?(\d{2})(9?\d{4})(\d{4})\b/g, (m, _ddi, ddd, _a, fim) => (m.length >= 10 ? `(${ddd}) *****-${fim}` : m))
     .replace(/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g, "$1***@$2");

@@ -38,6 +38,7 @@ export const MODULOS_CHAVES = [
   "despesas",
   "etapas",
   "tag-pedagio",
+  "integracoes",
   "plataforma",
 ] as const;
 export const ModuloChaveSchema = z.enum(MODULOS_CHAVES);
@@ -263,6 +264,18 @@ export const MODULOS: ModuloDef[] = [
       "Sobe a fatura do Sem Parar e o sistema liga cada passagem à viagem certa, mostra o vale-pedágio que o contratante deixou de dar e o que dá pra contestar antes do prazo.",
     adicional: true,
     recursos: ["tag"],
+  },
+  {
+    // O sistema da empresa (ERP, app próprio) criando viagens aqui por chave de
+    // acesso, sem ninguém digitar. Vendido à parte (decisão do dono, 07/10/2026);
+    // a Schaba e o 1º piloto não pagam. Cancelar o módulo para toda chave na
+    // hora, sem apagar nada. Conta nova não recebe sozinha, nem no teste grátis.
+    chave: "integracoes",
+    nome: "Integrações",
+    adicional: true,
+    pitch:
+      "O sistema de vocês manda as viagens direto pro Movatruck, sem ninguém digitar duas vezes — e cada chave só faz o que vocês marcaram.",
+    recursos: ["integracoes"],
   },
   {
     chave: "plataforma",

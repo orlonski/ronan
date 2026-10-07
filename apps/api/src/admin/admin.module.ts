@@ -1,3 +1,4 @@
+import { IntegracoesModule } from "./integracoes/integracoes.module";
 import { Module } from "@nestjs/common";
 import { DemandasModule } from "./demandas/demandas.module";
 import { ConferenciasModule } from "./conferencias/conferencias.module";
@@ -73,6 +74,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     FrotaManutencaoModule,
     CteModule,
     ImportacaoModule,
+    IntegracoesModule,
     TorreModule,
     ConferenciaDiariaModule,
     ViagemLifecycleAdminModule,

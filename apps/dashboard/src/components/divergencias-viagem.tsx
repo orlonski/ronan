@@ -34,6 +34,7 @@ const MOTIVO_LABEL: Record<string, string> = {
   FALTA_KM: "Sem km",
   FALTA_TONELADAS: "Sem peso",
   FALTA_CLIENTE: "Sem obra",
+  FALTA_TICKET: "Sem ticket",
   CADASTRO_VEICULO_SUMIU: "Placa fora do cadastro",
   CADASTRO_CLIENTE_SUMIU: "Obra fora do cadastro",
   CADASTRO_MATERIAL_SUMIU: "Material fora do cadastro",
@@ -79,8 +80,11 @@ export function DivergenciasBadge({
 /** Bloco do detalhe da viagem: o que houve, em português, item a item. */
 export function DivergenciasCard({
   divergencias,
+  origemIntegracaoNome,
 }: {
   divergencias?: DivergenciaViagem[] | null;
+  /** A viagem veio do sistema da empresa (integração), não do app do motorista. */
+  origemIntegracaoNome?: string | null;
 }) {
   const todas = divergencias ?? [];
   if (todas.length === 0) return null;
@@ -100,8 +104,8 @@ export function DivergenciasCard({
       </div>
 
       <p className="mt-1 text-sm text-amber-800">
-        O motorista lançou e o sistema aceitou. Estes pontos ficaram pendentes do
-        lado de cá — a maioria se resolve preenchendo o campo na edição da viagem.
+        {origemIntegracaoNome ? `O ${origemIntegracaoNome} mandou` : "O motorista lançou"} e o sistema aceitou. Estes
+        pontos ficaram pendentes do lado de cá — a maioria se resolve preenchendo o campo na edição da viagem.
       </p>
 
       <ul className="mt-3 space-y-2">

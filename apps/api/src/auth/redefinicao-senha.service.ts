@@ -58,7 +58,9 @@ export class RedefinicaoSenhaService {
   private async resolverConta(cpf: string, telefone?: string): Promise<string | null> {
     const candidatos = await comoSistema(() =>
       this.prisma.motorista.findMany({
-        where: { cpf },
+        // Sem os cadastros feitos por integração: o telefone deles foi um
+        // sistema de fora que escolheu, e o código iria pra ele.
+        where: { cpf, origemIntegracaoId: null },
         select: { contaId: true, telefone: true, criadoEm: true },
         orderBy: { criadoEm: "desc" },
       }),
@@ -182,7 +184,7 @@ export class RedefinicaoSenhaService {
   private async esqueciNaConta(cpf: string, telefoneInput: string) {
     const telefone = telefoneDigits(telefoneInput);
     const motorista = await this.prisma.motorista.findFirst({
-      where: { cpf },
+      where: { cpf, origemIntegracaoId: null },
       select: { id: true, telefone: true, ativo: true, status: true },
     });
 
@@ -402,7 +404,7 @@ export class RedefinicaoSenhaService {
       // agora (corrida) antes de gravar.
       if (pendente.vincular) {
         const emUso = await tx.motorista.findFirst({
-          where: { telefone: pendente.telefone, id: { not: pendente.motoristaId } },
+          where: { telefone: pendente.telefone, id: { not: pendente.motoristaId }, origemIntegracaoId: null },
           select: { id: true },
         });
         if (emUso) {
@@ -476,7 +478,7 @@ export class RedefinicaoSenhaService {
    */
   private async buscarPendente(cpf: string) {
     const motorista = await this.prisma.motorista.findFirst({
-      where: { cpf },
+      where: { cpf, origemIntegracaoId: null },
       select: { id: true },
     });
     if (!motorista) return null;
@@ -488,7 +490,8 @@ export class RedefinicaoSenhaService {
 
   private async checarTelefoneLivre(telefone: string, motoristaId: string) {
     const emUso = await this.prisma.motorista.findFirst({
-      where: { telefone, id: { not: motoristaId } },
+      // Telefone posto por integração não "ocupa" o número de quem usa o app.
+      where: { telefone, id: { not: motoristaId }, origemIntegracaoId: null },
       select: { id: true },
     });
     if (emUso) {

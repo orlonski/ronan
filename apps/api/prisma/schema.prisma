@@ -260,6 +260,16 @@ enum AcaoAuditoria {
   PLATAFORMA_ASSUMIU_CONTA
   /// E saiu, voltando pra casa dele. Fecha a janela aberta pela ação acima.
   PLATAFORMA_SAIU_DA_CONTA
+  /// Integrações (API pública). Criar e desligar integração ou chave é entregar
+  /// (ou deixar de entregar) o dado da empresa a outro sistema: nome próprio.
+  INTEGRACAO_CRIADA
+  INTEGRACAO_REVOGADA
+  CHAVE_INTEGRACAO_CRIADA
+  CHAVE_INTEGRACAO_REVOGADA
+  /// Escritas feitas pelo sistema de fora. `AuditLog.integracaoId` diz qual.
+  INTEGRACAO_CRIOU
+  INTEGRACAO_ALTEROU
+  INTEGRACAO_ALTEROU_KM
 }
 
 /// Qual comprovante a foto do abastecimento é.
@@ -717,6 +727,12 @@ model Conta {
   conexaoAsaas           ConexaoAsaas?
   cobrancasCliente       CobrancaCliente[]
   eventosCobrancaCliente EventoCobrancaCliente[]
+
+  integracoes             Integracao[]
+  chavesIntegracao        ChaveIntegracao[]
+  idempotenciasIntegracao IdempotenciaIntegracao[]
+  vinculosExternos        VinculoExterno[]
+  usosIntegracao          UsoIntegracao[]
 
   @@index([ativa])
   @@map("contas")
@@ -1696,6 +1712,11 @@ model Motorista {
   storyReacoes          StoryReacao[]
   redefinicaoSenha      RedefinicaoSenhaPendente?
   criadoPor             User?                     @relation("CriouMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  /// Criado por uma integração. Existe pra viagem e pro acerto, SEM acesso ao
+  /// app: fica fora do login, da identidade por CPF e do "esqueci a senha"
+  /// (senão a chave de outra empresa sequestraria a conta de quem dirige).
+  origemIntegracao      Integracao?               @relation("MotoristaDaIntegracao", fields: [origemIntegracaoId], references: [id], onDelete: SetNull)
+  origemIntegracaoId    String?
   criadoPorId           String?
 
   acertos AcertoMotorista[]
@@ -2321,6 +2342,8 @@ model Veiculo {
   despesas              Despesa[]
   abastecimentos        Abastecimento[]
   criadoPor             User?              @relation("CriouVeiculo", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  origemIntegracao      Integracao?        @relation("VeiculoDaIntegracao", fields: [origemIntegracaoId], references: [id], onDelete: SetNull)
+  origemIntegracaoId    String?
   criadoPorId           String?
 
   viagensPlanejadas ViagemPlanejada[]
@@ -4412,17 +4435,19 @@ model Local {
   criadoEm             DateTime             @default(now())
   alteradoEm           DateTime             @updatedAt
 
-  clientes        LocalCliente[]
-  viagensCarga    Viagem[]         @relation("LocalCarga")
-  viagensDescarga Viagem[]         @relation("LocalDescarga")
-  trechosViagem   TrechoViagem[]
-  eventosViagem   EventoViagem[]
-  rotasOrigem     RotaCache[]      @relation("RotaOrigem")
-  rotasDestino    RotaCache[]      @relation("RotaDestino")
-  evidencias      LocalEvidencia[]
+  clientes           LocalCliente[]
+  viagensCarga       Viagem[]         @relation("LocalCarga")
+  viagensDescarga    Viagem[]         @relation("LocalDescarga")
+  trechosViagem      TrechoViagem[]
+  eventosViagem      EventoViagem[]
+  rotasOrigem        RotaCache[]      @relation("RotaOrigem")
+  rotasDestino       RotaCache[]      @relation("RotaDestino")
+  evidencias         LocalEvidencia[]
   /// Quando o admin cadastra/edita pelo dashboard. Pra motorista, ver criadoPorMotorista.
-  criadoPor       User?            @relation("CriouLocal", fields: [criadoPorId], references: [id], onDelete: SetNull)
-  criadoPorId     String?
+  criadoPor          User?            @relation("CriouLocal", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  origemIntegracao   Integracao?      @relation("LocalDaIntegracao", fields: [origemIntegracaoId], references: [id], onDelete: SetNull)
+  origemIntegracaoId String?
+  criadoPorId        String?
 
   pedidosComoCarga           Pedido[]        @relation("PedidoLocalCarga")
   pedidosComoDescarga        Pedido[]        @relation("PedidoLocalDescarga")
@@ -4746,6 +4771,16 @@ model Viagem {
   alteradoEm              DateTime           @updatedAt
   /// Versão do app usada na CRIAÇÃO (headers x-app-version / x-app-update-id do
   /// app nativo). Null pra viagens antigas ou PWA. Só pra auditoria/suporte.
+  /// A integração (sistema de fora) que CRIOU a viagem. null = app ou painel.
+  /// Decide quem pode alterar e esconde a viagem do app do motorista.
+  origemIntegracao        Integracao?        @relation("ViagemDaIntegracao", fields: [origemIntegracaoId], references: [id], onDelete: SetNull)
+  origemIntegracaoId      String?
+  /// O km que o sistema de origem informou. NUNCA vai pra `kmMotorista`, que é
+  /// só do que o motorista digitou no nosso app.
+  kmOrigem                Decimal?           @db.Decimal(10, 2)
+  /// Campos que uma pessoa corrigiu no painel. A integração não sobrescreve
+  /// mais esses — decisão justificada de gente não é desfeita por máquina.
+  camposTravados          String[]           @default([])
   appVersaoCriacao        String?
   appUpdateIdCriacao      String?
   /// Frota dona da viagem, CARIMBADA na criação (motorista.transportadoraId ??
@@ -4857,6 +4892,7 @@ model Viagem {
   /// declarar aqui, mas a maioria das viagens antigas tem `revisadoEm` nulo e o
   /// Postgres não indexa nada mais barato que isso sem SQL cru.
   @@index([contaId, revisadoEm])
+  @@index([origemIntegracaoId])
   @@map("viagens")
 }
 
@@ -5513,20 +5549,22 @@ model EnvioFechamento {
 }
 
 model AuditLog {
-  contaId     String        @default("__SEM_CONTA__")
-  conta       Conta         @relation(fields: [contaId], references: [id])
-  id          String        @id @default(uuid())
-  usuario     User?         @relation(fields: [usuarioId], references: [id])
-  usuarioId   String?
-  entidade    String // "Viagem", "Pedagio", "FechamentoLinha", etc
-  entidadeId  String // id do registro afetado
-  acao        AcaoAuditoria
-  campo       String? // campo alterado (null se for ação ampla)
-  valorAntes  Json?
-  valorDepois Json?
-  motivo      String? // texto livre quando humano resolve divergência ou justifica
-  metadata    Json? // dados extras (confidence da IA, sugestão usada, etc)
-  criadoEm    DateTime      @default(now())
+  contaId      String        @default("__SEM_CONTA__")
+  conta        Conta         @relation(fields: [contaId], references: [id])
+  id           String        @id @default(uuid())
+  usuario      User?         @relation(fields: [usuarioId], references: [id])
+  usuarioId    String?
+  entidade     String // "Viagem", "Pedagio", "FechamentoLinha", etc
+  entidadeId   String // id do registro afetado
+  acao         AcaoAuditoria
+  campo        String? // campo alterado (null se for ação ampla)
+  valorAntes   Json?
+  valorDepois  Json?
+  motivo       String? // texto livre quando humano resolve divergência ou justifica
+  metadata     Json? // dados extras (confidence da IA, sugestão usada, etc)
+  /// Quem agiu foi uma integração (sistema de fora), não uma pessoa. `usuarioId` fica null.
+  integracaoId String?
+  criadoEm     DateTime      @default(now())
 
   @@index([entidade, entidadeId])
   @@index([usuarioId, criadoEm])
@@ -9725,4 +9763,138 @@ model RespostaCargaTag {
 
   @@unique([contaId, passagemAncoraId])
   @@map("respostas_carga_tag")
+}
+
+// ---------------------------------------------------------------------------
+// Integrações (API pública, Onda 1A). Desenho: docs/api-publica/04-proposta.md.
+// ---------------------------------------------------------------------------
+
+/// O sistema de uma empresa conectado ao Movatruck ("ERP Totvs"). Dona das
+/// viagens que criou e dos números dela (`sistema`); a chave é só o segredo.
+model Integracao {
+  contaId           String    @default("__SEM_CONTA__")
+  conta             Conta     @relation(fields: [contaId], references: [id])
+  id                String    @id @default(uuid())
+  nome              String
+  /// Nome curto do outro lado ("erp"). Único entre as integrações VIVAS da
+  /// conta: duas com "erp" sobrescreveriam os números uma da outra.
+  sistema           String
+  /// Escopos públicos (`viagens:escrever`…). Podados pelo teto da conta NA
+  /// LEITURA, nunca apagados daqui: módulo recontratado volta a valer.
+  escopos           String[]
+  /// Frotas que ela enxerga (acessoGlobal = todas). Copiado de quem criou.
+  transportadoraIds String[]  @default([])
+  acessoGlobal      Boolean   @default(true)
+  criadaPorId       String?
+  criadoEm          DateTime  @default(now())
+  alteradoEm        DateTime  @updatedAt
+  revogadaEm        DateTime?
+  revogadaPorId     String?
+  revogacaoMotivo   String?
+
+  chaves        ChaveIntegracao[]
+  idempotencias IdempotenciaIntegracao[]
+  usos          UsoIntegracao[]
+  viagens       Viagem[]                 @relation("ViagemDaIntegracao")
+  motoristas    Motorista[]              @relation("MotoristaDaIntegracao")
+  veiculos      Veiculo[]                @relation("VeiculoDaIntegracao")
+  locais        Local[]                  @relation("LocalDaIntegracao")
+
+  @@index([contaId])
+  @@map("integracoes")
+}
+
+/// Uma chave de acesso. O texto completo aparece uma vez; aqui fica o hash.
+/// Lida em comoSistema pelo hash: é a consulta que DESCOBRE a conta.
+model ChaveIntegracao {
+  contaId         String     @default("__SEM_CONTA__")
+  conta           Conta      @relation(fields: [contaId], references: [id])
+  id              String     @id @default(uuid())
+  integracao      Integracao @relation(fields: [integracaoId], references: [id], onDelete: Cascade)
+  integracaoId    String
+  /// sha256 hex do token inteiro. 256 bits aleatórios dispensam hash lento.
+  hash            String     @unique
+  /// `mvt_live_Ab3k` e `x9Qe`: o bastante pra reconhecer, inútil pra usar.
+  inicio          String
+  final           String
+  criadaPorId     String?
+  criadoEm        DateTime   @default(now())
+  revogadaEm      DateTime?
+  revogadaPorId   String?
+  revogacaoMotivo String?
+  ultimoUsoEm     DateTime?
+  ultimoUsoIp     String?
+
+  @@index([contaId])
+  @@index([integracaoId])
+  @@map("chaves_integracao")
+}
+
+/// Idempotency-Key: mesma chave + mesmo corpo = mesma resposta por 24h.
+model IdempotenciaIntegracao {
+  contaId      String     @default("__SEM_CONTA__")
+  conta        Conta      @relation(fields: [contaId], references: [id])
+  id           String     @id @default(uuid())
+  integracao   Integracao @relation(fields: [integracaoId], references: [id], onDelete: Cascade)
+  integracaoId String
+  chave        String
+  hashCorpo    String
+  /// EM_ANDAMENTO segura a segunda chamada simultânea (409) em vez de duplicar.
+  estado       String
+  statusHttp   Int?
+  resposta     Json?
+  criadoEm     DateTime   @default(now())
+  expiraEm     DateTime
+
+  @@unique([integracaoId, chave])
+  @@index([expiraEm])
+  @@index([contaId])
+  @@map("idempotencias_integracao")
+}
+
+/// O número de um registro nosso no sistema de fora. Um registro tem no máximo
+/// um número por sistema; um número aponta pra no máximo um registro. Único
+/// DENTRO da conta: global viraria oráculo ("esse número existe em outra empresa").
+model VinculoExterno {
+  contaId      String   @default("__SEM_CONTA__")
+  conta        Conta    @relation(fields: [contaId], references: [id])
+  id           String   @id @default(uuid())
+  sistema      String
+  /// "viagem" | "motorista" | "veiculo" | "local" (texto: entidade nova não pede migration)
+  entidade     String
+  /// Id nosso. Sem FK: a entidade é polimórfica.
+  entidadeId   String
+  idExterno    String
+  integracaoId String?
+  usuarioId    String?
+  criadoEm     DateTime @default(now())
+  alteradoEm   DateTime @updatedAt
+
+  @@unique([contaId, sistema, entidade, idExterno])
+  @@unique([contaId, sistema, entidade, entidadeId])
+  @@index([contaId, entidade, entidadeId])
+  @@map("vinculos_externos")
+}
+
+/// Uso agregado por hora: o que cada integração chamou e com que resultado.
+/// Linha por requisição incharia o banco; o agregado responde "o que essa chave
+/// fez e desde quando", que é a pergunta de um incidente (LGPD art. 48).
+model UsoIntegracao {
+  contaId      String     @default("__SEM_CONTA__")
+  conta        Conta      @relation(fields: [contaId], references: [id])
+  id           String     @id @default(uuid())
+  integracao   Integracao @relation(fields: [integracaoId], references: [id], onDelete: Cascade)
+  integracaoId String
+  hora         DateTime
+  metodo       String
+  rota         String
+  status       Int
+  total        Int        @default(0)
+  ultimoIp     String?
+  ultimoCodigo String?
+  ultimoEm     DateTime   @default(now())
+
+  @@unique([integracaoId, hora, metodo, rota, status])
+  @@index([contaId, hora])
+  @@map("usos_integracao")
 }

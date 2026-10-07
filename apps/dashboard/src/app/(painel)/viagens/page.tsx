@@ -58,6 +58,7 @@ type Viagem = {
   status: string;
   /** true = veio do fluxo guiado "Iniciar viagem" (lifecycle). */
   iniciadaGuiada: boolean;
+  origemIntegracao?: { nome: string } | null;
   toneladasInformada: string;
   toneladasEfetiva: string;
   toneladasAjustada: boolean;
@@ -197,6 +198,11 @@ export default function ViagensPage() {
                 title="Lançada pelo fluxo guiado 'Iniciar viagem'"
               >
                 Guiada
+              </Badge>
+            )}
+            {row.original.origemIntegracao && (
+              <Badge className="border-slate-300 bg-slate-100 text-slate-800" title="Entrou pelo sistema da empresa, não pelo app">
+                Veio do {row.original.origemIntegracao.nome}
               </Badge>
             )}
           </div>
@@ -560,6 +566,11 @@ function ViagemCard({ v }: { v: Viagem }) {
                   title="Lançada pelo fluxo guiado 'Iniciar viagem'"
                 >
                   Guiada
+                </Badge>
+              )}
+              {v.origemIntegracao && (
+                <Badge className="border-slate-300 bg-slate-100 text-slate-800" title="Entrou pelo sistema da empresa, não pelo app">
+                  Veio do {v.origemIntegracao.nome}
                 </Badge>
               )}
               <AlertasBadges v={v} />

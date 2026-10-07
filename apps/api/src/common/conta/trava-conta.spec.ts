@@ -1,6 +1,6 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { describe, expect, it } from "vitest";
-import { comConta, comoSistema } from "./conta-context";
+import { abrirContexto, comConta, comoSistema, definirConta } from "./conta-context";
 import { travaConta } from "./trava-conta";
 
 /**
@@ -181,5 +181,31 @@ describe("toda tabela sem dono está declarada como global", () => {
       .filter((m) => !m.fields.some((f) => f.name === "contaId"))
       .map((m) => m.name);
     expect(semConta.filter((n) => !MODELS_GLOBAIS.has(n))).toEqual([]);
+  });
+});
+
+describe("trava — o app do motorista não enxerga viagem da integração", () => {
+  const noApp = <T>(fn: () => Promise<T>) =>
+    abrirContexto(async () => {
+      definirConta(CONTA, { appDoMotorista: true });
+      return (await fn()) as Record<string, any>;
+    });
+
+  it("listar, abrir, apagar e contar: todas filtram origemIntegracaoId null", async () => {
+    const lista = await noApp(() => prisma.viagem.findMany({ where: { motoristaId: "m1" } }));
+    expect(lista.where.AND[1]).toEqual({ contaId: CONTA, origemIntegracaoId: null });
+    const uma = await noApp(() => prisma.viagem.findUnique({ where: { id: "v1" } }));
+    expect(uma.where).toEqual({ id: "v1", contaId: CONTA, origemIntegracaoId: null });
+    const apagar = await noApp(() => prisma.viagem.delete({ where: { id: "v1" } }));
+    expect(apagar.where.origemIntegracaoId).toBeNull();
+    const n = await noApp(() => prisma.viagem.count({ where: { status: "AGUARDANDO_PESO" } }));
+    expect(n.where.AND[1].origemIntegracaoId).toBeNull();
+  });
+
+  it("só a Viagem e só no app: painel e outros models seguem iguais", async () => {
+    const painel = await argsDe(() => prisma.viagem.findMany({}) as Promise<unknown>);
+    expect(painel.where).toEqual({ contaId: CONTA });
+    const pedagio = await noApp(() => prisma.pedagio.findMany({}));
+    expect(pedagio.where).toEqual({ contaId: CONTA });
   });
 });

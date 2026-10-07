@@ -1,3 +1,4 @@
+import { PublicaModule } from "./publica/publica.module";
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
@@ -82,6 +83,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     PontoModule,
     AdmissaoModule,
     EmailModule,
+    PublicaModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: ErrorsExceptionFilter },

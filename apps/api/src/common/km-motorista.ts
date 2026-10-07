@@ -16,6 +16,8 @@
 export type ViagemParaAlteracaoKm = {
   km: { toString(): string } | number | null;
   kmMotorista: { toString(): string } | number | null;
+  /** O km que o sistema de fora (integração) mandou. Mesma proteção do km do motorista. */
+  kmOrigem?: { toString(): string } | number | null;
 };
 
 /** Diferença abaixo disso é arredondamento de decimal, não alteração. */
@@ -43,8 +45,17 @@ export function checarAlteracaoKm(
   if (atual != null && Math.abs(atual - kmNovo) < TOLERANCIA_KM) return { mudou: false };
 
   const doMotorista = paraNumero(viagem.kmMotorista);
-  if (doMotorista == null) return { mudou: true, erro: null };
+  // Viagem que veio do sistema de outra empresa: o km de lá também não muda
+  // calado. Sem isto ele teria MENOS proteção que o do app.
+  const daOrigem = paraNumero(viagem.kmOrigem ?? null);
+  if (doMotorista == null && daOrigem == null) return { mudou: true, erro: null };
   if (motivo && motivo.trim().length > 0) return { mudou: true, erro: null };
+  if (doMotorista == null) {
+    return {
+      mudou: true,
+      erro: `O km veio do sistema da empresa (${fmtKmBr(daOrigem!)} km). Pra alterar, escreva o motivo.`,
+    };
+  }
 
   return {
     mudou: true,

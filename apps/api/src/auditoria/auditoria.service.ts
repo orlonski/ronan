@@ -12,6 +12,8 @@ export type AuditEntry = {
   valorDepois?: unknown;
   motivo?: string | null;
   metadata?: Prisma.InputJsonValue | null;
+  /** Quem agiu foi uma integração (sistema de fora). `usuarioId` fica null. */
+  integracaoId?: string | null;
 };
 
 const IGNORED_FIELDS = new Set(["alteradoEm", "sincronizadoEm", "criadoEm", "id"]);
@@ -32,6 +34,7 @@ export class AuditoriaService {
         valorDepois: serializable(entry.valorDepois),
         motivo: entry.motivo ?? null,
         metadata: entry.metadata ?? Prisma.DbNull,
+        integracaoId: entry.integracaoId ?? null,
       },
     });
   }

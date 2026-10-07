@@ -45,6 +45,7 @@ export class KmReprocessamentoService {
         select: {
           id: true,
           clientId: true,
+          origemIntegracaoId: true,
           motoristaId: true,
           status: true,
           km: true,
@@ -62,6 +63,10 @@ export class KmReprocessamentoService {
         },
       });
       if (!v) return;
+      // Viagem do sistema de outra empresa (integração): o km dela é o que esse
+      // sistema mandou, e o motorista nunca a lançou — trocar pelo da rota e
+      // mandar push "seu km era estimativa" seria mentir pros dois.
+      if (v.origemIntegracaoId) return;
       // Já reprocessada, ou OSRM já rodou na criação (viagem online) → nada a fazer.
       if (v.kmRecalculadoEm) return;
       if (v.kmCalculado != null) return;
@@ -232,6 +237,9 @@ export class KmReprocessamentoService {
         kmCalculado: null,
         // Km alterado no painel (com motivo) não volta pra fila do cron.
         kmAlteradoEm: null,
+        // Integração fica fora (ver `reprocessar`) — e fora daqui também, senão
+        // ela ocuparia a fila de 50 pra sempre sem nunca sair.
+        origemIntegracaoId: null,
         status: { notIn: ["EM_ANDAMENTO", "RASCUNHO_OFFLINE"] },
         localCargaId: { not: null },
         localDescargaId: { not: null },

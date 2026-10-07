@@ -906,6 +906,23 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
+  "/configuracoes/integracoes": {
+    oQue:
+      "Liga o sistema da empresa (ERP, sistema de frete, app próprio) ao Movatruck: " +
+      "ele manda as viagens direto pra cá, sem ninguém digitar duas vezes.",
+    faz: [
+      "Criar uma conexão e copiar a chave — ela aparece uma vez só",
+      "Marcar o que cada chave pode fazer: ver viagens, criar viagens, cadastrar motorista, caminhão e local",
+      "Ver quando a chave foi usada pela última vez e de onde",
+      "Desligar uma chave ou a conexão inteira na hora, com o motivo escrito",
+    ],
+    naoEAqui: {
+      procurando: "subir uma planilha com a base que vocês já têm",
+      vaEm: "Importar dados",
+      href: "/importacao",
+    },
+  },
+
   "/importacao": {
     oQue:
       "Traz pro sistema a base que a empresa já tem em planilha — clientes, " +

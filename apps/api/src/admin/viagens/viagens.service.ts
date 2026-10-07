@@ -1,3 +1,4 @@
+import { camposCorrigidos } from "../../common/viagem-origem";
 import {
   BadRequestException,
   ConflictException,
@@ -299,6 +300,8 @@ export class ViagensAdminService {
         // O painel precisa do modo pra decidir entre coluna de peso e de
         // permanência — e aplicarMinimos precisa dele pro guarda da diária.
         tipoServico: { select: { id: true, nome: true } },
+        // Selo "Veio do sistema X": viagem que entrou pela integração.
+        origemIntegracao: { select: { nome: true } },
         // Pro selo e pro link "ver a outra viagem" no painel.
         ticketDuplicadoDe: { select: { id: true, ticket: true, data: true } },
         // O que o lançamento trouxe pendente. Só as ABERTAS: resolvida vira
@@ -387,6 +390,8 @@ export class ViagensAdminService {
         // O painel decide entre tile de peso e de permanência com isto — e o
         // guarda de mínimo em aplicarMinimos depende dele.
         tipoServico: { select: { id: true, nome: true } },
+        // Selo "Veio do sistema X": viagem que entrou pela integração.
+        origemIntegracao: { select: { nome: true } },
         // Pro selo e pro link "ver a outra viagem" no painel.
         ticketDuplicadoDe: { select: { id: true, ticket: true, data: true } },
         // Quem mexeu no km do motorista — o painel mostra o nome junto do motivo.
@@ -600,6 +605,15 @@ export class ViagensAdminService {
       dataUpdate.status = StatusViagem.ENVIADA;
     }
 
+    // Viagem que veio do sistema de outra empresa (integração): o campo que uma
+    // pessoa corrigiu aqui fica travado pra ela. Senão o próximo reenvio do ERP
+    // desfaria a correção calado.
+    if (antes.origemIntegracaoId) {
+      const corrigidos = camposCorrigidos(antes as unknown as Record<string, unknown>, campos as Record<string, unknown>);
+      const travados = new Set([...antes.camposTravados, ...corrigidos]);
+      if (travados.size > antes.camposTravados.length) dataUpdate.camposTravados = [...travados];
+    }
+
     // As chaves fiscais só entram se forem chaves de verdade. O Zod já garantiu
     // 44 números; aqui o dígito verificador e o MODELO são conferidos, porque
     // colar a chave da NF-e no campo do CT-e passa por qualquer regex e só o
@@ -677,7 +691,9 @@ export class ViagensAdminService {
     // Notifica motorista com 1 push agrupado descrevendo o que mudou.
     // FK já vêm enriquecidas com { id, nome } pra resumo legível.
     const diffs = computarDiffViagem(antesEnriquecido, depoisEnriquecido);
-    if (diffs.length > 0) {
+    // Viagem da integração não aparece no app do motorista: avisar dela seria
+    // falar de uma viagem que ele nunca lançou nem consegue abrir.
+    if (diffs.length > 0 && !antes.origemIntegracaoId) {
       void this.notificarMotorista({
         viagemId: id,
         tipo: "viagem-editada",
@@ -1054,6 +1070,7 @@ export class ViagensAdminService {
         localDescargaId: true,
         km: true,
         kmMotorista: true,
+        kmOrigem: true,
         kmCalculado: true,
         kmFonte: true,
         kmEditadoManual: true,

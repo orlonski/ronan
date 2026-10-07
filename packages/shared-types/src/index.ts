@@ -72,3 +72,4 @@ export * from "./email-ticket";
 export * from "./encarregado";
 export * from "./cobranca-asaas";
 export * from "./tag-pedagio";
+export * from "./integracoes";

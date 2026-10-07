@@ -147,6 +147,8 @@ type ViagemDetalhe = {
   kmAlteradoEm: string | null;
   kmAlteracaoMotivo: string | null;
   kmAlteradoPor: { id: string; nome: string } | null;
+  /** Entrou pelo sistema da empresa (integração), não pelo app. */
+  origemIntegracao?: { nome: string } | null;
   iniciadoEm: string | null;
   // Quando o motorista criou a viagem no device (offline) e quando sincronizou.
   criadoOfflineEm: string | null;
@@ -638,6 +640,14 @@ export default function ViagemDetalhePage({
                 {v.ticket ? `Viagem ${v.ticket}` : "Viagem sem ticket"}
               </h1>
               <Badge>{v.status}</Badge>
+              {v.origemIntegracao && (
+                <Badge
+                  className="border-slate-300 bg-slate-100 text-slate-800"
+                  title="Entrou pelo sistema da empresa, não pelo app do motorista. Campo corrigido aqui não é sobrescrito por ele."
+                >
+                  Veio do {v.origemIntegracao.nome}
+                </Badge>
+              )}
               {v.material && !v.material.exigeTicket && (
                 <Badge className="border-amber-300 bg-amber-50 text-amber-700">
                   {v.material.nome} não exige ticket
@@ -818,7 +828,7 @@ export default function ViagemDetalhePage({
               repetido logo abaixo, generalizado: o servidor não recusa mais
               lançamento do motorista — aceita e carimba o que falta, pra
               decisão ser tomada aqui, por quem tem os cadastros na mão. */}
-          <DivergenciasCard divergencias={v.divergencias} />
+          <DivergenciasCard divergencias={v.divergencias} origemIntegracaoNome={v.origemIntegracao?.nome ?? null} />
 
           {/* O que a leitura automática viu nesta foto, campo a campo. Fica
               aqui, e não só na lista de conferências, porque é neste ponto que
@@ -910,6 +920,7 @@ export default function ViagemDetalhePage({
                 rotaEscolhida={v.rotaEscolhida}
                 kmMotorista={v.kmMotorista}
                 kmFonte={v.kmFonte}
+                origemIntegracaoNome={v.origemIntegracao?.nome ?? null}
                 kmAlteradoEm={v.kmAlteradoEm}
                 kmAlteracaoMotivo={v.kmAlteracaoMotivo}
                 kmAlteradoPorNome={v.kmAlteradoPor?.nome ?? null}

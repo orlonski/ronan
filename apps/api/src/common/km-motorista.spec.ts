@@ -60,3 +60,11 @@ describe("fmtKmBr", () => {
     expect(fmtKmBr(62.8)).toBe("62,8");
   });
 });
+
+describe("km que veio do sistema de outra empresa (integração)", () => {
+  it("também exige motivo pra mudar no painel", () => {
+    const r = checarAlteracaoKm({ km: 42, kmMotorista: null, kmOrigem: 42 }, 50, null);
+    expect(r).toMatchObject({ mudou: true, erro: expect.stringMatching(/sistema da empresa/) });
+    expect(checarAlteracaoKm({ km: 42, kmMotorista: null, kmOrigem: 42 }, 50, "ticket mostra 50")).toEqual({ mudou: true, erro: null });
+  });
+});

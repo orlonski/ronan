@@ -45,6 +45,7 @@ import {
   TrendingUp,
   Truck,
   Upload,
+  Plug,
   Users,
   Users2,
   Wallet,
@@ -420,6 +421,9 @@ export const GRUPOS: Grupo[] = [
         ou: [{ href: "/acesso-app", perm: "perfis-acesso.ver" }],
       },
       { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver" },
+      // O sistema da empresa (ERP, app próprio) mandando viagem por chave de
+      // acesso. Módulo `integracoes`, vendido à parte: sem ele, o item some.
+      { href: "/configuracoes/integracoes", label: "Conectar outro sistema", icon: Plug, perm: "integracoes.ver" },
     ],
   },
   {

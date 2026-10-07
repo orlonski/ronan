@@ -1,0 +1,3460 @@
+{
+  "components": {
+    "parameters": {},
+    "schemas": {
+      "Erro": {
+        "additionalProperties": false,
+        "properties": {
+          "erro": {
+            "additionalProperties": false,
+            "properties": {
+              "codigo": {
+                "example": "VALIDACAO",
+                "type": "string"
+              },
+              "detalhes": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "campo": {
+                      "type": "string"
+                    },
+                    "codigo": {
+                      "type": "string"
+                    },
+                    "mensagem": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "campo",
+                    "codigo",
+                    "mensagem"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "mensagem": {
+                "type": "string"
+              },
+              "requisicaoId": {
+                "example": "req_3f9a0c1d2e4b5a6c7d8e",
+                "type": "string"
+              }
+            },
+            "required": [
+              "codigo",
+              "mensagem",
+              "requisicaoId"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "erro"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "chave": {
+        "bearerFormat": "mvt_live_…",
+        "description": "A chave da integração, criada no painel do Movatruck.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "A API do Movatruck pro sistema de vocês (ERP, sistema de frete, app próprio) mandar viagens sem ninguém digitar.\n\n**Como entrar.** Quem administra a empresa no Movatruck cria a integração em *Ajustes › Conectar outro sistema* e copia a chave\n(`mvt_live_…`, aparece uma vez só). Toda chamada leva o cabeçalho `Authorization: Bearer mvt_live_…`. Comece por `GET /v1/eu`.\n\n**O número de vocês.** Motorista, caminhão, local e viagem podem ser criados e achados pelo número que eles têm no sistema de\nvocês (`/externo/{idExterno}`). Mandar de novo com o mesmo número atualiza, não duplica.\n\n**Regras que não mudam.**\n- Viagem sem peso entra como `AGUARDANDO_PESO` e não conta em fechamento até ter peso.\n- O valor (R$) sai da tabela de preço da empresa no Movatruck. Não é aceito de fora.\n- Viagem lançada pelo motorista no app é só dele: a integração lê, não altera.\n- Uma pessoa conferiu, fechou ou corrigiu no painel? A integração não desfaz.\n- Referência não achada (material, obra, local) não recusa a viagem: ela entra com pendência e a resposta traz `avisos`.\n  Só motorista e caminhão são obrigatórios.\n\n**Erros.** Sempre `{ \"erro\": { \"codigo\", \"mensagem\", \"detalhes\"?, \"requisicaoId\" } }`. O `codigo` é estável.\nCampo que não existe no contrato é recusado (400), nunca ignorado.\n\n**Limites.** 120 leituras e 60 escritas por minuto por chave; 600 por minuto somando as chaves da empresa; corpo até 1 MB.\nAcima disso, 429 com `Retry-After`.\n\n**Escopos.** `viagens:ler` (Vê viagens) · `viagens:escrever` (Cria viagens) · `cadastros:escrever` (Cria motoristas, caminhões e locais).",
+    "title": "Movatruck — API de integração",
+    "version": "2026-10-08"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/eu": {
+      "get": {
+        "description": "Diz de qual empresa e de qual integração é a chave, e o que ela pode fazer. Bom primeiro passo.\n\nQualquer chave válida.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "empresa": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "nome": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "nome"
+                      ],
+                      "type": "object"
+                    },
+                    "escopos": {
+                      "items": {
+                        "enum": [
+                          "viagens:ler",
+                          "viagens:escrever",
+                          "cadastros:escrever"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "integracao": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": "string"
+                        },
+                        "sistema": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome",
+                        "sistema"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "integracao",
+                    "empresa",
+                    "escopos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Chave válida."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`NAO_AUTENTICADO`: Mande a chave de acesso no cabeçalho Authorization: Bearer mvt_live_…\n\n`CHAVE_REVOGADA`: Esta chave foi desligada. Peça uma nova a quem administra a empresa no Movatruck."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`EMPRESA_INDISPONIVEL`: A empresa desta chave está com o acesso suspenso.\n\n`MODULO_NAO_CONTRATADO`: A empresa não tem o módulo Integrações contratado.\n\n`ESCOPO_INSUFICIENTE`: Esta chave não tem permissão pra isso."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`LIMITE_EXCEDIDO`: Chamadas demais em pouco tempo. Espere os segundos de Retry-After."
+          }
+        },
+        "security": [
+          {
+            "chave": []
+          }
+        ],
+        "summary": "Testa a chave",
+        "tags": [
+          "Conexão"
+        ]
+      }
+    },
+    "/v1/locais/externo/{idExterno}": {
+      "put": {
+        "description": "Local não é casado por nome (nomes se repetem): sem o número de vocês, nasce um novo. A coordenada de um local que o app do motorista já usou só muda pelo painel.\n\nEscopo: `cadastros:escrever`.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idExterno",
+            "required": true,
+            "schema": {
+              "description": "O número deste registro no sistema de vocês.",
+              "example": "PED-88231",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "bairro": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "cep": {
+                    "type": "string"
+                  },
+                  "cidade": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "lat": {
+                    "maximum": 6,
+                    "minimum": -34,
+                    "type": "number"
+                  },
+                  "lng": {
+                    "maximum": -28,
+                    "minimum": -74,
+                    "type": "number"
+                  },
+                  "logradouro": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "nome": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "numero": {
+                    "maxLength": 20,
+                    "type": "string"
+                  },
+                  "tipo": {
+                    "enum": [
+                      "CARGA",
+                      "DESCARGA",
+                      "AMBOS"
+                    ],
+                    "type": "string"
+                  },
+                  "uf": {
+                    "pattern": "^[A-Z]{2}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "nome",
+                  "tipo",
+                  "cidade",
+                  "uf"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "alterado": {
+                      "type": "boolean"
+                    },
+                    "avisos": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "codigo": {
+                            "type": "string"
+                          },
+                          "mensagem": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "codigo",
+                          "mensagem"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "criado": {
+                      "type": "boolean"
+                    },
+                    "local": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cidade": {
+                          "type": "string"
+                        },
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "lat": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "lng": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "nome": {
+                          "type": "string"
+                        },
+                        "tipo": {
+                          "type": "string"
+                        },
+                        "uf": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome",
+                        "tipo",
+                        "cidade",
+                        "uf",
+                        "lat",
+                        "lng",
+                        "externo"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "criado",
+                    "alterado",
+                    "local",
+                    "avisos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Já existia."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "alterado": {
+                      "type": "boolean"
+                    },
+                    "avisos": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "codigo": {
+                            "type": "string"
+                          },
+                          "mensagem": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "codigo",
+                          "mensagem"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "criado": {
+                      "type": "boolean"
+                    },
+                    "local": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cidade": {
+                          "type": "string"
+                        },
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "lat": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "lng": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "nome": {
+                          "type": "string"
+                        },
+                        "tipo": {
+                          "type": "string"
+                        },
+                        "uf": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome",
+                        "tipo",
+                        "cidade",
+                        "uf",
+                        "lat",
+                        "lng",
+                        "externo"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "criado",
+                    "alterado",
+                    "local",
+                    "avisos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Criado."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`VALIDACAO`: Algum campo veio errado. Veja `detalhes`."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`NAO_AUTENTICADO`: Mande a chave de acesso no cabeçalho Authorization: Bearer mvt_live_…\n\n`CHAVE_REVOGADA`: Esta chave foi desligada. Peça uma nova a quem administra a empresa no Movatruck."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`EMPRESA_INDISPONIVEL`: A empresa desta chave está com o acesso suspenso.\n\n`MODULO_NAO_CONTRATADO`: A empresa não tem o módulo Integrações contratado.\n\n`ESCOPO_INSUFICIENTE`: Esta chave não tem permissão pra isso.\n\n`CONTA_SOMENTE_LEITURA`: A empresa está em modo somente leitura: dá pra consultar, não dá pra gravar."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`VIAGEM_DE_OUTRA_ORIGEM`: Esta viagem não foi criada por este sistema (veio do app do motorista ou do painel). Ela só pode ser lida."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`CORPO_GRANDE_DEMAIS`: O corpo passa de 1 MB."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`LIMITE_EXCEDIDO`: Chamadas demais em pouco tempo. Espere os segundos de Retry-After."
+          }
+        },
+        "security": [
+          {
+            "chave": []
+          }
+        ],
+        "summary": "Cria ou atualiza um local de carga ou descarga",
+        "tags": [
+          "Cadastros"
+        ]
+      }
+    },
+    "/v1/motoristas/externo/{idExterno}": {
+      "put": {
+        "description": "Se já existe motorista com o mesmo CPF nesta empresa, ele é ligado ao número de vocês e NÃO é alterado. O motorista criado aqui existe pras viagens e pro acerto; ele não entra no app (o convite pro app é feito por uma pessoa no painel) e não recebe mensagem nossa.\n\nEscopo: `cadastros:escrever`.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idExterno",
+            "required": true,
+            "schema": {
+              "description": "O número deste registro no sistema de vocês.",
+              "example": "PED-88231",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "cpf": {
+                    "type": "string"
+                  },
+                  "nome": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "telefone": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "nome",
+                  "cpf"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "alterado": {
+                      "type": "boolean"
+                    },
+                    "avisos": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "codigo": {
+                            "type": "string"
+                          },
+                          "mensagem": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "codigo",
+                          "mensagem"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "criado": {
+                      "type": "boolean"
+                    },
+                    "motorista": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome",
+                        "externo"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "criado",
+                    "alterado",
+                    "motorista",
+                    "avisos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Já existia."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "alterado": {
+                      "type": "boolean"
+                    },
+                    "avisos": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "codigo": {
+                            "type": "string"
+                          },
+                          "mensagem": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "codigo",
+                          "mensagem"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "criado": {
+                      "type": "boolean"
+                    },
+                    "motorista": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome",
+                        "externo"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "criado",
+                    "alterado",
+                    "motorista",
+                    "avisos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Criado."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`VALIDACAO`: Algum campo veio errado. Veja `detalhes`."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`NAO_AUTENTICADO`: Mande a chave de acesso no cabeçalho Authorization: Bearer mvt_live_…\n\n`CHAVE_REVOGADA`: Esta chave foi desligada. Peça uma nova a quem administra a empresa no Movatruck."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`EMPRESA_INDISPONIVEL`: A empresa desta chave está com o acesso suspenso.\n\n`MODULO_NAO_CONTRATADO`: A empresa não tem o módulo Integrações contratado.\n\n`ESCOPO_INSUFICIENTE`: Esta chave não tem permissão pra isso.\n\n`CONTA_SOMENTE_LEITURA`: A empresa está em modo somente leitura: dá pra consultar, não dá pra gravar."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`CORPO_GRANDE_DEMAIS`: O corpo passa de 1 MB."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`LIMITE_EXCEDIDO`: Chamadas demais em pouco tempo. Espere os segundos de Retry-After."
+          }
+        },
+        "security": [
+          {
+            "chave": []
+          }
+        ],
+        "summary": "Cria ou atualiza um motorista",
+        "tags": [
+          "Cadastros"
+        ]
+      }
+    },
+    "/v1/veiculos/externo/{idExterno}": {
+      "put": {
+        "description": "Se já existe caminhão com a mesma placa nesta empresa, ele é ligado ao número de vocês e NÃO é alterado.\n\nEscopo: `cadastros:escrever`.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idExterno",
+            "required": true,
+            "schema": {
+              "description": "O número deste registro no sistema de vocês.",
+              "example": "PED-88231",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "modelo": {
+                    "maxLength": 80,
+                    "type": "string"
+                  },
+                  "placa": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "placa"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "alterado": {
+                      "type": "boolean"
+                    },
+                    "avisos": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "codigo": {
+                            "type": "string"
+                          },
+                          "mensagem": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "codigo",
+                          "mensagem"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "criado": {
+                      "type": "boolean"
+                    },
+                    "veiculo": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "modelo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "placa": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "placa",
+                        "modelo",
+                        "externo"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "criado",
+                    "alterado",
+                    "veiculo",
+                    "avisos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Já existia."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "alterado": {
+                      "type": "boolean"
+                    },
+                    "avisos": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "codigo": {
+                            "type": "string"
+                          },
+                          "mensagem": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "codigo",
+                          "mensagem"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "criado": {
+                      "type": "boolean"
+                    },
+                    "veiculo": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "modelo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "placa": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "placa",
+                        "modelo",
+                        "externo"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "criado",
+                    "alterado",
+                    "veiculo",
+                    "avisos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Criado."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`VALIDACAO`: Algum campo veio errado. Veja `detalhes`."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`NAO_AUTENTICADO`: Mande a chave de acesso no cabeçalho Authorization: Bearer mvt_live_…\n\n`CHAVE_REVOGADA`: Esta chave foi desligada. Peça uma nova a quem administra a empresa no Movatruck."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`EMPRESA_INDISPONIVEL`: A empresa desta chave está com o acesso suspenso.\n\n`MODULO_NAO_CONTRATADO`: A empresa não tem o módulo Integrações contratado.\n\n`ESCOPO_INSUFICIENTE`: Esta chave não tem permissão pra isso.\n\n`CONTA_SOMENTE_LEITURA`: A empresa está em modo somente leitura: dá pra consultar, não dá pra gravar."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`CORPO_GRANDE_DEMAIS`: O corpo passa de 1 MB."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`LIMITE_EXCEDIDO`: Chamadas demais em pouco tempo. Espere os segundos de Retry-After."
+          }
+        },
+        "security": [
+          {
+            "chave": []
+          }
+        ],
+        "summary": "Cria ou atualiza um caminhão",
+        "tags": [
+          "Cadastros"
+        ]
+      }
+    },
+    "/v1/viagens": {
+      "post": {
+        "description": "Mande `externo` (o número da viagem no sistema de vocês) ou o cabeçalho `Idempotency-Key`: sem nenhum dos dois, um reenvio duplicaria a viagem. Com `externo` já usado, a viagem existente é atualizada (mesma regra do PUT). Sem `toneladas`, a viagem entra como AGUARDANDO_PESO e fica fora de fechamento até ter peso. O valor (R$) sai da tabela de preço da empresa no Movatruck; não é aceito de fora.\n\nEscopo: `viagens:escrever`.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "description": "Um UUID por pedido. Reenviar o mesmo pedido com a mesma chave devolve a mesma resposta, sem gravar de novo (vale 24 h).",
+              "example": "6f1c2a8e-7b3d-4c9a-9e2f-1a2b3c4d5e6f",
+              "maxLength": 255,
+              "minLength": 8,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "description": "Dia da viagem (data da carga), sem hora.",
+                    "example": "2026-10-07",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "type": "string"
+                  },
+                  "externo": {
+                    "description": "O número da viagem no sistema de vocês. Recomendado: mandar de novo com o mesmo número ATUALIZA em vez de duplicar.",
+                    "example": "PED-88231",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "km": {
+                    "description": "Km do trajeto segundo o sistema de vocês.",
+                    "example": 48.2,
+                    "exclusiveMinimum": 0,
+                    "maximum": 5000,
+                    "type": "number"
+                  },
+                  "localCarga": {
+                    "additionalProperties": false,
+                    "description": "Onde carregou. Crie antes por PUT /locais/externo/{idExterno}.",
+                    "properties": {
+                      "externo": {
+                        "description": "O número deste registro no sistema de vocês.",
+                        "example": "PED-88231",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "localDescarga": {
+                    "additionalProperties": false,
+                    "description": "Onde descarregou. Crie antes por PUT /locais/externo/{idExterno}.",
+                    "properties": {
+                      "externo": {
+                        "description": "O número deste registro no sistema de vocês.",
+                        "example": "PED-88231",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "material": {
+                    "additionalProperties": false,
+                    "description": "O que foi transportado. Achado pelo nome exato do cadastro.",
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "nome": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "motorista": {
+                    "additionalProperties": false,
+                    "description": "Quem dirigiu. Obrigatório e precisa existir (crie antes por PUT /motoristas/externo/{idExterno}).",
+                    "properties": {
+                      "cpf": {
+                        "type": "string"
+                      },
+                      "externo": {
+                        "description": "O número deste registro no sistema de vocês.",
+                        "example": "PED-88231",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "id": {
+                        "description": "Id do Movatruck.",
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "obra": {
+                    "additionalProperties": false,
+                    "description": "A obra (e, por ela, o cliente que paga). Achada pelo nome exato do cadastro.",
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "nome": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "observacao": {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  "ticket": {
+                    "description": "Número do ticket de balança / romaneio.",
+                    "maxLength": 60,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "toneladas": {
+                    "description": "Peso. Sem peso, a viagem entra como AGUARDANDO_PESO e fica fora de fechamento e faturamento até ter.",
+                    "example": 32.45,
+                    "exclusiveMinimum": 0,
+                    "maximum": 200,
+                    "type": "number"
+                  },
+                  "veiculo": {
+                    "additionalProperties": false,
+                    "description": "O caminhão. Obrigatório e precisa existir.",
+                    "properties": {
+                      "externo": {
+                        "description": "O número deste registro no sistema de vocês.",
+                        "example": "PED-88231",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "id": {
+                        "description": "Id do Movatruck.",
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "placa": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "data",
+                  "motorista",
+                  "veiculo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "avisos": {
+                      "description": "O que entrou diferente do mandado (ex.: material não achado).",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "codigo": {
+                            "type": "string"
+                          },
+                          "mensagem": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "codigo",
+                          "mensagem"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "criada": {
+                      "description": "false = já existia (mesmo número ou mesma Idempotency-Key) e foi atualizada ou devolvida.",
+                      "type": "boolean"
+                    },
+                    "viagem": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "alteradoEm": {
+                          "type": "string"
+                        },
+                        "criadoEm": {
+                          "type": "string"
+                        },
+                        "data": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "km": {
+                          "description": "Km que vale pro faturamento (pode ter sido corrigido no painel).",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "kmSistemaOrigem": {
+                          "description": "O km que o sistema de vocês mandou, guardado como veio.",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "localCarga": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "localDescarga": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "material": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "motorista": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": "object"
+                        },
+                        "obra": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "origem": {
+                          "description": "Quem criou. Só viagem criada por esta integração pode ser alterada por ela.",
+                          "enum": [
+                            "APP",
+                            "PAINEL",
+                            "INTEGRACAO"
+                          ],
+                          "type": "string"
+                        },
+                        "pendencias": {
+                          "description": "O que falta pra viagem poder ser conferida (ex.: material não achado).",
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "detalhe": {
+                                "type": "string"
+                              },
+                              "motivo": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "motivo",
+                              "detalhe"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "situacao": {
+                          "description": "EM_ANDAMENTO, AGUARDANDO_PESO e INCOMPLETA são viagens que ainda NÃO podem ser faturadas. A_CONFERIR espera uma pessoa conferir; CONFERIDA já passou.",
+                          "enum": [
+                            "EM_ANDAMENTO",
+                            "AGUARDANDO_PESO",
+                            "INCOMPLETA",
+                            "A_CONFERIR",
+                            "COM_DIVERGENCIA",
+                            "CONFERIDA"
+                          ],
+                          "type": "string"
+                        },
+                        "ticket": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "toneladas": {
+                          "description": "Número em texto decimal, com ponto.",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "veiculo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "placa": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "placa",
+                            "externo"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "externo",
+                        "situacao",
+                        "origem",
+                        "data",
+                        "motorista",
+                        "veiculo",
+                        "localCarga",
+                        "localDescarga",
+                        "material",
+                        "obra",
+                        "toneladas",
+                        "km",
+                        "kmSistemaOrigem",
+                        "ticket",
+                        "pendencias",
+                        "criadoEm",
+                        "alteradoEm"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "criada",
+                    "viagem",
+                    "avisos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Já existia (mesmo `externo` ou mesma Idempotency-Key): atualizada ou devolvida."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "avisos": {
+                      "description": "O que entrou diferente do mandado (ex.: material não achado).",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "codigo": {
+                            "type": "string"
+                          },
+                          "mensagem": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "codigo",
+                          "mensagem"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "criada": {
+                      "description": "false = já existia (mesmo número ou mesma Idempotency-Key) e foi atualizada ou devolvida.",
+                      "type": "boolean"
+                    },
+                    "viagem": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "alteradoEm": {
+                          "type": "string"
+                        },
+                        "criadoEm": {
+                          "type": "string"
+                        },
+                        "data": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "km": {
+                          "description": "Km que vale pro faturamento (pode ter sido corrigido no painel).",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "kmSistemaOrigem": {
+                          "description": "O km que o sistema de vocês mandou, guardado como veio.",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "localCarga": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "localDescarga": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "material": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "motorista": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": "object"
+                        },
+                        "obra": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "origem": {
+                          "description": "Quem criou. Só viagem criada por esta integração pode ser alterada por ela.",
+                          "enum": [
+                            "APP",
+                            "PAINEL",
+                            "INTEGRACAO"
+                          ],
+                          "type": "string"
+                        },
+                        "pendencias": {
+                          "description": "O que falta pra viagem poder ser conferida (ex.: material não achado).",
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "detalhe": {
+                                "type": "string"
+                              },
+                              "motivo": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "motivo",
+                              "detalhe"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "situacao": {
+                          "description": "EM_ANDAMENTO, AGUARDANDO_PESO e INCOMPLETA são viagens que ainda NÃO podem ser faturadas. A_CONFERIR espera uma pessoa conferir; CONFERIDA já passou.",
+                          "enum": [
+                            "EM_ANDAMENTO",
+                            "AGUARDANDO_PESO",
+                            "INCOMPLETA",
+                            "A_CONFERIR",
+                            "COM_DIVERGENCIA",
+                            "CONFERIDA"
+                          ],
+                          "type": "string"
+                        },
+                        "ticket": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "toneladas": {
+                          "description": "Número em texto decimal, com ponto.",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "veiculo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "placa": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "placa",
+                            "externo"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "externo",
+                        "situacao",
+                        "origem",
+                        "data",
+                        "motorista",
+                        "veiculo",
+                        "localCarga",
+                        "localDescarga",
+                        "material",
+                        "obra",
+                        "toneladas",
+                        "km",
+                        "kmSistemaOrigem",
+                        "ticket",
+                        "pendencias",
+                        "criadoEm",
+                        "alteradoEm"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "criada",
+                    "viagem",
+                    "avisos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Criada."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`VALIDACAO`: Algum campo veio errado. Veja `detalhes`.\n\n`IDENTIFICACAO_OBRIGATORIA`: Mande `externo` no corpo ou o cabeçalho Idempotency-Key — senão um reenvio cria a viagem duas vezes."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`NAO_AUTENTICADO`: Mande a chave de acesso no cabeçalho Authorization: Bearer mvt_live_…\n\n`CHAVE_REVOGADA`: Esta chave foi desligada. Peça uma nova a quem administra a empresa no Movatruck."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`EMPRESA_INDISPONIVEL`: A empresa desta chave está com o acesso suspenso.\n\n`MODULO_NAO_CONTRATADO`: A empresa não tem o módulo Integrações contratado.\n\n`ESCOPO_INSUFICIENTE`: Esta chave não tem permissão pra isso.\n\n`CONTA_SOMENTE_LEITURA`: A empresa está em modo somente leitura: dá pra consultar, não dá pra gravar."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`REQUISICAO_EM_ANDAMENTO`: Um pedido igual ainda está sendo processado. Tente de novo em alguns segundos.\n\n`VIAGEM_DE_OUTRA_ORIGEM`: Esta viagem não foi criada por este sistema (veio do app do motorista ou do painel). Ela só pode ser lida.\n\n`VIAGEM_TRAVADA`: A viagem já foi conferida, entrou num fechamento ou num acerto. Correção agora só pelo painel."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`CORPO_GRANDE_DEMAIS`: O corpo passa de 1 MB."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`REFERENCIA_OBRIGATORIA`: Não achamos o motorista ou o caminhão informado.\n\n`IDEMPOTENCIA_CONFLITO`: Esta Idempotency-Key já foi usada com outro conteúdo. Use uma chave nova pra um pedido novo."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`LIMITE_EXCEDIDO`: Chamadas demais em pouco tempo. Espere os segundos de Retry-After."
+          }
+        },
+        "security": [
+          {
+            "chave": []
+          }
+        ],
+        "summary": "Cria uma viagem",
+        "tags": [
+          "Viagens"
+        ]
+      }
+    },
+    "/v1/viagens/externo/{idExterno}": {
+      "get": {
+        "description": "Escopo: `viagens:ler`.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idExterno",
+            "required": true,
+            "schema": {
+              "description": "O número deste registro no sistema de vocês.",
+              "example": "PED-88231",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "alteradoEm": {
+                      "type": "string"
+                    },
+                    "criadoEm": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "externo": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "km": {
+                      "description": "Km que vale pro faturamento (pode ter sido corrigido no painel).",
+                      "example": "32.450",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "kmSistemaOrigem": {
+                      "description": "O km que o sistema de vocês mandou, guardado como veio.",
+                      "example": "32.450",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "localCarga": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome",
+                        "externo"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "localDescarga": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome",
+                        "externo"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "material": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "motorista": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome",
+                        "externo"
+                      ],
+                      "type": "object"
+                    },
+                    "obra": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "origem": {
+                      "description": "Quem criou. Só viagem criada por esta integração pode ser alterada por ela.",
+                      "enum": [
+                        "APP",
+                        "PAINEL",
+                        "INTEGRACAO"
+                      ],
+                      "type": "string"
+                    },
+                    "pendencias": {
+                      "description": "O que falta pra viagem poder ser conferida (ex.: material não achado).",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "detalhe": {
+                            "type": "string"
+                          },
+                          "motivo": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "motivo",
+                          "detalhe"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "situacao": {
+                      "description": "EM_ANDAMENTO, AGUARDANDO_PESO e INCOMPLETA são viagens que ainda NÃO podem ser faturadas. A_CONFERIR espera uma pessoa conferir; CONFERIDA já passou.",
+                      "enum": [
+                        "EM_ANDAMENTO",
+                        "AGUARDANDO_PESO",
+                        "INCOMPLETA",
+                        "A_CONFERIR",
+                        "COM_DIVERGENCIA",
+                        "CONFERIDA"
+                      ],
+                      "type": "string"
+                    },
+                    "ticket": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "toneladas": {
+                      "description": "Número em texto decimal, com ponto.",
+                      "example": "32.450",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "veiculo": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "placa": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "placa",
+                        "externo"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "externo",
+                    "situacao",
+                    "origem",
+                    "data",
+                    "motorista",
+                    "veiculo",
+                    "localCarga",
+                    "localDescarga",
+                    "material",
+                    "obra",
+                    "toneladas",
+                    "km",
+                    "kmSistemaOrigem",
+                    "ticket",
+                    "pendencias",
+                    "criadoEm",
+                    "alteradoEm"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A viagem."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`NAO_AUTENTICADO`: Mande a chave de acesso no cabeçalho Authorization: Bearer mvt_live_…\n\n`CHAVE_REVOGADA`: Esta chave foi desligada. Peça uma nova a quem administra a empresa no Movatruck."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`EMPRESA_INDISPONIVEL`: A empresa desta chave está com o acesso suspenso.\n\n`MODULO_NAO_CONTRATADO`: A empresa não tem o módulo Integrações contratado.\n\n`ESCOPO_INSUFICIENTE`: Esta chave não tem permissão pra isso."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`NAO_ENCONTRADO`: Não existe."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`LIMITE_EXCEDIDO`: Chamadas demais em pouco tempo. Espere os segundos de Retry-After."
+          }
+        },
+        "security": [
+          {
+            "chave": []
+          }
+        ],
+        "summary": "Lê uma viagem pelo número de vocês",
+        "tags": [
+          "Viagens"
+        ]
+      },
+      "put": {
+        "description": "Só altera viagem criada por esta integração. Viagem conferida, em fechamento ou em acerto não muda mais (VIAGEM_TRAVADA). Campo que uma pessoa corrigiu no painel fica como ela deixou, e a resposta traz o aviso CAMPO_PROTEGIDO.\n\nEscopo: `viagens:escrever`.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idExterno",
+            "required": true,
+            "schema": {
+              "description": "O número deste registro no sistema de vocês.",
+              "example": "PED-88231",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "description": "Um UUID por pedido. Reenviar o mesmo pedido com a mesma chave devolve a mesma resposta, sem gravar de novo (vale 24 h).",
+              "example": "6f1c2a8e-7b3d-4c9a-9e2f-1a2b3c4d5e6f",
+              "maxLength": 255,
+              "minLength": 8,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "description": "Dia da viagem (data da carga), sem hora.",
+                    "example": "2026-10-07",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "type": "string"
+                  },
+                  "km": {
+                    "description": "Km do trajeto segundo o sistema de vocês.",
+                    "example": 48.2,
+                    "exclusiveMinimum": 0,
+                    "maximum": 5000,
+                    "type": "number"
+                  },
+                  "localCarga": {
+                    "additionalProperties": false,
+                    "description": "Onde carregou. Crie antes por PUT /locais/externo/{idExterno}.",
+                    "properties": {
+                      "externo": {
+                        "description": "O número deste registro no sistema de vocês.",
+                        "example": "PED-88231",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "localDescarga": {
+                    "additionalProperties": false,
+                    "description": "Onde descarregou. Crie antes por PUT /locais/externo/{idExterno}.",
+                    "properties": {
+                      "externo": {
+                        "description": "O número deste registro no sistema de vocês.",
+                        "example": "PED-88231",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "material": {
+                    "additionalProperties": false,
+                    "description": "O que foi transportado. Achado pelo nome exato do cadastro.",
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "nome": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "motorista": {
+                    "additionalProperties": false,
+                    "description": "Quem dirigiu. Obrigatório e precisa existir (crie antes por PUT /motoristas/externo/{idExterno}).",
+                    "properties": {
+                      "cpf": {
+                        "type": "string"
+                      },
+                      "externo": {
+                        "description": "O número deste registro no sistema de vocês.",
+                        "example": "PED-88231",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "id": {
+                        "description": "Id do Movatruck.",
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "obra": {
+                    "additionalProperties": false,
+                    "description": "A obra (e, por ela, o cliente que paga). Achada pelo nome exato do cadastro.",
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "nome": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "observacao": {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  "ticket": {
+                    "description": "Número do ticket de balança / romaneio.",
+                    "maxLength": 60,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "toneladas": {
+                    "description": "Peso. Sem peso, a viagem entra como AGUARDANDO_PESO e fica fora de fechamento e faturamento até ter.",
+                    "example": 32.45,
+                    "exclusiveMinimum": 0,
+                    "maximum": 200,
+                    "type": "number"
+                  },
+                  "veiculo": {
+                    "additionalProperties": false,
+                    "description": "O caminhão. Obrigatório e precisa existir.",
+                    "properties": {
+                      "externo": {
+                        "description": "O número deste registro no sistema de vocês.",
+                        "example": "PED-88231",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "id": {
+                        "description": "Id do Movatruck.",
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "placa": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "data",
+                  "motorista",
+                  "veiculo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "avisos": {
+                      "description": "O que entrou diferente do mandado (ex.: material não achado).",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "codigo": {
+                            "type": "string"
+                          },
+                          "mensagem": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "codigo",
+                          "mensagem"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "criada": {
+                      "description": "false = já existia (mesmo número ou mesma Idempotency-Key) e foi atualizada ou devolvida.",
+                      "type": "boolean"
+                    },
+                    "viagem": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "alteradoEm": {
+                          "type": "string"
+                        },
+                        "criadoEm": {
+                          "type": "string"
+                        },
+                        "data": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "km": {
+                          "description": "Km que vale pro faturamento (pode ter sido corrigido no painel).",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "kmSistemaOrigem": {
+                          "description": "O km que o sistema de vocês mandou, guardado como veio.",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "localCarga": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "localDescarga": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "material": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "motorista": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": "object"
+                        },
+                        "obra": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "origem": {
+                          "description": "Quem criou. Só viagem criada por esta integração pode ser alterada por ela.",
+                          "enum": [
+                            "APP",
+                            "PAINEL",
+                            "INTEGRACAO"
+                          ],
+                          "type": "string"
+                        },
+                        "pendencias": {
+                          "description": "O que falta pra viagem poder ser conferida (ex.: material não achado).",
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "detalhe": {
+                                "type": "string"
+                              },
+                              "motivo": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "motivo",
+                              "detalhe"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "situacao": {
+                          "description": "EM_ANDAMENTO, AGUARDANDO_PESO e INCOMPLETA são viagens que ainda NÃO podem ser faturadas. A_CONFERIR espera uma pessoa conferir; CONFERIDA já passou.",
+                          "enum": [
+                            "EM_ANDAMENTO",
+                            "AGUARDANDO_PESO",
+                            "INCOMPLETA",
+                            "A_CONFERIR",
+                            "COM_DIVERGENCIA",
+                            "CONFERIDA"
+                          ],
+                          "type": "string"
+                        },
+                        "ticket": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "toneladas": {
+                          "description": "Número em texto decimal, com ponto.",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "veiculo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "placa": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "placa",
+                            "externo"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "externo",
+                        "situacao",
+                        "origem",
+                        "data",
+                        "motorista",
+                        "veiculo",
+                        "localCarga",
+                        "localDescarga",
+                        "material",
+                        "obra",
+                        "toneladas",
+                        "km",
+                        "kmSistemaOrigem",
+                        "ticket",
+                        "pendencias",
+                        "criadoEm",
+                        "alteradoEm"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "criada",
+                    "viagem",
+                    "avisos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Atualizada."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "avisos": {
+                      "description": "O que entrou diferente do mandado (ex.: material não achado).",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "codigo": {
+                            "type": "string"
+                          },
+                          "mensagem": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "codigo",
+                          "mensagem"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "criada": {
+                      "description": "false = já existia (mesmo número ou mesma Idempotency-Key) e foi atualizada ou devolvida.",
+                      "type": "boolean"
+                    },
+                    "viagem": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "alteradoEm": {
+                          "type": "string"
+                        },
+                        "criadoEm": {
+                          "type": "string"
+                        },
+                        "data": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "km": {
+                          "description": "Km que vale pro faturamento (pode ter sido corrigido no painel).",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "kmSistemaOrigem": {
+                          "description": "O km que o sistema de vocês mandou, guardado como veio.",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "localCarga": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "localDescarga": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "material": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "motorista": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome",
+                            "externo"
+                          ],
+                          "type": "object"
+                        },
+                        "obra": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "nome": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "nome"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "origem": {
+                          "description": "Quem criou. Só viagem criada por esta integração pode ser alterada por ela.",
+                          "enum": [
+                            "APP",
+                            "PAINEL",
+                            "INTEGRACAO"
+                          ],
+                          "type": "string"
+                        },
+                        "pendencias": {
+                          "description": "O que falta pra viagem poder ser conferida (ex.: material não achado).",
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "detalhe": {
+                                "type": "string"
+                              },
+                              "motivo": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "motivo",
+                              "detalhe"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "situacao": {
+                          "description": "EM_ANDAMENTO, AGUARDANDO_PESO e INCOMPLETA são viagens que ainda NÃO podem ser faturadas. A_CONFERIR espera uma pessoa conferir; CONFERIDA já passou.",
+                          "enum": [
+                            "EM_ANDAMENTO",
+                            "AGUARDANDO_PESO",
+                            "INCOMPLETA",
+                            "A_CONFERIR",
+                            "COM_DIVERGENCIA",
+                            "CONFERIDA"
+                          ],
+                          "type": "string"
+                        },
+                        "ticket": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "toneladas": {
+                          "description": "Número em texto decimal, com ponto.",
+                          "example": "32.450",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "veiculo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "externo": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "placa": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "placa",
+                            "externo"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "externo",
+                        "situacao",
+                        "origem",
+                        "data",
+                        "motorista",
+                        "veiculo",
+                        "localCarga",
+                        "localDescarga",
+                        "material",
+                        "obra",
+                        "toneladas",
+                        "km",
+                        "kmSistemaOrigem",
+                        "ticket",
+                        "pendencias",
+                        "criadoEm",
+                        "alteradoEm"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "criada",
+                    "viagem",
+                    "avisos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Não existia: criada."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`VALIDACAO`: Algum campo veio errado. Veja `detalhes`."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`NAO_AUTENTICADO`: Mande a chave de acesso no cabeçalho Authorization: Bearer mvt_live_…\n\n`CHAVE_REVOGADA`: Esta chave foi desligada. Peça uma nova a quem administra a empresa no Movatruck."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`EMPRESA_INDISPONIVEL`: A empresa desta chave está com o acesso suspenso.\n\n`MODULO_NAO_CONTRATADO`: A empresa não tem o módulo Integrações contratado.\n\n`ESCOPO_INSUFICIENTE`: Esta chave não tem permissão pra isso.\n\n`CONTA_SOMENTE_LEITURA`: A empresa está em modo somente leitura: dá pra consultar, não dá pra gravar."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`REQUISICAO_EM_ANDAMENTO`: Um pedido igual ainda está sendo processado. Tente de novo em alguns segundos.\n\n`VIAGEM_DE_OUTRA_ORIGEM`: Esta viagem não foi criada por este sistema (veio do app do motorista ou do painel). Ela só pode ser lida.\n\n`VIAGEM_TRAVADA`: A viagem já foi conferida, entrou num fechamento ou num acerto. Correção agora só pelo painel."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`CORPO_GRANDE_DEMAIS`: O corpo passa de 1 MB."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`REFERENCIA_OBRIGATORIA`: Não achamos o motorista ou o caminhão informado.\n\n`IDEMPOTENCIA_CONFLITO`: Esta Idempotency-Key já foi usada com outro conteúdo. Use uma chave nova pra um pedido novo."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`LIMITE_EXCEDIDO`: Chamadas demais em pouco tempo. Espere os segundos de Retry-After."
+          }
+        },
+        "security": [
+          {
+            "chave": []
+          }
+        ],
+        "summary": "Cria ou atualiza pelo número de vocês",
+        "tags": [
+          "Viagens"
+        ]
+      }
+    },
+    "/v1/viagens/{id}": {
+      "get": {
+        "description": "Escopo: `viagens:ler`.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "alteradoEm": {
+                      "type": "string"
+                    },
+                    "criadoEm": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "externo": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "km": {
+                      "description": "Km que vale pro faturamento (pode ter sido corrigido no painel).",
+                      "example": "32.450",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "kmSistemaOrigem": {
+                      "description": "O km que o sistema de vocês mandou, guardado como veio.",
+                      "example": "32.450",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "localCarga": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome",
+                        "externo"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "localDescarga": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome",
+                        "externo"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "material": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "motorista": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome",
+                        "externo"
+                      ],
+                      "type": "object"
+                    },
+                    "obra": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "nome": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nome"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "origem": {
+                      "description": "Quem criou. Só viagem criada por esta integração pode ser alterada por ela.",
+                      "enum": [
+                        "APP",
+                        "PAINEL",
+                        "INTEGRACAO"
+                      ],
+                      "type": "string"
+                    },
+                    "pendencias": {
+                      "description": "O que falta pra viagem poder ser conferida (ex.: material não achado).",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "detalhe": {
+                            "type": "string"
+                          },
+                          "motivo": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "motivo",
+                          "detalhe"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "situacao": {
+                      "description": "EM_ANDAMENTO, AGUARDANDO_PESO e INCOMPLETA são viagens que ainda NÃO podem ser faturadas. A_CONFERIR espera uma pessoa conferir; CONFERIDA já passou.",
+                      "enum": [
+                        "EM_ANDAMENTO",
+                        "AGUARDANDO_PESO",
+                        "INCOMPLETA",
+                        "A_CONFERIR",
+                        "COM_DIVERGENCIA",
+                        "CONFERIDA"
+                      ],
+                      "type": "string"
+                    },
+                    "ticket": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "toneladas": {
+                      "description": "Número em texto decimal, com ponto.",
+                      "example": "32.450",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "veiculo": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "externo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "placa": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "placa",
+                        "externo"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "externo",
+                    "situacao",
+                    "origem",
+                    "data",
+                    "motorista",
+                    "veiculo",
+                    "localCarga",
+                    "localDescarga",
+                    "material",
+                    "obra",
+                    "toneladas",
+                    "km",
+                    "kmSistemaOrigem",
+                    "ticket",
+                    "pendencias",
+                    "criadoEm",
+                    "alteradoEm"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A viagem."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`NAO_AUTENTICADO`: Mande a chave de acesso no cabeçalho Authorization: Bearer mvt_live_…\n\n`CHAVE_REVOGADA`: Esta chave foi desligada. Peça uma nova a quem administra a empresa no Movatruck."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`EMPRESA_INDISPONIVEL`: A empresa desta chave está com o acesso suspenso.\n\n`MODULO_NAO_CONTRATADO`: A empresa não tem o módulo Integrações contratado.\n\n`ESCOPO_INSUFICIENTE`: Esta chave não tem permissão pra isso."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`NAO_ENCONTRADO`: Não existe."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "`LIMITE_EXCEDIDO`: Chamadas demais em pouco tempo. Espere os segundos de Retry-After."
+          }
+        },
+        "security": [
+          {
+            "chave": []
+          }
+        ],
+        "summary": "Lê uma viagem pelo id do Movatruck",
+        "tags": [
+          "Viagens"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "Produção",
+      "url": "https://api.schaba.com.br"
+    }
+  ],
+  "webhooks": {}
+}

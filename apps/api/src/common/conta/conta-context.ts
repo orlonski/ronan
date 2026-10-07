@@ -22,6 +22,13 @@ export type ContaStore = {
    * crons que varrem contas. Todo uso é uma decisão explícita e localizada.
    */
   modo: "request" | "sistema";
+  /**
+   * A requisição é do APP do motorista. A trava esconde dela as viagens criadas
+   * pelo sistema de outra empresa (integração): o app não mostra, não apaga e
+   * não "corrige" viagem que o motorista nunca lançou — e o km "do motorista"
+   * não aparece numa viagem que não é dele.
+   */
+  soViagensDoApp?: boolean;
 };
 
 const storage = new AsyncLocalStorage<ContaStore>();
@@ -101,9 +108,10 @@ export async function comoSistema<T>(fn: () => T | Promise<T>): Promise<T> {
  *
  * Silencioso fora de contexto: rota pública sem usuário não tem o que definir.
  */
-export function definirConta(contaId: string): void {
+export function definirConta(contaId: string, opcoes: { appDoMotorista?: boolean } = {}): void {
   const store = storage.getStore();
   if (!store) return;
   store.contaId = contaId;
   store.modo = "request";
+  store.soViagensDoApp = opcoes.appDoMotorista === true;
 }

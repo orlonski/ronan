@@ -422,6 +422,9 @@ export class KmAtipicoService {
       AND v."localDescargaId" = ${descargaId}
       AND (${excluir}::text IS NULL OR v.id <> ${excluir})
       AND v.km IS NOT NULL AND v.km > 0
+      -- O km que um sistema de fora mandou (integração) ninguém conferiu: não
+      -- pode decidir se o km do MOTORISTA é atípico nem virar a sugestão do app.
+      AND v."origemIntegracaoId" IS NULL
       AND v.data >= ${desde}
       AND v.status::text NOT IN ('RASCUNHO_OFFLINE','EM_ANDAMENTO','AGUARDANDO_PESO','INCOMPLETA','DIVERGENTE')
       AND NOT EXISTS (SELECT 1 FROM trechos_viagem t WHERE t."viagemId" = v.id)

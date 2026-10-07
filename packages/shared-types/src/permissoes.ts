@@ -306,6 +306,10 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // cadastro: quem pode criar um cliente não deveria, por isso, poder
   // reescrever a base inteira — por isso recurso próprio.
   { recurso: "importacao", label: "Importar dados", modulo: "Sistema", acoes: ["ver", "executar"] },
+  // Conectar o sistema da empresa (ERP, app próprio) por chave de acesso
+  // (módulo `integracoes`, vendido à parte). `gerenciar` cria e desliga chave:
+  // é entregar o dado da empresa a outro sistema, decisão de dono.
+  { recurso: "integracoes", label: "Conectar outro sistema", modulo: "Sistema", acoes: ["ver", "gerenciar"] },
   // Emitir documento fiscal é ato com consequência jurídica: quem lança uma
   // viagem não deveria, por isso, poder emitir em nome da empresa. Cancelar é
   // ação à parte porque tem prazo legal e é contada pela SEFAZ.

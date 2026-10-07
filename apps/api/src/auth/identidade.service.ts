@@ -42,7 +42,10 @@ export class IdentidadeService {
 
     const vinculos = await comoSistema(() =>
       this.prisma.motorista.findMany({
-        where: { cpf },
+        // Cadastro criado pelo sistema de outra empresa (integração) não monta
+        // identidade: senão a chave de qualquer empresa escolheria a senha e o
+        // telefone da pessoa — e, com o "esqueci a senha", tomaria a conta dela.
+        where: { cpf, origemIntegracaoId: null },
         orderBy: [{ ativo: "desc" }, { criadoEm: "desc" }],
       }),
     );

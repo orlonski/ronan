@@ -347,10 +347,16 @@ export const travaConta = Prisma.defineExtension({
 
         const a = (args ?? {}) as Obj;
 
+        // No app do motorista, a viagem criada pelo sistema de outra empresa
+        // (integração) não existe: nem pra listar, nem pra abrir, nem pra
+        // apagar. Mesmo mecanismo da conta, pelo mesmo motivo — filtro
+        // esquecido em uma das ~60 consultas do app seria o vazamento.
+        const filtro = model === "Viagem" && ctx.soViagensDoApp ? { contaId, origemIntegracaoId: null } : { contaId };
+
         if (WHERE_LIVRE.has(operation)) {
-          a.where = a.where ? { AND: [a.where, { contaId }] } : { contaId };
+          a.where = a.where ? { AND: [a.where, filtro] } : filtro;
         } else if (WHERE_UNICO.has(operation)) {
-          a.where = { ...(a.where as Obj | undefined), contaId };
+          a.where = { ...(a.where as Obj | undefined), ...filtro };
         }
 
         if (ESCRITAS.has(operation)) {

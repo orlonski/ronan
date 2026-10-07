@@ -91,7 +91,9 @@ export class AvisoPesoService {
 
   private async lembreteFimDoDiaDaVez(): Promise<void> {
     const pendentes = await this.prisma.viagem.findMany({
-      where: { status: "AGUARDANDO_PESO" },
+      // Viagem do sistema de outra empresa (integração) não aparece no app:
+      // cobrar o motorista de completar o peso dela seria pedir o impossível.
+      where: { status: "AGUARDANDO_PESO", origemIntegracaoId: null },
       select: {
         id: true,
         data: true,

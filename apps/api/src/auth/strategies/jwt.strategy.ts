@@ -235,7 +235,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException("Esse vínculo com a empresa não está ativo");
     }
 
-    definirConta(motorista.contaId);
+    // `appDoMotorista`: a trava esconde do app as viagens que vieram do
+    // sistema de outra empresa (integração). Ver common/conta/trava-conta.ts.
+    definirConta(motorista.contaId, { appDoMotorista: true });
 
     // Ele também é funcionário registrado desta empresa?
     //

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, Calculator, Route, TrendingUp, User } from "lucide-react";
+import { ArrowDown, Calculator, Route, TrendingUp, User, Plug } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { fmtDataHoraBR, fmtNum } from "@/lib/fechamento-helpers";
 
@@ -26,6 +26,8 @@ type Props = {
   kmMotorista?: string | null;
   /** Procedência do km do motorista. Sinal fiel (o resto é inferência). */
   kmFonte?: "ROTA_OSRM" | "ROTA_ESCOLHIDA" | "HISTORICO" | "MANUAL" | null;
+  /** A viagem veio do sistema da empresa (integração): o km é dele, não do motorista. */
+  origemIntegracaoNome?: string | null;
   /** Alteração do km pelo painel (só acontece com motivo escrito). */
   kmAlteradoEm?: string | null;
   kmAlteracaoMotivo?: string | null;
@@ -171,9 +173,9 @@ export function FaturamentoCard(p: Props) {
           unidade={calc != null ? "km" : undefined}
         />
         <Tile
-          Icon={User}
+          Icon={p.origemIntegracaoNome ? Plug : User}
           label={p.kmAjustada ? "Informado" : "Km da viagem"}
-          hint={hintDoKmFonte(p.kmFonte)}
+          hint={p.origemIntegracaoNome ? `${p.origemIntegracaoNome} (sistema da empresa)` : hintDoKmFonte(p.kmFonte)}
           valor={fmtNum(p.kmInformado, 2)}
           unidade="km"
         />

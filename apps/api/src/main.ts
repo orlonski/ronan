@@ -8,7 +8,7 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, Logger } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import compression from "compression";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { json, urlencoded } from "express";
 import { AppModule } from "./app.module";
 
@@ -30,12 +30,18 @@ async function bootstrap() {
   // pergunta antes (OPTIONS) se pode. Sem Max-Age o Chrome lembra a resposta
   // por só 5s — e com o servidor na França cada pergunta é mais uma ida e
   // volta de ~230ms. 7200s é o teto que o Chrome aceita.
-  app.enableCors({
+  const corsDoPainel = {
     origin,
     credentials: true,
     exposedHeaders: ["X-Imagem-Tipo", "Content-Disposition"],
     maxAge: 7200,
-  });
+  };
+  // A API pública (/v1) NÃO responde a navegador: sem Access-Control-Allow-Origin
+  // o browser recusa, e a chave secreta de integração não vai parar no
+  // JavaScript do site de ninguém. Quem chama a /v1 é servidor.
+  app.enableCors((req: { url?: string }, cb: (err: Error | null, opts: object) => void) =>
+    cb(null, req.url?.startsWith("/v1/") ? { origin: false } : corsDoPainel),
+  );
 
   // Gzip nas respostas. Crítico pro app móvel em rede 3G/4G —
   // reduz /catalogos de ~300KB pra ~40KB. Threshold default ignora
@@ -48,6 +54,19 @@ async function bootstrap() {
 
   // aumenta limite do body-parser pra aceitar uploads de planilhas e fotos
   // (default do Express e 100KB e barra antes do Multer pegar)
+  // /v1 com teto próprio de 1 MB, ANTES do parser global de 50 MB (o primeiro
+  // que lê o corpo vence). Integração não manda planilha nem foto por aqui.
+  app.use("/v1", json({ limit: "1mb" }));
+  // Erro do parser (corpo grande, JSON quebrado) acontece ANTES do Nest: sem
+  // isto saía 500 "Internal server error" — que diz ao integrador que o erro é
+  // nosso. Sai no formato da /v1, com o código certo.
+  app.use("/v1", (err: { type?: string; status?: number } | undefined, _req: unknown, res: { status(n: number): { json(b: unknown): void } }, next: (e?: unknown) => void) => {
+    if (!err) return next();
+    const grande = err.type === "entity.too.large";
+    const codigo = grande ? "CORPO_GRANDE_DEMAIS" : "VALIDACAO";
+    const mensagem = grande ? "O corpo passa de 1 MB." : "O corpo não é um JSON válido.";
+    res.status(grande ? 413 : 400).json({ erro: { codigo, mensagem, requisicaoId: `req_${randomUUID().replace(/-/g, "").slice(0, 20)}` } });
+  });
   app.use(
     json({
       limit: "50mb",
