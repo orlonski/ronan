@@ -138,13 +138,25 @@ export async function encerrarRegime(
      * simultâneas não conseguem encerrar o regime uma da outra.
      */
     regime?: RegimeTrabalho;
+    /**
+     * O ÚLTIMO DIA do vínculo (AAAA-MM-DD), quando quem encerra sabe — o
+     * desligamento registrado com data no passado. Sem isto o regime terminava
+     * no dia do clique, e o acerto barrava como "dia de emprego" os dias entre a
+     * saída de verdade e o registro dela. Ausente = encerra agora.
+     *
+     * Grava o fim do dia (23:59:59.999 UTC), a mesma régua do `iniciouEm`
+     * (@db.Date, meia-noite UTC): a viagem do último dia ainda é de emprego, a do
+     * dia seguinte não.
+     */
+    ultimoDia?: string;
   },
 ): Promise<void> {
   const chave = soDigitos(e.cpf);
   if (chave.length !== 11) return;
+  const encerradoEm = e.ultimoDia ? new Date(`${e.ultimoDia}T23:59:59.999Z`) : new Date();
   await tx.regimeVigente.updateMany({
     where: { chaveViva: chave, ...(e.regime ? { regime: e.regime } : {}) },
-    data: { chaveViva: null, encerradoEm: new Date(), motivo: e.motivo },
+    data: { chaveViva: null, encerradoEm, motivo: e.motivo },
   });
 }
 

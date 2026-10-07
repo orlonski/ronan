@@ -446,6 +446,8 @@ export class PontoAdminService {
         cpf: f.cpf,
         motivo: `desligamento: ${dados.motivo}`,
         regime: "EMPREGADO",
+        // O vínculo acaba na data do desligamento informada, não no dia do clique.
+        ultimoDia: dados.desligadoEm,
       });
       return atualizado;
     });

@@ -115,6 +115,17 @@ describe("encerrar regime", () => {
     expect(t.escritas[0]!.encerradoEm).toBeInstanceOf(Date);
   });
 
+  it("desligamento com data no passado encerra no último dia informado, não no dia do clique", async () => {
+    const t = tx({ id: "r1", regime: "EMPREGADO" });
+    await encerrarRegime(t.client, { cpf: CPF, motivo: "desligamento", regime: "EMPREGADO", ultimoDia: "2026-09-15" });
+    const fim = t.escritas[0]!.encerradoEm as Date;
+    expect(fim.toISOString()).toBe("2026-09-15T23:59:59.999Z");
+    // A viagem do último dia ainda é de emprego; a do dia seguinte já não.
+    const p = [{ inicio: new Date("2026-09-01T00:00:00Z"), fim }];
+    expect(dentroDeEmprego(p, new Date("2026-09-15T00:00:00Z"))).toBe(true);
+    expect(dentroDeEmprego(p, new Date("2026-09-16T00:00:00Z"))).toBe(false);
+  });
+
   it("sem alvo, encerra o regime vivo seja ele qual for", async () => {
     const t = tx({ id: "r1", regime: "PARCEIRO" });
     await encerrarRegime(t.client, { cpf: CPF, motivo: "x" });
