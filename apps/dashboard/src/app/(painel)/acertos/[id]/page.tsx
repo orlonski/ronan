@@ -888,7 +888,8 @@ function ViagemDaTag({
             Pra devolver, use &quot;Outro valor&quot; com o motivo (ex.: recibo do motorista).
           </p>
         ))}
-      {Number(v.retorno) > 0 && (
+      {/* Só quando a sugestão devolve algo: com sugestão zero, não há volta a descontar. */}
+      {Number(v.retorno) > 0 && Number(v.sugestao) > 0 && (
         <p className="text-xs text-muted-foreground">
           A volta vazia passou {brl(v.retorno)} na tag. Não entra na sugestão: se ele lançou a volta também,
           desconte com &quot;Outro valor&quot;.
