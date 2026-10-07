@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { inicioDoDiaData, inicioDiasAtras } from "../common/timezone";
 import { comoSistema, contaIdAtual } from "../common/conta/conta-context";
 import { contaTemModuloDespesas } from "../common/despesa-acesso";
+import { modulosDaConta } from "../common/conta/teto-da-conta";
 import type { ModeloEtapaCatalogo, TipoDespesaCatalogo } from "@ronan/shared-types";
 import { EtapasNucleoService } from "../etapas/etapas-nucleo.service";
 
@@ -1140,6 +1141,10 @@ export class MotoristaService {
     // Lista no catálogo pra o app ter os formulários SEM internet (pré-baixado
     // no login); a capacidade `app.viagem.etapas` é quem decide se a tela aparece.
     const temEtapas = this.etapas ? await this.etapas.contaTemModulo(contaIdAtual()) : false;
+    // Conferência da tag: com ela, o pedágio que a tag pagou vem da fatura e o
+    // app avisa que não precisa lançar. Sem ela, o lançado segue sendo o que
+    // vai pro cliente — avisar "não lance" ali zeraria a cobrança.
+    const temTagPedagio = (await modulosDaConta(this.prisma, contaIdAtual())).has("tag-pedagio");
     const modelosEtapa: ModeloEtapaCatalogo[] = temEtapas && this.etapas ? await this.etapas.catalogo() : [];
 
     const odometroMap = new Map(ultimosAbast.map((a) => [a.veiculoId, a.odometro]));
@@ -1165,6 +1170,7 @@ export class MotoristaService {
         exigeFotoAbastecimento: conta?.exigeFotoAbastecimento === true,
         despesas: temDespesas,
         etapas: temEtapas,
+        tagPedagio: temTagPedagio,
       },
     };
   }

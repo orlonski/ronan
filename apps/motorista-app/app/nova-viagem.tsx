@@ -1896,6 +1896,11 @@ export default function NovaViagem() {
           </View>
         ) : null}
       </View>
+      {/* Com a conferência da tag, o pedágio da tag vem da fatura do Sem Parar:
+          lançar de novo faria a empresa devolver o que ela mesma já pagou. */}
+      {mostraPedagio && cat.data?.config?.tagPedagio ? (
+        <Text className="text-xs text-muted-foreground">Pedágio que a tag pagou não precisa lançar. Lance só o que você pagou do bolso.</Text>
+      ) : null}
       {/* Aviso SEM INTERNET em LINHA INTEIRA (haversine OU cache local). Some
           quando a sugestão do histórico está visível — ela absorve o recado de
           offline numa linha só, pra a tela não empilhar dois banners. */}

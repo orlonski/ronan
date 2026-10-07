@@ -224,7 +224,11 @@ export default function NovoPedagio() {
                 editable={!submitting}
                 maxLength={10}
               />
-              <Text className="text-xs text-muted-foreground">Em R$</Text>
+              <Text className="text-xs text-muted-foreground">
+                {cat.data?.config?.tagPedagio
+                  ? "Pedágio que a tag pagou não precisa lançar. Lance só o que você pagou do bolso."
+                  : "Em R$"}
+              </Text>
             </View>
 
             {erro && <Text className="text-sm text-destructive">{erro}</Text>}

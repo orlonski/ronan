@@ -163,6 +163,8 @@ export type Catalogos = {
     exigeFotoAbastecimento?: boolean;
     /** Módulo `despesas` contratado (Gasto de viagem). Ausente = não. */
     despesas?: boolean;
+    /** Módulo da conferência da tag: o pedágio da tag vem da fatura. Ausente = não. */
+    tagPedagio?: boolean;
   };
 };
 
