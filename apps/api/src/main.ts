@@ -12,9 +12,7 @@ import { json, urlencoded } from "express";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  // O que os módulos pedem pra fora enquanto ligam (ex.: conferir o balde do
-  // MinIO) aparece como "subida da API" na tela de chamadas externas.
-  const app = await comGatilho("subida da API", () => NestFactory.create(AppModule, { bufferLogs: true }));
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
   // CORS antes do body-parser — assim mesmo se body-parser falhar com 413,
   // a resposta de erro ainda vem com o header Access-Control-Allow-Origin.
@@ -80,6 +78,10 @@ async function bootstrap() {
   SwaggerModule.setup("docs", app, document);
 
   const port = Number(process.env.PORT ?? 3000);
+  // O que os módulos pedem pra fora enquanto ligam (onModuleInit: ex.: conferir
+  // o balde do MinIO) aparece como "subida da API" na tela de chamadas externas.
+  // A inicialização roda aqui, fora do listen, pra o servidor HTTP não herdar o rótulo.
+  await comGatilho("subida da API", () => app.init());
   await app.listen(port);
   Logger.log(`Ronan API rodando em http://localhost:${port} (docs em /docs)`, "Bootstrap");
 }
