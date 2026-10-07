@@ -354,7 +354,10 @@ export function pracaNaAntt(p: PracaDoExtrato, lista: PracaAntt[] = PRACAS_ANTT)
   const rod = normalizarRodovia(p.rodovia);
   const achadas = lista.filter(
     (a) =>
-      normalizarRodovia(/^\d+$/.test(a.rodovia) ? `BR${a.rodovia}` : a.rodovia) === rod &&
+      // Só o número (lotes do Paraná): pode ser BR ou estadual — aceita as duas.
+      (/^\d+$/.test(a.rodovia)
+        ? [`BR${Number(a.rodovia)}`, `${a.uf}${Number(a.rodovia)}`].includes(rod)
+        : normalizarRodovia(a.rodovia) === rod) &&
       (!p.uf || a.uf === p.uf) &&
       Math.abs(a.km * 1000 - p.kmMetros) <= 1500,
   );

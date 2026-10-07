@@ -215,4 +215,9 @@ describe("praça pela lista oficial da ANTT", () => {
     expect(pracaNaAntt(praca({ rodovia: "BR163", kmMetros: 586900, uf: "RO" }))).toBeNull();
     expect(pracaNaAntt(praca({ rodovia: "MT246", kmMetros: 10000 }))).toBeNull();
   });
+
+  it("rodovia só com número na ANTT (lotes do Paraná) casa como estadual ou BR", () => {
+    expect(pracaNaAntt(praca({ rodovia: "PR444", kmMetros: 3300, uf: "PR" }))?.municipio).toBe("Arapongas");
+    expect(pracaNaAntt(praca({ rodovia: "BR280", kmMetros: 234300, uf: "PR" }))?.municipio).toBe("Vitorino");
+  });
 });
