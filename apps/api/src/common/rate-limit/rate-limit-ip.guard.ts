@@ -17,6 +17,8 @@ export function criarRateLimitIpGuard(opcoes: {
   limitePorMinuto: number;
   /** Só pra deixar o guard identificável em stack trace/debug. */
   nome: string;
+  /** O que a pessoa lê quando passa do limite (o app mostra a mensagem do servidor). */
+  mensagem?: string;
 }): CanActivate {
   const contador = new ContadorJanela();
 
@@ -25,7 +27,7 @@ export function criarRateLimitIpGuard(opcoes: {
       const req = context.switchToHttp().getRequest<Request>();
       const total = contador.registrar(ipDaRequisicao(req));
       if (total > opcoes.limitePorMinuto) {
-        throw new HttpException("Muitas requisições", HttpStatus.TOO_MANY_REQUESTS);
+        throw new HttpException(opcoes.mensagem ?? "Muitas requisições", HttpStatus.TOO_MANY_REQUESTS);
       }
       return true;
     },

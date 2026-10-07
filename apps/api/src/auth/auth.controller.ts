@@ -34,6 +34,14 @@ const limiteCadastro = criarRateLimitIpGuard({ limitePorMinuto: 10, nome: "cadas
 // Login do painel: sem freio, dava pra testar senha de administrador à vontade.
 // Por IP (muitos e-mails com uma senha comum) e por e-mail (uma conta, muitas senhas).
 const limiteLoginAdminIp = criarRateLimitIpGuard({ limitePorMinuto: 30, nome: "login-admin" });
+// App do motorista: o bloqueio por CPF já existe (auth.service); este é o freio
+// contra testar uma senha comum em muitos CPFs. 60, e não 30: no 4G muitos
+// celulares saem pelo MESMO IP da operadora (CGNAT).
+const limiteLoginMotoristaIp = criarRateLimitIpGuard({
+  limitePorMinuto: 60,
+  nome: "login-motorista",
+  mensagem: "Muitas tentativas seguidas deste aparelho. Espere um minuto e tente de novo.",
+});
 const tentativasAdmin = new TentativasDeLogin({ maxFalhas: 10, janelaMs: 15 * 60_000, bloqueioMs: 15 * 60_000 });
 
 @ApiTags("auth")
@@ -149,6 +157,7 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post("m/auth/login")
+  @UseGuards(limiteLoginMotoristaIp)
   async loginMotorista(
     @Body(new ZodValidationPipe(LoginMotoristaInput)) body: LoginMotoristaInput,
   ) {

@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import { ForbiddenException, Injectable, Logger, UnauthorizedException, HttpException, HttpStatus } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import * as bcrypt from "bcrypt";
@@ -93,7 +93,13 @@ export class AuthService {
 
     if (identidade.bloqueadoAte && identidade.bloqueadoAte > new Date()) {
       const faltam = Math.ceil((identidade.bloqueadoAte.getTime() - Date.now()) / 60_000);
-      throw new UnauthorizedException(`Conta bloqueada. Tente novamente em ${faltam} minutos.`);
+      // 429, não 401: o app trata 401 como "CPF ou senha incorretos" e o
+      // motorista bloqueado seguia tentando sem saber. Qualquer outro código o
+      // app mostra com a mensagem do servidor — vale até pra versão já instalada.
+      throw new HttpException(
+        `Conta bloqueada por muitas tentativas. Tente de novo em ${faltam} minuto${faltam === 1 ? "" : "s"}, ou use "Esqueci a senha".`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     if (!(await this.conferirSenha(identidade, senha))) {
@@ -102,7 +108,9 @@ export class AuthService {
         this.prisma.motoristaIdentidade.update({
           where: { id: identidade.id },
           data: {
-            tentativasLogin: tentativas,
+            // Ao bloquear, a contagem zera: senão, vencido o bloqueio, um único
+            // erro (6 ≥ 5) bloqueava de novo por mais 15 minutos.
+            tentativasLogin: tentativas >= MAX_TENTATIVAS_MOTORISTA ? 0 : tentativas,
             bloqueadoAte:
               tentativas >= MAX_TENTATIVAS_MOTORISTA
                 ? new Date(Date.now() + BLOQUEIO_MINUTOS * 60_000)
