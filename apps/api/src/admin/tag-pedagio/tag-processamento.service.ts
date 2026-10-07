@@ -19,11 +19,22 @@ import { DIA, MIN, normalizarPlaca, variantesDaPlaca } from "../../common/tag-pe
 import {
   agruparNos,
   cadeiaConfere,
+  caixaDaMalha,
   candidatosDaPraca,
+  candidatosNoMunicipio,
   decidirPraca,
+  kmDaChave,
+  mesmaRodovia,
   paresDaCadeia,
+  pelasVizinhas as pelasVizinhasPura,
+  pracaNaAntt,
+  RAIO_ANTT_MAPA_M,
   tarifaConfere,
+  vizinhasNaRodovia,
   type GrupoPraca,
+  type Malha,
+  type PelasVizinhas,
+  type PracaConhecida,
   type PracaDoExtrato,
 } from "../../common/tag-pedagio/pracas";
 import {
@@ -131,6 +142,12 @@ export class TagProcessamentoService {
       });
     }
 
+    // 1º a lista oficial da ANTT: rodovia + estado + km, a mesma língua do extrato.
+    for (const p of pracas.filter((x) => !out.get(x.chave)!.pedagioRodoviaId)) {
+      const g = await this.pelaAntt(p);
+      if (!g) continue;
+      out.set(p.chave, { ...out.get(p.chave)!, pedagioRodoviaId: g.grupo.id, lat: g.grupo.lat, lng: g.grupo.lng, nome: g.grupo.nome, origem: "AUTOMATICA" });
+    }
     const pendentes = pracas.filter((p) => !out.get(p.chave)!.pedagioRodoviaId);
     if (pendentes.length === 0) return out;
     const analise = await this.analisarPracas(pracas, out);
@@ -158,6 +175,47 @@ export class TagProcessamentoService {
     return out;
   }
 
+  /**
+   * A praça pela ANTT e, dela, a praça do NOSSO mapa (é o mapa que as rotas
+   * usam): a mais perto da coordenada oficial, a até 3 km. Grava o de-para
+   * global como AUTOMATICA, com a evidência. Sem praça no mapa perto, não casa
+   * — vai pra fila como sempre.
+   */
+  private async pelaAntt(p: PracaDoExtrato): Promise<{ grupo: GrupoPraca } | null> {
+    const a = pracaNaAntt(p);
+    if (!a) return null;
+    const d = 0.05;
+    const nos = await this.prisma.pedagioRodovia.findMany({
+      where: { ativo: true, lat: { gte: a.lat - d, lte: a.lat + d }, lng: { gte: a.lng - d, lte: a.lng + d } },
+      select: { id: true, nome: true, lat: true, lng: true, rodovia: true, concessionaria: true, valorBase: true },
+    });
+    const grupo = agruparNos(nos.map((n) => ({ ...n, valorBase: n.valorBase == null ? null : Number(n.valorBase) })))
+      .map((g) => ({ g, m: distanciaMetros(a.lat, a.lng, g.lat, g.lng) }))
+      .filter((x) => x.m <= RAIO_ANTT_MAPA_M)
+      .sort((x, y) => x.m - y.m)[0];
+    if (!grupo) return null;
+    try {
+      await this.prisma.pracaTagDePara.upsert({
+        where: { operadora_chavePraca: { operadora: OPERADORA, chavePraca: p.chave } },
+        create: {
+          operadora: OPERADORA,
+          chavePraca: p.chave,
+          pedagioRodoviaId: grupo.g.id,
+          origem: "AUTOMATICA",
+          evidencia: {
+            motivo: `Lista oficial da ANTT: ${a.concessionaria} ${a.praca}, ${a.rodovia}/${a.uf} km ${a.km}, ${a.municipio}; praça do mapa a ${Math.round(grupo.m)} m`,
+            fonte: "ANTT",
+            cidade: p.cidade,
+          } as Prisma.InputJsonValue,
+        },
+        update: {},
+      });
+    } catch (e) {
+      this.log.warn(`De-para pela ANTT de ${p.chave} não gravou: ${(e as Error).message}`);
+    }
+    return { grupo: grupo.g };
+  }
+
   /** Candidatos e decisão de cada praça (também alimenta a fila da tela). */
   async analisarPracas(
     pracas: PracaDoExtrato[],
@@ -177,19 +235,32 @@ export class TagProcessamentoService {
     const base = new Map<string, { sede: { lat: number; lng: number } | null; candidatos: { grupo: GrupoPraca; distanciaKm: number }[] }>();
     for (const p of pracas) {
       const sede = await this.geocoding.sedeDoMunicipio(p.cidade, p.uf);
+      // O território do município (IBGE), além do raio em volta da sede.
+      const malha = (await this.geocoding.malhaDoMunicipio(p.cidade, p.uf)) as Malha | null;
       let candidatos: { grupo: GrupoPraca; distanciaKm: number }[] = [];
-      if (sede) {
+      if (sede || malha) {
         const d = (raioKm ?? 40) / 100;
+        const cx = malha ? caixaDaMalha(malha) : null;
+        const caixa = {
+          minLat: Math.min(sede ? sede.lat - d : Infinity, cx ? cx.minLat - 0.05 : Infinity),
+          maxLat: Math.max(sede ? sede.lat + d : -Infinity, cx ? cx.maxLat + 0.05 : -Infinity),
+          minLng: Math.min(sede ? sede.lng - d : Infinity, cx ? cx.minLng - 0.05 : Infinity),
+          maxLng: Math.max(sede ? sede.lng + d : -Infinity, cx ? cx.maxLng + 0.05 : -Infinity),
+        };
         const nos = await this.prisma.pedagioRodovia.findMany({
-          where: { ativo: true, lat: { gte: sede.lat - d, lte: sede.lat + d }, lng: { gte: sede.lng - d, lte: sede.lng + d } },
+          where: { ativo: true, lat: { gte: caixa.minLat, lte: caixa.maxLat }, lng: { gte: caixa.minLng, lte: caixa.maxLng } },
           select: { id: true, nome: true, lat: true, lng: true, rodovia: true, concessionaria: true, valorBase: true },
         });
         const grupos = agruparNos(nos.map((n) => ({ ...n, valorBase: n.valorBase == null ? null : Number(n.valorBase) })));
-        candidatos = candidatosDaPraca(p, grupos, sede, raioKm);
+        candidatos = sede ? candidatosDaPraca(p, grupos, sede, raioKm) : [];
+        if (malha) {
+          const ja = new Set(candidatos.map((c) => c.grupo.id));
+          candidatos = [...candidatos, ...candidatosNoMunicipio(p, grupos, malha, sede).filter((c) => !ja.has(c.grupo.id))];
+        }
         // Na fila (raio largo), depois das da mesma rodovia, as praças de
         // qualquer rodovia perto da cidade — a concessionária chama tudo de
         // "MT246", mas no mapa duas delas estão na MT-358 (05 §1a). Só sugere.
-        if (raioKm) {
+        if (raioKm && sede) {
           const ja = new Set(candidatos.map((c) => c.grupo.id));
           candidatos = [
             ...candidatos,
@@ -218,13 +289,77 @@ export class TagProcessamentoService {
       cadeias.set(a.chave, [...(cadeias.get(a.chave) ?? []), { com: `${b.cidade} km ${(b.kmMetros / 1000).toFixed(1)}`, ok, dKmExtrato, dKmEstrada }]);
       cadeias.set(b.chave, [...(cadeias.get(b.chave) ?? []), { com: `${a.cidade} km ${(a.kmMetros / 1000).toFixed(1)}`, ok, dKmExtrato, dKmEstrada }]);
     }
+    const conhecidas = await this.pracasConhecidas(resolvidas);
     for (const p of pracas) {
       const { sede, candidatos } = base.get(p.chave)!;
       const cadeia = cadeias.get(p.chave) ?? [];
       const tarifaOk = candidatos.length === 1 ? tarifaConfere(p, candidatos[0]!.grupo) : null;
-      out.set(p.chave, { sede, candidatos, cadeia, tarifaOk, decisao: decidirPraca(p, candidatos, cadeia, tarifaOk) });
+      // A régua do km: só pra quem ainda não está casada.
+      const pv = resolvidas.get(p.chave)?.lat != null ? undefined : await this.pelasVizinhas(p, conhecidas);
+      out.set(p.chave, { sede, candidatos, cadeia, tarifaOk, decisao: decidirPraca(p, candidatos, cadeia, tarifaOk, pv) });
     }
     return out;
+  }
+
+  /**
+   * Praças do extrato já casadas com o mapa, com o km de cada uma: as deste
+   * extrato e todas as do de-para (desta empresa e o global — a praça da
+   * BR-364 km 383 é a mesma pra todo mundo).
+   */
+  private async pracasConhecidas(resolvidas: Map<string, PracaResolvida>): Promise<PracaConhecida[]> {
+    const out = new Map<string, PracaConhecida>();
+    const deParas = [
+      ...(await this.prisma.pracaTagDeParaConta.findMany({
+        where: { operadora: OPERADORA },
+        include: { pedagioRodovia: { select: { lat: true, lng: true, nome: true, uf: true } } },
+      })),
+      ...(await this.prisma.pracaTagDePara.findMany({
+        where: { operadora: OPERADORA },
+        include: { pedagioRodovia: { select: { lat: true, lng: true, nome: true, uf: true } } },
+      })),
+    ];
+    for (const d of deParas) {
+      const k = kmDaChave(d.chavePraca);
+      if (!k || out.has(d.chavePraca)) continue;
+      out.set(d.chavePraca, { chave: d.chavePraca, ...k, lat: d.pedagioRodovia.lat, lng: d.pedagioRodovia.lng, nome: d.pedagioRodovia.nome, uf: d.pedagioRodovia.uf });
+    }
+    for (const r of resolvidas.values()) {
+      if (r.lat == null || r.lng == null || out.has(r.chave)) continue;
+      out.set(r.chave, { chave: r.chave, rodovia: r.rodovia, kmMetros: r.kmMetros, lat: r.lat, lng: r.lng, nome: r.nome ?? r.cidade, uf: r.uf });
+    }
+    return [...out.values()];
+  }
+
+  /**
+   * A conta pelo km: as praças do mapa, na mesma rodovia, cuja distância de
+   * ESTRADA até as vizinhas já casadas bate com o Δkm do extrato.
+   */
+  private async pelasVizinhas(p: PracaDoExtrato, conhecidas: PracaConhecida[]): Promise<PelasVizinhas | undefined> {
+    const vizinhas = vizinhasNaRodovia(p, conhecidas);
+    if (vizinhas.length === 0) return undefined;
+    const alcance = Math.max(...vizinhas.map((v) => Math.abs(p.kmMetros - v.kmMetros) / 1000)) + 20;
+    const graus = alcance / 100;
+    const nos = await this.prisma.pedagioRodovia.findMany({
+      where: {
+        ativo: true,
+        lat: { gte: Math.min(...vizinhas.map((v) => v.lat)) - graus, lte: Math.max(...vizinhas.map((v) => v.lat)) + graus },
+        lng: { gte: Math.min(...vizinhas.map((v) => v.lng)) - graus, lte: Math.max(...vizinhas.map((v) => v.lng)) + graus },
+      },
+      select: { id: true, nome: true, lat: true, lng: true, rodovia: true, concessionaria: true, valorBase: true },
+    });
+    // Pré-filtro em linha reta (a estrada nunca é mais curta que ela): só quem
+    // ainda pode estar no Δkm de cada vizinha vai pro roteador.
+    const grupos = agruparNos(nos.map((n) => ({ ...n, valorBase: n.valorBase == null ? null : Number(n.valorBase) })))
+      .filter((g) => mesmaRodovia(p, g))
+      .filter((g) =>
+        vizinhas.every((v) => distanciaMetros(g.lat, g.lng, v.lat, v.lng) / 1000 <= (Math.abs(p.kmMetros - v.kmMetros) / 1000) * 1.15 + 2),
+      )
+      .slice(0, 12);
+    const estrada = new Map<string, number | null>();
+    for (const g of grupos) {
+      for (const v of vizinhas) estrada.set(`${g.id}|${v.chave}`, (await this.rota(g, v)).km);
+    }
+    return pelasVizinhasPura(p, vizinhas, grupos, (gid, vk) => estrada.get(`${gid}|${vk}`) ?? null);
   }
 
   /** As praças distintas das passagens, com a tarifa por eixo mais recente. */

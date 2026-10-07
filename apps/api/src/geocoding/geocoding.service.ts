@@ -327,6 +327,50 @@ export class GeocodingService {
     return null;
   }
 
+  /**
+   * O contorno do município (IBGE), pra procurar praça de pedágio no
+   * TERRITÓRIO dele e não num raio em volta da sede: em MT o município tem 9
+   * mil km² e a praça pode estar a 60 km do centro. Cacheado (inclusive o "não
+   * achei") — o contorno não muda. null = sem UF, nome que não casa ou IBGE
+   * fora do ar: quem chama segue só com o raio.
+   */
+  async malhaDoMunicipio(cidade: string, uf: string | null): Promise<unknown | null> {
+    if (!uf) return null;
+    const nome = normalizarMunicipio(cidade);
+    if (!nome) return null;
+    const cacheKey = `malha:${uf.toUpperCase()}:${nome}`;
+    const hit = await this.prisma.geocodingCache.findUnique({ where: { query: cacheKey } });
+    if (hit) return (hit.resposta as unknown) ?? null;
+    try {
+      const lista = (await (
+        await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf.toUpperCase()}/municipios`, {
+          signal: AbortSignal.timeout(10_000),
+        })
+      ).json()) as { id: number; nome: string }[];
+      const m =
+        lista.find((x) => normalizarMunicipio(x.nome) === nome) ??
+        lista.find((x) => normalizarMunicipio(x.nome).replace(/ (DO|DA|DE|DOS|DAS) /g, " ") === nome.replace(/ (DO|DA|DE|DOS|DAS) /g, " "));
+      let geometria: unknown = null;
+      if (m) {
+        const g = (await (
+          await fetch(
+            `https://servicodados.ibge.gov.br/api/v3/malhas/municipios/${m.id}?formato=application/vnd.geo+json&qualidade=minima`,
+            { signal: AbortSignal.timeout(10_000) },
+          )
+        ).json()) as { features?: { geometry?: unknown }[] };
+        geometria = g.features?.[0]?.geometry ?? null;
+      }
+      await this.prisma.geocodingCache
+        .create({ data: { query: cacheKey, resposta: (geometria ?? Prisma.JsonNull) as Prisma.InputJsonValue } })
+        .catch(() => {});
+      return geometria;
+    } catch (e) {
+      // IBGE fora do ar não é "não existe": não cacheia, tenta na próxima.
+      this.log.warn(`malha do município ${cidade}/${uf}: ${(e as Error).message}`);
+      return null;
+    }
+  }
+
   /** Nominatim aceita 1 consulta por segundo: a fila de praças pergunta várias seguidas. */
   private ultimaBuscaSede = 0;
 
@@ -484,4 +528,15 @@ function normalizarPlace(placeId: string, p: GooglePlaceResponse): SugestaoEnder
     lat: p.location?.latitude,
     lng: p.location?.longitude,
   };
+}
+
+/** "ROSÁRIO DO OESTE" / "Rosário Oeste" → "ROSARIO DO OESTE" (sem acento, maiúsculo, espaço simples). */
+function normalizarMunicipio(nome: string): string {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
