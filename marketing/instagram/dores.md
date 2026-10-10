@@ -182,6 +182,20 @@ não filtra por conta), com bloqueio e denúncia (`apps/motorista-app/app/chat/`
 O escritório só vê o canal de Avisos que ele mesmo publica, nunca a conversa
 entre motoristas (`chat-admin.service.ts`).
 
+### 18. Fez um frete pra quem ainda não o conhece, e não tem como provar o que rodou
+**Como ele diz:** "rodei pra esse contratante, mas na hora de cobrar é só a minha palavra."
+**O que custa:** é o ponto mais frágil do autônomo sem vínculo (bico, frete por
+fora, contratante novo) — sem nota nem contrato formal, provar o que foi feito
+depende de confiança, e cobrar vira constrangimento. Levantado em
+`docs/motorista-sem-empresa.md` (item 3 de "o que dói no dia dele").
+**O que mata:** `POST /m/eu/frete/comprovante` gera um link público por período
+(`ComprovantePessoalPublicoController`, `apps/api/src/frete-pessoal/`) com data,
+origem, destino, carga, km e valor combinado de cada frete lançado no caderno,
+mais o total do período — sem CPF, telefone nem em qual empresa ele roda
+(`ComprovantePessoalPublico` em `packages/shared-types/src/lancamento-pessoal.ts`).
+Usado em `44-rodou-precisa-provar` — ângulo distinto de `21-vale-a-pena` (decidir
+antes de aceitar) e `42-quanto-sobrou` (balanço do mês).
+
 ---
 
 ## De onde vem isto, e o que falta
