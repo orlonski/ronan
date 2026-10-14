@@ -78,6 +78,18 @@ envelhecida e sem número pra justificar a troca no banco.
 **O que mata:** o real do motorista nunca é sobrescrito; alteração de km exige motivo
 escrito e vira auditoria (`common/km-motorista.ts`).
 
+### 19. Documento de motorista ou caminhão vence, e ninguém vê antes de sair
+**Como ele diz:** "só vi que o CRLV tinha vencido quando o caminhão já tava parado
+na fiscalização."
+**O que custa:** CNH, CRLV, seguro e tacógrafo vencem toda semana numa frota de
+verdade; não tem como guardar isso de cabeça motorista por motorista, placa por
+placa — e documento vencido pode reter caminhão e carga na estrada.
+**O que mata:** selo (vencido/vence logo) na tela de Programação por motorista e
+por caminhão, com resumo no sininho do painel a 15, 7, 1 dia e no dia do
+vencimento — só avisa, quem decide se o caminhão sai continua sendo o escritório
+(`common/documento-vencimento.ts`, `admin/pedidos/documentos-vencendo.service.ts`,
+`app/(painel)/programacao/page.tsx`).
+
 ### 9b. O CT-e volta rejeitado, e a mensagem da Sefaz não ajuda
 **Como ele diz:** "deu erro 610 de novo, e agora?"
 **O que custa:** CT-e rejeitado é número de série perdido, emissão que não sai, e alguém
