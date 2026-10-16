@@ -90,6 +90,28 @@ vencimento — só avisa, quem decide se o caminhão sai continua sendo o escrit
 (`common/documento-vencimento.ts`, `admin/pedidos/documentos-vencendo.service.ts`,
 `app/(painel)/programacao/page.tsx`).
 
+### 20. O funcionário saiu há anos, e a ação trabalhista cobra hora extra que a empresa não tem como provar que não houve
+**Como ele diz:** "ele foi desligado há dois anos, agora entrou com ação pedindo hora
+extra. Juro que não teve, mas eu não tenho como provar."
+**O que custa:** pela Súmula 338 do TST, quem não mantém controle de ponto válido
+(ou usa cartão de horário sempre igual, o "ponto britânico") perde a presunção a
+favor: o ônus da prova vira do empregador, e prevalece a jornada que o ex-funcionário
+alega na petição se a empresa não desincumbir. Numa transportadora com motorista ou
+equipe de pátio registrados em CLT, isso é passivo que só aparece anos depois, numa
+reclamatória, sem chance de corrigir o que já aconteceu.
+**O que mata:** módulo de Ponto (`apps/api/src/ponto/`, telas `/ponto/*` no painel e
+aba Ponto no app) — REP conforme a Portaria 671/MTE: a marcação grava só instante e
+pessoa, é append-only (nunca alterada, art. 82 IV da Portaria), toda correção nasce de
+um motivo escrito — do funcionário que pede ou do escritório que lança — e fica riscada
+no espelho sem apagar o original
+(`common/ponto-jornada.ts`). O funcionário confere o espelho do mês e pode discordar
+por escrito — não é um botão "concordo" (`conferirEspelho` em `ponto/ponto.service.ts`);
+o hash amarra a ciência ao documento exato. O acesso ao próprio histórico continua
+disponível por meses depois do desligamento (`exigirAcessoDeLeitura`), e o registro
+nunca é bloqueado — nem por escala, feriado, madrugada ou mensalidade em atraso — porque
+recusar bater o ponto é a prova contra a própria empresa (comentário do `registrar()`
+no mesmo arquivo).
+
 ### 9b. O CT-e volta rejeitado, e a mensagem da Sefaz não ajuda
 **Como ele diz:** "deu erro 610 de novo, e agora?"
 **O que custa:** CT-e rejeitado é número de série perdido, emissão que não sai, e alguém
