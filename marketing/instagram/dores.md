@@ -230,6 +230,23 @@ mais o total do período — sem CPF, telefone nem em qual empresa ele roda
 Usado em `44-rodou-precisa-provar` — ângulo distinto de `21-vale-a-pena` (decidir
 antes de aceitar) e `42-quanto-sobrou` (balanço do mês).
 
+### 21. O celular não para de tocar perguntando onde ele está
+**Como ele diz:** "toda hora é ligação perguntando onde eu tô. Não dá nem pra
+prestar atenção na pista direito."
+**O que custa:** atender celular dirigindo é risco e multa; motorista para o
+caminhão ou arrisca a atenção na pista só pra dizer "tô entrando em tal
+cidade" pra alguém que podia simplesmente abrir uma tela.
+**O que mata:** compartilhar posição é decisão do próprio motorista, desligada
+por padrão (`MotoristaPosicaoConfig.ativada`, default `false`) e ligada na
+tela de Perfil do app (`apps/motorista-app/app/perfil-posicao.tsx`), com
+escolha de janela de horário e desligamento a qualquer momento — o backend
+recusa gravar posição se estiver desligada (`apps/api/src/motorista/posicao.service.ts`).
+Enquanto ligada, só o escritório vê no mapa (`admin/frota/mapa`, tela `/mapa`
+do painel) — o link público de comprovante do cliente final não mostra
+posição de propósito (`compartilhamento/viagem-publica.ts`: "mandar isso pro
+cliente é vigiar o motorista, não comprovar a entrega"). Usado em
+`50-voce-decide-quem-ve`.
+
 ---
 
 ## De onde vem isto, e o que falta
