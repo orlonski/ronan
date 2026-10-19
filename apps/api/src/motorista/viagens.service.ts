@@ -1,3 +1,4 @@
+import { recarimbarApontadoras } from "../common/ticket-duplicado";
 import { POLITICA_DA_ORIGEM } from "../common/viagem-origem";
 import {
   BadRequestException,
@@ -909,6 +910,9 @@ export class ViagensMotoristaService {
         revisadoPor: { disconnect: true },
       },
     });
+    if (mudancas.some((m) => m.campo === "ticket")) {
+      await recarimbarApontadoras(this.prisma, viagemId, (data.ticket as string | undefined) ?? viagem.ticket);
+    }
 
     const nomeMot = (
       await this.prisma.motorista.findUnique({ where: { id: motoristaId }, select: { nome: true } })

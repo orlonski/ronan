@@ -1,3 +1,4 @@
+import { recarimbarApontadoras } from "../../common/ticket-duplicado";
 import { camposCorrigidos } from "../../common/viagem-origem";
 import {
   BadRequestException,
@@ -633,6 +634,7 @@ export class ViagensAdminService {
       where: { id },
       data: dataUpdate,
     });
+    if (novoTicket !== antes.ticket) await recarimbarApontadoras(this.prisma, id, novoTicket ?? null);
 
     // Viagem que entrou INCOMPLETA (o servidor aceitou o lançamento do motorista
     // faltando dado, em vez de recusar e matá-lo no celular): o conferente
