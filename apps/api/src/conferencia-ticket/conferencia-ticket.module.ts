@@ -4,6 +4,7 @@ import { ConferenciaConfig } from "./conferencia.config";
 import { ConferenciaFilaService } from "./conferencia-fila.service";
 import { VinculosNomeService } from "./vinculos-nome.service";
 import { AuditoriaCegaService } from "./auditoria-cega.service";
+import { EscritorioSnapshotService } from "./escritorio-snapshot";
 
 /**
  * Só a FILA — sem worker. É o que a API importa pra poder enfileirar do
@@ -15,7 +16,7 @@ import { AuditoriaCegaService } from "./auditoria-cega.service";
  */
 @Module({
   imports: [PrismaModule],
-  providers: [ConferenciaConfig, ConferenciaFilaService, VinculosNomeService, AuditoriaCegaService],
-  exports: [ConferenciaFilaService, ConferenciaConfig, VinculosNomeService, AuditoriaCegaService],
+  providers: [ConferenciaConfig, ConferenciaFilaService, VinculosNomeService, AuditoriaCegaService, EscritorioSnapshotService],
+  exports: [ConferenciaFilaService, ConferenciaConfig, VinculosNomeService, AuditoriaCegaService, EscritorioSnapshotService],
 })
 export class ConferenciaTicketModule {}

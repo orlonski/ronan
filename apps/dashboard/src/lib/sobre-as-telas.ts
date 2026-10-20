@@ -276,6 +276,23 @@ export const SOBRE_AS_TELAS: Record<string, SobreATela> = {
     },
   },
 
+  "/escritorio": {
+    oQue:
+      "O caminho de cada viagem, do celular do motorista até o veredito do agente, " +
+      "desenhado como um escritório: dá pra ver o que chegou, o que está sendo lido e o que ficou parado esperando alguém.",
+    faz: [
+      "Ver, ao vivo, as viagens que chegam e as conferências que terminam",
+      "Saber quantas viagens estão esperando o escritório e há quanto tempo a mais antiga está parada",
+      "Perceber de relance se o agente está em modo sombra (só anotando) ou desligado",
+      "Abrir a demonstração com dados de exemplo pra mostrar a alguém como funciona",
+    ],
+    naoEAqui: {
+      procurando: "decidir o que fazer com uma viagem parada",
+      vaEm: "Conferir tickets",
+      href: "/conferencias",
+    },
+  },
+
   "/conferencias": {
     oQue:
       "O que a leitura automática enxergou na foto do ticket, lado a lado com " +
