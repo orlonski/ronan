@@ -11,13 +11,13 @@ const EscritorioCliente = dynamic(
 
 export default function EscritorioPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <header>
-        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight max-2xl:text-xl">
           <Building2 className="h-6 w-6" />
           Escritório de Agentes
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground max-2xl:hidden">
           A viagem sai do celular do motorista, passa pela torre e pelo servidor, cai na mesa de entrada e os
           agentes conferem o ticket.
         </p>

@@ -1,30 +1,31 @@
 /**
- * A cena isométrica do Escritório de Agentes: desenho em canvas, sem dependência.
+ * A cena do Escritório de Agentes: dois lugares (OBRA e ESCRITÓRIO) ligados por
+ * uma faixa de SINAL, num canvas lógico de 1280x480. A arte mora em `desenho.ts`;
+ * aqui moram o estado, as linhas do tempo e o laço de animação.
  *
  * Dois modos, a MESMA arte:
- *  - "vivo": os números vêm do snapshot da API e a cena só anima fatos reais
- *    (uma viagem que chegou, uma conferência que terminou). Nada é inventado:
- *    o cartão do agente mostra "lendo o ticket…" e o veredito de verdade.
- *  - "demo": o ciclo fictício de 22 s, com valores de exemplo.
+ *  - "vivo": os números vêm do snapshot da API e o ÚNICO gatilho da rotina na
+ *    obra é uma chegada real. Sem chegada, a vaga fica vazia (só a camada
+ *    ambiente se mexe). Nada de estado inventado.
+ *  - "demo": ciclo fictício em loop, com dados de exemplo.
  *
- * Duas linhas do tempo independentes alimentam o desenho:
- *  - a CHEGADA (celular → torre → servidor → cabo → mesa de entrada), uma por
- *    viagem que chegou, no relógio local `ta` (3,0 → 9,0);
- *  - o VEREDITO (agente pega o papel, lê, carimba, leva ao destino), um por vez,
- *    no relógio local `tv` (8,9 → fim).
- * No demo as duas andam juntas no mesmo `t`; ao vivo cada fato tem o seu relógio.
+ * Duas linhas do tempo independentes:
+ *  - a CHEGADA (`Cheg`): caminhão, descarga, conferência na obra, lançamento,
+ *    sinal, torre, servidor, papel na mesa de entrada. Relógio local `tc`
+ *    (0 = o motorista lança).
+ *  - o VEREDITO (`Ver`): o leitor levanta, pega o papel, lê, carimba e leva ao
+ *    destino. Relógio local `u` (0 = começou a rotina do leitor).
  */
 import type { EscritorioSnapshot } from "@ronan/shared-types";
+import {
+  ALTURA, C, LARGURA, OBRA_FIM, SINAL_FIM, ZE, ZO, ZS, criarDesenho, pctNaCena,
+  type Braco, type Dir, type LinhaCartao, type Pt, type Pt3, type Zona,
+} from "./desenho";
 
-export const LARGURA = 1190;
-export const ALTURA = 720;
-const OX = 492;
-const OY = 132;
-const GW = 22;
-const GD = 15;
-const K = 1.25;
+export { ALTURA, LARGURA, pctNaCena, ZE, ZO, ZS };
+export type { Zona };
 
-export type Caso = "OK" | "DIV" | "AJ" | "TRAV" | "HUM";
+export type Caso = "OK" | "DIV" | "AJ" | "TRAV" | "HUM" | "SEMTK";
 export type Modo = "vivo" | "demo";
 export type TomLog = "ok" | "no" | "wait" | "info";
 
@@ -35,7 +36,7 @@ export interface Numeros {
   aj: number;
   trav: number;
   /** Minutos parada a travada mais antiga (0 quando não há travada). */
-  age: number;
+  age: number | null;
 }
 export interface EntradaLog {
   h: string;
@@ -53,910 +54,434 @@ export interface Cena {
   setCaso(c: Caso | ""): void;
   setPausado(p: boolean): void;
   setVelocidade(v: 1 | 2): void;
+  /** Dado velho demais: a idade da travada para de subir sozinha. */
+  setDefasado(d: boolean): void;
   destruir(): void;
 }
 
-type Pt = [number, number];
-type Pt3 = [number, number, number];
-type Kind = "OK" | "DIV" | "AJ" | "TRAV";
-type Dir = "px" | "py" | "mx" | "my";
-type Braco = "up" | "front" | null | undefined;
-
-/** Posição na cena (em tiles) → % do canvas, pros rótulos em HTML por cima. */
-export function pctNaCena(x: number, y: number, z = 0): { left: number; top: number } {
-  const px = OX + (x - y) * 24 * K;
-  const py = OY + (x + y) * 12 * K - z * K;
-  return { left: (px / LARGURA) * 100, top: (py / ALTURA) * 100 };
-}
-
-export const ROTULOS: {
-  texto: string;
-  x: number;
-  y: number;
-  z: number;
-  tom: "" | "f" | "v" | "d" | "a";
-  opc?: boolean;
-  chave?: keyof Numeros;
-}[] = [
-  { texto: "Obra · ponto de descarga", x: 3.5, y: 14.9, z: 0, tom: "", opc: true },
-  { texto: "Torre de celular", x: 7.9, y: 6.5, z: 125, tom: "", opc: true },
-  { texto: "Mesa de entrada", x: 10.6, y: 3.0, z: 8, tom: "f", chave: "fila" },
-  { texto: "Validadas", x: 19.9, y: 2.8, z: 4, tom: "v", chave: "val" },
-  { texto: "Devolvidas pra conferir", x: 20.5, y: 8.9, z: 0, tom: "d", chave: "dev" },
-  { texto: "Ajustadas", x: 20.5, y: 12.2, z: 0, tom: "a", chave: "aj" },
+/** Rótulos em HTML por cima da cena (a zona diz qual origem usar em `pctNaCena`). */
+export const ROTULOS: { zona: Zona; x: number; y: number; alt: number; texto: string; opc?: boolean; obra?: boolean }[] = [
+  { zona: ZO, x: 7.0, y: 3.0, alt: 50, texto: "Guarita do conferente", opc: true, obra: true },
+  { zona: ZO, x: 9.5, y: 1.0, alt: -12, texto: "Avisos no celular", opc: true, obra: true },
+  { zona: ZS, x: 2.77, y: 6.6, alt: -6, texto: "Torre", opc: true },
+  { zona: ZS, x: 3.9, y: 1.0, alt: -9, texto: "Servidor", opc: true },
 ];
 
-const C = {
-  g0: "#0E1526", g1: "#1B2540", g2: "#2C3A63", az: "#2A4A9E", azl: "#5B8AE8", cz: "#A6B3D2", pp: "#EEF1F8",
-  lj: "#DF7234", ljd: "#B4501A", am: "#F2B53F", vd: "#27A06A", vdl: "#7ED9A6", vm: "#E05A4E",
-  pa: "#F0C7A0", pb: "#C98F63", pc: "#8A5A3A", md: "#9A6B43", bk: "#07090F",
-};
+type Kind = "OK" | "DIV" | "AJ" | "TRAV" | "NEU" | "SOM";
+type Tom3 = "ok" | "no" | "wait" | "neu";
+type HumDest = "val" | "dev" | "sai";
 
-const CABO: Pt3[] = [[6.7, 3.8, 0], [6.7, 5.0, 0], [10.3, 5.0, 0], [10.9, 5.0, 4], [10.9, 5.0, 26]];
-const T = 22;
-const SEQ: Caso[] = ["OK", "DIV", "AJ", "OK", "TRAV", "OK", "TRAV", "HUM"];
-const HOME1: Pt = [13.9, 9.0];
-const HOME2: Pt = [13.9, 12.2];
-const INBOX: Pt = [12.8, 5.0];
-const DRV: Pt = [5.8, 10.6];
-const MAX_CHEGADAS = 3;
-/**
- * A rotina na obra, ANTES de lançar (a regra do negócio): o caminhão chega,
- * basculha, o conferente da obra confere e assina, o motorista fotografa o
- * comprovante e só então lança a viagem. Depois volta ao caminhão e sai, pra
- * liberar a vaga do próximo. `TA_LANCA` é o instante do lançamento na linha do
- * tempo da chegada (`ta`); tudo que vem depois (sinal, torre, servidor, mesa)
- * continua medido a partir dele. O que vem antes é a "entrada" (`ta` negativo).
- */
-const TA_LANCA = 3.8;
-const ENTRADA = 4.8;
-/** Ao vivo, um caminhão por vez na vaga: o próximo só entra depois que o anterior saiu. */
-const INTERVALO_CAMINHAO = 12;
-const PORTA_CAB: Pt = [4.35, 8.8];
-const POSTO_CONF: Pt = [5.2, 12.4];
-const MAX_FILA_VEREDITOS = 3;
+const SEQ: Caso[] = ["OK", "DIV", "SEMTK", "AJ", "OK", "TRAV", "HUM", "SEMTK"];
+const DEMO_NOMES = ["Carlos M.", "Ana P.", "Pedro L.", "Marta R."];
+const DEMO_INICIAL: Numeros = { fila: 7, val: 81, dev: 287, aj: 4, trav: 2, age: 195 };
+
+/** Instante em que o papel pousa na mesa de entrada (tc). */
+const T_POUSO = 3.9;
+const T_INI_CHEG = -10.4;
+const T_INI_AJ = -2.0;
+const T_FIM_CHEG = 4.9;
+const MAX_CHEGADAS_FILA = 30;
+const MAX_VEREDITOS_FILA = 50;
+const JANELA_CHEGADA_MS = 10 * 60_000;
 
 const lerp = (a: number, b: number, u: number): number => a + (b - a) * u;
 const ease = (u: number): number => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2);
 const easeOut = (u: number): number => 1 - Math.pow(1 - u, 3);
-const seg = (t: number, a: number, b: number): number => (t <= a ? 0 : t >= b ? 1 : (t - a) / (b - a));
+const clamp01 = (u: number): number => (u < 0 ? 0 : u > 1 ? 1 : u);
+const segT = (t: number, a: number, b: number): number => (t <= a ? 0 : t >= b ? 1 : (t - a) / (b - a));
 
-/** Chegada de uma viagem: a perna celular → mesa. */
-interface Chegada {
+/* ---------- pontos fixos (OBRA) ---------- */
+const DOOR: Pt = [6.1, 5.5];
+const MEET: Pt = [6.4, 8.05];
+const DG: Pt = [8.05, 5.55];
+const MEETC: Pt = [7.35, 8.05];
+/* ---------- pontos fixos (ESCRITÓRIO) ---------- */
+const HOMEL: Pt = [5.0, 4.75];
+const HOMEC: Pt = [5.0, 1.75];
+const WPL: Pt = [3.8, 4.7];
+const INB: Pt = [2.6, 5.45];
+const PILE: Pt = [2.5, 7.0];
+const DESK1: Pt3 = [5.0, 5.55, 14.6];
+const DESK2: Pt3 = [5.0, 2.6, 14.6];
+const HUMS: Pt = [11.7, 5.0];
+const HUMH: Pt = [10.5, 7.55];
+const SP = 2.4;
+const DEST: Record<Kind, Pt3> = { OK: [9.5, 1.2, 44], AJ: [9.35, 3.55, 14], DIV: [9.35, 5.75, 20], TRAV: [8.9, 8.9, 22], NEU: [1.2, 4.0, 10], SOM: [1.2, 4.0, 10] };
+
+/* ---------- roteiro do escritório ---------- */
+interface StepIn {
+  k: "rise" | "walk" | "stand" | "sitdown" | "sit";
+  d?: number;
+  pts?: Pt[];
+  at?: Pt;
+  dir?: Dir;
+  arm?: Braco;
+  pp?: "hand" | "desk" | "deskC" | null;
+  pp2?: "hand" | "desk" | "deskC";
+  ppS?: number;
+  ppA?: number;
+  ppB?: number;
+  act?: "read" | "verdict" | "stamp";
+  drawer?: boolean;
+  ev?: [number, string][];
+}
+interface Step extends StepIn {
+  t0: number;
+  t1: number;
+  d: number;
+}
+interface Ev {
+  t: number;
   id: string;
-  /** Instante (relógio da cena) em que começou. */
-  inicio: number;
-  slot: number;
-  aj: boolean;
-  fired: Record<string, boolean>;
+  who: string;
+  k: string;
 }
-/** O que o agente está fazendo com um papel. */
-interface Veredito {
-  id: string;
-  inicio: number;
-  kind: Kind;
-  /** Houve 2ª leitura (o conferente entra em cena). */
-  seg2: boolean;
-  /** O motorista foi avisado (volta o sinal pro celular dele). */
-  aviso: boolean;
-  hum: boolean;
-  texto: string;
-  tom: "ok" | "no" | "wait";
-  fired: Record<string, boolean>;
+interface Script {
+  L: Step[];
+  C: Step[];
+  H: Step[] | null;
+  ev: Ev[];
+  tEnd: number;
+  retT: number | null;
 }
-interface VView extends Veredito {
-  tv: number;
-}
-interface PoseHumano {
+interface Pose {
   x: number;
   y: number;
   dir: Dir;
-  walk?: boolean;
-  arm?: Braco;
   seat?: boolean;
+  walk?: boolean;
+  chair: number;
+  arm: Braco;
+  pp: "hand" | "desk" | "deskC" | null;
+  sg?: Step;
+  fr: number;
 }
-interface OpcHumano extends PoseHumano {
-  t: number;
-  shirt: string;
-  skin: string;
-  hair: string;
-  badge?: boolean;
-  cap?: boolean;
+
+const plen = (pts: Pt[]): number => {
+  let q = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1] as Pt;
+    const b = pts[i] as Pt;
+    q += Math.hypot(b[0] - a[0], b[1] - a[1]);
+  }
+  return q;
+};
+const rev = (pts: Pt[]): Pt[] => pts.slice().reverse();
+function mk(t0: number, steps: StepIn[], who: string, evs: Ev[]): Step[] {
+  let tt = t0;
+  return steps.map((s) => {
+    const d = s.d ?? (s.k === "walk" ? plen(s.pts ?? []) / SP : 0.5);
+    const out: Step = { ...s, d, t0: tt, t1: tt + d };
+    (s.ev ?? []).forEach((e) => evs.push({ t: out.t0 + e[0] * d, id: e[1], who, k: `${who}${e[1]}${evs.length}` }));
+    tt = out.t1;
+    return out;
+  });
+}
+/** Caminho do papel até o destino. `de` = de que mesa o agente sai. */
+function rotaDestino(kind: Kind, de: "L" | "C", sx: number): { pts: Pt[]; dir: Dir; drawer?: boolean } {
+  const h = de === "L" ? HOMEL : HOMEC;
+  const p1: Pt = de === "L" ? [6.4, 4.75] : [6.6, 1.75];
+  if (kind === "AJ") return { pts: [h, p1, [7.5, 4.3], [8.05, 3.55]], dir: "px" };
+  if (kind === "TRAV") return { pts: [h, p1, de === "L" ? [7.5, 5.2] : [7.5, 2.5], [7.5, 7.6], [sx, 7.6]], dir: "py" };
+  if (kind === "DIV") return { pts: [h, p1, de === "L" ? [7.5, 5.2] : [7.5, 2.5], [7.5, 5.8], [8.0, 5.8]], dir: "px" };
+  if (kind === "NEU" || kind === "SOM") return { pts: de === "L" ? [h, WPL, [2.0, 4.05]] : [h, [3.4, 1.5], [2.0, 2.5], [2.0, 4.05]], dir: "mx" };
+  return { pts: de === "L" ? [h, p1, [7.5, 3.8], [7.5, 2.15], [9.47, 2.15]] : [h, p1, [7.5, 2.15], [9.47, 2.15]], dir: "my", drawer: true };
+}
+function destHum(d: HumDest): { pts: Pt[]; at: Pt; dir: Dir; drawer: boolean } {
+  if (d === "val") return { pts: [HUMH, [10.9, 3.6], [10.47, 2.15]], at: [10.47, 2.15], dir: "my", drawer: true };
+  if (d === "dev") return { pts: [HUMH, [10.9, 6.6], [10.7, 5.75]], at: [10.7, 5.75], dir: "mx", drawer: false };
+  return { pts: [HUMH, [11.0, 6.2], HUMS], at: HUMS, dir: "px", drawer: false };
+}
+
+interface OpcVer {
+  kind: Kind;
+  seg2: boolean;
+  sem: boolean;
+  hum: boolean;
+  soHum: boolean;
+  humDest: HumDest;
+  nTrav: number;
+}
+function construirRoteiro(o: OpcVer): Script {
+  const evs: Ev[] = [];
+  let L: Step[] = [];
+  let Cc: Step[] = [];
+  let H: Step[] | null = null;
+  const sx = Math.min(10.3, 6.8 + 0.5 + o.nTrav * 0.55);
+  let tEnd = 0;
+  let retT: number | null = null;
+  if (!o.soHum) {
+    const k = o.kind;
+    const ls: StepIn[] = [
+      { k: "rise", d: 0.5 },
+      { k: "walk", pts: [HOMEL, WPL, INB] },
+      { k: "stand", d: 0.8, at: INB, dir: "py", arm: "front", pp: "hand", ppA: 0.5, ev: [[0.5, "pick"]] },
+      { k: "walk", pts: [INB, WPL, HOMEL], pp: "hand", arm: "front" },
+      { k: "sitdown", d: 0.5, pp: "hand", pp2: "desk", ppS: 0.55 },
+      { k: "sit", d: o.sem ? 1.1 : 2.4, pp: "desk", act: "read" },
+      { k: "sit", d: 0.6, pp: "desk", act: "verdict" },
+    ];
+    const destDe = (de: "L" | "C"): StepIn[] => {
+      const dd = rotaDestino(k, de, sx);
+      const last = dd.pts[dd.pts.length - 1] as Pt;
+      const hp = de === "L" ? "desk" : "deskC";
+      return [
+        { k: "rise", d: 0.5, pp: hp },
+        { k: "walk", pts: dd.pts, pp: "hand", arm: "front" },
+        { k: "stand", d: dd.drawer ? 2.0 : 1.0, at: last, dir: dd.dir, arm: "front", pp: "hand", ppB: dd.drawer ? 0.55 : 0.5, drawer: !!dd.drawer, ev: [[dd.drawer ? 0.55 : 0.5, "place"]] },
+        { k: "walk", pts: rev(dd.pts) },
+        { k: "sitdown", d: 0.5 },
+      ];
+    };
+    if (o.seg2) {
+      ls.push(
+        { k: "rise", d: 0.5, pp: "desk" },
+        { k: "walk", pts: [HOMEL, [3.7, 4.45], [3.4, 2.6]], pp: "hand", arm: "front" },
+        { k: "stand", d: 0.9, at: [3.4, 2.6], dir: "px", arm: "front", pp: "hand", ppB: 0.5, ev: [[0.5, "handover"]] },
+        { k: "walk", pts: [[3.4, 2.6], [3.7, 4.45], HOMEL] },
+        { k: "sitdown", d: 0.5 },
+      );
+    } else {
+      ls.push({ k: "sit", d: 0.75, pp: "desk", act: "stamp", ev: [[0.4, "stamp"]] }, ...destDe("L"));
+    }
+    L = mk(3.0 * 0, ls, "L", evs);
+    tEnd = (L[L.length - 1] as Step).t1;
+    if (o.seg2) {
+      const ho = (evs.find((e) => e.id === "handover") as Ev).t;
+      Cc = mk(
+        ho,
+        [
+          { k: "sit", d: 0.35, pp: "deskC" },
+          { k: "sit", d: 2.3, pp: "deskC", act: "read" },
+          { k: "sit", d: 0.55, pp: "deskC", act: "verdict" },
+          { k: "sit", d: 0.75, pp: "deskC", act: "stamp", ev: [[0.4, "stamp"]] },
+          ...destDe("C"),
+        ],
+        "C",
+        evs,
+      );
+      tEnd = Math.max(tEnd, (Cc[Cc.length - 1] as Step).t1);
+    }
+    if (k === "AJ" || k === "DIV") {
+      const pl = evs.find((e) => e.id === "place");
+      if (pl) retT = pl.t;
+    }
+  }
+  if (o.hum || o.soHum) {
+    const h2 = destHum(o.humDest);
+    const hp1: Pt[] = [HUMS, [11.0, 5.9], HUMH];
+    H = mk(
+      o.soHum ? 0 : 1.1,
+      [
+        { k: "walk", pts: hp1 },
+        { k: "stand", d: 0.9, at: HUMH, dir: "py", arm: "front", pp: "hand", ppA: 0.5, ev: [[0.5, "hpick"]] },
+        { k: "walk", pts: h2.pts, pp: "hand", arm: "front" },
+        { k: "stand", d: h2.drawer ? 2.0 : 1.0, at: h2.at, dir: h2.dir, arm: "front", pp: "hand", ppB: h2.drawer ? 0.55 : 0.5, drawer: h2.drawer, ev: [[h2.drawer ? 0.55 : 0.5, "hplace"]] },
+        { k: "walk", pts: rev(h2.pts).concat([HUMS]) },
+      ],
+      "H",
+      evs,
+    );
+    tEnd = Math.max(tEnd, (H[H.length - 1] as Step).t1);
+  }
+  if (retT !== null) tEnd = Math.max(tEnd, retT + 6.3);
+  return { L, C: Cc, H, ev: evs, tEnd: tEnd + 1.0, retT };
+}
+
+const dirDe = (dx: number, dy: number): Dir => (Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "px" : "mx") : dy > 0 ? "py" : "my");
+function ppDe(sg: Step, fr: number): Pose["pp"] {
+  let p: Pose["pp"] = sg.pp ?? null;
+  if (sg.pp2 && fr >= (sg.ppS ?? 0)) p = sg.pp2;
+  if (sg.ppA !== undefined && fr < sg.ppA) p = null;
+  if (sg.ppB !== undefined && fr >= sg.ppB) p = null;
+  return p;
+}
+function poseDe(list: Step[] | null, tt: number, home: Pt | null): Pose | null {
+  const base: Pose | null = home ? { x: home[0], y: home[1], dir: "py", seat: true, chair: 0, arm: null, pp: null, fr: 0 } : null;
+  if (!list || !list.length) return base;
+  const first = list[0] as Step;
+  const lastS = list[list.length - 1] as Step;
+  if (tt < first.t0 || tt >= lastS.t1) return base;
+  const sg = list.find((s) => tt >= s.t0 && tt < s.t1);
+  if (!sg) return base;
+  const fr = (tt - sg.t0) / sg.d;
+  const o: Pose = { x: 0, y: 0, dir: "py", chair: 1, arm: sg.arm ?? null, pp: ppDe(sg, fr), sg, fr };
+  const h: Pt = home ?? [0, 0];
+  if (sg.k === "rise") {
+    o.x = h[0];
+    o.y = h[1];
+    o.chair = ease(clamp01(fr * 1.2));
+    o.seat = fr < 0.35;
+    if (!o.seat) o.arm = null;
+  } else if (sg.k === "sitdown") {
+    o.x = h[0];
+    o.y = h[1];
+    o.chair = 1 - ease(clamp01(fr * 1.2 - 0.1));
+    o.seat = fr > 0.45;
+    if (o.seat) o.arm = "front";
+  } else if (sg.k === "sit") {
+    o.x = h[0];
+    o.y = h[1];
+    o.chair = 0;
+    o.seat = true;
+    o.arm = sg.act === "read" || sg.act === "stamp" ? "front" : null;
+  } else if (sg.k === "walk") {
+    const pts = sg.pts as Pt[];
+    const tot = plen(pts);
+    let dist = fr * tot;
+    let q = 0;
+    for (; q < pts.length - 2; q++) {
+      const a0 = pts[q] as Pt;
+      const b0 = pts[q + 1] as Pt;
+      const l = Math.hypot(b0[0] - a0[0], b0[1] - a0[1]);
+      if (dist <= l) break;
+      dist -= l;
+    }
+    const a = pts[q] as Pt;
+    const b = pts[q + 1] as Pt;
+    const ll = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const f = Math.min(1, dist / ll);
+    o.x = lerp(a[0], b[0], f);
+    o.y = lerp(a[1], b[1], f);
+    o.dir = dirDe(b[0] - a[0], b[1] - a[1]);
+    o.walk = true;
+  } else {
+    const at = sg.at as Pt;
+    o.x = at[0];
+    o.y = at[1];
+    o.dir = sg.dir ?? "py";
+  }
+  return o;
+}
+function maoDe(o: Pose): Pt3 {
+  const ax = o.dir === "px" || o.dir === "mx";
+  const fx = o.dir === "px" ? 1 : o.dir === "mx" ? -1 : 0;
+  const fy = o.dir === "py" ? 1 : o.dir === "my" ? -1 : 0;
+  return [o.x + fx * 0.27 + (ax ? 0 : 0.17), o.y + fy * 0.27 + (ax ? 0.17 : 0), o.seat ? 18 : 21];
+}
+const p3 = (a: Pt3, b: Pt3, u: number, lift: number): Pt3 => [lerp(a[0], b[0], u), lerp(a[1], b[1], u), lerp(a[2], b[2], u) + 4 * lift * u * (1 - u)];
+
+/* ---------- entidades ---------- */
+interface Cheg {
+  id: string;
+  emIso?: string;
+  emMs: number;
+  motorista?: string;
+  aj: boolean;
+  fromQ: boolean;
+  tc: number;
+  fired: Record<string, boolean>;
+  skip: number | null;
+  pousou: boolean;
+  entrou: number;
+}
+interface Carimbada {
+  u: number;
+  text: string;
+  col: string;
+  who: string;
+}
+interface Ver {
+  id: string;
+  emIso?: string;
+  kind: Kind;
+  seg2: boolean;
+  aviso: boolean;
+  sem: boolean;
+  hum: boolean;
+  soHum: boolean;
+  humDest: HumDest;
+  texto: string;
+  tom: Tom3;
+  carimbo: string;
+  corCarimbo: string;
+  logNeu: string;
+  demo: boolean;
+  scr: Script;
+  u: number;
+  fired: Record<string, boolean>;
+  skip: number | null;
+  pegou: boolean;
+  guardou: boolean;
+  hpegou: boolean;
+  hguardou: boolean;
+  stamp: Carimbada | null;
 }
 
 export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirMovimento: boolean): Cena {
-  const DPR = Math.min(2, window.devicePixelRatio || 1);
-  canvas.width = LARGURA * DPR;
-  canvas.height = ALTURA * DPR;
+  const reduce = reduzirMovimento;
   const ctxOuNulo = canvas.getContext("2d");
   if (!ctxOuNulo) throw new Error("canvas 2d indisponível");
   const ctx: CanvasRenderingContext2D = ctxOuNulo;
-  const bgc = document.createElement("canvas");
-  bgc.width = LARGURA * DPR;
-  bgc.height = ALTURA * DPR;
-  const bgx = bgc.getContext("2d");
-  if (!bgx) throw new Error("canvas 2d indisponível");
-  let g: CanvasRenderingContext2D = ctx;
-  let ZK = 1;
-  const reduce = reduzirMovimento;
-
-  /* ---------- projeção isométrica ---------- */
-  const P = (x: number, y: number, z = 0): Pt => [OX + (x - y) * 24 * K, OY + (x + y) * 12 * K - z * K * ZK];
-  const shc: Record<string, string> = {};
-  function sh(hex: string, f: number): string {
-    const k = hex + f;
-    const hit = shc[k];
-    if (hit) return hit;
-    const n = parseInt(hex.slice(1), 16);
-    const r = Math.min(255, Math.round((n >> 16) * f));
-    const gg = Math.min(255, Math.round(((n >> 8) & 255) * f));
-    const b = Math.min(255, Math.round((n & 255) * f));
-    return (shc[k] = `rgb(${r},${gg},${b})`);
-  }
-  function poly(pts: Pt[], fill: string | null, stroke?: string | null, lw?: number): void {
-    const first = pts[0];
-    if (!first) return;
-    g.beginPath();
-    g.moveTo(first[0], first[1]);
-    for (let i = 1; i < pts.length; i++) {
-      const p = pts[i] as Pt;
-      g.lineTo(p[0], p[1]);
-    }
-    g.closePath();
-    if (fill) {
-      g.fillStyle = fill;
-      g.fill();
-    }
-    if (stroke) {
-      g.strokeStyle = stroke;
-      g.lineWidth = lw ?? 0.7;
-      g.stroke();
-    }
-  }
-  function box(x: number, y: number, z: number, w: number, d: number, h: number, col: string, o?: { lift?: number; a?: number; edge?: string }): void {
-    const lf = o?.lift ?? 0;
-    const x1 = x + w;
-    const y1 = y + d;
-    const zt = z + h;
-    const L = [P(x, y1, z + lf), P(x1, y1, z + lf), P(x1, y1, zt + lf), P(x, y1, zt + lf)];
-    const Rr = [P(x1, y, z), P(x1, y1, z + lf), P(x1, y1, zt + lf), P(x1, y, zt)];
-    const Tp = [P(x, y, zt), P(x1, y, zt), P(x1, y1, zt + lf), P(x, y1, zt + lf)];
-    const ed = o?.edge === undefined ? "rgba(5,8,20,.22)" : o.edge;
-    if (o?.a !== undefined) g.globalAlpha = o.a;
-    poly(L, sh(col, 0.92), ed);
-    poly(Rr, sh(col, 0.66), ed);
-    poly(Tp, sh(col, 1.14), ed);
-    if (o?.a !== undefined) g.globalAlpha = 1;
-  }
-  function glow(p: Pt, r: number, col: string, a?: number): void {
-    const gr = g.createRadialGradient(p[0], p[1], 0, p[0], p[1], r);
-    gr.addColorStop(0, col);
-    gr.addColorStop(1, "rgba(0,0,0,0)");
-    g.save();
-    g.globalCompositeOperation = "lighter";
-    g.globalAlpha = a === undefined ? 1 : a;
-    g.fillStyle = gr;
-    g.fillRect(p[0] - r, p[1] - r, r * 2, r * 2);
-    g.restore();
-  }
-  function shadowFoot(x: number, y: number, w: number, d: number, off: number): void {
-    poly([P(x + off * 0.5, y + off * 0.5, 0), P(x + w + off, y + off * 0.5, 0), P(x + w + off, y + d + off, 0), P(x + off * 0.5, y + d + off, 0)], "rgba(4,7,18,.30)");
-  }
-  function faceText(face: "x" | "y", x: number, y: number, z: number, text: string, px: number, col: string, weight?: number): void {
-    const p = P(x, y, z);
-    g.save();
-    g.translate(p[0], p[1]);
-    if (face === "y") g.transform(1, 0.5, 0, 1, 0, 0);
-    else g.transform(1, -0.5, 0, 1, 0, 0);
-    g.font = `${weight ?? 600} ${px * K}px Archivo, system-ui, sans-serif`;
-    g.fillStyle = col;
-    g.textBaseline = "alphabetic";
-    g.fillText(text, 0, 0);
-    g.restore();
-  }
-  function faceRect(face: "x" | "y", a0: number, a1: number, fixed: number, z0: number, z1: number, col: string, stroke?: string): void {
-    const pts: Pt[] =
-      face === "y"
-        ? [P(a0, fixed, z0), P(a1, fixed, z0), P(a1, fixed, z1), P(a0, fixed, z1)]
-        : [P(fixed, a0, z0), P(fixed, a1, z0), P(fixed, a1, z1), P(fixed, a0, z1)];
-    poly(pts, col, stroke);
-  }
-  function roundRect(x: number, y: number, w: number, h: number, r: number): void {
-    g.beginPath();
-    g.moveTo(x + r, y);
-    g.arcTo(x + w, y, x + w, y + h, r);
-    g.arcTo(x + w, y + h, x, y + h, r);
-    g.arcTo(x, y + h, x, y, r);
-    g.arcTo(x, y, x + w, y, r);
-    g.closePath();
-  }
-  function ellipse(p: Pt, rx: number, ry: number, fill: string): void {
-    g.beginPath();
-    g.ellipse(p[0], p[1], rx, ry, 0, 0, 6.2832);
-    g.fillStyle = fill;
-    g.fill();
-  }
-
-  /* ---------- fundo estático ---------- */
-  function fundo(): void {
-    g = bgx as CanvasRenderingContext2D;
-    g.setTransform(DPR, 0, 0, DPR, 0, 0);
-    const gr = g.createLinearGradient(0, 0, 0, ALTURA);
-    gr.addColorStop(0, "#0F1730");
-    gr.addColorStop(1, "#070B17");
-    g.fillStyle = gr;
-    g.fillRect(0, 0, LARGURA, ALTURA);
-    poly([P(0, GD, 0), P(GW, GD, 0), P(GW, GD, -18), P(0, GD, -18)], "#0B1226");
-    poly([P(GW, 0, 0), P(GW, GD, 0), P(GW, GD, -18), P(GW, 0, -18)], "#080D1D");
-    poly([P(0, GD, 0), P(GW, GD, 0), P(GW, GD, -4), P(0, GD, -4)], "#243158");
-    for (let i = 0; i < GW; i++) {
-      for (let j = 0; j < GD; j++) {
-        let col: string;
-        if (i < 8) {
-          if (i >= 2 && i <= 4) col = (i + j) % 2 ? "#273259" : "#29345C";
-          else col = (i + j) % 2 ? "#3A4A78" : "#364573";
-          if (i === 1 || i === 5) col = "#42527F";
-        } else col = (i + j) % 2 ? "#3C4D7B" : "#364675";
-        poly([P(i, j, 0), P(i + 1, j, 0), P(i + 1, j + 1, 0), P(i, j + 1, 0)], col, "rgba(255,255,255,.035)", 0.6);
-      }
-    }
-    poly([P(2, GD, 0), P(5, GD, 0), P(5, 21, 0), P(2, 21, 0)], "#232D4E");
-    poly([P(2, -6, 0), P(5, -6, 0), P(5, 0, 0), P(2, 0, 0)], "#232D4E");
-    for (let k = -3; k < 10; k++) poly([P(3.45, k * 2 + 0.4, 0), P(3.55, k * 2 + 0.4, 0), P(3.55, k * 2 + 1.3, 0), P(3.45, k * 2 + 1.3, 0)], "#A6B3D2");
-    poly([P(2, -6, 0), P(2.08, -6, 0), P(2.08, 21, 0), P(2, 21, 0)], "#EEF1F8");
-    poly([P(4.92, -6, 0), P(5, -6, 0), P(5, 21, 0), P(4.92, 21, 0)], "#EEF1F8");
-    poly([P(12.2, 6.2, 0), P(18.6, 6.2, 0), P(18.6, 13.8, 0), P(12.2, 13.8, 0)], "#22305C");
-    poly([P(12.4, 6.4, 0), P(18.4, 6.4, 0), P(18.4, 13.6, 0), P(12.4, 13.6, 0)], null, "rgba(223,114,52,.6)", 1.6);
-    g.lineCap = "round";
-    g.lineJoin = "round";
-    g.beginPath();
-    CABO.forEach((c, i) => {
-      const q = P(c[0], c[1], c[2]);
-      if (i) g.lineTo(q[0], q[1]);
-      else g.moveTo(q[0], q[1]);
-    });
-    g.strokeStyle = "#070B17";
-    g.lineWidth = 5;
-    g.stroke();
-    g.strokeStyle = "#2A4A9E";
-    g.lineWidth = 2;
-    g.stroke();
-    box(8, -0.4, 0, GW - 8, 0.4, 96, "#1E2A4D", { edge: "rgba(5,8,20,.3)" });
-    faceRect("y", 8, GW, 0, 0, 10, "#141C36");
-    faceRect("y", 8, GW, 0, 10, 11, "rgba(223,114,52,.8)");
-    const wins: [number, number][] = [[8.6, 9.9]];
-    wins.forEach((w) => {
-      faceRect("y", w[0], w[1], 0, 40, 84, "#35508F", "rgba(255,255,255,.25)");
-      faceRect("y", w[0] + 0.08, w[1] - 0.08, 0, 44, 80, "#5B8AE8");
-      faceRect("y", (w[0] + w[1]) / 2 - 0.02, (w[0] + w[1]) / 2 + 0.02, 0, 40, 84, "#35508F");
-    });
-    poly([P(8.6, 0.2, 0), P(9.9, 0.2, 0), P(10.9, 3.6, 0), P(9.4, 3.6, 0)], "rgba(120,160,255,.08)");
-    poly([P(19.9, 0.2, 0), P(21.6, 0.2, 0), P(22, 3.6, 0), P(20.4, 3.6, 0)], "rgba(120,160,255,.08)");
-    const sombras: [number, number, number, number, number][] = [
-      [10, 4.2, 2.2, 1.6, 0.3], [14.6, 8.2, 2, 1.6, 0.3], [14.6, 11.4, 2, 1.6, 0.3], [18.4, 0.3, 3, 1.2, 0.5],
-      [19.6, 6.8, 2, 1.4, 0.3], [19.6, 10.2, 2, 1.4, 0.3], [10.2, 12.0, 3, 1.3, 0.4], [8.8, 8.6, 1.0, 1.0, 0.4],
-      [17.5, 13.2, 3.2, 1.4, 0.4], [5.5, 0.6, 2.4, 3.0, 0.8], [2.85, 7.2, 1.3, 4.3, 0.5],
-    ];
-    sombras.forEach((s) => shadowFoot(s[0], s[1], s[2], s[3], s[4]));
-    g = ctx;
-  }
-
-  /* ---------- pessoas ---------- */
-  function human(o: OpcHumano): void {
-    ZK = 1.22;
-    humanBody(o);
-    ZK = 1;
-  }
-  function humanBody(o: OpcHumano): void {
-    const { x, y, dir } = o;
-    const ax = dir === "px" || dir === "mx";
-    const fx = dir === "px" ? 1 : dir === "mx" ? -1 : 0;
-    const fy = dir === "py" ? 1 : dir === "my" ? -1 : 0;
-    const sw = o.walk ? Math.sin(o.t * 10) : 0;
-    let bob = o.walk ? Math.abs(sw) * 1.6 : 0;
-    if (o.seat) bob = 0;
-    ellipse(P(x, y, 0), 11, 5, "rgba(4,7,18,.38)");
-    const lo = 0.07;
-    const l1: Pt = ax ? [x + fx * sw * 0.12 - 0.045, y - lo - 0.045] : [x - lo - 0.045, y + fy * sw * 0.12 - 0.045];
-    const l2: Pt = ax ? [x - fx * sw * 0.12 - 0.045, y + lo - 0.045] : [x + lo - 0.045, y - fy * sw * 0.12 - 0.045];
-    [l1, l2].sort((a, b) => a[0] + a[1] - (b[0] + b[1])).forEach((l) => {
-      box(l[0], l[1], 0, 0.09, 0.09, 11, "#232F58");
-      box(l[0] - 0.01, l[1] - 0.01, 0, 0.11, 0.11, 3, C.bk);
-    });
-    const tw = ax ? 0.14 : 0.27;
-    const td = ax ? 0.27 : 0.14;
-    box(x - tw / 2, y - td / 2, 11 + bob, tw, td, 14, o.shirt);
-    const arm = o.arm;
-    const arm1 = (side: number): void => {
-      const ox = ax ? 0 : side * (tw / 2 + 0.035);
-      const oy = ax ? side * (td / 2 + 0.035) : 0;
-      const up = arm === "up" && side === 1;
-      const front = arm === "front" && side === 1;
-      if (up) {
-        box(x + ox - 0.035, y + oy - 0.035, 15 + bob, 0.07, 0.07, 16, o.shirt);
-        box(x + ox - 0.04, y + oy - 0.04, 29 + bob, 0.08, 0.08, 3, o.skin);
-      } else if (front) {
-        box(x + ox - 0.035 + fx * 0.09, y + oy - 0.035 + fy * 0.09, 17 + bob, 0.07 + Math.abs(fx) * 0.16, 0.07 + Math.abs(fy) * 0.16, 4, o.shirt);
-        box(x + ox - 0.04 + fx * 0.26, y + oy - 0.04 + fy * 0.26, 17 + bob, 0.08, 0.08, 4, o.skin);
-      } else box(x + ox - 0.035, y + oy - 0.035, 13 + bob, 0.07, 0.07, 12, o.shirt);
-    };
-    [-1, 1].sort((a, b) => (ax ? a - b : b - a)).forEach(arm1);
-    if (o.badge) {
-      const bp = ax ? P(x + fx * (tw / 2 + 0.01), y + 0.05, 20 + bob) : P(x + 0.05, y + fy * (td / 2 + 0.01), 20 + bob);
-      if (fx > 0 || fy > 0) {
-        g.fillStyle = C.lj;
-        g.fillRect(bp[0] - 1.5, bp[1] - 1.5, 3.5, 3.5);
-      }
-    }
-    box(x - 0.1, y - 0.1, 25 + bob, 0.2, 0.2, 9, o.skin);
-    box(x - 0.108, y - 0.108, 31 + bob, 0.216, 0.216, 4.5, o.hair);
-    if (o.cap) {
-      box(x - 0.112, y - 0.112, 32 + bob, 0.224, 0.224, 3, C.lj);
-      box(x + fx * 0.12 - 0.08, y + fy * 0.12 - 0.08, 32 + bob, 0.16, 0.16, 1.2, C.ljd);
-    }
-    g.fillStyle = C.bk;
-    if (fx > 0) {
-      const e1 = P(x + 0.1, y - 0.05, 28.5 + bob);
-      const e2 = P(x + 0.1, y + 0.05, 28.5 + bob);
-      g.fillRect(e1[0] - 1, e1[1] - 1, 2, 2.4);
-      g.fillRect(e2[0] - 1, e2[1] - 1, 2, 2.4);
-    }
-    if (fy > 0) {
-      const f1 = P(x - 0.05, y + 0.1, 28.5 + bob);
-      const f2 = P(x + 0.05, y + 0.1, 28.5 + bob);
-      g.fillRect(f1[0] - 1, f1[1] - 1, 2, 2.4);
-      g.fillRect(f2[0] - 1, f2[1] - 1, 2, 2.4);
-    }
-  }
-  function tag(x: number, y: number, z: number, txt: string, col: string): void {
-    const p = P(x, y, z);
-    g.font = "600 10px Archivo, system-ui, sans-serif";
-    const w = g.measureText(txt).width + 12;
-    g.fillStyle = "rgba(10,15,30,.9)";
-    roundRect(p[0] - w / 2, p[1] - 8, w, 15, 4);
-    g.fill();
-    g.strokeStyle = col;
-    g.lineWidth = 1;
-    g.stroke();
-    g.fillStyle = "#EEF1F8";
-    g.textAlign = "center";
-    g.fillText(txt, p[0], p[1] + 3);
-    g.textAlign = "left";
-  }
-
-  /* ---------- objetos ---------- */
-  function mesa(x: number, y: number, w: number, d: number, col?: string): void {
-    ([[x + 0.08, y + 0.08], [x + w - 0.2, y + 0.08], [x + 0.08, y + d - 0.2], [x + w - 0.2, y + d - 0.2]] as Pt[]).forEach((l) => box(l[0], l[1], 0, 0.12, 0.12, 10, "#3a2a22"));
-    box(x, y, 10, w, d, 4, col ?? C.md);
-  }
-  function papelChato(x: number, y: number, z: number, col?: string, a?: number): void {
-    box(x - 0.15, y - 0.19, z, 0.3, 0.38, 1.4, col ?? C.pp, { a });
-  }
-  function degrausDaPilha(n: number): number {
-    return n <= 0 ? 0 : n <= 5 ? n : n <= 20 ? 5 + Math.round((n - 5) / 3) : Math.min(14, 10 + Math.round((Math.log(n / 20) / Math.LN2) * 1.5));
-  }
-  function pilha(n: number, px: number, py: number, pz: number): number {
-    const h = degrausDaPilha(n);
-    for (let i = 0; i < h; i++) papelChato(px + (((i * 7) % 3) - 1) * 0.015, py + (((i * 5) % 3) - 1) * 0.015, pz + i * 1.6, i % 2 ? C.pp : "#d4dbeb");
-    if (n > 20) for (let k = 0; k < Math.floor(h / 2); k++) papelChato(px + 0.42 + ((k * 3) % 2) * 0.02, py + 0.12, pz + k * 1.6, k % 2 ? C.pp : "#d4dbeb");
-    return pz + h * 1.6;
-  }
-  function monitor(x: number, y: number, on: boolean, glowOn?: string): void {
-    box(x - 0.02, y - 0.05, 14, 0.08, 0.1, 3, C.g0);
-    box(x - 0.07, y - 0.42, 17, 0.07, 0.84, 15, "#0b1226");
-    if (on) glow(P(x - 0.035, y, 26), 36, glowOn ?? "rgba(91,138,232,.55)", 0.7);
-  }
-  function relogioPino(x: number, y: number, z: number, nivel: number, tm: number): void {
-    const rim = [C.vd, C.am, C.lj, C.vm][nivel] ?? C.vd;
-    const p = P(x, y, z);
-    ellipse([p[0], p[1] + 14], 8, 3, "rgba(4,7,18,.3)");
-    g.fillStyle = "#10182f";
-    g.fillRect(p[0] - 1.5, p[1] + 8, 3, 8);
-    g.beginPath();
-    g.arc(p[0], p[1], 13, 0, 6.2832);
-    g.fillStyle = rim;
-    g.fill();
-    g.beginPath();
-    g.arc(p[0], p[1], 10.5, 0, 6.2832);
-    g.fillStyle = "#EEF1F8";
-    g.fill();
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * 6.2832;
-      g.fillStyle = "#10182f";
-      g.fillRect(p[0] + Math.sin(a) * 8.5 - 0.6, p[1] - Math.cos(a) * 8.5 - 0.6, 1.2, 1.2);
-    }
-    const ang = tm * (nivel > 0 ? 1.4 : 0.5);
-    g.strokeStyle = "#10182f";
-    g.lineWidth = 1.6;
-    g.beginPath();
-    g.moveTo(p[0], p[1]);
-    g.lineTo(p[0] + Math.sin(ang) * 8, p[1] - Math.cos(ang) * 8);
-    g.stroke();
-    g.lineWidth = 2;
-    g.beginPath();
-    g.moveTo(p[0], p[1]);
-    g.lineTo(p[0] + Math.sin(ang / 12) * 5, p[1] - Math.cos(ang / 12) * 5);
-    g.stroke();
-    if (nivel >= 1) glow(p, 26, nivel === 3 ? "rgba(224,90,78,.55)" : nivel === 2 ? "rgba(223,114,52,.4)" : "rgba(242,181,63,.3)", 0.8);
-  }
-  function planta(x: number, y: number): void {
-    box(x - 0.18, y - 0.18, 0, 0.36, 0.36, 10, C.ljd);
-    box(x - 0.06, y - 0.06, 10, 0.12, 0.12, 8, "#1f7a4f");
-    box(x - 0.22, y - 0.22, 17, 0.44, 0.44, 8, C.vd);
-    box(x - 0.15, y - 0.15, 24, 0.3, 0.3, 7, C.vdl);
-    box(x - 0.3, y - 0.1, 15, 0.18, 0.2, 6, C.vd);
-    box(x + 0.12, y - 0.12, 14, 0.2, 0.2, 6, C.vd);
-  }
-  function arvore(x: number, y: number): void {
-    box(x - 0.1, y - 0.1, 0, 0.2, 0.2, 22, "#5a3a22");
-    box(x - 0.5, y - 0.5, 16, 1, 1, 12, "#1f7a4f");
-    box(x - 0.38, y - 0.38, 28, 0.76, 0.76, 10, C.vd);
-    box(x - 0.22, y - 0.22, 38, 0.44, 0.44, 7, C.vdl);
-  }
-  function posteLuz(x: number, y: number): void {
-    box(x - 0.05, y - 0.05, 0, 0.1, 0.1, 56, "#10182f");
-    box(x - 0.2, y - 0.05, 56, 0.3, 0.1, 3, "#10182f");
-    const p = P(x - 0.15, y, 54);
-    glow(p, 52, "rgba(242,181,63,.55)", 0.8);
-    g.fillStyle = "#ffe8a8";
-    g.fillRect(p[0] - 3, p[1] - 1, 6, 3);
-  }
-  function coneTrafego(x: number, y: number): void {
-    box(x - 0.12, y - 0.12, 0, 0.24, 0.24, 2, "#10182f");
-    box(x - 0.08, y - 0.08, 2, 0.16, 0.16, 10, C.lj);
-    box(x - 0.05, y - 0.05, 8, 0.1, 0.1, 2, C.pp);
-  }
-  function torre(tm: number, flash: boolean): void {
-    const bx = 6.2;
-    const by = 6.5;
-    const tp = 150;
-    const hw = 0.34;
-    const cs: Pt[] = [[bx - hw, by - hw], [bx + hw, by - hw], [bx + hw, by + hw], [bx - hw, by + hw]];
-    const topc: Pt[] = [[bx - 0.05, by - 0.05], [bx + 0.05, by - 0.05], [bx + 0.05, by + 0.05], [bx - 0.05, by + 0.05]];
-    g.strokeStyle = "#A6B3D2";
-    g.lineWidth = 1.6;
-    for (let i = 0; i < 4; i++) {
-      const c = cs[i] as Pt;
-      const tc = topc[i] as Pt;
-      const a = P(c[0], c[1], 0);
-      const b = P(tc[0], tc[1], tp);
-      g.beginPath();
-      g.moveTo(a[0], a[1]);
-      g.lineTo(b[0], b[1]);
-      g.stroke();
-    }
-    g.lineWidth = 1;
-    g.strokeStyle = "rgba(166,179,210,.8)";
-    for (let s = 1; s < 8; s++) {
-      const u = s / 8;
-      const zz = tp * u * 0.96;
-      const k = 1 - u * 0.85;
-      const q: Pt[] = [[bx - hw * k, by - hw * k], [bx + hw * k, by - hw * k], [bx + hw * k, by + hw * k], [bx - hw * k, by + hw * k]];
-      g.beginPath();
-      for (let c = 0; c < 5; c++) {
-        const qq = q[c % 4] as Pt;
-        const pp = P(qq[0], qq[1], zz);
-        if (c) g.lineTo(pp[0], pp[1]);
-        else g.moveTo(pp[0], pp[1]);
-      }
-      g.stroke();
-      if (s < 7) {
-        const q0 = q[0] as Pt;
-        const q2 = q[2] as Pt;
-        const d1 = P(q0[0], q0[1], zz);
-        const d2 = P(q2[0], q2[1], zz + (tp / 8) * 0.8);
-        g.beginPath();
-        g.moveTo(d1[0], d1[1]);
-        g.lineTo(d2[0], d2[1]);
-        g.stroke();
-      }
-    }
-    box(bx - 0.45, by - 0.45, 0, 0.9, 0.9, 6, "#1B2540");
-    box(bx - 0.14, by - 0.14, tp - 2, 0.28, 0.28, 8, "#d0d8ec");
-    box(bx - 0.3, by - 0.06, tp - 14, 0.6, 0.12, 10, C.cz);
-    const on = flash || Math.floor(tm) % 2 === 0;
-    const bp = P(bx, by, tp + 12);
-    g.beginPath();
-    g.arc(bp[0], bp[1], 3.5, 0, 6.2832);
-    g.fillStyle = on ? "#ff6b5c" : "#6a2a28";
-    g.fill();
-    if (on) glow(bp, flash ? 50 : 26, "rgba(255,90,76,.8)", flash ? 1 : 0.7);
-  }
-  function datacenter(tm: number, flash: boolean): void {
-    const x = 5.5;
-    const y = 0.6;
-    const w = 2.3;
-    const d = 3.0;
-    box(x, y, 0, w, d, 46, "#26335E");
-    box(x - 0.06, y - 0.06, 46, w + 0.12, d + 0.12, 3, "#3a4b82");
-    for (let i = 0; i < 4; i++) faceRect("y", x + 0.2 + i * 0.52, x + 0.62 + i * 0.52, y + d, 14, 36, flash ? "#9CC0FF" : "#3C6BC8", "rgba(255,255,255,.18)");
-    for (let j = 0; j < 4; j++) faceRect("x", y + 0.2 + j * 0.7, y + 0.75 + j * 0.7, x + w, 14, 36, flash ? "#9CC0FF" : "#30539F", "rgba(255,255,255,.14)");
-    faceRect("y", x + 0.2, x + w - 0.2, y + d, 4, 10, "#1B2540");
-    for (let k = 0; k < 8; k++) {
-      const lp = P(x + 0.3 + k * 0.22, y + d, 7);
-      const v = Math.floor(tm * 3 + k * 1.3) % 3;
-      g.fillStyle = v === 0 ? C.vdl : v === 1 ? C.azl : C.am;
-      g.fillRect(lp[0] - 1.4, lp[1] - 1, 2.8, 2.2);
-    }
-    faceText("y", x + 0.2, y + d, 42, "SERVIDOR", 11, "#EEF1F8", 800);
-    box(x + 1.5, y + 1.9, 49, 0.5, 0.5, 4, C.cz);
-    box(x + 0.3, y + 0.5, 49, 0.6, 0.6, 5, C.cz);
-    box(x + 0.35, y + 1.4, 49, 0.6, 0.6, 5, C.cz);
-    const dp = P(x + 1.0, y + 1.1, 62);
-    g.beginPath();
-    g.ellipse(dp[0], dp[1], 14, 9, -0.4, 0, 6.2832);
-    g.fillStyle = "#d0d8ec";
-    g.fill();
-    g.strokeStyle = "#7f8cb0";
-    g.lineWidth = 1.2;
-    g.stroke();
-    g.beginPath();
-    g.moveTo(dp[0], dp[1]);
-    g.lineTo(dp[0] + 6, dp[1] - 10);
-    g.strokeStyle = "#A6B3D2";
-    g.stroke();
-    if (flash) glow(dp, 60, "rgba(91,138,232,.9)", 1);
-    glow(P(x + w, y + d, 24), 70, "rgba(60,107,200,.35)", 0.7);
-  }
-  function caminhao(ty: number, tilt: number, cargo: number, tm: number, fumaca: boolean): void {
-    const x = 2.85;
-    const w = 1.3;
-    const cabD = 1.15;
-    const gap = 0.08;
-    const tl = ty + cabD + gap;
-    const td = 3.0;
-    [ty + 0.35, tl + 0.5, tl + 1.1, tl + 2.55].forEach((r) => {
-      box(x - 0.04, r - 0.17, 0, 0.16, 0.34, 11, "#0b1020");
-      box(x + w - 0.12, r - 0.17, 0, 0.16, 0.34, 11, "#0b1020");
-    });
-    box(x + 0.1, ty, 8, w - 0.2, cabD + gap + td, 5, "#10182f");
-    box(x, ty, 11, w, cabD, 17, C.lj);
-    box(x, ty + 0.05, 28, w, cabD - 0.1, 14, C.lj);
-    faceRect("x", ty + 0.1, ty + 0.5, x + w, 30, 40, "#9CC0FF", "rgba(255,255,255,.3)");
-    box(x + 0.05, ty - 0.1, 11, w - 0.1, 0.12, 9, "#10182f");
-    box(x + 0.2, ty - 0.02, 12, 0.3, 0.06, 4, C.am);
-    const lift = tilt * 36;
-    box(x - 0.04, tl, 13, w + 0.08, td, 4, "#10182f", { lift });
-    box(x - 0.04, tl, 17, 0.1, td, 16, C.lj, { lift });
-    box(x + w - 0.06, tl, 17, 0.1, td, 16, C.lj, { lift });
-    box(x - 0.04, tl, 17, w + 0.08, 0.1, 16, C.ljd);
-    if (cargo > 0.02) box(x + 0.04, tl + 0.1, 17, w - 0.1, td - 0.2, 11 * cargo + 1, C.pb, { lift });
-    box(x - 0.05, tl + td - 0.05, 17 + lift, w + 0.1, 0.1, 16, C.ljd);
-    faceRect("x", tl, tl + td, x + w + 0.04, 24, 27, "#EEF1F8");
-    if (fumaca) {
-      for (let s = 0; s < 4; s++) {
-        const u = (tm * 0.7 + s / 4) % 1;
-        const sp = P(x + 0.15, ty + 0.3, 48 + u * 24);
-        g.beginPath();
-        g.arc(sp[0] - u * 8, sp[1], 3 + u * 5, 0, 6.2832);
-        g.fillStyle = `rgba(166,179,210,${(0.5 - u * 0.45).toFixed(2)})`;
-        g.fill();
-      }
-    }
-    glow(P(x + 0.1, ty - 0.1, 18), 28, "rgba(255,230,150,.55)", 0.8);
-  }
-  function pilhaChao(u: number): void {
-    if (u <= 0) return;
-    const cx = 3.5;
-    const cy = 13.2;
-    const sizes: [number, number, number][] = [[1.6, 1.3, 7], [1.15, 0.95, 7], [0.7, 0.6, 6], [0.3, 0.28, 4]];
-    let z = 0;
-    sizes.forEach((s, i) => {
-      const f = Math.min(1, Math.max(0, u * 4 - i * 0.6));
-      if (f <= 0) return;
-      const m = Math.min(1, 0.6 + f * 0.4);
-      box(cx - s[0] / 2, cy - s[1] / 2, z, s[0] * m, s[1] * m, s[2] * f, C.pb);
-      z += s[2] * f;
-    });
-  }
-  function arquivo(open: boolean, n: number, lampOn: boolean): void {
-    const x0 = 18.4;
-    const y = 0.3;
-    const d = 1.1;
-    for (let i = 0; i < 3; i++) {
-      const x = x0 + i * 1.0;
-      box(x, y, 0, 0.95, d, 40, "#B7C2DD");
-      faceRect("y", x + 0.06, x + 0.89, y + d, 4, 12, "#C9D3EA", "rgba(5,8,20,.3)");
-      faceRect("y", x + 0.06, x + 0.89, y + d, 15, 24, "#C9D3EA", "rgba(5,8,20,.3)");
-      faceRect("y", x + 0.06, x + 0.89, y + d, 27, 36, "#C9D3EA", "rgba(5,8,20,.3)");
-      for (let h = 0; h < 3; h++) faceRect("y", x + 0.35, x + 0.6, y + d, 8 + h * 12, 9.2 + h * 12, "#3a456b");
-      if (open && i === 1) box(x + 0.08, y + d, 27, 0.79, 0.35, 8, "#A9B6D6");
-    }
-    const cnt = Math.min(6, Math.floor(Math.log(n + 1) / Math.LN2 / 1.3));
-    for (let k = 0; k < cnt; k++) papelChato(x0 + 0.2 + ((k * 0.42) % 2.7), y + 0.55, 41 + (k % 2) * 1.4, C.pp);
-    box(x0, y, 40, 2.95, d, 1.5, "#8995B5");
-    const lp = P(x0 + 1.5, y + d, 46);
-    glow(lp, 42, "rgba(126,217,166,.7)", lampOn ? 1 : 0.45);
-    g.fillStyle = C.vdl;
-    g.fillRect(lp[0] - 3, lp[1] - 1.5, 6, 3);
-  }
-  function caixaDevolvidas(n: number, pulso: boolean): void {
-    const x = 19.6;
-    const y = 6.8;
-    const w = 1.8;
-    const d = 1.3;
-    box(x, y, 0, w, d, 16, C.ljd);
-    box(x + 0.06, y + 0.06, 16, w - 0.12, d - 0.12, 0.1, "#6f2f0c");
-    faceRect("y", x + 0.12, x + w - 0.12, y + d, 4, 10, C.vm);
-    faceRect("y", x + 0.12, x + w - 0.12, y + d, 10.2, 11.2, "#EEF1F8");
-    const c = Math.min(5, n);
-    for (let i = 0; i < c; i++) papelChato(x + 0.35 + i * 0.28, y + 0.5 + (i % 2) * 0.1, 17 + (i % 3), C.pp);
-    glow(P(x + w / 2, y + d / 2, 22), pulso ? 56 : 34, "rgba(224,90,78,.8)", pulso ? 1 : 0.35);
-  }
-  function pastaAjustadas(pulso: boolean): void {
-    const x = 19.6;
-    const y = 10.2;
-    const w = 1.8;
-    const d = 1.3;
-    box(x, y, 0, w, d, 12, "#223D80");
-    for (let i = 0; i < 3; i++) box(x + 0.1 + i * 0.55, y + 0.12, 12, 0.4, d - 0.24, 14 + (i % 2) * 3, "#5B8AE8");
-    glow(P(x + w / 2, y + d / 2, 24), pulso ? 52 : 28, "rgba(91,138,232,.8)", pulso ? 1 : 0.3);
-  }
-  function balcao(nT: number, nivel: number, tm: number): void {
-    const x = 10.2;
-    const y = 12.0;
-    const w = 3.0;
-    const d = 1.2;
-    box(x, y, 0, w, d, 24, "#6c4a30");
-    box(x - 0.05, y - 0.05, 24, w + 0.1, d + 0.1, 3, C.md);
-    faceRect("y", x + 0.1, x + w - 0.1, y + d, 3, 10, "#4b3322");
-    faceText("y", x + 0.15, y + d, 15, "ESPERANDO O ESCRITÓRIO", 7.4, "#F2B53F", 800);
-    const postCols = [C.am, C.am, "#ff8a3d", C.vm];
-    for (let i = 0; i < Math.min(5, nT); i++) {
-      const px = x + 0.35 + i * 0.5;
-      const py = y + 0.55;
-      papelChato(px, py, 27, C.pp);
-      papelChato(px + 0.02, py, 28.4, "#d4dbeb");
-      box(px - 0.1, py - 0.1, 30, 0.2, 0.2, 1, postCols[nivel] ?? C.am, { edge: "rgba(5,8,20,.3)" });
-    }
-    if (nivel === 3 && nT > 0 && (reduce || Math.floor(tm * 2) % 2 === 0)) {
-      poly([P(x - 0.1, y - 0.1, 0), P(x + w + 0.1, y - 0.1, 0), P(x + w + 0.1, y + d + 0.1, 0), P(x - 0.1, y + d + 0.1, 0)], "rgba(224,90,78,.28)", "rgba(224,90,78,.9)", 2);
-    }
-    relogioPino(x + w + 0.1, y + 0.5, 58, nivel, tm);
-  }
-  function sofa(x: number, y: number): void {
-    box(x, y, 0, 3.0, 1.2, 10, "#26335E");
-    box(x, y + 0.8, 10, 3.0, 0.4, 14, "#2A4A9E");
-    box(x + 0.1, y, 10, 1.3, 0.8, 5, "#3A66C8");
-    box(x + 1.6, y, 10, 1.3, 0.8, 5, "#3A66C8");
-  }
-  function cafeteira(x: number, y: number): void {
-    mesa(x - 0.45, y - 0.45, 0.9, 0.9, C.md);
-    box(x - 0.25, y - 0.22, 14, 0.5, 0.44, 20, "#2b3763");
-    box(x - 0.1, y + 0.1, 20, 0.2, 0.12, 3, C.lj);
-    box(x - 0.06, y - 0.1, 14, 0.12, 0.12, 6, C.pp);
-  }
-  function parede(tm: number, n: Numeros, robo: { texto: string; cor: string }, barras: boolean): void {
-    const x0 = 10.1;
-    const x1 = 19.5;
-    const z0 = 34;
-    const z1 = 86;
-    faceRect("y", x0 - 0.1, x1 + 0.1, 0.0, z0 - 3, z1 + 3, "#0b1226", "rgba(91,138,232,.8)");
-    faceRect("y", x0, x1, 0.0, z0, z1, "#0f1a38");
-    glow(P((x0 + x1) / 2, 0.3, (z0 + z1) / 2), 200, "rgba(60,107,200,.28)", 0.9);
-    faceText("y", x0 + 0.15, 0.0, z1 - 8, "MOVATRUCK · CONFERÊNCIA", 7.5, "#A6B3D2", 600);
-    const items: [string, number, string][] = [["FILA", n.fila, "#5B8AE8"], ["VALID.", n.val, "#7ED9A6"], ["DEVOLV.", n.dev, "#E05A4E"], ["AJUST.", n.aj, "#EEF1F8"], ["ESPERA", n.trav, "#F2B53F"]];
-    items.forEach((it, i) => {
-      const cx = x0 + 0.15 + i * 1.82;
-      faceText("y", cx, 0.0, z1 - 21, it[0], 6.2, "#A6B3D2", 600);
-      faceText("y", cx, 0.0, z1 - 38, String(it[1]), 17, it[2], 800);
-    });
-    if (barras) {
-      for (let b = 0; b < 26; b++) {
-        const hh = 2 + ((Math.sin(b * 1.3 + 2) + 1) * 3.6 + (b === 25 ? Math.sin(tm * 2) * 1.2 + 1.2 : 0));
-        faceRect("y", x0 + 0.15 + b * 0.12, x0 + 0.15 + b * 0.12 + 0.08, 0.0, z0 + 4, z0 + 4 + hh, b % 5 === 4 ? "#F2B53F" : "#2A4A9E");
-      }
-    }
-    faceText("y", barras ? x0 + 3.6 : x0 + 0.15, 0.0, z0 + 7, robo.texto, 7.5, robo.cor, 800);
-    const cp = P(20.7, 0, 66);
-    g.beginPath();
-    g.arc(cp[0], cp[1], 14, 0, 6.2832);
-    g.fillStyle = "#EEF1F8";
-    g.fill();
-    g.lineWidth = 2.4;
-    g.strokeStyle = "#DF7234";
-    g.stroke();
-    const ang = tm * 0.5;
-    g.strokeStyle = "#10182f";
-    g.lineWidth = 1.8;
-    g.beginPath();
-    g.moveTo(cp[0], cp[1]);
-    g.lineTo(cp[0] + Math.sin(ang) * 9, cp[1] - Math.cos(ang) * 9);
-    g.stroke();
-    g.beginPath();
-    g.moveTo(cp[0], cp[1]);
-    g.lineTo(cp[0] + Math.sin(ang / 12) * 6, cp[1] - Math.cos(ang / 12) * 6);
-    g.stroke();
-  }
-  function divisoria(): void {
-    for (let j = 0; j < GD; j++) {
-      if (j === 4 || j === 5) continue;
-      box(7.85, j, 0, 0.3, 1, 12, "#26335E");
-      box(7.9, j + 0.02, 12, 0.2, 0.96, 30, "#5B8AE8", { a: 0.16, edge: "rgba(160,190,255,.25)" });
-    }
-    box(7.82, 3.9, 0, 0.36, 0.2, 46, "#1B2540");
-    box(7.82, 5.9, 0, 0.36, 0.2, 46, "#1B2540");
-  }
-
-  /* ---------- sinais, pacotes, cartões, selos ---------- */
-  function p3(a: Pt3, b: Pt3, u: number, lift: number): Pt3 {
-    return [lerp(a[0], b[0], u), lerp(a[1], b[1], u), lerp(a[2], b[2], u) + 4 * lift * u * (1 - u)];
-  }
-  function caboPos(u: number): Pt3 {
-    let tot = 0;
-    const ls: number[] = [];
-    for (let i = 0; i < CABO.length - 1; i++) {
-      const a = CABO[i] as Pt3;
-      const b = CABO[i + 1] as Pt3;
-      const l = Math.hypot(b[0] - a[0], b[1] - a[1], (b[2] - a[2]) / 24);
-      ls.push(l);
-      tot += l;
-    }
-    let d = u * tot;
-    for (let q = 0; q < ls.length; q++) {
-      const lq = ls[q] as number;
-      if (d <= lq) {
-        const a2 = CABO[q] as Pt3;
-        const b2 = CABO[q + 1] as Pt3;
-        const f = d / lq;
-        return [lerp(a2[0], b2[0], f), lerp(a2[1], b2[1], f), lerp(a2[2], b2[2], f)];
-      }
-      d -= lq;
-    }
-    return CABO[CABO.length - 1] as Pt3;
-  }
-  function pacote(pt: Pt3, col?: "r"): void {
-    const p = P(pt[0], pt[1], pt[2]);
-    glow(p, 22, col === "r" ? "rgba(224,90,78,.9)" : "rgba(91,138,232,.95)", 1);
-    g.beginPath();
-    g.arc(p[0], p[1], 4, 0, 6.2832);
-    g.fillStyle = col === "r" ? "#ffb1a8" : "#cfe0ff";
-    g.fill();
-  }
-  function trilha(a: Pt3, b: Pt3, u: number, lift: number, col?: "r"): void {
-    for (let i = 1; i <= 5; i++) {
-      const uu = Math.max(0, u - i * 0.035);
-      const pt = p3(a, b, uu, lift);
-      const p = P(pt[0], pt[1], pt[2]);
-      g.beginPath();
-      g.arc(p[0], p[1], 3 - i * 0.4, 0, 6.2832);
-      g.fillStyle = `${col === "r" ? "rgba(224,90,78," : "rgba(91,138,232,"}${(0.55 - i * 0.09).toFixed(2)})`;
-      g.fill();
-    }
-  }
-  type LinhaCartao = [string, string, "ok" | "no" | "wait" | "ler"];
-  function cartao(x: number, y: number, z: number, titulo: string, rows: LinhaCartao[], prog: number, col: string, tm: number, sempre: boolean): void {
-    const p = P(x, y, z);
-    const w = 170;
-    const hgt = 24 + rows.length * 16 + 6;
-    const cx = p[0] - w / 2;
-    const cy = p[1] - hgt;
-    g.save();
-    g.fillStyle = "rgba(8,13,28,.92)";
-    roundRect(cx, cy, w, hgt, 8);
-    g.fill();
-    g.strokeStyle = col;
-    g.lineWidth = 1.4;
-    g.stroke();
-    g.beginPath();
-    g.moveTo(p[0] - 6, cy + hgt);
-    g.lineTo(p[0], cy + hgt + 7);
-    g.lineTo(p[0] + 6, cy + hgt);
-    g.fillStyle = "rgba(8,13,28,.92)";
-    g.fill();
-    g.font = "800 10.5px Archivo, system-ui, sans-serif";
-    g.fillStyle = col;
-    g.fillText(titulo, cx + 10, cy + 16);
-    g.font = '600 10.5px "Public Sans", system-ui, sans-serif';
-    rows.forEach((r, i) => {
-      const ry = cy + 33 + i * 16;
-      const mostra = sempre || prog > (i / rows.length) * 0.86 + 0.04;
-      const pronto = sempre || prog > ((i + 1) / rows.length) * 0.86 + 0.04;
-      g.fillStyle = "#A6B3D2";
-      g.fillText(r[0], cx + 10, ry);
-      if (!mostra) return;
-      if (!pronto || r[2] === "ler") {
-        g.fillStyle = "#5B8AE8";
-        g.fillText(r[2] === "ler" ? r[1] : "lendo…", cx + 74, ry);
-        return;
-      }
-      g.fillStyle = r[2] === "ok" ? "#7ED9A6" : r[2] === "no" ? "#ff8f84" : "#F2B53F";
-      g.fillText((r[2] === "ok" ? "✓ " : r[2] === "no" ? "✗ " : "? ") + r[1], cx + 74, ry);
-    });
-    const sy = cy + 22 + ((tm * 40) % (hgt - 26));
-    if (prog < 1) {
-      g.fillStyle = "rgba(91,138,232,.25)";
-      g.fillRect(cx + 6, sy, w - 12, 2);
-    }
-    g.restore();
-  }
-  function selo(x: number, y: number, z: number, tipo: "ok" | "no" | "wait", u: number): void {
-    const p = P(x, y, z + 10 * u);
-    const s = 0.6 + 0.4 * Math.min(1, u * 1.6);
-    g.save();
-    g.translate(p[0], p[1]);
-    g.scale(s, s);
-    glow([0, 0], 36, tipo === "ok" ? "rgba(126,217,166,.9)" : tipo === "no" ? "rgba(224,90,78,.9)" : "rgba(242,181,63,.9)", 1);
-    g.beginPath();
-    g.arc(0, 0, 13, 0, 6.2832);
-    g.fillStyle = tipo === "ok" ? "#27A06A" : tipo === "no" ? "#E05A4E" : "#F2B53F";
-    g.fill();
-    g.lineWidth = 2;
-    g.strokeStyle = "#EEF1F8";
-    g.stroke();
-    g.fillStyle = tipo === "wait" ? "#1B2540" : "#EEF1F8";
-    g.font = "800 17px Archivo, system-ui, sans-serif";
-    g.textAlign = "center";
-    g.fillText(tipo === "ok" ? "✓" : tipo === "no" ? "✗" : "!", 0, 6);
-    g.textAlign = "left";
-    g.restore();
-  }
-  function ondas(x: number, y: number, z: number, tm: number): void {
-    const p = P(x, y, z);
-    for (let r = 0; r < 3; r++) {
-      const u = (tm * 1.4 + r / 3) % 1;
-      g.beginPath();
-      g.arc(p[0], p[1], 6 + u * 28, -1.25, -0.2);
-      g.strokeStyle = `rgba(126,180,255,${(0.9 - u * 0.85).toFixed(2)})`;
-      g.lineWidth = 2;
-      g.stroke();
-    }
-  }
+  const D = criarDesenho(reduce);
+  let s0: HTMLCanvasElement | null = null;
+  let s1: HTMLCanvasElement | null = null;
+  let SCL = 0;
 
   /* ---------- estado ---------- */
-  const DEMO_INICIAL: Numeros = { fila: 7, val: 128, dev: 6, aj: 11, trav: 2, age: 195 };
   const st: Numeros = { fila: 0, val: 0, dev: 0, aj: 0, trav: 0, age: 0 };
   const S = {
     modo: "vivo" as Modo,
     pausado: false,
     vel: 1 as 1 | 2,
     forcado: "" as Caso | "",
-    relogio: 0, // segundos de cena (anda quando não está pausada)
+    wall: 0,
+    sujo: true,
     // demo
-    t: 12.6,
     seqI: 0,
-    outcome: "OK" as Caso,
-    kind: "OK" as Kind,
-    demoFired: {} as Record<string, boolean>,
-    skipBefore: 12.6 as number | null,
     simMin: 14 * 60 + 7,
+    nomeI: 0,
+    demoVer: null as Ver | null,
     // vivo
     snap: null as EscritorioSnapshot | null,
     primeira: true,
-    chegadas: [] as Chegada[],
-    fila: [] as Veredito[],
-    ativo: null as Veredito | null,
     vistosCh: new Set<string>(),
     vistosVe: new Set<string>(),
-    ageBase: 0,
+    ageBase: null as number | null,
     ageEm: 0,
-    slot: 0,
+    antes: null as Numeros | null,
+    // compartilhado
+    ch: null as Cheg | null,
+    chQ: [] as Cheg[],
+    ve: null as Ver | null,
+    veQ: [] as Ver[],
+    // ambiente
+    monteV: 0.55,
+    monteBase: 0.55,
+    retroProx: 6,
+    retroT0: -99,
+    figProx: 4,
+    figT0: -99,
+    neuEm: [] as number[],
+    neuRot: "SEGUE O FLUXO NORMAL",
+    defasado: false,
+    ultimoGerado: 0,
   };
+  const nuvensL: [number, number, number][] = [[60, 30, 1], [250, 55, 0.8], [430, 22, 1.2]];
   let ultimoEnviado = "";
   let rafId = 0;
   let ultimoTick = performance.now();
+  let ultimoDesenho = 0;
 
-  function relogioTexto(): string {
+  const relogioTexto = (em?: string): string => {
+    if (em && !Number.isNaN(Date.parse(em))) {
+      return new Date(em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+    }
     if (S.modo === "demo") {
       const m = S.simMin % 1440;
       return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
     }
     return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
-  }
-  function log(msg: string, tom: TomLog, gl: string): void {
-    cb.onLog({ h: relogioTexto(), msg, tom, gl });
-  }
+  };
+  const log = (msg: string, tom: TomLog, gl: string, em?: string): void => cb.onLog({ h: relogioTexto(em), msg, tom, gl });
   function notificar(): void {
-    const k = `${st.fila}|${st.val}|${st.dev}|${st.aj}|${st.trav}|${Math.round(st.age)}`;
+    const k = `${st.fila}|${st.val}|${st.dev}|${st.aj}|${st.trav}|${st.age === null ? "n" : Math.round(st.age)}`;
     if (k !== ultimoEnviado) {
       ultimoEnviado = k;
       cb.onNumeros({ ...st });
     }
   }
-  function nivelAge(): number {
-    const a = st.age;
-    return a < 15 ? 0 : a < 120 ? 1 : a < 480 ? 2 : 3;
-  }
+  const nivelAge = (): number => (st.age === null ? 1 : st.age < 15 ? 0 : st.age < 120 ? 1 : st.age < 480 ? 2 : 3);
   function once(f: Record<string, boolean>, k: string, now: number, at: number, fn: () => void, skip: number | null): void {
     if (now >= at && !f[k]) {
       f[k] = true;
@@ -964,210 +489,278 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
       fn();
     }
   }
+  const demo = (): boolean => S.modo === "demo";
 
-  /* ---------- demo: ciclo fictício ---------- */
-  function iniciarCicloDemo(): void {
-    S.demoFired = {};
-    let pick: Caso = S.forcado || (SEQ[S.seqI++ % SEQ.length] as Caso);
-    if (pick === "HUM" && st.trav <= 0) pick = "OK";
-    S.outcome = pick;
-    S.kind = pick === "HUM" ? "OK" : (pick as Kind);
-    st.fila = Math.max(3, Math.min(30, st.fila + (Math.random() < 0.5 ? 1 : -1)));
+  /* ---------- fábricas ---------- */
+  let seqId = 0;
+  function novoVer(o: { emIso?: string; kind: Kind; seg2: boolean; aviso?: boolean; sem?: boolean; hum?: boolean; soHum?: boolean; humDest?: HumDest; texto?: string; tom?: Tom3; carimbo?: string; logNeu?: string; demo: boolean }, nTrav: number): Ver {
+    const kind = o.kind;
+    const carimbo = o.carimbo ?? { OK: "VALIDADO", AJ: "AJUSTADA", TRAV: "EM ESPERA", DIV: "DEVOLVIDA", NEU: "SEM TICKET", SOM: "SOMBRA" }[kind];
+    const corCarimbo = { OK: "#27A06A", AJ: "#5B8AE8", TRAV: "#F2B53F", DIV: "#E05A4E", NEU: "#8190B5", SOM: "#8FA3D6" }[kind];
+    const scr = construirRoteiro({ kind, seg2: o.seg2, sem: !!o.sem, hum: !!o.hum, soHum: !!o.soHum, humDest: o.humDest ?? "val", nTrav });
+    return {
+      id: `v${++seqId}`, emIso: o.emIso, kind, seg2: o.seg2, aviso: !!o.aviso, sem: !!o.sem, hum: !!o.hum, soHum: !!o.soHum, humDest: o.humDest ?? "val",
+      texto: o.texto ?? "", tom: o.tom ?? "ok", carimbo, corCarimbo, logNeu: o.logNeu ?? "Sem decisão do agente: a viagem segue a conferência normal",
+      demo: o.demo, scr, u: 0, fired: {}, skip: null, pegou: false, guardou: false, hpegou: false, hguardou: false, stamp: null,
+    };
+  }
+
+  /* ---------- demo ---------- */
+  function iniciarCicloDemo(pick?: Caso): void {
+    let p: Caso = pick ?? (S.forcado || (SEQ[S.seqI++ % SEQ.length] as Caso));
+    if (p === "HUM" && st.trav <= 0) p = "OK";
+    const kind: Kind = p === "HUM" ? "OK" : p === "SEMTK" ? "NEU" : (p as Kind);
+    const aj = kind === "AJ";
     S.simMin += 2;
-  }
-  /** O ciclo começa na entrada do caminhão; o ajuste não tem caminhão. */
-  function inicioDoCiclo(): number {
-    return S.kind === "AJ" ? 0 : -ENTRADA;
-  }
-  function demoChegada(): { ta: number; slot: number; aj: boolean } {
-    return { ta: S.t, slot: 0, aj: S.kind === "AJ" };
-  }
-  function demoVeredito(): VView {
-    return {
-      id: "demo", inicio: 0, tv: S.t, kind: S.kind, seg2: S.kind === "DIV", aviso: S.kind === "DIV", hum: S.outcome === "HUM",
-      texto: "", tom: "ok", fired: S.demoFired,
-    };
+    S.monteBase = S.monteV;
+    const nome = DEMO_NOMES[S.nomeI++ % DEMO_NOMES.length] as string;
+    S.ch = { id: `d${++seqId}`, emMs: 0, motorista: aj ? undefined : nome, aj, fromQ: !aj, tc: aj ? T_INI_AJ : T_INI_CHEG, fired: {}, skip: null, pousou: false, entrou: S.wall };
+    S.chQ = [];
+    S.ve = null;
+    S.veQ = [];
+    S.demoVer = novoVer({ kind, seg2: kind === "DIV", aviso: kind === "DIV", sem: p === "SEMTK", hum: p === "HUM", demo: true }, st.trav);
   }
 
-  /* ---------- eventos de log (e, no demo, dos números) ---------- */
-  function eventosChegada(f: Record<string, boolean>, ta: number, aj: boolean, demo: boolean, skip: number | null): void {
-    if (demo && !aj) once(f, "c1", ta, -3.0, () => log("Caminhão chegou ao ponto de descarga", "info", "•"), skip);
-    if (demo && !aj) once(f, "c2", ta, -1.6, () => log("Descarga concluída", "info", "•"), skip);
-    if (demo && !aj) once(f, "c2b", ta, 1.8, () => log("Conferente da obra conferiu e assinou o comprovante", "info", "•"), skip);
-    if (demo && !aj) once(f, "c2c", ta, 2.9, () => log("Motorista fotografou o comprovante", "info", "•"), skip);
-    once(f, "c3", ta, 3.8, () => log(aj ? "Motorista corrigiu a viagem e reenviou" : demo ? "Motorista lançou a viagem no celular" : "Uma viagem chegou do celular do motorista", "info", "•"), skip);
-    once(f, "c4", ta, 5.9, () => log("Sinal passou pela torre", "info", "•"), skip);
-    once(f, "c5", ta, 6.8, () => log("Servidor recebeu a viagem", "info", "•"), skip);
-    once(f, "c6", ta, 8.9, () => {
-      if (demo) st.fila++;
-      log("Viagem na mesa de entrada", "info", "•");
-    }, skip);
+  /* ---------- eventos (log e, só na demo, os números) ---------- */
+  function eventosChegada(c: Cheg): void {
+    const lg = (m: string, t: TomLog, g2: string): void => log(m, t, g2, c.emIso);
+    const d = demo();
+    const tc = c.tc;
+    const f = c.fired;
+    const k = c.skip;
+    if (d && !c.aj) {
+      once(f, "e1", tc, -9.6, () => lg("Caminhão chegou à obra", "info", "•"), k);
+      once(f, "e2", tc, -4.9, () => lg("Descarga concluída na obra", "info", "•"), k);
+      once(f, "e3", tc, -2.4, () => lg("Conferente conferiu a carga e o ticket", "info", "•"), k);
+      once(f, "e4", tc, -1.0, () => lg("Ticket assinado", "info", "•"), k);
+    }
+    once(f, "e5", tc, 0, () => {
+      if (c.aj) lg("Motorista corrigiu a viagem e reenviou", "info", "•");
+      else if (c.motorista) lg(`${c.motorista} lançou uma viagem`, "info", "•");
+      else lg(d ? "Motorista lançou a viagem no celular" : "Uma viagem chegou do celular do motorista", "info", "•");
+    }, k);
+    once(f, "e6", tc, 1.4, () => lg("Sinal passou pela torre", "info", "•"), k);
+    once(f, "e7", tc, 2.6, () => lg("Servidor recebeu a viagem", "info", "•"), k);
+    once(f, "c6", tc, T_POUSO, () => {
+      c.pousou = true;
+      if (d) st.fila++;
+      lg("Viagem na mesa de entrada", "info", "•");
+    }, k);
+    c.skip = null;
   }
-  const tFly = (v: { seg2: boolean }): number => (v.seg2 ? 17.6 : 14.7);
-  function eventosVeredito(v: VView, demo: boolean, skip: number | null): void {
+  function eventosVer(v: Ver): void {
+    const lg = (m: string, t: TomLog, g2: string): void => log(m, t, g2, v.emIso);
+    const d = v.demo;
+    const u = v.u;
     const f = v.fired;
-    const tv = v.tv;
-    const f1 = tFly(v) + 1.1;
-    once(f, "c7", tv, 10.3, () => {
-      if (demo) st.fila = Math.max(0, st.fila - 1);
-      log("Agente leitor pegou a viagem", "info", "•");
-    }, skip);
-    once(f, "c8", tv, 12.0, () => log("Leitor lendo o ticket, sem ver o que o motorista digitou", "info", "?"), skip);
-    once(f, "c9", tv, 14.3, () => {
-      if (v.seg2) log(v.kind === "DIV" ? "Leitor achou divergência: chamando o conferente" : "Leitor ficou em dúvida: chamando o conferente", "wait", "!");
-      else if (v.kind === "TRAV") log("Sem como decidir: esperando alguém do escritório", "wait", "!");
-      else if (v.kind === "DIV") log("Ticket diverge do lançamento", "no", "✗");
-      else log(v.kind === "AJ" ? "Ajuste confere com o ticket" : "Ticket confere com o lançamento", "ok", "✓");
-    }, skip);
-    if (v.seg2) {
-      once(f, "c9b", tv, 16.9, () => {
-        if (v.kind === "DIV") log("Conferente leu de novo e confirmou a divergência", "no", "✗");
-        else if (v.kind === "TRAV") log("Conferente também ficou em dúvida", "wait", "!");
-        else log("Conferente leu de novo e confirmou: ticket confere", "ok", "✓");
-      }, skip);
+    const k = v.skip;
+    const rd = v.scr.L.find((z) => z.act === "read");
+    if (rd) once(f, "lr", u, rd.t0, () => lg(v.sem ? (v.demo ? "Viagem sem ticket obrigatório: o leitor só confere o cadastro" : "Nada pra conferir no ticket desta viagem") : "Leitor lendo o ticket", "info", "?"), k);
+    v.scr.ev.forEach((e) => {
+      once(f, e.k, u, e.t, () => {
+        if (e.id === "pick") {
+          if (d) st.fila = Math.max(0, st.fila - 1);
+          v.pegou = true;
+          lg("Leitor foi à mesa de entrada e pegou a viagem do topo da pilha", "info", "•");
+        } else if (e.id === "handover") lg(v.texto === "Foto ilegível" ? "Leitor não conseguiu ler a foto e levou o papel ao conferente" : v.kind === "DIV" ? "Leitor achou divergência e levou o papel ao conferente" : "Leitor ficou em dúvida e levou o papel ao conferente", "wait", "!");
+        else if (e.id === "stamp") {
+          v.stamp = { u: e.t, text: v.carimbo, col: v.corCarimbo, who: e.who };
+          lg(`Carimbou: ${v.carimbo.toLowerCase()}`, v.kind === "DIV" ? "no" : v.kind === "TRAV" ? "wait" : v.kind === "NEU" || v.kind === "SOM" ? "info" : "ok", v.kind === "DIV" ? "✗" : v.kind === "TRAV" ? "!" : v.kind === "NEU" || v.kind === "SOM" ? "•" : "✓");
+        } else if (e.id === "place") {
+          v.guardou = true;
+          if (v.kind === "OK") {
+            if (d) st.val++;
+            lg("Guardou a viagem no arquivo de validadas", "ok", "✓");
+          } else if (v.kind === "AJ") {
+            if (d) {
+              st.aj++;
+              st.dev = Math.max(0, st.dev - 1);
+            }
+            lg("Ajuste conferido: viagem guardada em ajustadas", "ok", "✓");
+          } else if (v.kind === "DIV") {
+            if (d) st.dev++;
+            lg(v.aviso ? "Conferente levou a viagem à caixa de devolvidas" : "Viagem levada à caixa de devolvidas", "no", "✗");
+          } else if (v.kind === "TRAV") {
+            if (d) {
+              if (st.trav === 0) st.age = 3;
+              st.trav++;
+            }
+            lg("Sem como decidir: viagem deixada no balcão, esperando alguém do escritório", "wait", "!");
+          } else {
+            S.neuEm.push(S.wall);
+            S.neuRot = v.kind === "SOM" ? "LIDAS EM SOMBRA" : "SEGUE O FLUXO NORMAL";
+            lg(v.logNeu, "info", "•");
+          }
+        } else if (e.id === "hpick") {
+          v.hpegou = true;
+          if (d) st.trav = Math.max(0, st.trav - 1);
+          lg("Alguém do escritório pegou uma travada no balcão", "info", "•");
+        } else if (e.id === "hplace") {
+          v.hguardou = true;
+          if (d) {
+            st.val++;
+            st.age = st.trav === 0 ? 0 : (st.age ?? 0) * 0.6;
+          }
+          lg(v.humDest === "val" ? "Travada resolvida e guardada nas validadas" : v.humDest === "dev" ? "Travada resolvida: viagem devolvida ao motorista" : "Travada resolvida por alguém do escritório", "ok", "✓");
+        }
+      }, k);
+    });
+    if (v.scr.retT !== null) {
+      once(f, "c12", u, v.scr.retT + 3.9, () => lg(v.kind === "AJ" ? "Motorista recebeu a confirmação do ajuste" : "Aviso ao motorista registrado", "info", "•"), k);
     }
-    once(f, "c10", tv, f1, () => {
-      if (demo) {
-        if (v.kind === "OK") st.val++;
-        if (v.kind === "AJ") {
-          st.aj++;
-          st.dev = Math.max(0, st.dev - 1);
-        }
-        if (v.kind === "DIV") st.dev++;
-        if (v.kind === "TRAV") {
-          if (st.trav === 0) st.age = 3;
-          st.trav++;
-        }
-      }
-      if (v.kind === "OK" || v.kind === "AJ") log("Viagem validada", "ok", "✓");
-      else if (v.kind === "DIV") log(v.aviso ? "Viagem devolvida pra conferir" : "Divergência registrada, sem aviso ao motorista", "no", "✗");
-      else log("Viagem parada: esperando alguém do escritório", "wait", "!");
-    }, skip);
-    if (v.hum) {
-      once(f, "c11", tv, 17.4, () => {
-        if (st.trav > 0) {
-          st.trav--;
-          st.val++;
-          st.age = st.trav === 0 ? 0 : st.age * 0.6;
-          log("Alguém do escritório resolveu uma travada", "ok", "✓");
-        }
-      }, skip);
-    }
-    if (v.aviso) once(f, "c12", tv, 20.4, () => log("Aviso chegou ao celular do motorista", "info", "•"), skip);
+    v.skip = null;
   }
 
-  /* ---------- poses ---------- */
-  function driverSpot(slot: number): Pt {
-    return [DRV[0], DRV[1] + (slot === 1 ? 1.3 : slot === 2 ? -1.3 : 0)];
-  }
-  function leitorPose(v: VView | null): PoseHumano {
-    const h = HOME1;
-    if (!v || v.tv < 8.9) return { x: h[0], y: h[1], dir: "px", seat: true };
-    const tv = v.tv;
-    if (tv < 10.2) {
-      const u = ease(seg(tv, 8.9, 10.2));
-      return { x: lerp(h[0], INBOX[0], u), y: lerp(h[1], INBOX[1], u), dir: u < 0.85 ? "my" : "mx", walk: true };
-    }
-    if (tv < 10.6) return { x: INBOX[0], y: INBOX[1], dir: "mx", arm: "front" };
-    if (tv < 12.0) {
-      const u2 = ease(seg(tv, 10.6, 12.0));
-      return { x: lerp(INBOX[0], h[0], u2), y: lerp(INBOX[1], h[1], u2), dir: u2 < 0.15 ? "mx" : "py", walk: true, arm: "front" };
-    }
-    if (tv < 13.8) return { x: h[0], y: h[1], dir: "px", arm: "front" };
-    if (tv < 14.7) return { x: h[0], y: h[1], dir: "px", arm: Math.floor(tv * 6) % 2 ? "up" : "front" };
-    if (tv < 16.0 && (v.kind === "OK" || v.kind === "AJ") && !v.seg2) return { x: h[0], y: h[1], dir: "px", arm: "up" };
-    return { x: h[0], y: h[1], dir: "px" };
-  }
-  function conferentePose(v: VView | null): PoseHumano {
-    const h = HOME2;
-    if (v && v.seg2 && v.tv >= 15.4 && v.tv < 16.9) return { x: h[0], y: h[1], dir: "px", arm: "front" };
-    if (v && v.seg2 && v.tv >= 16.9 && v.tv < 17.6) return { x: h[0], y: h[1], dir: "px", arm: Math.floor(v.tv * 6) % 2 ? "up" : "front" };
-    return { x: h[0], y: h[1], dir: "px", seat: true };
-  }
-  function motoristaPose(ta: number, slot: number, aj: boolean): PoseHumano | null {
-    const spot = driverSpot(slot);
-    const tl = ta - TA_LANCA;
-    if (aj) {
-      // Ajuste: o motorista corrige e reenvia de onde estiver, sem caminhão.
-      if (tl < 1.2) return { x: spot[0], y: spot[1], dir: "mx", arm: tl > 0 ? "up" : null };
-      if (tl < 3.4) {
-        const v = ease(seg(tl, 1.2, 3.4));
-        return { x: lerp(spot[0], 6.4, v), y: lerp(spot[1], 19, v), dir: "py", walk: true };
+  /* ---------- números exibidos nos montes ---------- */
+  /**
+   * Ao vivo, os números do snapshot já contam o que a animação ainda está
+   * entregando. A ETIQUETA mostra sempre o número real; só a ALTURA do monte
+   * espera o papel chegar (e a fila espera o leitor pegar). Em repouso, monte
+   * e número coincidem.
+   */
+  function visiveis(): Numeros {
+    const v = { ...st };
+    if (demo()) return v;
+    // Fila de reprodução grande: o ajuste não faz sentido, a pilha mostra o número real.
+    if (S.chQ.length + S.veQ.length > 3) return v;
+    const robo = S.snap?.robo;
+    const roboAgindo = !!robo && robo.ativo && !robo.modoSombra;
+    // só a chegada em curso, e só com o robô agindo (não se supõe que toda viagem gerou job)
+    if (roboAgindo && S.ch && !S.ch.pousou) v.fila -= 1;
+    const ves = [...(S.ve ? [S.ve] : []), ...S.veQ].slice(0, 2);
+    ves.forEach((e) => {
+      if (e.kind === "SOM" || e.kind === "NEU") return; // não mexem em pilha nenhuma
+      if (!e.pegou) v.fila += 1;
+      if (!e.guardou) {
+        if (e.kind === "OK") v.val -= 1;
+        else if (e.kind === "DIV") v.dev -= 1;
+        else if (e.kind === "AJ") v.aj -= 1;
+        else if (e.kind === "TRAV") v.trav -= 1;
       }
-      return null;
-    }
-    if (tl < -4.8) return null; // ainda dentro da cabine, o caminhão basculando
-    if (tl < -3.9) {
-      const u = ease(seg(tl, -4.8, -3.9));
-      return { x: lerp(PORTA_CAB[0], POSTO_CONF[0], u), y: lerp(PORTA_CAB[1], POSTO_CONF[1], u), dir: "py", walk: true };
-    }
-    if (tl < -1.8) return { x: POSTO_CONF[0], y: POSTO_CONF[1], dir: "py" }; // espera o conferente conferir e assinar
-    if (tl < -1.0) {
-      const u = ease(seg(tl, -1.8, -1.0));
-      return { x: lerp(POSTO_CONF[0], spot[0], u), y: lerp(POSTO_CONF[1], spot[1], u), dir: "my", walk: true };
-    }
-    if (tl < 0.7) return { x: spot[0], y: spot[1], dir: "mx", arm: "up" }; // fotografa o comprovante e lança
-    if (tl < 1.9) {
-      const u = ease(seg(tl, 0.7, 1.9));
-      return { x: lerp(spot[0], PORTA_CAB[0], u), y: lerp(spot[1], PORTA_CAB[1], u), dir: "mx", walk: true };
-    }
-    return null; // entrou no caminhão
+    });
+    v.fila = Math.max(0, v.fila);
+    v.val = Math.max(0, v.val);
+    v.dev = Math.max(0, v.dev);
+    v.aj = Math.max(0, v.aj);
+    v.trav = Math.max(0, v.trav);
+    return v;
   }
-  function conferenteObraPose(ta: number, aj: boolean): PoseHumano | null {
-    if (aj) return null;
-    const tl = ta - TA_LANCA;
-    const entrada: Pt = [6.4, 19];
-    const posto: Pt = [4.9, 13.9];
-    if (tl < -7.0 || tl > 2.4) return null;
-    if (tl < -5.4) {
-      const u = ease(seg(tl, -7.0, -5.4));
-      return { x: lerp(entrada[0], posto[0], u), y: lerp(entrada[1], posto[1], u), dir: "my", walk: true };
+
+  /* ---------- poses da OBRA (tc relativo ao lançamento) ---------- */
+  function truckPose(c: Cheg | null): { pos: number; cen: number; tilt: number; cargo: number; alpha: number; lights: boolean; smoke: boolean } | null {
+    if (!c || c.aj) return null;
+    const t = c.tc;
+    let y: number;
+    let a = 1;
+    if (t < -7.6) {
+      const e = easeOut(segT(t, T_INI_CHEG, -7.6));
+      y = c.fromQ ? lerp(9.0, 5.0, e) : lerp(28, 5.0, e);
+    } else if (t < -7.0) y = 5.0 + 0.12 * Math.sin(segT(t, -7.6, -7.0) * Math.PI);
+    else if (t < 2.4) y = 5.0;
+    else {
+      y = lerp(5.0, -9.0, Math.pow(segT(t, 2.4, 4.4), 1.7));
+      a = y > -2.5 ? 1 : clamp01((y + 9) / 6.5);
     }
-    if (tl < -3.0) return { x: posto[0], y: posto[1], dir: "mx", arm: "front" }; // confere a carga e o ticket
-    if (tl < -2.0) return { x: posto[0], y: posto[1], dir: "mx", arm: Math.floor(tl * 6) % 2 ? "up" : "front" }; // assina
-    if (tl < 0.4) return { x: posto[0], y: posto[1], dir: "my" };
-    const u = ease(seg(tl, 0.4, 2.4));
-    return { x: lerp(posto[0], entrada[0], u), y: lerp(posto[1], entrada[1], u), dir: "py", walk: true };
+    const x = c.fromQ && t < -7.6 ? lerp(1.8, 5.0, ease(easeOut(segT(t, T_INI_CHEG, -7.6)))) : 5.0;
+    let tilt = 0;
+    if (t >= -6.6) {
+      const up = ease(segT(t, -6.6, -5.4));
+      tilt = up * (1 - ease(segT(t, -4.6, -3.8)));
+    }
+    return { pos: y, cen: x, tilt, cargo: 1 - ease(segT(t, -5.4, -4.6)), alpha: a, lights: t < -7.2 || t > 1.8, smoke: t < -7.2 || t > 1.2 };
   }
-  /** O caminhão na linha do tempo da chegada: entra, basculha, espera, sai. */
-  function caminhaoEstado(ta: number): { ty: number | null; tilt: number; cargo: number; movendo: boolean; pilha: number } {
-    const tl = ta - TA_LANCA;
-    const basc = seg(tl, -6.8, -5.4);
-    let ty: number | null = null;
-    if (tl >= -8.6 && tl < 4.0) {
-      ty = tl < -6.8 ? lerp(19, 8.2, easeOut(seg(tl, -8.6, -6.8))) : tl < 2.0 ? 8.2 : lerp(8.2, -6, ease(seg(tl, 2.0, 4.0)));
-    }
-    return {
-      ty,
-      tilt: basc < 1 ? basc : Math.max(0, 1 - seg(tl, -5.4, -4.8)),
-      cargo: 1 - basc,
-      movendo: tl < -6.8 || tl > 2.0,
-      pilha: seg(tl, -6.8, -5.8) * (1 - seg(tl, 3.0, 4.2)),
-    };
+  interface PoseObra {
+    x: number;
+    y: number;
+    dir: Dir;
+    walk?: boolean;
+    arm?: Braco;
+    sign?: boolean;
+    cam?: boolean;
+    lanca?: boolean;
+    bal?: boolean;
+    prancheta?: boolean;
   }
-  function humanoPose(v: VView | null): PoseHumano | null {
-    if (!v || !v.hum) return null;
-    const tv = v.tv;
-    const hx = 11.7;
-    const hy = 11.2;
-    if (tv < 15.8) return null;
-    if (tv < 16.6) {
-      const u = ease(seg(tv, 15.8, 16.6));
-      return { x: lerp(8.8, hx, u), y: lerp(10.2, hy, u), dir: "py", walk: true };
+  function motoristaPose(c: Cheg | null): PoseObra | null {
+    if (!c || c.aj) return null;
+    const t = c.tc;
+    if (t < -7.0 || t >= 1.6) return null;
+    if (t < -5.6) {
+      const u = ease(segT(t, -7.0, -5.6));
+      return { x: lerp(DOOR[0], MEET[0], u), y: lerp(DOOR[1], MEET[1], u), dir: "py", walk: true };
     }
-    if (tv < 17.4) return { x: hx, y: hy, dir: "py", arm: tv < 17.0 ? "up" : "front" };
-    if (tv < 18.5) return { x: hx, y: hy, dir: "py", arm: "front" };
-    if (tv < 19.4) {
-      const w = ease(seg(tv, 18.5, 19.4));
-      return { x: lerp(hx, 8.8, w), y: lerp(hy, 10.2, w), dir: "my", walk: true };
-    }
-    return null;
+    if (t < -3.0) return { x: MEET[0], y: MEET[1], dir: "px" };
+    if (t < -1.8) return { x: MEET[0], y: MEET[1], dir: "px", arm: "front" };
+    if (t < -0.8) return { x: MEET[0], y: MEET[1], dir: "px", arm: "front", sign: true };
+    if (t < -0.2) return { x: MEET[0], y: MEET[1], dir: "px", arm: "up", cam: true };
+    if (t < 0.4) return { x: MEET[0], y: MEET[1], dir: "px", arm: "up", lanca: true };
+    const v = ease(segT(t, 0.4, 1.6));
+    return { x: lerp(MEET[0], DOOR[0], v), y: lerp(MEET[1], DOOR[1], v), dir: "my", walk: true };
   }
-  function destinoDe(kind: Kind): Pt3 {
-    if (kind === "OK") return [19.9, 1.0, 42];
-    if (kind === "AJ") return [20.5, 10.8, 18];
-    if (kind === "DIV") return [20.5, 7.4, 20];
-    return [11.7, 12.6, 28];
+  function conferenteObraPose(c: Cheg | null): PoseObra {
+    const idle: PoseObra = { x: DG[0], y: DG[1], dir: "py", prancheta: true };
+    if (!c || c.aj) return idle;
+    const t = c.tc;
+    if (t < -4.4) return idle;
+    if (t < -3.0) {
+      const u = ease(segT(t, -4.4, -3.0));
+      return { x: lerp(DG[0], MEETC[0], u), y: lerp(DG[1], MEETC[1], u), dir: u < 0.7 ? "py" : "mx", walk: true, prancheta: true };
+    }
+    if (t < 0.4) return { x: MEETC[0], y: MEETC[1], dir: "mx", prancheta: true, bal: t < -1.8 };
+    if (t < 1.6) {
+      const v = ease(segT(t, 0.4, 1.6));
+      return { x: lerp(MEETC[0], DG[0], v), y: lerp(MEETC[1], DG[1], v), dir: v < 0.8 ? "my" : "py", walk: true, prancheta: true };
+    }
+    return idle;
+  }
+
+  /* ---------- sinais (estágios) ---------- */
+  function sigStage(c: Cheg | null, v: Ver | null): { ledP?: number; spark?: number; torF?: boolean } {
+    const o: { ledP?: number; spark?: number; torF?: boolean } = {};
+    if (c) {
+      const s = c.tc;
+      if (s >= 2.2 && s < 2.6) {
+        o.ledP = (s - 2.2) / 0.4;
+        o.spark = 1 - (s - 2.2) / 0.4;
+      }
+      if (s >= 2.0 && s < 2.8) o.spark = Math.max(o.spark ?? 0, 0.6);
+      if (s >= 0.8 && s < 1.7) o.torF = s > 1.35;
+    }
+    if (v && v.scr.retT !== null) {
+      const r = v.u - v.scr.retT;
+      if (r >= 1.7 && r < 2.3) {
+        o.ledP = (r - 1.7) / 0.6;
+        o.spark = 1 - (r - 1.7) / 0.6;
+      }
+      if (r >= 2.5 && r < 3.3) o.torF = true;
+    }
+    return o;
+  }
+  function bolhaEstado(c: Cheg | null, v: Ver | null): { col?: string; glowA?: number; glowC?: string; tela?: string; glyph?: string } {
+    const b: { col?: string; glowA?: number; glowC?: string; tela?: string; glyph?: string } = { col: "rgba(166,179,210,.5)", glowA: 0, tela: "#1B2A52" };
+    if (c) {
+      const t = c.tc;
+      if (t >= 0 && t < 1.2) {
+        b.col = "#5B8AE8";
+        b.glowA = t < 0.9 ? 1 : 1 - (t - 0.9) / 0.3;
+        b.glowC = "rgba(91,138,232,.9)";
+        b.tela = "#2A4A9E";
+        b.glyph = c.aj ? "↺" : "↑";
+      }
+      if (!c.aj && t >= -0.2 && t < 0) b.tela = "#27A06A";
+    }
+    if (v && v.scr.retT !== null) {
+      const r = v.u - v.scr.retT;
+      if (r >= 3.2 && r < 6.9) {
+        const red = v.kind === "DIV";
+        b.col = red ? "#E05A4E" : "#5B8AE8";
+        b.tela = red ? "#7a2a24" : "#2A4A9E";
+        b.glyph = red ? "✗" : "↺";
+        b.glowA = 0.9;
+        b.glowC = red ? "rgba(224,90,78,.9)" : "rgba(91,138,232,.9)";
+      }
+    }
+    return b;
   }
 
   /* ---------- quadro ---------- */
@@ -1175,294 +768,8 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
     k: number;
     f: () => void;
   }
-  function frame(): void {
-    const tm = S.relogio;
-    const demo = S.modo === "demo";
-    g = ctx;
-    g.setTransform(DPR, 0, 0, DPR, 0, 0);
-    g.clearRect(0, 0, LARGURA, ALTURA);
-    g.drawImage(bgc, 0, 0, LARGURA * DPR, ALTURA * DPR, 0, 0, LARGURA, ALTURA);
-    g.lineJoin = "round";
-
-    // linhas do tempo vigentes
-    const chegadas: { ta: number; slot: number; aj: boolean }[] = demo
-      ? [demoChegada()]
-      : S.chegadas.map((c) => ({ ta: -ENTRADA + (S.relogio - c.inicio), slot: c.slot, aj: c.aj }));
-    const V: VView | null = demo ? demoVeredito() : S.ativo ? { ...S.ativo, tv: 8.9 + (S.relogio - S.ativo.inicio) } : null;
-    const kind: Kind = V ? V.kind : "OK";
-    const f0 = V ? tFly(V) : 14.7;
-    const f1 = f0 + 1.1;
-    const ajDemo = demo && S.kind === "AJ";
-    const items: Item[] = [];
-    const add = (k: number, fn: () => void): void => {
-      items.push({ k, f: fn });
-    };
-    const robo = roboRotulo(demo);
-    parede(tm, st, robo, demo);
-
-    // caminhão: só existe quando há uma chegada em curso. Sem viagem chegando, a
-    // vaga fica vazia (nada de caminhão parado de enfeite): ele entra, basculha, e
-    // sai depois que o motorista lança, pra liberar a vaga do próximo.
-    let pilhaU = 0;
-    chegadas.forEach((c) => {
-      if (c.aj) return;
-      const e = caminhaoEstado(c.ta);
-      pilhaU = Math.max(pilhaU, e.pilha);
-      const tyV = e.ty;
-      if (tyV === null) return;
-      add(0.2 + tyV + 2.2 + 3.5, () => caminhao(tyV, e.tilt, e.cargo, tm, e.movendo));
-    });
-    add(3.5 + 13.2, () => pilhaChao(pilhaU));
-    add(6.5 + 3, () => datacenter(tm, chegadas.some((c) => c.ta > 6.8 && c.ta < 7.4)));
-    add(6.2 + 6.5, () => torre(tm, chegadas.some((c) => c.ta > 5.5 && c.ta < 6.2)));
-    add(2 + 3, () => posteLuz(5.0, 6.0));
-    add(2 + 14, () => posteLuz(5.0, 13.8));
-    add(5.5 + 9, () => {
-      coneTrafego(4.8, 8.0);
-      coneTrafego(4.8, 13.2);
-    });
-    add(2 + 8, () => {
-      box(0.5, 7.4, 0, 1, 0.9, 9, "#8a5a3a");
-      box(0.6, 7.5, 9, 0.8, 0.7, 8, "#9A6B43");
-      box(0.5, 8.5, 0, 1, 0.9, 9, "#8a5a3a");
-    });
-
-    // mesa de entrada e a pilha (a altura vem do número real de jobs na fila)
-    const topo = pilhaTopo(st.fila);
-    add(11 + 5, () => {
-      mesa(10, 4.2, 2.2, 1.6, C.md);
-      pilha(st.fila, 11.0, 5.0, 14);
-      chegadas.forEach((c) => {
-        if (c.ta >= 8.4 && c.ta < 8.9) {
-          const uf = seg(c.ta, 8.4, 8.9);
-          const bq = uf < 0.75 ? easeOut(uf / 0.75) : 1 - Math.sin(((uf - 0.75) / 0.25) * Math.PI) * 0.1;
-          papelChato(10.9, 5.0, lerp(70, topo, bq), C.pp);
-        }
-      });
-      if (V && V.tv >= 10.2 && V.tv < 10.6) papelChato(lerp(11.0, 12.5, seg(V.tv, 10.2, 10.6)), 5.0, lerp(topo, 28, seg(V.tv, 10.2, 10.6)), C.pp);
-    });
-
-    const ag = leitorPose(V);
-    const lendo = !!V && V.tv >= 11.4 && V.tv < 15.5;
-    add(15.2 + 9.0, () => {
-      mesa(14.6, 8.2, 2, 1.6, C.md);
-      monitor(16.1, 9.0, lendo, "rgba(91,138,232,.6)");
-      box(14.8, 8.8, 14, 0.3, 0.5, 0.8, "#cfd8ee");
-      box(15.8, 8.35, 14, 0.12, 0.12, 7, "#10182f");
-      box(14.7, 8.5, 14, 0.12, 0.12, 3, C.pp);
-    });
-    add(15.2 + 12.2, () => {
-      mesa(14.6, 11.4, 2, 1.6, C.md);
-      monitor(16.1, 12.2, !!V && V.seg2 && V.tv >= 15.0 && V.tv < 17.6, "rgba(242,181,63,.55)");
-      box(14.8, 12.0, 14, 0.3, 0.5, 0.8, "#cfd8ee");
-      box(15.7, 11.55, 14, 0.12, 0.12, 5, C.ljd);
-    });
-
-    // o papel principal
-    let mp: Pt3 | null = null;
-    const papelCor = (): string => {
-      if (!V) return C.pp;
-      if (V.tv >= 14.3 && V.tv < f1) {
-        if (V.seg2 && V.tv < 16.9) return "#ffe0a0";
-        return kind === "OK" || kind === "AJ" ? "#a9e8c6" : kind === "DIV" ? "#ffb1a8" : "#ffe0a0";
-      }
-      return C.pp;
-    };
-    if (V) {
-      const tv = V.tv;
-      if (tv >= 10.6 && tv < 12.0) mp = [ag.x + (ag.dir === "mx" ? -0.3 : ag.dir === "py" ? 0.02 : 0.3), ag.y + (ag.dir === "py" ? 0.3 : 0), 24];
-      if (tv >= 12.0 && tv < (V.seg2 ? 14.7 : f0)) mp = [15.2, 9.0, 14.8];
-      if (V.seg2 && tv >= 14.7 && tv < 15.4) mp = p3([15.2, 9.0, 14.8], [15.2, 12.2, 14.8], ease(seg(tv, 14.7, 15.4)), 20);
-      if (V.seg2 && tv >= 15.4 && tv < f0) mp = [15.2, 12.2, 14.8];
-      if (tv >= f0 && tv < f1) {
-        const ini: Pt3 = V.seg2 ? [15.2, 12.2, 14.8] : [15.2, 9.0, 14.8];
-        mp = p3(ini, destinoDe(kind), ease(seg(tv, f0, f1)), kind === "OK" ? 60 : 36);
-      }
-    }
-    const mpF = mp;
-    add(20, () => {
-      if (mpF) {
-        papelChato(mpF[0], mpF[1], mpF[2], papelCor());
-        if (ajDemo) box(mpF[0] + 0.02, mpF[1] - 0.15, mpF[2] + 1.4, 0.12, 0.12, 0.8, C.azl);
-      }
-    });
-
-    // pessoas
-    add(ag.x + ag.y, () => {
-      tag(ag.x, ag.y, 50, "LEITOR", C.azl);
-      human({ ...ag, t: tm, shirt: "#2A4A9E", skin: C.pb, hair: C.g0, badge: true });
-    });
-    const cf = conferentePose(V);
-    add(cf.x + cf.y, () => {
-      tag(cf.x, cf.y, 50, "CONFERENTE", C.am);
-      human({ ...cf, t: tm, shirt: "#B4501A", skin: C.pa, hair: C.pc });
-    });
-    chegadas.forEach((c) => {
-      const co = conferenteObraPose(c.ta, c.aj);
-      if (co) {
-        add(co.x + co.y, () => {
-          tag(co.x, co.y, 50, "CONFERENTE · OBRA", C.am);
-          human({ ...co, t: tm, shirt: "#C98A0A", skin: C.pc, hair: C.g0, cap: true });
-        });
-      }
-      const mt = motoristaPose(c.ta, c.slot, c.aj);
-      if (!mt) return;
-      add(mt.x + mt.y, () => {
-        human({ ...mt, t: tm, shirt: "#8A3A12", skin: C.pa, hair: C.pc, cap: true });
-        if (mt.arm === "up") {
-          const cp = P(mt.x + (mt.dir === "mx" ? -0.1 : 0), mt.y, 35);
-          g.fillStyle = "#0b1226";
-          g.fillRect(cp[0] - 2.5, cp[1] - 6, 5, 8);
-          g.fillStyle = "#9CC0FF";
-          g.fillRect(cp[0] - 1.6, cp[1] - 5, 3.2, 6);
-          glow([cp[0], cp[1] - 2], 18, "rgba(120,170,255,.8)", 0.9);
-          // o flash da foto do comprovante, antes de lançar
-          const tl = c.ta - TA_LANCA;
-          if (!c.aj && tl > -0.6 && tl < -0.3) glow([cp[0], cp[1] - 2], 64, "rgba(255,255,255,.95)", 1);
-        }
-      });
-    });
-    const hm = humanoPose(V);
-    if (hm) add(hm.x + hm.y, () => human({ ...hm, t: tm, shirt: "#1d8a5c", skin: C.pc, hair: C.g0 }));
-
-    // móveis restantes
-    add(20 + 1.5, () => arquivo(!!V && ((kind === "OK" && V.tv > f0 - 0.3 && V.tv < f0 + 1.2) || (V.hum && V.tv > 18)), st.val, !!V && V.tv > f0 - 0.2 && V.tv < f0 + 1.3));
-    add(20.5 + 7.4, () => caixaDevolvidas(st.dev, !!V && kind === "DIV" && V.tv > f1 && V.tv < f1 + 1.5));
-    add(20.5 + 10.8, () => pastaAjustadas(!!V && kind === "AJ" && V.tv > f1 && V.tv < f1 + 1.5));
-    add(11.7 + 12.6, () => balcao(st.trav, nivelAge(), tm));
-    add(9 + 14.4, () => planta(9.4, 14.3));
-    add(21 + 14.4, () => planta(21.5, 14.3));
-    add(19 + 13.5, () => sofa(17.5, 13.3));
-    add(9 + 8.8, () => cafeteira(9.2, 8.9));
-    add(21 + 4.6, () => {
-      box(21.0, 4.3, 0, 0.5, 0.5, 30, "#9CC0FF", { a: 0.8 });
-      box(20.95, 4.25, 30, 0.6, 0.6, 4, "#cfd8ee");
-    });
-    add(1 + 3, () => arvore(1.0, 3.2));
-    add(1 + 14, () => arvore(1.0, 13.6));
-    add(7 + 14, () => arvore(7.2, 14.2));
-
-    items.sort((a, b) => a.k - b.k);
-    divisoria();
-    items.forEach((i) => i.f());
-
-    // sinais e pacotes por cima
-    const tTop: Pt3 = [6.2, 6.5, 160];
-    const dish: Pt3 = [6.5, 1.7, 62];
-    chegadas.forEach((c) => {
-      const sp = driverSpot(c.slot);
-      const ph: Pt3 = [sp[0] - 0.1, sp[1], 37];
-      if (c.ta > 3.8 && c.ta < 5.0) ondas(ph[0], ph[1], 37, tm);
-      if (c.ta >= 5.0 && c.ta < 5.9) {
-        const u1 = ease(seg(c.ta, 5.0, 5.9));
-        trilha(ph, tTop, u1, 40);
-        pacote(p3(ph, tTop, u1, 40));
-      }
-      if (c.ta >= 5.9 && c.ta < 6.8) {
-        const u2 = ease(seg(c.ta, 5.9, 6.8));
-        trilha(tTop, dish, u2, 30);
-        pacote(p3(tTop, dish, u2, 30));
-      }
-      if (c.ta >= 7.2 && c.ta < 8.4) {
-        const u3 = easeOut(seg(c.ta, 7.2, 8.4));
-        pacote(caboPos(u3));
-        for (let q = 1; q < 6; q++) {
-          const cp = caboPos(Math.max(0, u3 - q * 0.03));
-          const pp = P(cp[0], cp[1], cp[2]);
-          g.beginPath();
-          g.arc(pp[0], pp[1], 2.6 - q * 0.3, 0, 6.2832);
-          g.fillStyle = `rgba(91,138,232,${0.5 - q * 0.08})`;
-          g.fill();
-        }
-      }
-    });
-    for (let r = 0; r < 3; r++) {
-      const pc = caboPos((tm * 0.18 + r / 3) % 1);
-      const pp = P(pc[0], pc[1], pc[2]);
-      g.fillStyle = "rgba(91,138,232,.7)";
-      g.fillRect(pp[0] - 1, pp[1] - 1, 2, 2);
-    }
-    if (V && V.aviso) {
-      const ob: Pt3 = [20.5, 7.4, 28];
-      const sp0 = driverSpot(0);
-      const ph0: Pt3 = [sp0[0] - 0.1, sp0[1], 37];
-      if (V.tv >= 18.7 && V.tv < 19.6) {
-        const u4 = ease(seg(V.tv, 18.7, 19.6));
-        trilha(ob, tTop, u4, 50, "r");
-        pacote(p3(ob, tTop, u4, 50), "r");
-      }
-      if (V.tv >= 19.6 && V.tv < 20.4) {
-        const u5 = ease(seg(V.tv, 19.6, 20.4));
-        trilha(tTop, ph0, u5, 30, "r");
-        pacote(p3(tTop, ph0, u5, 30), "r");
-      }
-      if (V.tv >= 20.0) {
-        // O motorista já foi embora no caminhão: o aviso chega ao celular dele, onde estiver.
-        const cp = P(ph0[0], ph0[1], 37);
-        g.fillStyle = "#0b1226";
-        g.fillRect(cp[0] - 2.5, cp[1] - 6, 5, 8);
-        g.fillStyle = "#9CC0FF";
-        g.fillRect(cp[0] - 1.6, cp[1] - 5, 3.2, 6);
-        glow([cp[0], cp[1] - 2], 22, "rgba(120,170,255,.8)", 0.9);
-        selo(sp0[0], sp0[1], 52, "no", 1);
-      }
-    }
-    if (V && V.hum && V.tv >= 17.4 && V.tv < 18.5) {
-      const hp = p3([11.7, 12.6, 28], [19.9, 1.0, 42], ease(seg(V.tv, 17.4, 18.5)), 70);
-      papelChato(hp[0], hp[1], hp[2], "#a9e8c6");
-    }
-
-    // cartões e selos
-    if (V) {
-      const tv = V.tv;
-      if (demo) {
-        const dv = V.seg2 && kind === "DIV";
-        if (tv >= 12.0 && tv < 14.3) {
-          const rows1: LinhaCartao[] = [
-            ["Peso", dv ? "lido 17,9 t" : "18,4 t", dv ? "no" : "ok"],
-            ["Material", "Brita 1", "ok"],
-            ["Placa", "conferida", "ok"],
-            ["Obra", kind === "TRAV" ? "sem vínculo" : "Obra Centro", kind === "TRAV" ? "wait" : "ok"],
-            ["Data", "hoje", "ok"],
-          ];
-          cartao(17.6, 9.0, 62, "LEITOR · TICKET", rows1, seg(tv, 12.0, 14.0), "#5B8AE8", tm, false);
-        }
-        if (V.seg2 && tv >= 15.4 && tv < 17.2) {
-          const rows2: LinhaCartao[] = [["Peso", "lido 17,9 t", "no"], ["Lançado", "18,4 t", "ok"], ["Diferença", "0,5 t", "no"]];
-          cartao(17.6, 12.4, 62, "CONFERENTE · 2ª LEITURA", rows2, seg(tv, 15.4, 16.9), "#F2B53F", tm, false);
-        }
-      } else {
-        // Ao vivo: nada de campo inventado. Só "lendo" e o veredito de verdade.
-        if (tv >= 12.0 && tv < 15.5) {
-          const pronto = tv >= 13.8;
-          const l1: LinhaCartao[] = pronto
-            ? [["Resultado", V.seg2 ? "pediu 2ª leitura" : V.texto, V.seg2 ? "wait" : V.tom]]
-            : [["Ticket", "lendo o ticket…", "ler"]];
-          cartao(17.6, 9.0, 62, "LEITOR · TICKET", l1, pronto ? 1 : 0.5, "#5B8AE8", tm, true);
-        }
-        if (V.seg2 && tv >= 15.4 && tv < 17.6) {
-          const pronto = tv >= 16.9;
-          const l2: LinhaCartao[] = pronto ? [["Resultado", V.texto, V.tom]] : [["Ticket", "lendo de novo…", "ler"]];
-          cartao(17.6, 12.4, 62, "CONFERENTE · 2ª LEITURA", l2, pronto ? 1 : 0.5, "#F2B53F", tm, true);
-        }
-      }
-      const primeiroSelo: "ok" | "no" | "wait" = V.seg2 ? "wait" : kind === "TRAV" ? "wait" : kind === "DIV" ? "no" : "ok";
-      if (tv >= 14.2 && tv < (V.seg2 ? 15.0 : 15.6)) selo(15.2, 9.0, 24, primeiroSelo, easeOut(seg(tv, 14.2, 15.0)));
-      if (V.seg2 && tv >= 16.9 && tv < 18.0) selo(15.2, 12.2, 24, kind === "DIV" ? "no" : kind === "TRAV" ? "wait" : "ok", easeOut(seg(tv, 16.9, 17.5)));
-    }
-
-    // vinheta
-    const vg = g.createRadialGradient(LARGURA / 2, ALTURA / 2, ALTURA * 0.35, LARGURA / 2, ALTURA / 2, ALTURA * 0.85);
-    vg.addColorStop(0, "rgba(0,0,0,0)");
-    vg.addColorStop(1, "rgba(3,5,14,.38)");
-    g.fillStyle = vg;
-    g.fillRect(0, 0, LARGURA, ALTURA);
-  }
-  function pilhaTopo(n: number): number {
-    return 14 + degrausDaPilha(n) * 1.6;
-  }
-  function roboRotulo(demo: boolean): { texto: string; cor: string } {
-    if (demo) return { texto: "DEMO · DADOS DE EXEMPLO", cor: "#F2B53F" };
+  function roboRotulo(): { texto: string; cor: string } {
+    if (demo()) return { texto: "DEMONSTRAÇÃO · DADOS DE EXEMPLO", cor: "#F2B53F" };
     const r = S.snap?.robo;
     if (!r) return { texto: "AGUARDANDO DADOS REAIS", cor: "#A6B3D2" };
     if (!r.ativo) return { texto: "AGENTE DESLIGADO", cor: "#A6B3D2" };
@@ -1470,17 +777,450 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
     return { texto: "AGENTE ATIVO · MODO REAL", cor: "#7ED9A6" };
   }
 
+  function frame(): void {
+    if (!s0 || !s1) return;
+    const tm = S.wall;
+    const g = D.usar(ctx);
+    const W = LARGURA;
+    const H = ALTURA;
+    g.clearRect(0, 0, W, H);
+    g.drawImage(s0, 0, 0, W * SCL, H * SCL, 0, 0, W, H);
+    const live = !demo();
+    const ch = S.ch;
+    const ve = S.ve;
+    const vis = visiveis();
+    const aj = !!ch && ch.aj;
+    const veA = ve && !ve.soHum ? ve : null;
+    const nome = ch?.motorista;
+
+    /* ===== OBRA ===== */
+    D.clipZona(0, OBRA_FIM);
+    D.setO(ZO);
+    D.nuvens(tm, nuvensL);
+    if (S.figT0 >= 0) {
+      const fu = (tm - S.figT0) / 10;
+      if (fu < 1) D.caminhao({ ori: "x", pos: lerp(-7, 22, fu), cen: -3.5, tilt: 0, cargo: 1, sat: 0.7, tm, alpha: 0.92 });
+    }
+    g.restore();
+    g.drawImage(s1, 0, 0, W * SCL, H * SCL, 0, 0, W, H);
+    D.clipZona(0, OBRA_FIM);
+    D.setO(ZO);
+    const items: Item[] = [];
+    const add = (k: number, fn: () => void): void => {
+      items.push({ k, f: fn });
+    };
+    const tp = truckPose(ch);
+    // a vaga: apagada sem chegada, âmbar enquanto há uma viagem real em reprodução
+    const dp: Pt[] = [D.P(3.7, 4.2, 0), D.P(6.3, 4.2, 0), D.P(6.3, 10.9, 0), D.P(3.7, 10.9, 0)];
+    if (live && ch) {
+      const pa = 0.16 + (reduce ? 0 : 0.08 * Math.sin(tm * 3));
+      D.poly(dp, `rgba(242,181,63,${pa.toFixed(2)})`, "rgba(242,181,63,.85)", 2);
+      D.glow(D.P(5, 7.5, 0), 90, "rgba(242,181,63,.3)", 1);
+    } else {
+      D.poly(dp, "rgba(0,0,0,.16)", null);
+      const lp0 = D.P(3.55, 10.95, 8);
+      g.fillStyle = "#2a3150";
+      g.fillRect(lp0[0] - 2, lp0[1] - 2, 4, 4);
+    }
+    // fila de caminhões (só reprodução de chegadas reais; na demo, 2 esperando)
+    const nEspera = live ? S.chQ.length : 2;
+    const shift = ch && ch.fromQ ? 1 - ease(easeOut(segT(ch.tc, T_INI_CHEG, -7.6))) : 0;
+    const slotDe = (j: number): number => j + shift;
+    for (let j = 0; j < Math.min(nEspera, 3); j++) {
+      const q = live ? (S.chQ[j] as Cheg) : null;
+      const entra = q ? 1 - easeOut(clamp01((tm - q.entrou) / 1.4)) : 0;
+      const sl = slotDe(j) + entra * 1.6;
+      if (sl > 2.3) continue;
+      const y = 9.0 + 4.4 * sl;
+      add(1.8 + y + 2.4, () => D.caminhao({ ori: "y", pos: y, cen: 1.8, tilt: 0, cargo: 1, tm, smoke: false, alpha: 1 - entra * 0.7 }));
+    }
+    if (tp) add(tp.cen + tp.pos + 2.4, () => D.caminhao({ ori: "y", pos: tp.pos, cen: tp.cen, tilt: tp.tilt, cargo: tp.cargo, tm, smoke: tp.smoke, lights: tp.lights, alpha: tp.alpha }));
+    // monte e retroescavadeira
+    const mdump = ease(segT(ch?.tc ?? 99, -5.4, -4.6));
+    let mnow = S.monteV;
+    if (ch && !aj && !reduce) {
+      mnow = lerp(S.monteBase, Math.min(1, S.monteBase + 0.3), mdump);
+      if (ch.tc >= -4.6) S.monteV = Math.min(1, S.monteBase + 0.3);
+    }
+    const rph = S.retroT0 >= 0 ? (tm - S.retroT0) / 5 : -1;
+    add(5 + 10.95, () => D.monte(mnow));
+    add(7.2 + 10.2 + 1, () => D.retro(tm, rph));
+    add(1.5 + 1.1, () => D.betoneira(tm));
+    add(8 + 4, () => D.guarita());
+    add(9.6 + 4.7, () => D.mesinha());
+    add(9.8 + 8.2, () => D.palete());
+    add(9.2 + 12.4 + 1.5, () => D.container());
+    add(9.6 + 5.9, () => D.tubos());
+    add(10.2 + 3.0, () => D.torreLuz());
+    add(5 + 11.4, () => D.cones());
+    const bst = bolhaEstado(ch, ve);
+    add(9.5 + 1.0, () => D.bolha(bst, tm));
+    const mt = motoristaPose(ch);
+    if (mt) {
+      add(mt.x + mt.y, () => {
+        D.humano({ x: mt.x, y: mt.y, dir: mt.dir, t: tm, shirt: "#8A3A12", skin: C.pa, hair: C.pc, walk: mt.walk, arm: mt.arm, cap: true });
+        if (mt.arm === "up") D.celular(D.P(mt.x + 0.16, mt.y, 34), !!mt.lanca);
+      });
+    }
+    const cf = conferenteObraPose(ch);
+    add(cf.x + cf.y, () => D.humano({ x: cf.x, y: cf.y, dir: cf.dir, t: tm, shirt: "#2A4A9E", skin: C.pc, hair: C.g0, vest: true, helmet: true, walk: cf.walk, arm: "front", prancheta: cf.prancheta }));
+    items.sort((a, b) => a.k - b.k);
+    items.forEach((i) => i.f());
+    // etiquetas da obra
+    if (nEspera > 0) {
+      const sl0 = slotDe(0);
+      const qp = D.P(1.8, 9.0 + 4.4 * sl0, 48);
+      D.tagS(qp[0], qp[1], `A reproduzir · +${nEspera}`, "#DF7234");
+    }
+    if (tp && live) {
+      const q = D.P(tp.cen, tp.pos + 1.6, 66);
+      D.tagS(q[0], q[1], "↓ viagem real", "#DF7234", "rgba(60,24,6,.94)");
+    }
+    if (mt && nome) D.tag(mt.x, mt.y, -22, `MOTORISTA · ${nome}`, "#DF7234", "rgba(60,24,6,.94)");
+    if (cf.bal) {
+      const bp = D.P(cf.x, cf.y, 50);
+      D.balaoReticencias(bp, tm);
+    }
+    if (ch && mt && (mt.sign || (ch.tc >= -3.0 && ch.tc < -1.8))) D.ticketCard(D.P(6.9, 8.05, 58), mt.sign ? segT(ch.tc, -1.8, -0.8) : -1);
+    if (ch && mt && ch.tc >= -0.55 && ch.tc < -0.35) D.glow(D.P(mt.x + 0.16, mt.y, 34), 70, "rgba(255,255,255,.95)", 1 - ((ch.tc + 0.55) / 0.2) * 0.6);
+    g.restore();
+
+    /* ===== SINAL ===== */
+    D.setO(ZS);
+    const sg = sigStage(ch, ve);
+    D.clipZona(OBRA_FIM, SINAL_FIM);
+    D.torre(tm, !!sg.torF);
+    D.servidor(tm, sg.ledP ?? -1, sg.spark ?? 0);
+    g.restore();
+
+    /* ===== ESCRITÓRIO ===== */
+    D.clipZona(SINAL_FIM, W);
+    D.parede(tm, !!ve, roboRotulo());
+    D.setO(ZE);
+    const scr = ve ? ve.scr : null;
+    const u = ve ? ve.u : 0;
+    const Lp = poseDe(scr ? scr.L : null, u, HOMEL) as Pose;
+    const Cp = poseDe(scr ? scr.C : null, u, HOMEC) as Pose;
+    const Hp = poseDe(scr ? scr.H : null, u, null);
+    const lsg = Lp.sg;
+    const csg = Cp.sg;
+    const readL = !!lsg && lsg.act === "read";
+    const readC = !!csg && csg.act === "read";
+    let drawerIdx = -1;
+    let drawerP = 0;
+    const tmpD: [Pose | null, number][] = [[Lp, 1], [Hp, 2]];
+    tmpD.forEach((a) => {
+      const o = a[0];
+      if (o && o.sg && o.sg.drawer) {
+        const f = o.fr;
+        drawerIdx = a[1];
+        drawerP = f < 0.2 ? ease(f / 0.2) : f < 0.8 ? 1 : 1 - ease((f - 0.8) / 0.2);
+      }
+    });
+    // C também pode abrir a gaveta
+    if (Cp.sg && Cp.sg.drawer) {
+      const f = Cp.fr;
+      drawerIdx = 1;
+      drawerP = f < 0.2 ? ease(f / 0.2) : f < 0.8 ? 1 : 1 - ease((f - 0.8) / 0.2);
+    }
+    const it2: Item[] = [];
+    const add2 = (k: number, fn: () => void): void => {
+      it2.push({ k, f: fn });
+    };
+    const rotuloEntrada = `MESA DE ENTRADA · ${st.fila}`;
+    add2(9.5, () => {
+      D.mesa(1.5, 6, 2, 2, C.md);
+      const topo = D.pilhaGrupo(1.7, 6.2, 1.6, 1.6, 14, vis.fila, { col: "#5B8AE8", max: 20 });
+      D.plaquetaPendente(2.5, 8.35, 6, rotuloEntrada, "#5B8AE8");
+      if (ch && ch.tc >= 3.4 && ch.tc < T_POUSO) {
+        const uf = (ch.tc - 3.4) / 0.5;
+        const bq = uf < 0.75 ? easeOut(uf / 0.75) : 1 - Math.sin(((uf - 0.75) / 0.25) * Math.PI) * 0.1;
+        D.papelChato(lerp(0.1, PILE[0], easeOut(uf)), lerp(7.5, PILE[1], easeOut(uf)), lerp(34, topo, bq), C.pp);
+      }
+    });
+    add2(HOMEL[0] + HOMEL[1] - 0.6, () => D.cadeira(HOMEL[0], HOMEL[1], Lp.chair));
+    add2(HOMEC[0] + HOMEC[1] - 0.6, () => D.cadeira(HOMEC[0], HOMEC[1], Cp.chair * -0.6));
+    add2(11, () => {
+      D.mesa(4, 5, 2, 2, C.md);
+      D.monitor(5.0, 6.4, readL, "rgba(91,138,232,.6)");
+      if (readL && lsg) D.box(4.62, 6.36, 32, 0.76 * clamp01((u - lsg.t0) / lsg.d), 0.03, 0.9, "#7ED9A6", { edge: null });
+      D.box(4.5, 5.2, 14, 0.5, 0.2, 0.8, "#cfd8ee");
+      D.box(5.45, 5.3, 14, 0.12, 0.16, 0.8, C.pp);
+    });
+    add2(8, () => {
+      D.mesa(4, 2, 2, 2, C.md);
+      D.monitor(5.0, 3.45, readC, "rgba(242,181,63,.55)");
+      if (readC && csg) D.box(4.62, 3.41, 32, 0.76 * clamp01((u - csg.t0) / csg.d), 0.03, 0.9, "#F2B53F", { edge: null });
+      D.box(4.5, 2.25, 14, 0.5, 0.2, 0.8, "#cfd8ee");
+    });
+    // papel principal: sempre na mão de alguém, numa mesa ou na pilha
+    let mp: Pt3 | null = null;
+    if (ve) {
+      if (Cp.pp === "hand") mp = maoDe(Cp);
+      else if (Cp.pp === "deskC") mp = DESK2;
+      else if (Lp.pp === "hand") mp = maoDe(Lp);
+      else if (Lp.pp === "desk") mp = DESK1;
+    }
+    const hmp = ve && Hp && Hp.pp === "hand" ? maoDe(Hp) : null;
+    const stampCol = ve && ve.stamp ? ve.stamp.col : null;
+    add2(40, () => {
+      if (mp) {
+        D.papelChato(mp[0], mp[1], mp[2], C.pp);
+        if (stampCol) D.box(mp[0] - 0.12, mp[1] - 0.15, mp[2] + 1.4, 0.24, 0.1, 0.5, stampCol, { edge: null });
+      }
+      if (hmp) D.papelChato(hmp[0], hmp[1], hmp[2], "#ffe0a0");
+    });
+    // carimbo
+    let stp: { p: Pt3; f: number; col: string } | null = null;
+    ([[lsg, DESK1], [csg, DESK2]] as [Step | undefined, Pt3][]).forEach((a) => {
+      const s2 = a[0];
+      if (s2 && s2.act === "stamp" && ve) stp = { p: a[1], f: (u - s2.t0) / s2.d, col: ve.corCarimbo };
+    });
+    if (stp) {
+      const sp = stp as { p: Pt3; f: number; col: string };
+      add2(41, () => D.carimbo(sp.p, sp.f, sp.col));
+    }
+    const agente = (pose: Pose, tg: string, tgc: string, shirt: string, skin: string, hair: string, badge: boolean): void => {
+      const tz = pose.seat ? 44 : 50;
+      add2(pose.x + pose.y + 0.05, () => {
+        D.tag(pose.x, pose.y, tz, tg, tgc);
+        D.humano({ x: pose.x, y: pose.y, dir: pose.dir, t: tm, shirt, skin, hair, badge, walk: pose.walk, arm: pose.arm, seat: pose.seat });
+      });
+    };
+    agente(Lp, S.veQ.length > 0 ? `LEITOR · +${S.veQ.length}` : "LEITOR", C.azl, "#2A4A9E", C.pb, C.g0, true);
+    agente(Cp, "CONFERENTE", C.am, "#B4501A", C.pa, C.pc, false);
+    if (Hp) {
+      const hfade = Hp.x > 11.5 ? clamp01((12.3 - Hp.x) / 0.8) : 1;
+      add2(Hp.x + Hp.y + 0.05, () => {
+        g.save();
+        g.globalAlpha = hfade;
+        D.humano({ x: Hp.x, y: Hp.y, dir: Hp.dir, t: tm, shirt: "#1d8a5c", skin: C.pc, hair: C.g0, walk: Hp.walk, arm: Hp.arm });
+        g.restore();
+      });
+    }
+    const pulsoDest = (k: Kind): boolean => !!ve && ve.kind === k && ve.scr.retT !== null && ve.u > ve.scr.retT && ve.u < ve.scr.retT + 1.5;
+    const rotuloVal = `${live ? "VALIDADAS 24 H" : "VALIDADAS"} · ${st.val}`;
+    add2(10.2, () => D.arquivo(drawerIdx, drawerP, vis.val, drawerP > 0, rotuloVal));
+    add2(13.2, () => D.pastaAjustadas(vis.aj, pulsoDest("AJ"), `AJUSTADAS · ${st.aj}`));
+    add2(15.4, () => D.caixaDevolvidas(vis.dev, pulsoDest("DIV"), `DEVOLVIDAS · ${st.dev}`));
+    add2(17.5, () => D.balcao(vis.trav, nivelAge(), tm, st.trav > 0, `ESPERANDO O ESCRITÓRIO · ${st.trav}`));
+    S.neuEm = S.neuEm.filter((x) => tm - x < 25);
+    if (S.neuEm.length > 0) add2(12.0, () => D.bandejaNeutra(Math.min(4, S.neuEm.length), S.neuRot));
+    add2(20.5, () => D.planta(0.7, 9.3));
+    add2(8.1, () => D.cafeteira(7.3, 0.95));
+    it2.sort((a, b) => a.k - b.k);
+    if (st.fila > 0) {
+      const pa2 = 0.55 + (reduce ? 0 : 0.35 * Math.sin(tm * 3));
+      D.poly([D.P(1.35, 5.85, 14), D.P(3.65, 5.85, 14), D.P(3.65, 8.15, 14), D.P(1.35, 8.15, 14)], "rgba(91,138,232,.10)", `rgba(91,138,232,${pa2.toFixed(2)})`, 1.6);
+    }
+    it2.forEach((i) => i.f());
+    D.descarregarPlaquetas();
+    g.restore();
+
+    /* ===== sinais por cima ===== */
+    desenharSinais(tm, ch, ve);
+    if (ve && !ve.soHum) {
+      const dv = ve.kind === "DIV";
+      D.setO(ZE);
+      if (readL && lsg) {
+        const pr = clamp01((u - lsg.t0) / (lsg.d * 0.9));
+        let rows: LinhaCartao[];
+        let titulo = ve.kind === "SOM" ? "LEITOR · SOMBRA (SEM EFEITO)" : ve.sem ? "LEITOR · SEM TICKET" : "LEITOR · TICKET";
+        if (ve.demo) {
+          rows = ve.sem
+            ? [["Ticket", "não obrigatório", "ok"], ["Tipo", "viagem s/ ticket", "ok"], ["Obra", "Obra Centro", "ok"], ["Data", "hoje", "ok"]]
+            : [["Peso", dv ? "lido 17,9 t" : "18,4 t", dv ? "no" : "ok"], ["Material", "Brita 1", "ok"], ["Placa", "conferida", "ok"], ["Obra", ve.kind === "TRAV" ? "sem vínculo" : "Obra Centro", ve.kind === "TRAV" ? "wait" : "ok"], ["Data", "hoje", "ok"]];
+        } else {
+          // Ao vivo: nenhum campo inventado, só "lendo" e o veredito de verdade.
+          rows = [["Resultado", ve.seg2 ? "pediu 2ª leitura" : ve.texto, ve.seg2 ? "wait" : ve.tom]];
+          if (ve.kind === "NEU" && ve.sem) titulo = "LEITOR · SEM TICKET";
+        }
+        D.cartao(1100, 40, 150, titulo, rows, pr, "#5B8AE8", tm, D.P(5.0, 4.75, 46));
+      }
+      if (readC && csg) {
+        const rows: LinhaCartao[] = ve.demo
+          ? [["Peso", "lido 17,9 t", "no"], ["Lançado", "18,4 t", "ok"], ["Diferença", "0,5 t", "no"]]
+          : [["Resultado", ve.texto, ve.tom]];
+        D.cartao(790, 46, 150, "CONFERENTE · 2ª LEITURA", rows, clamp01((u - csg.t0) / (csg.d * 0.9)), "#F2B53F", tm, D.P(5.0, 1.75, 46));
+      }
+      const tipoL: "ok" | "no" | "wait" | "neu" = ve.seg2 || ve.kind === "TRAV" ? "wait" : ve.kind === "DIV" ? "no" : ve.kind === "NEU" || ve.kind === "SOM" ? "neu" : "ok";
+      const tipoC: "ok" | "no" | "wait" | "neu" = ve.kind === "DIV" ? "no" : ve.kind === "TRAV" ? "wait" : ve.kind === "NEU" || ve.kind === "SOM" ? "neu" : "ok";
+      if (lsg && lsg.act === "verdict") D.selo(D.P(4.25, 5.2, 46), tipoL, easeOut(clamp01((u - lsg.t0) / 0.4)));
+      if (csg && csg.act === "verdict") D.selo(D.P(4.25, 2.2, 46), tipoC, easeOut(clamp01((u - csg.t0) / 0.4)));
+      if (ve.stamp && u - ve.stamp.u < 2.2) {
+        const pp0 = D.P(5.0, ve.stamp.who === "C" ? 2.6 : 5.55, 40);
+        D.marcaCarimbo(pp0, ve.stamp.text, ve.stamp.col, u - ve.stamp.u, ve.stamp.who === "C" ? -62 : ve.stamp.text.length > 12 ? -24 : 34);
+      }
+    }
+    // molduras dos painéis e vinheta
+    g.lineWidth = 1;
+    D.roundRect(0.5, 0.5, OBRA_FIM - 1, H - 1, 10);
+    g.strokeStyle = "rgba(223,114,52,.55)";
+    g.stroke();
+    D.roundRect(SINAL_FIM + 0.5, 0.5, W - SINAL_FIM - 1, H - 1, 10);
+    g.strokeStyle = "rgba(91,138,232,.55)";
+    g.stroke();
+    const vg = g.createRadialGradient(W / 2, H / 2, H * 0.5, W / 2, H / 2, W * 0.62);
+    vg.addColorStop(0, "rgba(0,0,0,0)");
+    vg.addColorStop(1, "rgba(3,5,14,.18)");
+    g.fillStyle = vg;
+    g.fillRect(0, 0, W, H);
+  }
+
+  function desenharSinais(tm: number, ch: Cheg | null, ve: Ver | null): void {
+    const g = D.usar(ctx);
+    const { bub, tor, dish, slot } = D.PT;
+    g.save();
+    g.lineCap = "round";
+    // guias tracejadas = ilustração (a legenda na faixa explica)
+    g.setLineDash([3, 5]);
+    g.strokeStyle = "rgba(127,149,201,.35)";
+    g.lineWidth = 1.2;
+    g.beginPath();
+    for (let i = 0; i <= 20; i++) {
+      const q = D.arcPt(bub, tor, i / 20, 40);
+      if (i) g.lineTo(q[0], q[1]);
+      else g.moveTo(q[0], q[1]);
+    }
+    g.stroke();
+    g.beginPath();
+    g.moveTo(tor[0], tor[1]);
+    g.lineTo(dish[0], dish[1]);
+    g.stroke();
+    g.setLineDash([]);
+    // pulsos lentos pelo duto: linha cheia, o registro real
+    if (!reduce) {
+      for (let r = 0; r < 3; r++) {
+        const pc = D.cabPos((tm * 0.18 + r / 3) % 1);
+        g.fillStyle = "rgba(91,138,232,.7)";
+        g.fillRect(pc[0] - 1, pc[1] - 1, 2, 2);
+      }
+    }
+    g.restore();
+    const ajC = !!ch && ch.aj;
+    if (ch) {
+      const s = ch.tc;
+      const glyph = ajC ? "↺" : null;
+      if (!ajC && s >= 0 && s < 0.45) {
+        D.setO(ZO);
+        const ph = D.P(MEET[0] + 0.16, MEET[1], 34);
+        const u0 = ease(s / 0.45);
+        const pt = D.arcPt(ph, bub, u0, 10);
+        g.setLineDash([2, 3]);
+        g.strokeStyle = "rgba(120,170,255,.8)";
+        g.lineWidth = 1.4;
+        g.beginPath();
+        g.moveTo(ph[0], ph[1]);
+        g.lineTo(pt[0], pt[1]);
+        g.stroke();
+        g.setLineDash([]);
+        D.pacoteS(pt, "b", false);
+      }
+      if (s >= 0.3 && s < 0.9) D.ondasS(bub, tm, 20);
+      if (s >= 0.8 && s < 1.5) {
+        const u1 = ease((s - 0.8) / 0.7);
+        D.trilhaArc(bub, tor, u1, 40, "b", false);
+        D.pacoteS(D.arcPt(bub, tor, u1, 40), "b", false, glyph);
+      }
+      if (s >= 1.5 && s < 2.2) {
+        const u2 = ease((s - 1.5) / 0.7);
+        D.ondasS([tor[0] + 4, tor[1] + 10], tm, 70);
+        for (let j = 1; j <= 6; j++) {
+          const uu = Math.max(0, u2 - j * 0.04);
+          g.beginPath();
+          g.arc(lerp(tor[0], dish[0], uu), lerp(tor[1], dish[1], uu), Math.max(0.5, 3 - j * 0.4), 0, 6.2832);
+          g.fillStyle = `rgba(91,138,232,${(0.5 - j * 0.07).toFixed(2)})`;
+          g.fill();
+        }
+        D.pacoteS([lerp(tor[0], dish[0], u2), lerp(tor[1], dish[1], u2)], "b", false, glyph);
+      }
+      if (s >= 2.6 && s < 3.4) {
+        const u3 = easeOut((s - 2.6) / 0.8);
+        for (let q2 = 1; q2 < 7; q2++) {
+          const cq = D.cabPos(Math.max(0, u3 - q2 * 0.03));
+          g.beginPath();
+          g.arc(cq[0], cq[1], Math.max(0.6, 2.8 - q2 * 0.35), 0, 6.2832);
+          g.fillStyle = `rgba(91,138,232,${(0.55 - q2 * 0.08).toFixed(2)})`;
+          g.fill();
+        }
+        D.pacoteS(D.cabPos(u3), "b", true, glyph);
+      }
+    }
+    // retorno (aviso ao celular do motorista)
+    if (ve && ve.scr.retT !== null) {
+      const rr = ve.u - ve.scr.retT;
+      const red = ve.kind === "DIV";
+      const col = red ? "r" : "b";
+      const gl = red ? null : "↺";
+      D.setO(ZE);
+      const dz = DEST[ve.kind];
+      const from = D.P(dz[0], dz[1], dz[2] + 2);
+      if (rr >= 0 && rr < 0.9) {
+        const ua = ease(rr / 0.9);
+        D.trilhaArc(from, slot, ua, 30, col, true);
+        D.pacoteS(D.arcPt(from, slot, ua, 30), col, true, gl);
+      }
+      if (rr >= 0.9 && rr < 1.7) {
+        const ub = easeOut((rr - 0.9) / 0.8);
+        for (let q3 = 1; q3 < 7; q3++) {
+          const cq3 = D.cabPos(Math.min(1, 1 - ub + q3 * 0.03));
+          g.beginPath();
+          g.arc(cq3[0], cq3[1], Math.max(0.6, 2.8 - q3 * 0.35), 0, 6.2832);
+          g.fillStyle = `${(D.COLS[col] as [string, string])[0]}${(0.55 - q3 * 0.08).toFixed(2)})`;
+          g.fill();
+        }
+        D.pacoteS(D.cabPos(1 - ub), col, true, gl);
+      }
+      if (rr >= 1.7 && rr < 2.5) {
+        const uc = ease((rr - 1.7) / 0.8);
+        D.pacoteS([lerp(dish[0], tor[0], uc), lerp(dish[1], tor[1], uc)], col, false, gl);
+      }
+      if (rr >= 2.5 && rr < 3.2) {
+        const ud = ease((rr - 2.5) / 0.7);
+        D.ondasS([tor[0] - 4, tor[1] + 10], tm, 50, red ? "rgba(224,90,78," : "rgba(126,180,255,");
+        D.trilhaArc(tor, bub, ud, 36, col, false);
+        D.pacoteS(D.arcPt(tor, bub, ud, 36), col, false, gl);
+      }
+      if (rr >= 3.2 && rr < 6.5) D.selo([bub[0], bub[1] - 36], red ? "no" : "ok", easeOut(clamp01((rr - 3.2) / 0.5)));
+    }
+  }
+
   /* ---------- ao vivo: do snapshot às animações ---------- */
-  function veredictoParaKind(v: EscritorioSnapshot["veredictos"][number]): { kind: Kind; texto: string; tom: "ok" | "no" | "wait"; aviso: boolean } | null {
-    if (v.veredito === "NAO_APLICAVEL") return null;
-    const aviso = v.acao === "AVISOU_MOTORISTA";
-    if (v.veredito === "BATE") return { kind: "OK", texto: "Confere", tom: "ok", aviso: false };
-    if (aviso) return { kind: "DIV", texto: v.veredito === "ILEGIVEL" ? "Foto ilegível" : "Diverge", tom: "no", aviso: true };
-    if (v.veredito === "DIVERGE" && v.acao !== "FILA_REVISAO") return { kind: "DIV", texto: "Diverge", tom: "no", aviso: false };
-    return { kind: "TRAV", texto: v.veredito === "ILEGIVEL" ? "Foto ilegível" : "Em dúvida", tom: "wait", aviso: false };
+  function veredictoParaKind(v: EscritorioSnapshot["veredictos"][number], sombra: boolean): { kind: Kind; texto: string; tom: Tom3; aviso: boolean; sem: boolean; carimbo?: string; logNeu?: string } {
+    const acao = v.acao ?? "";
+    // MODO SOMBRA: o robô só anota (acao NENHUMA) e a viagem NÃO muda, nem entra em contador.
+    // Todo veredito vira "lido em sombra": carimbo neutro, nada vai pra arquivo/caixa/pasta/balcão,
+    // nenhum aviso volta ao motorista.
+    if (sombra) {
+      const m = {
+        BATE: ["SOMBRA · CONFERE", "Confere", "O agente decidiria: ticket confere (modo sombra, nada mudou)"],
+        DIVERGE: ["SOMBRA · DIVERGE", "Diverge", "O agente decidiria: ticket diverge do lançamento (modo sombra, nada mudou)"],
+        INCERTO: ["SOMBRA · DÚVIDA", "Dúvida", "O agente decidiria: ficar em dúvida e chamar alguém (modo sombra, nada mudou)"],
+        ILEGIVEL: ["SOMBRA · ILEGÍVEL", "Ilegível", "O agente decidiria: pedir outra foto (modo sombra, nada mudou)"],
+        NAO_APLICAVEL: ["SOMBRA · SEM TICKET", "Sem ticket", "O agente não teria o que conferir (modo sombra, nada mudou)"],
+      }[v.veredito] as [string, string, string];
+      return { kind: "SOM", texto: m[1], tom: "neu", aviso: false, sem: v.veredito === "NAO_APLICAVEL", carimbo: m[0], logNeu: m[2] };
+    }
+    // Pediu algo ao motorista (divergência, foto nova, pedágio): a viagem VOLTA pro celular dele.
+    const avisou = acao === "AVISOU_MOTORISTA" || acao === "PEDIU_FOTO" || acao === "PEDIU_PEDAGIO";
+    if (v.veredito === "NAO_APLICAVEL") {
+      // No código da API a viagem NÃO é aprovada (acao NENHUMA): só sai da fila de revisão e
+      // segue a conferência normal. Por isso o carimbo é neutro e nada soma em "validadas".
+      return { kind: "NEU", texto: "Sem ticket", tom: "ok", aviso: false, sem: true, carimbo: "SEM TICKET", logNeu: "Sem ticket pra conferir: a viagem não foi aprovada, segue a conferência normal" };
+    }
+    if (avisou) {
+      const texto = acao === "PEDIU_FOTO" || v.veredito === "ILEGIVEL" ? "Foto ilegível" : acao === "PEDIU_PEDAGIO" ? "Falta pedágio" : "Diverge";
+      return { kind: "DIV", texto, tom: "no", aviso: true, sem: false };
+    }
+    if (v.veredito === "BATE") {
+      if (acao === "APROVOU") return { kind: "OK", texto: "Confere", tom: "ok", aviso: false, sem: false };
+      return { kind: "NEU", texto: "Confere", tom: "ok", aviso: false, sem: false, carimbo: "CONFERE", logNeu: "Ticket confere, mas a viagem não foi aprovada sozinha: segue a conferência normal" };
+    }
+    if (v.veredito === "DIVERGE" && acao !== "FILA_REVISAO") return { kind: "DIV", texto: "Diverge", tom: "no", aviso: false, sem: false };
+    return { kind: "TRAV", texto: v.veredito === "ILEGIVEL" ? "Foto ilegível" : "Em dúvida", tom: "wait", aviso: false, sem: false };
   }
   function limitar(set: Set<string>): void {
-    while (set.size > 300) {
+    while (set.size > 400) {
       const primeiro = set.values().next().value;
       if (primeiro === undefined) break;
       set.delete(primeiro);
@@ -1492,18 +1232,27 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
     st.dev = s.contagens.devolvidas;
     st.aj = s.contagens.ajustadas;
     st.trav = s.contagens.travadas;
-    S.ageBase = s.travadaMaisAntigaMin ?? 0;
+    S.ageBase = s.travadaMaisAntigaMin; // null = idade desconhecida (mostra "—")
     S.ageEm = performance.now();
     st.age = st.trav > 0 ? S.ageBase : 0;
   }
   function ingerir(s: EscritorioSnapshot): void {
+    // snapshot mais antigo que o último aplicado não volta o tempo
+    const gerado = Date.parse(s.geradoEm);
+    if (!Number.isNaN(gerado)) {
+      if (gerado < S.ultimoGerado) return;
+      S.ultimoGerado = gerado;
+    }
+    const antes = S.antes ? { ...S.antes } : null;
     aplicarNumeros(s);
+    S.antes = { ...st };
     const novosCh = s.chegadas.filter((c) => !S.vistosCh.has(c.id));
     const novosVe = s.veredictos.filter((v) => !S.vistosVe.has(v.id)).sort((a, b) => a.em.localeCompare(b.em));
     s.chegadas.forEach((c) => S.vistosCh.add(c.id));
     s.veredictos.forEach((v) => S.vistosVe.add(v.id));
     limitar(S.vistosCh);
     limitar(S.vistosVe);
+    S.sujo = true;
     // Primeira carga: só preenche os números, nunca reanima o histórico.
     if (S.primeira) {
       S.primeira = false;
@@ -1511,92 +1260,188 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
     }
     // Sem movimento (preferência do sistema): os números já mudaram, e basta.
     if (reduce) return;
-    novosCh.forEach((c) => {
-      if (S.chegadas.length >= MAX_CHEGADAS) return;
-      const usados = new Set(S.chegadas.map((x) => x.slot));
-      const slot = [0, 1, 2].find((n) => !usados.has(n)) ?? 0;
-      // Um caminhão por vez na vaga: o próximo entra depois que o anterior saiu.
-      const inicio = S.chegadas.reduce((m, x) => Math.max(m, x.inicio + INTERVALO_CAMINHAO), S.relogio);
-      S.chegadas.push({ id: c.id, inicio, slot, aj: false, fired: {} });
+    const agora = Date.now();
+    const recente = (em: string): boolean => {
+      const t = Date.parse(em);
+      return !Number.isNaN(t) && agora - t <= JANELA_CHEGADA_MS; // data ilegível: não anima
+    };
+    let descartadas = 0;
+    novosCh
+      .filter((c) => recente(c.em))
+      .sort((a, b) => a.em.localeCompare(b.em))
+      .forEach((c) => {
+        if (S.chQ.length >= MAX_CHEGADAS_FILA) {
+          descartadas++;
+          return;
+        }
+        S.chQ.push({ id: c.id, emIso: c.em, emMs: Date.parse(c.em), motorista: c.motorista, aj: false, fromQ: false, tc: T_INI_CHEG, fired: {}, skip: null, pousou: false, entrou: S.wall });
+      });
+    if (descartadas > 0) log(`${descartadas} chegadas sem reprodução (fila cheia)`, "info", "•");
+    const nRec = novosCh.filter((c) => recente(c.em)).length;
+    if (nRec >= 3) log(`${nRec} viagens chegaram juntas: reprodução acelerada`, "info", "•");
+    // vereditos novos: comprimem (acelera e agrupa com +N), nunca somem em silêncio
+    const sombra = s.robo.modoSombra;
+    let cortados = 0;
+    const veRec = novosVe.filter((v) => recente(v.em));
+    veRec.forEach((v) => {
+      if (S.veQ.length >= MAX_VEREDITOS_FILA) {
+        cortados++;
+        return;
+      }
+      const m = veredictoParaKind(v, sombra);
+      S.veQ.push(
+        novoVer({ emIso: v.em, kind: m.kind, seg2: m.kind === "SOM" ? false : v.segundaLeitura, aviso: m.aviso, sem: m.sem, texto: m.texto, tom: m.tom, carimbo: m.carimbo, logNeu: m.logNeu, demo: false }, st.trav),
+      );
     });
-    novosVe.forEach((v) => {
-      const m = veredictoParaKind(v);
-      if (!m) return;
-      if (S.fila.length + (S.ativo ? 1 : 0) >= MAX_FILA_VEREDITOS) return;
-      S.fila.push({ id: v.id, inicio: 0, kind: m.kind, seg2: v.segundaLeitura, aviso: m.aviso, hum: false, texto: m.texto, tom: m.tom, fired: {} });
-    });
+    if (cortados > 0) log(`Mais ${cortados} conferências terminaram: os números já estão atualizados, só não reproduzi cada uma`, "info", "•");
+    if (veRec.length >= 3) log(`${veRec.length} conferências terminaram juntas: reprodução acelerada`, "info", "•");
+    // O balcão só tem saldo: não dá pra saber quem resolveu nem pra onde foi o papel. Só um aviso neutro.
+    if (antes && antes.trav > st.trav) log(`O saldo do balcão caiu em ${antes.trav - st.trav}`, "info", "•");
   }
 
   /* ---------- relógio e laço ---------- */
+  const fator = (b: number): number => (b <= 0 ? 1 : b === 1 ? 1.3 : b <= 3 ? 1.6 : 2);
   function avancar(dt: number): void {
-    S.relogio += dt;
-    if (S.modo === "demo") {
-      S.t += dt;
-      st.age += (dt / 60) * 240; // relógio acelerado (4 min por segundo)
+    S.wall += dt;
+    const live = !demo();
+    const dtc = dt * (demo() ? S.vel : 1);
+    if (demo()) {
+      st.age = (st.age ?? 0) + (dtc / 60) * 240; // relógio acelerado (4 min por segundo)
       if (st.trav <= 0) st.age = 0;
-      if (S.t >= T) {
-        iniciarCicloDemo();
-        S.t = S.t - T + inicioDoCiclo();
+    } else if (st.trav > 0 && S.ageBase !== null && !S.defasado) st.age = S.ageBase + (performance.now() - S.ageEm) / 60000;
+    // chegada ativa
+    if (live && !S.ch && S.chQ.length > 0) {
+      // chegada que esperou demais na fila de reprodução já é história: só conta, não anima
+      let velhas = 0;
+      while (S.chQ.length > 0 && Date.now() - (S.chQ[0] as Cheg).emMs > 3 * 60_000) {
+        S.chQ.shift();
+        velhas++;
       }
-      return;
+      if (velhas > 0) log(`${velhas} chegadas sem reprodução`, "info", "•");
     }
-    if (st.trav > 0) st.age = S.ageBase + (performance.now() - S.ageEm) / 60000;
-    // chegadas: terminam em ta > 9
-    S.chegadas = S.chegadas.filter((c) => -ENTRADA + (S.relogio - c.inicio) < 9.0);
-    // veredito: um por vez
-    if (S.ativo) {
-      const fim = S.ativo.aviso ? 21.2 : tFly(S.ativo) + 1.1 + 0.8;
-      if (8.9 + (S.relogio - S.ativo.inicio) > fim) S.ativo = null;
+    if (live && !S.ch && S.chQ.length > 0) {
+      const prox = S.chQ.shift() as Cheg;
+      prox.fromQ = S.chQ.length > 0 || S.wall - prox.entrou > 1.5;
+      S.ch = prox;
+      S.monteBase = S.monteV;
     }
-    if (!S.ativo) {
-      const prox = S.fila.shift();
-      if (prox) {
-        prox.inicio = S.relogio;
-        S.ativo = prox;
-      }
+    if (S.ch) {
+      S.ch.tc += dtc * (live ? fator(S.chQ.length) : 1);
+      const fim = S.ch.aj ? 4.2 : T_FIM_CHEG;
+      if (S.ch.tc >= fim) S.ch = null;
     }
+    // demo: o veredito entra quando o papel pousa
+    if (demo() && S.demoVer && S.ch && S.ch.tc >= T_POUSO) {
+      S.demoVer.u = S.ch.tc - T_POUSO;
+      S.veQ.push(S.demoVer);
+      S.demoVer = null;
+    } else if (demo() && S.demoVer && !S.ch) {
+      S.veQ.push(S.demoVer);
+      S.demoVer = null;
+    }
+    // veredito ativo: um por vez
+    if (S.ve) {
+      S.ve.u += dtc * (live ? fator(S.veQ.length) : 1);
+      if (S.ve.u > S.ve.scr.tEnd) S.ve = null;
+    }
+    if (!S.ve && S.veQ.length > 0) {
+      const prox = S.veQ.shift() as Ver;
+      prox.scr = construirRoteiro({ kind: prox.kind, seg2: prox.seg2, sem: prox.sem, hum: prox.hum, soHum: prox.soHum, humDest: prox.humDest, nTrav: st.trav });
+      S.ve = prox;
+    }
+    // ambiente: retroescavadeira (só sem chegada) e caminhão-figurante, nunca na vaga
+    if (!S.ch) {
+      if (S.retroT0 < 0 && S.wall >= S.retroProx) S.retroT0 = S.wall;
+    }
+    if (S.retroT0 >= 0 && (S.wall - S.retroT0) / 5 >= 1) {
+      S.retroT0 = -99;
+      S.retroProx = S.wall + 22 + Math.random() * 6;
+      S.monteV = Math.max(0.3, S.monteV - 0.14);
+    }
+    if (S.figT0 < 0 && S.wall >= S.figProx) S.figT0 = S.wall;
+    if (S.figT0 >= 0 && S.wall - S.figT0 >= 10) {
+      S.figT0 = -99;
+      S.figProx = S.wall + 18 + Math.random() * 17;
+    }
+    // demo: ciclo contínuo
+    if (demo() && !S.ch && !S.ve && S.veQ.length === 0 && !S.demoVer) iniciarCicloDemo();
   }
   function eventosDoQuadro(): void {
-    if (S.modo === "demo") {
-      const c = demoChegada();
-      eventosChegada(S.demoFired, c.ta, c.aj, true, S.skipBefore);
-      eventosVeredito(demoVeredito(), true, S.skipBefore);
-      return;
-    }
-    S.chegadas.forEach((c) => eventosChegada(c.fired, -ENTRADA + (S.relogio - c.inicio), c.aj, false, null));
-    if (S.ativo) eventosVeredito({ ...S.ativo, tv: 8.9 + (S.relogio - S.ativo.inicio) }, false, null);
+    if (S.ch) eventosChegada(S.ch);
+    if (S.ve) eventosVer(S.ve);
   }
   function loop(now: number): void {
     const dt = Math.min(0.1, (now - ultimoTick) / 1000);
     ultimoTick = now;
-    if (!S.pausado && !document.hidden) avancar(dt * (S.modo === "demo" ? S.vel : 1));
-    eventosDoQuadro();
-    S.skipBefore = null;
-    frame();
-    notificar();
+    if (!document.hidden) {
+      const anda = !S.pausado;
+      if (anda) avancar(dt);
+      eventosDoQuadro();
+      // em repouso (só ambiente) ~30 fps; durante a coreografia, 60
+      const repouso = !demo() && !S.ch && !S.ve && S.chQ.length === 0 && S.veQ.length === 0;
+      if ((anda || S.sujo) && (S.sujo || !repouso || now - ultimoDesenho >= 30)) {
+        frame();
+        S.sujo = false;
+        ultimoDesenho = now;
+      }
+      notificar();
+    }
     rafId = requestAnimationFrame(loop);
   }
 
+  /* ---------- resolução ---------- */
+  let rzTimer = 0;
+  function refazerCamadas(): void {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cw = canvas.clientWidth || LARGURA;
+    const scl = Math.max(0.5, Math.min(2, (cw / LARGURA) * dpr));
+    if (SCL && Math.abs(scl - SCL) < 0.06) return;
+    SCL = scl;
+    canvas.width = Math.round(LARGURA * SCL);
+    canvas.height = Math.round(ALTURA * SCL);
+    const c = D.camadas(SCL);
+    s0 = c.s0;
+    s1 = c.s1;
+    S.sujo = true;
+  }
+  refazerCamadas();
+  const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => {
+    window.clearTimeout(rzTimer);
+    rzTimer = window.setTimeout(refazerCamadas, 120);
+  }) : null;
+  ro?.observe(canvas);
+
   /* ---------- API pública ---------- */
+  function limparEntidades(): void {
+    S.ch = null;
+    S.chQ = [];
+    S.ve = null;
+    S.veQ = [];
+    S.demoVer = null;
+    S.neuEm = [];
+  }
   function resetarVivo(): void {
-    S.chegadas = [];
-    S.fila = [];
-    S.ativo = null;
+    limparEntidades();
     S.vistosCh = new Set();
     S.vistosVe = new Set();
     S.primeira = true;
+    S.antes = null;
+    S.ultimoGerado = 0;
   }
   function resetarDemo(): void {
+    limparEntidades();
     Object.assign(st, DEMO_INICIAL);
-    S.t = 12.6;
-    S.skipBefore = S.t;
-    S.outcome = "OK";
-    S.kind = "OK";
-    S.demoFired = {};
     S.seqI = 0;
+    S.nomeI = 0;
+    S.monteV = 0.55;
+    iniciarCicloDemo();
+    // movimento reduzido: poses estáticas no meio da descarga, sem logar o que "já passou"
+    if (reduce && S.ch) {
+      S.ch.tc = -2.4;
+      S.ch.skip = -2.4;
+    }
   }
-
-  fundo();
+  // arranque: reduzir movimento começa pausada
   if (reduce) S.pausado = true;
   rafId = requestAnimationFrame(loop);
 
@@ -1604,9 +1449,10 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
     setModo(m) {
       if (S.modo === m) return;
       S.modo = m;
-      if (m === "demo") {
-        resetarDemo();
-      } else {
+      S.sujo = true;
+      if (m === "demo") resetarDemo();
+      else {
+        limparEntidades();
         Object.assign(st, { fila: 0, val: 0, dev: 0, aj: 0, trav: 0, age: 0 });
         resetarVivo();
         if (S.snap) ingerir(S.snap);
@@ -1615,26 +1461,34 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
       notificar();
     },
     setSnapshot(s) {
+      if (s && S.modo === "vivo" && Date.parse(s.geradoEm) < S.ultimoGerado) return; // mais antigo que o último
       S.snap = s;
       if (S.modo === "vivo" && s) ingerir(s);
+      S.sujo = true;
     },
     setCaso(c) {
       S.forcado = c;
       if (S.modo === "demo" && c) {
-        iniciarCicloDemo();
-        S.t = inicioDoCiclo();
-        S.skipBefore = null;
+        limparEntidades();
+        iniciarCicloDemo(c);
         S.pausado = false;
+        S.sujo = true;
       }
     },
     setPausado(p) {
       S.pausado = p;
+      S.sujo = true;
+    },
+    setDefasado(d) {
+      S.defasado = d;
     },
     setVelocidade(v) {
       S.vel = v;
     },
     destruir() {
       cancelAnimationFrame(rafId);
+      window.clearTimeout(rzTimer);
+      ro?.disconnect();
     },
   };
 }

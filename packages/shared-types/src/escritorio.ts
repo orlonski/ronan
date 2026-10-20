@@ -3,14 +3,18 @@ import { z } from "zod";
 // Escritório de Agentes: a foto do pipeline de conferência de ticket pro painel
 // da plataforma. Leitura pura, derivada do que já está gravado.
 //
-// NÃO leva dado pessoal (nome, CPF, placa, texto livre) nem custo: a cena só
-// precisa de contagem, estágio e tempo. Os ids são UUIDs opacos.
+// Dado pessoal: só o NOME CURTO do motorista que lançou a viagem ("João S."),
+// por pedido do dono, pra a cena dizer quem chegou. Nada de CPF, placa, telefone,
+// texto livre nem custo. O nome só sai pra quem tem `escritorio.ver` (chave de
+// plataforma). Os ids são UUIDs opacos.
 
 export const VereditoEscritorio = z.enum(["BATE", "DIVERGE", "INCERTO", "ILEGIVEL", "NAO_APLICAVEL"]);
 export type VereditoEscritorio = z.infer<typeof VereditoEscritorio>;
 
 export const EscritorioSnapshotSchema = z.object({
   geradoEm: z.string(),
+  /** Nome (fantasia) da empresa cujos dados a cena mostra. Vem do tenant, nunca fixo. */
+  empresa: z.string().max(120).optional(),
   /** true = o servidor estava sob pressão e devolveu o último cálculo bom. */
   desatualizado: z.boolean().default(false),
   robo: z.object({
@@ -24,17 +28,17 @@ export const EscritorioSnapshotSchema = z.object({
     fila: z.number().int(),
     /** Viagens aprovadas (status OK) nas últimas 24h. */
     validadas24h: z.number().int(),
-    /** Viagens hoje em DIVERGENTE (devolvidas, esperando o motorista). */
+    /** Viagens em DIVERGENTE (devolvidas, esperando o motorista), dos últimos 180 dias. */
     devolvidas: z.number().int(),
-    /** Viagens hoje em AJUSTADA (o motorista corrigiu, voltam pra fila). */
+    /** Viagens em AJUSTADA agora (o motorista corrigiu, voltam pra fila). */
     ajustadas: z.number().int(),
-    /** Viagens hoje em EM_CONFERENCIA (esperando alguém do escritório). */
+    /** Viagens em EM_CONFERENCIA agora (esperando alguém do escritório). */
     travadas: z.number().int(),
   }),
   /** Minutos desde que a travada mais antiga ficou parada. null = nenhuma. */
   travadaMaisAntigaMin: z.number().int().nullable(),
   /** Viagens que chegaram na API nos últimos minutos (alimenta a leg celular→torre→servidor). */
-  chegadas: z.array(z.object({ id: z.string(), em: z.string() })).max(50),
+  chegadas: z.array(z.object({ id: z.string(), em: z.string(), motorista: z.string().max(40).optional() })).max(50),
   /** Conferências concluídas nos últimos minutos (alimenta a leitura e o carimbo). */
   veredictos: z
     .array(

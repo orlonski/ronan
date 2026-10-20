@@ -3,6 +3,7 @@ import { NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { EscritorioSnapshotSchema } from "@ronan/shared-types";
 import {
   montarSnapshotEscritorio,
+  nomeCurto,
   JANELA_EVENTOS_MS,
   LIMITE_EVENTOS,
   EscritorioSnapshotService,
@@ -110,11 +111,11 @@ describe("EscritorioSnapshotService: cache, single-flight e transação única",
     const tx = {
       $executeRawUnsafe: vi.fn(async () => 0),
       $queryRaw: vi.fn(async () => [{ desde: new Date("2026-10-20T10:00:00.000Z") }]),
-      conta: { findUnique: vi.fn(async () => ({ iaConferenciaTicket: true })) },
+      conta: { findUnique: vi.fn(async () => ({ iaConferenciaTicket: true, nome: "Transportes Exemplo" })) },
       conferenciaTicket: { count: vi.fn(async () => 2), findMany: vi.fn(async () => []) },
       viagem: {
         count: vi.fn(async (args: { where: { status: unknown } }) => (args.where.status === "EM_CONFERENCIA" ? (opcoes.travadas ?? 1) : 4)),
-        findMany: vi.fn(async () => []),
+        findMany: vi.fn(async () => [{ id: "v1", sincronizadoEm: new Date(Date.now() - 60_000), motorista: { nome: "joão da SILVA souza" } }]),
       },
     };
     const prisma = {
@@ -253,5 +254,34 @@ describe("EscritorioSnapshotService: cache, single-flight e transação única",
     const opcoes = (prisma.$transaction.mock.calls as unknown[][])[0]?.[1] as { timeout: number };
     expect(opcoes.timeout).toBe(TIMEOUT_TRANSACAO_MS);
     expect(TIMEOUT_TRANSACAO_MS).toBeLessThanOrEqual(8_000);
+  });
+
+  it("leva o nome da empresa e só o nome CURTO do motorista, e valida no contrato", async () => {
+    const { svc } = montar();
+    const snap = await como("c1", () => svc.snapshot());
+    expect(snap.empresa).toBe("Transportes Exemplo");
+    expect(snap.chegadas[0]?.motorista).toBe("João S.");
+    expect(JSON.stringify(snap)).not.toContain("SILVA");
+    expect(EscritorioSnapshotSchema.safeParse(snap).success).toBe(true);
+  });
+
+  it("a consulta de chegadas traz só o nome do motorista da própria viagem (sem outro dado pessoal)", async () => {
+    const { svc, tx } = montar();
+    await como("c1", () => svc.snapshot());
+    const args = (tx.viagem.findMany.mock.calls as unknown[][])[0]?.[0] as { select: Record<string, unknown> };
+    expect(args.select.motorista).toEqual({ select: { nome: true } });
+  });
+});
+
+describe("nomeCurto", () => {
+  it("primeiro nome + inicial do último sobrenome, ignorando partículas", () => {
+    expect(nomeCurto("João da Silva Souza")).toBe("João S.");
+    expect(nomeCurto("MARIA DE OLIVEIRA")).toBe("Maria O.");
+    expect(nomeCurto("Pedro")).toBe("Pedro");
+    expect(nomeCurto("Ana Paula dos")).toBe("Ana P.");
+    expect(nomeCurto("João da Silva Jr")).toBe("João S.");
+    expect(nomeCurto("ana-maria souza")).toBe("Ana-Maria S.");
+    expect(nomeCurto("  ")).toBeUndefined();
+    expect(nomeCurto(null)).toBeUndefined();
   });
 });

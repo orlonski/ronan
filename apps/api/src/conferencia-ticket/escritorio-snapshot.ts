@@ -54,8 +54,27 @@ export const JANELA_DATA_DEVOLVIDAS_DIAS = 180;
 /** A travada mais antiga é medida entre as N mais antigas pela data da viagem. */
 export const AMOSTRA_TRAVADAS = 200;
 
+/**
+ * "João da Silva Souza" -> "João S.": primeiro nome + inicial do último sobrenome
+ * (ignora "da/de/do/dos/das/e"). É o que a cena mostra; o nome completo não sai
+ * da API.
+ */
+export function nomeCurto(nome: string | null | undefined): string | undefined {
+  const partes = (nome ?? "").trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return undefined;
+  // "ana-maria" -> "Ana-Maria"
+  const cap = (p: string) => p.toLowerCase().replace(/(^|-)(\p{L})/gu, (_m, h: string, l: string) => h + l.toUpperCase());
+  const primeiro = cap(partes[0] as string).slice(0, 20);
+  // Partículas e sufixos não identificam ninguém: "João da Silva Jr" -> "João S."
+  const ignorar = new Set(["da", "de", "do", "dos", "das", "e", "jr", "jr.", "junior", "júnior", "filho", "neto", "sobrinho"]);
+  const sobrenomes = partes.slice(1).filter((p) => !ignorar.has(p.toLowerCase()));
+  const ultimo = sobrenomes[sobrenomes.length - 1];
+  return ultimo ? `${primeiro} ${ultimo.charAt(0).toUpperCase()}.` : primeiro;
+}
+
 export type EntradaSnapshot = {
   agora: Date;
+  empresa?: string;
   robo: { ativo: boolean; modoSombra: boolean };
   fila: number;
   validadas24h: number;
@@ -64,7 +83,7 @@ export type EntradaSnapshot = {
   travadas: number;
   /** Quando a travada mais antiga ficou parada (fim da última leitura dela). */
   travadaMaisAntigaDesde: Date | null;
-  chegadas: { id: string; em: Date }[];
+  chegadas: { id: string; em: Date; motorista?: string }[];
   veredictos: {
     id: string;
     viagemId: string;
@@ -89,6 +108,7 @@ export function montarSnapshotEscritorio(e: EntradaSnapshot): EscritorioSnapshot
 
   return {
     geradoEm: e.agora.toISOString(),
+    ...(e.empresa ? { empresa: e.empresa } : {}),
     desatualizado: false,
     robo: e.robo,
     contagens: {
@@ -102,7 +122,11 @@ export function montarSnapshotEscritorio(e: EntradaSnapshot): EscritorioSnapshot
       e.travadas > 0 && e.travadaMaisAntigaDesde
         ? Math.max(0, Math.floor((t - e.travadaMaisAntigaDesde.getTime()) / 60_000))
         : null,
-    chegadas: recentesPrimeiro(e.chegadas).map((c) => ({ id: c.id, em: c.em.toISOString() })),
+    chegadas: recentesPrimeiro(e.chegadas).map((c) => ({
+      id: c.id,
+      em: c.em.toISOString(),
+      ...(c.motorista ? { motorista: c.motorista } : {}),
+    })),
     veredictos: recentesPrimeiro(e.veredictos).map((v) => ({
       id: v.id,
       viagemId: v.viagemId,
@@ -237,7 +261,7 @@ export class EscritorioSnapshotService {
       async (tx) => {
         await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = ${TIMEOUT_CONSULTA_MS}`);
 
-        const conta = await tx.conta.findUnique({ where: { id: contaId }, select: { iaConferenciaTicket: true } });
+        const conta = await tx.conta.findUnique({ where: { id: contaId }, select: { iaConferenciaTicket: true, nome: true } });
         const fila = await tx.conferenciaTicket.count({ where: { status: { in: ["PENDENTE", "EXECUTANDO"] } } });
         const validadas24h = await tx.viagem.count({
           where: { ...doApp, status: StatusViagem.OK, revisadoEm: { gte: desde24h }, data: { gte: desdeData } },
@@ -277,7 +301,7 @@ export class EscritorioSnapshotService {
           where: { ...doApp, data: { gte: desdeDataChegadas }, sincronizadoEm: { gte: desdeEventos } },
           orderBy: { sincronizadoEm: "desc" },
           take: LIMITE_EVENTOS,
-          select: { id: true, sincronizadoEm: true },
+          select: { id: true, sincronizadoEm: true, motorista: { select: { nome: true } } },
         });
         const veredictos = await tx.conferenciaTicket.findMany({
           where: {
@@ -293,6 +317,7 @@ export class EscritorioSnapshotService {
 
         return montarSnapshotEscritorio({
           agora,
+          empresa: conta?.nome,
           robo: { ativo: this.config.habilitado && !!conta?.iaConferenciaTicket, modoSombra: this.config.modoSombra },
           fila,
           validadas24h,
@@ -300,7 +325,7 @@ export class EscritorioSnapshotService {
           ajustadas,
           travadas,
           travadaMaisAntigaDesde,
-          chegadas: chegadas.map((v) => ({ id: v.id, em: v.sincronizadoEm })),
+          chegadas: chegadas.map((v) => ({ id: v.id, em: v.sincronizadoEm, motorista: nomeCurto(v.motorista?.nome) })),
           veredictos: veredictos.flatMap((c) =>
             c.finalizadoEm && c.veredito
               ? [{ id: c.id, viagemId: c.viagemId, em: c.finalizadoEm, veredito: c.veredito, acao: c.acao, passadas: c.passadas, escalouEm: c.escalouEm }]
