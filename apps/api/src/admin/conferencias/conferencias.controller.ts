@@ -8,7 +8,6 @@ import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorato
 import { ConferenciaFilaService } from "../../conferencia-ticket/conferencia-fila.service";
 import { VinculosNomeService } from "../../conferencia-ticket/vinculos-nome.service";
 import { AuditoriaCegaService } from "../../conferencia-ticket/auditoria-cega.service";
-import { EscritorioSnapshotService } from "../../conferencia-ticket/escritorio-snapshot";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { ConferenciaConfig } from "../../conferencia-ticket/conferencia.config";
@@ -54,7 +53,6 @@ export class ConferenciasController {
     private readonly prisma: PrismaService,
     private readonly vinculos: VinculosNomeService,
     private readonly auditoria: AuditoriaCegaService,
-    private readonly escritorio: EscritorioSnapshotService,
   ) {}
 
   /**
@@ -65,17 +63,6 @@ export class ConferenciasController {
    */
   private verCusto() {
     return ehContaDaPlataforma(this.prisma, contaIdAtual());
-  }
-
-  /**
-   * A foto do pipeline pro "Escritório de Agentes". Sem custo e sem dado
-   * pessoal no corpo (só contagem, estágio e tempo). Mesma chave da conferência,
-   * que já é de plataforma: por ora só a Movatruck enxerga.
-   */
-  @Get("escritorio")
-  @RequerPermissao("conferencia-ticket.ver")
-  escritorioSnapshot() {
-    return this.escritorio.snapshot();
   }
 
   @Get("resumo")
