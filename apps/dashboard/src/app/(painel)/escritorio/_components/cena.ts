@@ -78,7 +78,7 @@ export const ROTULOS: {
   opc?: boolean;
   chave?: keyof Numeros;
 }[] = [
-  { texto: "Ponto de descarga", x: 3.5, y: 14.4, z: 0, tom: "", opc: true },
+  { texto: "Obra · ponto de descarga", x: 3.5, y: 14.9, z: 0, tom: "", opc: true },
   { texto: "Torre de celular", x: 7.9, y: 6.5, z: 125, tom: "", opc: true },
   { texto: "Mesa de entrada", x: 10.6, y: 3.0, z: 8, tom: "f", chave: "fila" },
   { texto: "Validadas", x: 19.9, y: 2.8, z: 4, tom: "v", chave: "val" },
@@ -100,6 +100,20 @@ const HOME2: Pt = [13.9, 12.2];
 const INBOX: Pt = [12.8, 5.0];
 const DRV: Pt = [5.8, 10.6];
 const MAX_CHEGADAS = 3;
+/**
+ * A rotina na obra, ANTES de lançar (a regra do negócio): o caminhão chega,
+ * basculha, o conferente da obra confere e assina, o motorista fotografa o
+ * comprovante e só então lança a viagem. Depois volta ao caminhão e sai, pra
+ * liberar a vaga do próximo. `TA_LANCA` é o instante do lançamento na linha do
+ * tempo da chegada (`ta`); tudo que vem depois (sinal, torre, servidor, mesa)
+ * continua medido a partir dele. O que vem antes é a "entrada" (`ta` negativo).
+ */
+const TA_LANCA = 3.8;
+const ENTRADA = 4.8;
+/** Ao vivo, um caminhão por vez na vaga: o próximo só entra depois que o anterior saiu. */
+const INTERVALO_CAMINHAO = 12;
+const PORTA_CAB: Pt = [4.35, 8.8];
+const POSTO_CONF: Pt = [5.2, 12.4];
 const MAX_FILA_VEREDITOS = 3;
 
 const lerp = (a: number, b: number, u: number): number => a + (b - a) * u;
@@ -961,6 +975,10 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
     st.fila = Math.max(3, Math.min(30, st.fila + (Math.random() < 0.5 ? 1 : -1)));
     S.simMin += 2;
   }
+  /** O ciclo começa na entrada do caminhão; o ajuste não tem caminhão. */
+  function inicioDoCiclo(): number {
+    return S.kind === "AJ" ? 0 : -ENTRADA;
+  }
   function demoChegada(): { ta: number; slot: number; aj: boolean } {
     return { ta: S.t, slot: 0, aj: S.kind === "AJ" };
   }
@@ -973,8 +991,10 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
 
   /* ---------- eventos de log (e, no demo, dos números) ---------- */
   function eventosChegada(f: Record<string, boolean>, ta: number, aj: boolean, demo: boolean, skip: number | null): void {
-    if (demo && !aj) once(f, "c1", ta, 1.6, () => log("Caminhão chegou ao ponto de descarga", "info", "•"), skip);
-    if (demo && !aj) once(f, "c2", ta, 3.0, () => log("Descarga concluída", "info", "•"), skip);
+    if (demo && !aj) once(f, "c1", ta, -3.0, () => log("Caminhão chegou ao ponto de descarga", "info", "•"), skip);
+    if (demo && !aj) once(f, "c2", ta, -1.6, () => log("Descarga concluída", "info", "•"), skip);
+    if (demo && !aj) once(f, "c2b", ta, 1.8, () => log("Conferente da obra conferiu e assinou o comprovante", "info", "•"), skip);
+    if (demo && !aj) once(f, "c2c", ta, 2.9, () => log("Motorista fotografou o comprovante", "info", "•"), skip);
     once(f, "c3", ta, 3.8, () => log(aj ? "Motorista corrigiu a viagem e reenviou" : demo ? "Motorista lançou a viagem no celular" : "Uma viagem chegou do celular do motorista", "info", "•"), skip);
     once(f, "c4", ta, 5.9, () => log("Sinal passou pela torre", "info", "•"), skip);
     once(f, "c5", ta, 6.8, () => log("Servidor recebeu a viagem", "info", "•"), skip);
@@ -1066,21 +1086,64 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
   }
   function motoristaPose(ta: number, slot: number, aj: boolean): PoseHumano | null {
     const spot = driverSpot(slot);
+    const tl = ta - TA_LANCA;
     if (aj) {
-      if (ta < 5.0) return { x: spot[0], y: spot[1], dir: "mx", arm: ta > 3.8 ? "up" : null };
-    } else {
-      if (ta < 3.0) return null;
-      if (ta < 3.8) {
-        const u = ease(seg(ta, 3.0, 3.8));
-        return { x: lerp(4.4, spot[0], u), y: lerp(8.9 + (spot[1] - DRV[1]), spot[1], u), dir: "py", walk: true };
+      // Ajuste: o motorista corrige e reenvia de onde estiver, sem caminhão.
+      if (tl < 1.2) return { x: spot[0], y: spot[1], dir: "mx", arm: tl > 0 ? "up" : null };
+      if (tl < 3.4) {
+        const v = ease(seg(tl, 1.2, 3.4));
+        return { x: lerp(spot[0], 6.4, v), y: lerp(spot[1], 19, v), dir: "py", walk: true };
       }
-      if (ta < 5.0) return { x: spot[0], y: spot[1], dir: "mx", arm: ta < 4.4 ? "up" : null };
+      return null;
     }
-    if (ta < 7.2) {
-      const v = ease(seg(ta, 5.0, 7.2));
-      return { x: lerp(spot[0], 6.4, v), y: lerp(spot[1], 19, v), dir: "py", walk: true };
+    if (tl < -4.8) return null; // ainda dentro da cabine, o caminhão basculando
+    if (tl < -3.9) {
+      const u = ease(seg(tl, -4.8, -3.9));
+      return { x: lerp(PORTA_CAB[0], POSTO_CONF[0], u), y: lerp(PORTA_CAB[1], POSTO_CONF[1], u), dir: "py", walk: true };
     }
-    return null;
+    if (tl < -1.8) return { x: POSTO_CONF[0], y: POSTO_CONF[1], dir: "py" }; // espera o conferente conferir e assinar
+    if (tl < -1.0) {
+      const u = ease(seg(tl, -1.8, -1.0));
+      return { x: lerp(POSTO_CONF[0], spot[0], u), y: lerp(POSTO_CONF[1], spot[1], u), dir: "my", walk: true };
+    }
+    if (tl < 0.7) return { x: spot[0], y: spot[1], dir: "mx", arm: "up" }; // fotografa o comprovante e lança
+    if (tl < 1.9) {
+      const u = ease(seg(tl, 0.7, 1.9));
+      return { x: lerp(spot[0], PORTA_CAB[0], u), y: lerp(spot[1], PORTA_CAB[1], u), dir: "mx", walk: true };
+    }
+    return null; // entrou no caminhão
+  }
+  function conferenteObraPose(ta: number, aj: boolean): PoseHumano | null {
+    if (aj) return null;
+    const tl = ta - TA_LANCA;
+    const entrada: Pt = [6.4, 19];
+    const posto: Pt = [4.9, 13.9];
+    if (tl < -7.0 || tl > 2.4) return null;
+    if (tl < -5.4) {
+      const u = ease(seg(tl, -7.0, -5.4));
+      return { x: lerp(entrada[0], posto[0], u), y: lerp(entrada[1], posto[1], u), dir: "my", walk: true };
+    }
+    if (tl < -3.0) return { x: posto[0], y: posto[1], dir: "mx", arm: "front" }; // confere a carga e o ticket
+    if (tl < -2.0) return { x: posto[0], y: posto[1], dir: "mx", arm: Math.floor(tl * 6) % 2 ? "up" : "front" }; // assina
+    if (tl < 0.4) return { x: posto[0], y: posto[1], dir: "my" };
+    const u = ease(seg(tl, 0.4, 2.4));
+    return { x: lerp(posto[0], entrada[0], u), y: lerp(posto[1], entrada[1], u), dir: "py", walk: true };
+  }
+  /** O caminhão na linha do tempo da chegada: entra, basculha, espera, sai. */
+  function caminhaoEstado(ta: number): { ty: number | null; tilt: number; cargo: number; movendo: boolean; pilha: number } {
+    const tl = ta - TA_LANCA;
+    const basc = seg(tl, -6.8, -5.4);
+    let ty: number | null = null;
+    if (tl >= -8.6 && tl < 4.0) {
+      ty = tl < -6.8 ? lerp(19, 8.2, easeOut(seg(tl, -8.6, -6.8))) : tl < 2.0 ? 8.2 : lerp(8.2, -6, ease(seg(tl, 2.0, 4.0)));
+    }
+    return {
+      ty,
+      tilt: basc < 1 ? basc : Math.max(0, 1 - seg(tl, -5.4, -4.8)),
+      cargo: 1 - basc,
+      movendo: tl < -6.8 || tl > 2.0,
+      pilha: seg(tl, -6.8, -5.8) * (1 - seg(tl, 3.0, 4.2)),
+    };
   }
   function humanoPose(v: VView | null): PoseHumano | null {
     if (!v || !v.hum) return null;
@@ -1124,13 +1187,12 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
     // linhas do tempo vigentes
     const chegadas: { ta: number; slot: number; aj: boolean }[] = demo
       ? [demoChegada()]
-      : S.chegadas.map((c) => ({ ta: 3.0 + (S.relogio - c.inicio), slot: c.slot, aj: c.aj }));
+      : S.chegadas.map((c) => ({ ta: -ENTRADA + (S.relogio - c.inicio), slot: c.slot, aj: c.aj }));
     const V: VView | null = demo ? demoVeredito() : S.ativo ? { ...S.ativo, tv: 8.9 + (S.relogio - S.ativo.inicio) } : null;
     const kind: Kind = V ? V.kind : "OK";
     const f0 = V ? tFly(V) : 14.7;
     const f1 = f0 + 1.1;
     const ajDemo = demo && S.kind === "AJ";
-    const t = demo ? S.t : 0;
     const items: Item[] = [];
     const add = (k: number, fn: () => void): void => {
       items.push({ k, f: fn });
@@ -1138,29 +1200,19 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
     const robo = roboRotulo(demo);
     parede(tm, st, robo, demo);
 
-    // caminhão: no demo faz a descarga; ao vivo fica estacionado (decoração, sem fingir fato)
-    let ty: number | null = null;
-    let tilt = 0;
-    let cargo = 1;
-    let unl = 0;
-    if (demo && !ajDemo) {
-      unl = seg(t, 1.8, 3.0);
-      if (t < 3.8) ty = lerp(19, 8.2, easeOut(seg(t, 0, 1.8)));
-      else if (t < 5.8) ty = lerp(8.2, -6, ease(seg(t, 3.8, 5.8)));
-      tilt = unl < 1 ? unl : Math.max(0, 1 - seg(t, 3.0, 3.8));
-      cargo = 1 - unl;
-    } else if (!demo) {
-      ty = 8.2;
-      unl = 1;
-      cargo = 0;
-    }
-    if (demo ? !ajDemo : true) {
-      const tyV = ty;
-      add(0.2 + (tyV === null ? 0 : tyV + 2.2) + 3.5, () => {
-        if (tyV !== null) caminhao(tyV, tilt, cargo, tm, demo ? t < 2 || (t > 3.8 && t < 5.8) : Math.floor(tm / 5) % 2 === 0);
-      });
-      add(3.5 + 13.2, () => pilhaChao(unl));
-    }
+    // caminhão: só existe quando há uma chegada em curso. Sem viagem chegando, a
+    // vaga fica vazia (nada de caminhão parado de enfeite): ele entra, basculha, e
+    // sai depois que o motorista lança, pra liberar a vaga do próximo.
+    let pilhaU = 0;
+    chegadas.forEach((c) => {
+      if (c.aj) return;
+      const e = caminhaoEstado(c.ta);
+      pilhaU = Math.max(pilhaU, e.pilha);
+      const tyV = e.ty;
+      if (tyV === null) return;
+      add(0.2 + tyV + 2.2 + 3.5, () => caminhao(tyV, e.tilt, e.cargo, tm, e.movendo));
+    });
+    add(3.5 + 13.2, () => pilhaChao(pilhaU));
     add(6.5 + 3, () => datacenter(tm, chegadas.some((c) => c.ta > 6.8 && c.ta < 7.4)));
     add(6.2 + 6.5, () => torre(tm, chegadas.some((c) => c.ta > 5.5 && c.ta < 6.2)));
     add(2 + 3, () => posteLuz(5.0, 6.0));
@@ -1246,6 +1298,13 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
       human({ ...cf, t: tm, shirt: "#B4501A", skin: C.pa, hair: C.pc });
     });
     chegadas.forEach((c) => {
+      const co = conferenteObraPose(c.ta, c.aj);
+      if (co) {
+        add(co.x + co.y, () => {
+          tag(co.x, co.y, 50, "CONFERENTE · OBRA", C.am);
+          human({ ...co, t: tm, shirt: "#C98A0A", skin: C.pc, hair: C.g0, cap: true });
+        });
+      }
       const mt = motoristaPose(c.ta, c.slot, c.aj);
       if (!mt) return;
       add(mt.x + mt.y, () => {
@@ -1257,13 +1316,12 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
           g.fillStyle = "#9CC0FF";
           g.fillRect(cp[0] - 1.6, cp[1] - 5, 3.2, 6);
           glow([cp[0], cp[1] - 2], 18, "rgba(120,170,255,.8)", 0.9);
+          // o flash da foto do comprovante, antes de lançar
+          const tl = c.ta - TA_LANCA;
+          if (!c.aj && tl > -0.6 && tl < -0.3) glow([cp[0], cp[1] - 2], 64, "rgba(255,255,255,.95)", 1);
         }
       });
     });
-    if (V && V.aviso && V.tv > 20.0) {
-      const sp = driverSpot(0);
-      add(sp[0] + sp[1], () => human({ x: sp[0], y: sp[1], dir: "mx", arm: "up", t: tm, shirt: "#8A3A12", skin: C.pa, hair: C.pc, cap: true }));
-    }
     const hm = humanoPose(V);
     if (hm) add(hm.x + hm.y, () => human({ ...hm, t: tm, shirt: "#1d8a5c", skin: C.pc, hair: C.g0 }));
 
@@ -1338,7 +1396,16 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
         trilha(tTop, ph0, u5, 30, "r");
         pacote(p3(tTop, ph0, u5, 30), "r");
       }
-      if (V.tv >= 20.0) selo(sp0[0], sp0[1], 52, "no", 1);
+      if (V.tv >= 20.0) {
+        // O motorista já foi embora no caminhão: o aviso chega ao celular dele, onde estiver.
+        const cp = P(ph0[0], ph0[1], 37);
+        g.fillStyle = "#0b1226";
+        g.fillRect(cp[0] - 2.5, cp[1] - 6, 5, 8);
+        g.fillStyle = "#9CC0FF";
+        g.fillRect(cp[0] - 1.6, cp[1] - 5, 3.2, 6);
+        glow([cp[0], cp[1] - 2], 22, "rgba(120,170,255,.8)", 0.9);
+        selo(sp0[0], sp0[1], 52, "no", 1);
+      }
     }
     if (V && V.hum && V.tv >= 17.4 && V.tv < 18.5) {
       const hp = p3([11.7, 12.6, 28], [19.9, 1.0, 42], ease(seg(V.tv, 17.4, 18.5)), 70);
@@ -1448,7 +1515,9 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
       if (S.chegadas.length >= MAX_CHEGADAS) return;
       const usados = new Set(S.chegadas.map((x) => x.slot));
       const slot = [0, 1, 2].find((n) => !usados.has(n)) ?? 0;
-      S.chegadas.push({ id: c.id, inicio: S.relogio, slot, aj: false, fired: {} });
+      // Um caminhão por vez na vaga: o próximo entra depois que o anterior saiu.
+      const inicio = S.chegadas.reduce((m, x) => Math.max(m, x.inicio + INTERVALO_CAMINHAO), S.relogio);
+      S.chegadas.push({ id: c.id, inicio, slot, aj: false, fired: {} });
     });
     novosVe.forEach((v) => {
       const m = veredictoParaKind(v);
@@ -1466,14 +1535,14 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
       st.age += (dt / 60) * 240; // relógio acelerado (4 min por segundo)
       if (st.trav <= 0) st.age = 0;
       if (S.t >= T) {
-        S.t -= T;
         iniciarCicloDemo();
+        S.t = S.t - T + inicioDoCiclo();
       }
       return;
     }
     if (st.trav > 0) st.age = S.ageBase + (performance.now() - S.ageEm) / 60000;
     // chegadas: terminam em ta > 9
-    S.chegadas = S.chegadas.filter((c) => 3.0 + (S.relogio - c.inicio) < 9.0);
+    S.chegadas = S.chegadas.filter((c) => -ENTRADA + (S.relogio - c.inicio) < 9.0);
     // veredito: um por vez
     if (S.ativo) {
       const fim = S.ativo.aviso ? 21.2 : tFly(S.ativo) + 1.1 + 0.8;
@@ -1494,7 +1563,7 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
       eventosVeredito(demoVeredito(), true, S.skipBefore);
       return;
     }
-    S.chegadas.forEach((c) => eventosChegada(c.fired, 3.0 + (S.relogio - c.inicio), c.aj, false, null));
+    S.chegadas.forEach((c) => eventosChegada(c.fired, -ENTRADA + (S.relogio - c.inicio), c.aj, false, null));
     if (S.ativo) eventosVeredito({ ...S.ativo, tv: 8.9 + (S.relogio - S.ativo.inicio) }, false, null);
   }
   function loop(now: number): void {
@@ -1552,8 +1621,8 @@ export function criarCena(canvas: HTMLCanvasElement, cb: CenaCallbacks, reduzirM
     setCaso(c) {
       S.forcado = c;
       if (S.modo === "demo" && c) {
-        S.t = 0;
         iniciarCicloDemo();
+        S.t = inicioDoCiclo();
         S.skipBefore = null;
         S.pausado = false;
       }

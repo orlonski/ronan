@@ -200,8 +200,13 @@ export function EscritorioCliente() {
 
       <section aria-label="Cena do escritório" className="space-y-3 rounded-lg border bg-[#151E38] p-2.5 text-[#EEF1F8]">
         <div
-          className="relative mx-auto w-full overflow-hidden rounded-md bg-[#0A0F1E] [container-type:inline-size]"
-          style={{ aspectRatio: `${LARGURA} / ${ALTURA}` }}
+          className="relative mx-auto overflow-hidden rounded-md bg-[#0A0F1E] [container-type:inline-size]"
+          // A cena respeita a altura do monitor: a largura é limitada pela altura da janela
+          // (menos o cabeçalho e a barra de comandos), mantendo a proporção do desenho.
+          style={{
+            aspectRatio: `${LARGURA} / ${ALTURA}`,
+            width: `min(100%, max(640px, calc((100dvh - 13rem) * ${(LARGURA / ALTURA).toFixed(4)})))`,
+          }}
         >
           <canvas
             ref={canvasRef}
@@ -271,6 +276,13 @@ export function EscritorioCliente() {
             </div>
           )}
         </div>
+
+        {vivo && (
+          <p className="text-xs text-[#A6B3D2]">
+            A chegada de cada viagem, o sinal e a conferência são reais. A rotina na obra que vem antes do
+            lançamento (descarga, conferência e foto do comprovante) é ilustrada.
+          </p>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
