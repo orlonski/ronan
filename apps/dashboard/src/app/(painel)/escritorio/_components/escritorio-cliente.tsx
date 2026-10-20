@@ -49,6 +49,9 @@ function tempoParado(min: number): string {
   return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min` : `${m} min`;
 }
 
+const INTERVALO_MS = 20_000;
+const MAX_INTERVALO_MS = 120_000;
+
 export function EscritorioCliente() {
   const [modo, setModo] = useState<Modo>("vivo");
   const [pausado, setPausado] = useState(false);
@@ -59,11 +62,21 @@ export function EscritorioCliente() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cenaRef = useRef<Cena | null>(null);
 
-  // Dados reais: só busca no modo "vivo", de 10 em 10 s. O React Query já pausa
-  // quando a aba fica oculta e para quando a tela é desmontada.
+  // Dados reais: só busca no modo "vivo". O React Query já pausa quando a aba
+  // fica oculta e para quando a tela é desmontada.
+  //
+  // ⚠️ Esta consulta é polling de toda aba aberta e a 1ª versão (a cada 10 s,
+  // refazendo ao focar a janela) ajudou a travar o banco da produção. Agora:
+  // 20 s, sem refazer ao focar, e em erro o intervalo dobra (20 → 40 → 80 → 120 s)
+  // em vez de insistir no ritmo normal contra um servidor que já está lento.
   const consulta = useApiQuery<unknown>(modo === "vivo" ? ENDPOINT : undefined, {
-    refetchInterval: 10_000,
-    retry: 1,
+    refetchInterval: (q) =>
+      q.state.status === "error"
+        ? Math.min(MAX_INTERVALO_MS, INTERVALO_MS * 2 ** Math.min(q.state.fetchFailureCount, 4))
+        : INTERVALO_MS,
+    refetchOnWindowFocus: false,
+    staleTime: INTERVALO_MS,
+    retry: false,
   });
   const lido = useMemo(() => (consulta.data ? EscritorioSnapshotSchema.safeParse(consulta.data) : null), [consulta.data]);
   const snapshot = lido && lido.success ? lido.data : null;
@@ -233,7 +246,7 @@ export function EscritorioCliente() {
                 <p className="text-sm font-semibold">Não consegui buscar os dados do escritório</p>
                 <p className="mx-auto max-w-prose text-sm text-[#A6B3D2]">
                   A conexão com o servidor falhou ou esta versão da API ainda não tem a tela. Nenhum dado foi
-                  perdido. Tento de novo sozinho a cada 10 segundos.
+                  perdido. Tento de novo sozinho, com intervalo crescente.
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" className="bg-transparent hover:bg-white/10" onClick={() => void consulta.refetch()}>
@@ -335,7 +348,7 @@ export function EscritorioCliente() {
           </dl>
           <p className="mt-4 text-xs text-muted-foreground">
             {vivo
-              ? "Ao vivo, a cena só anima o que de fato aconteceu: uma viagem que chegou ou uma conferência que terminou. Os números vêm direto do servidor e se atualizam a cada 10 segundos."
+              ? "Ao vivo, a cena só anima o que de fato aconteceu: uma viagem que chegou ou uma conferência que terminou. Os números vêm direto do servidor e se atualizam a cada 20 segundos."
               : "Na demonstração tudo é de exemplo: o caminhão, os valores e o relógio do balcão (acelerado)."}
           </p>
         </Card>

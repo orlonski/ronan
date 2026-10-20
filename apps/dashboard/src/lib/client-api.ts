@@ -238,7 +238,10 @@ export function useApiQuery<T>(
     enabled?: boolean;
     staleTime?: number;
     retry?: boolean | number;
-    refetchInterval?: number | false;
+    /** Número fixo, ou função pra variar o intervalo (ex.: backoff quando a consulta falha). */
+    refetchInterval?: number | false | ((query: { state: { status: string; fetchFailureCount: number } }) => number | false);
+    /** Padrão do React Query é refazer ao focar a janela; polling pesado liga isto em false. */
+    refetchOnWindowFocus?: boolean;
   },
 ) {
   const token = useAuthToken();
@@ -247,6 +250,7 @@ export function useApiQuery<T>(
     enabled: !!token && !!path && options?.enabled !== false,
     staleTime: options?.staleTime,
     retry: options?.retry,
+    refetchOnWindowFocus: options?.refetchOnWindowFocus,
     refetchInterval: options?.refetchInterval ?? false,
     queryFn: () => fetchApi<T>(path as string, { token }),
   });
