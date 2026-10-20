@@ -245,14 +245,19 @@ export function EscritorioCliente() {
               <div className="space-y-1">
                 <p className="text-sm font-semibold">Não consegui buscar os dados do escritório</p>
                 <p className="mx-auto max-w-prose text-sm text-[#A6B3D2]">
-                  A conexão com o servidor falhou ou esta versão da API ainda não tem a tela. Nenhum dado foi
-                  perdido. Tento de novo sozinho, com intervalo crescente.
+                  O Escritório pode estar desligado pela plataforma, o servidor pode estar ocupado ou esta versão da
+                  API ainda não tem a tela. Nenhum dado foi perdido. Tento de novo sozinho, com intervalo crescente.
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" className="bg-transparent hover:bg-white/10" onClick={() => void consulta.refetch()}>
                 <RefreshCw className="h-4 w-4" aria-hidden />
                 Tentar de novo
               </Button>
+            </div>
+          )}
+          {vivo && snapshot?.desatualizado && (
+            <div className="absolute inset-x-0 bottom-0 bg-amber-950/90 px-4 py-2 text-center text-xs text-amber-100">
+              Servidor ocupado: mostrando o último dado bom. Volto ao ao vivo sozinho assim que normalizar.
             </div>
           )}
           {respostaInvalida && (

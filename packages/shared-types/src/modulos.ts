@@ -132,6 +132,7 @@ export const MODULOS: ModuloDef[] = [
     medido: true,
     recursos: [
       "conferencia-ticket",
+      "escritorio",
       "config-km-atipico",
       "config-ia",
       // Conferência diária de viagens (pergunta ao motorista que provavelmente

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { EscritorioSnapshotSchema } from "@ronan/shared-types";
 import {
   montarSnapshotEscritorio,
@@ -8,6 +9,9 @@ import {
   TTL_SNAPSHOT_MS,
   TTL_TRAVADA_MS,
   VALIDADE_STALE_MS,
+  PAUSA_APOS_FALHA_MS,
+  MAX_CALCULOS_SIMULTANEOS,
+  TIMEOUT_TRANSACAO_MS,
   type EntradaSnapshot,
 } from "./escritorio-snapshot";
 import { comConta } from "../common/conta/conta-context";
@@ -102,7 +106,7 @@ describe("montarSnapshotEscritorio", () => {
  * rajada.
  */
 describe("EscritorioSnapshotService: cache, single-flight e transação única", () => {
-  function montar(opcoes: { falha?: () => boolean; travadas?: number } = {}) {
+  function montar(opcoes: { falha?: () => boolean; travadas?: number; ligado?: boolean } = {}) {
     const tx = {
       $executeRawUnsafe: vi.fn(async () => 0),
       $queryRaw: vi.fn(async () => [{ desde: new Date("2026-10-20T10:00:00.000Z") }]),
@@ -114,6 +118,10 @@ describe("EscritorioSnapshotService: cache, single-flight e transação única",
       },
     };
     const prisma = {
+      configuracaoPlataforma: {
+        findUnique: vi.fn(async () => ({ escritorioAtivo: opcoes.ligado ?? true })),
+        upsert: vi.fn(async () => ({})),
+      },
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => {
         if (opcoes.falha?.()) throw new Error("statement timeout");
         return fn(tx);
@@ -168,7 +176,7 @@ describe("EscritorioSnapshotService: cache, single-flight e transação única",
     const bom = await como("c1", () => svc.snapshot());
     falhar = true;
     vi.setSystemTime(Date.now() + TTL_SNAPSHOT_MS + 1);
-    expect(await como("c1", () => svc.snapshot())).toEqual(bom);
+    expect(await como("c1", () => svc.snapshot())).toEqual({ ...bom, desatualizado: true });
     vi.setSystemTime(Date.now() + VALIDADE_STALE_MS);
     await expect(como("c1", () => svc.snapshot())).rejects.toThrow("statement timeout");
   });
@@ -193,5 +201,57 @@ describe("EscritorioSnapshotService: cache, single-flight e transação única",
     await como("conta-xyz", () => svc.snapshot());
     const sql = (tx.$queryRaw.mock.calls as unknown[][])[0]?.[0] as { values?: unknown[] };
     expect(sql?.values).toContain("conta-xyz");
+  });
+
+  it("interruptor desligado: 404 na hora, sem abrir transação nem tocar nas tabelas", async () => {
+    const { svc, prisma } = montar({ ligado: false });
+    await expect(como("c1", () => svc.snapshot())).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("se nem o interruptor consegue ser lido, trata como desligado (falha fechada)", async () => {
+    const { svc, prisma } = montar();
+    prisma.configuracaoPlataforma.findUnique.mockRejectedValueOnce(new Error("banco fora"));
+    await expect(como("c1", () => svc.snapshot())).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("o interruptor é lido do banco no máximo a cada TTL, e desligar vale na hora", async () => {
+    const { svc, prisma } = montar();
+    await como("c1", () => svc.snapshot());
+    vi.setSystemTime(Date.now() + TTL_SNAPSHOT_MS + 1);
+    await como("c1", () => svc.snapshot());
+    expect(prisma.configuracaoPlataforma.findUnique).toHaveBeenCalledTimes(2);
+    await svc.definirAtivo(false);
+    await expect(como("c1", () => svc.snapshot())).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("depois de uma falha não martela o banco: dentro da pausa responde sem nova transação", async () => {
+    let falhar = true;
+    const { svc, prisma } = montar({ falha: () => falhar });
+    await expect(como("c1", () => svc.snapshot())).rejects.toThrow("statement timeout");
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    await expect(como("c1", () => svc.snapshot())).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    falhar = false;
+    vi.setSystemTime(Date.now() + PAUSA_APOS_FALHA_MS + 1);
+    await expect(como("c1", () => svc.snapshot())).resolves.toBeTruthy();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("limita os cálculos simultâneos do servidor inteiro; o excedente leva 503 sem tocar no banco", async () => {
+    const { svc, prisma } = montar();
+    const r = await Promise.allSettled(["c1", "c2", "c3", "c4"].map((c) => como(c, () => svc.snapshot())));
+    expect(prisma.$transaction).toHaveBeenCalledTimes(MAX_CALCULOS_SIMULTANEOS);
+    expect(r.filter((x) => x.status === "fulfilled")).toHaveLength(MAX_CALCULOS_SIMULTANEOS);
+    expect(r.filter((x) => x.status === "rejected")).toHaveLength(4 - MAX_CALCULOS_SIMULTANEOS);
+  });
+
+  it("a conexão nunca fica presa mais que o teto da transação", async () => {
+    const { svc, prisma } = montar();
+    await como("c1", () => svc.snapshot());
+    const opcoes = (prisma.$transaction.mock.calls as unknown[][])[0]?.[1] as { timeout: number };
+    expect(opcoes.timeout).toBe(TIMEOUT_TRANSACAO_MS);
+    expect(TIMEOUT_TRANSACAO_MS).toBeLessThanOrEqual(8_000);
   });
 });

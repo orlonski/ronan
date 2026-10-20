@@ -11,6 +11,8 @@ export type VereditoEscritorio = z.infer<typeof VereditoEscritorio>;
 
 export const EscritorioSnapshotSchema = z.object({
   geradoEm: z.string(),
+  /** true = o servidor estava sob pressão e devolveu o último cálculo bom. */
+  desatualizado: z.boolean().default(false),
   robo: z.object({
     /** A conferência está ligada nesta conta? */
     ativo: z.boolean(),

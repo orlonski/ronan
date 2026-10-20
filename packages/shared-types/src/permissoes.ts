@@ -336,6 +336,10 @@ const RESOURCE_DEFS: ResourceDef[] = [
     modulo: "Sistema",
     acoes: ["ver", "reprocessar", "vincular"],
   },
+  // A tela "Escritório de agentes". Chave PRÓPRIA (não divide `conferencia-ticket`):
+  // cada item do menu tem a sua linha na matriz, e é a única que a plataforma
+  // concede só a quem deve ver a cena (o endpoint ainda nasce desligado).
+  { recurso: "escritorio", label: "Escritório de agentes", modulo: "Sistema", acoes: ["ver"] },
   { recurso: "config-agente", label: "Agente WhatsApp", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-campos-layout", label: "Fechamento com o cliente — como ler a planilha do cliente", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-forca-atualizacao", label: "Força-atualização do app", modulo: "Sistema", acoes: ["ver", "editar"] },
@@ -391,6 +395,8 @@ export const RECURSOS_PLATAFORMA: string[] = [
   "config-agente",
   "config-ia",
   "conferencia-ticket",
+  // O Escritório mostra o pipeline da conferência paga pela plataforma.
+  "escritorio",
   "config-forca-atualizacao",
   "erros",
   "diagnosticos",

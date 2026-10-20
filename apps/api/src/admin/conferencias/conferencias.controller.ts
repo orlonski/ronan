@@ -69,11 +69,15 @@ export class ConferenciasController {
 
   /**
    * A foto do pipeline pro "Escritório de Agentes". Sem custo e sem dado
-   * pessoal no corpo (só contagem, estágio e tempo). Mesma chave da conferência,
-   * que já é de plataforma: por ora só a Movatruck enxerga.
+   * pessoal no corpo (só contagem, estágio e tempo). Chave própria `escritorio.ver`,
+   * de plataforma (`RECURSOS_PLATAFORMA`: nenhuma empresa recebe por
+   * padrão, só quem a plataforma concede). Responde 404 enquanto o interruptor
+   * `admin/plataforma/escritorio` estiver desligado — que é como ele nasce.
+   * Não restringe à conta da plataforma de propósito: quem dá suporte "entra"
+   * numa empresa e é lá que os números existem.
    */
   @Get("escritorio")
-  @RequerPermissao("conferencia-ticket.ver")
+  @RequerPermissao("escritorio.ver")
   escritorioSnapshot() {
     return this.escritorio.snapshot();
   }

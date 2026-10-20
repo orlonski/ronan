@@ -1134,6 +1134,12 @@ model ConfiguracaoPlataforma {
   registroAlteracoesDesligadoEm DateTime?
   registroAlteracoesOrdemMinima BigInt?
 
+  /// Interruptor do Escritório de Agentes (`GET admin/conferencias/escritorio`).
+  /// Nasce DESLIGADO: a 1ª versão da tela travou o banco da produção
+  /// (20/10/2026), então ligar é decisão consciente, e desligar é um POST em
+  /// `admin/plataforma/escritorio` — segundos, sem deploy nem restart.
+  escritorioAtivo Boolean @default(false)
+
   @@map("configuracao_plataforma")
 }
 

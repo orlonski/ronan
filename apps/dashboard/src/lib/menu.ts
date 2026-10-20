@@ -178,7 +178,7 @@ export const GRUPOS: Grupo[] = [
       { href: "/torre", label: "Torre de controle", icon: TowerControl, perm: "torre.ver", ou: [{ href: "/configuracoes/torre", perm: "config-torre.ver" }] },
       // Visão em tempo real do caminho da viagem até o veredito do agente. Chave de
       // plataforma (a mesma da Conferência de ticket): empresa cliente não recebe.
-      { href: "/escritorio", label: "Escritório de agentes", icon: Bot, perm: "conferencia-ticket.ver" },
+      { href: "/escritorio", label: "Escritório de agentes", icon: Bot, perm: "escritorio.ver" },
       { href: "/programacao", label: "Programação do dia", icon: CalendarDays, perm: "programacao.ver" },
       { href: "/viagens-andamento", label: "Ao vivo", icon: Radio, perm: "ao-vivo.ver" },
       { href: "/mapa", label: "Mapa", icon: Map, perm: "mapa.ver", ou: [{ href: "/configuracoes/tracking", perm: "config-tracking.ver" }] },

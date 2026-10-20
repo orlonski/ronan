@@ -1,8 +1,8 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { Prisma, StatusViagem } from "@prisma/client";
 import type { EscritorioSnapshot } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
-import { contaIdAtual } from "../common/conta/conta-context";
+import { comoSistema, contaIdAtual } from "../common/conta/conta-context";
 import { STATUS_FORA_FECHAMENTO } from "../common/viagem-status";
 import { ConferenciaConfig } from "./conferencia.config";
 
@@ -37,7 +37,20 @@ export const TTL_TRAVADA_MS = 60_000;
 /** Se o cálculo falha, serve o último bom por até isto em vez de devolver erro. */
 export const VALIDADE_STALE_MS = 120_000;
 /** Cada consulta do snapshot falha rápido em vez de segurar a conexão. */
-export const TIMEOUT_CONSULTA_MS = 4_000;
+export const TIMEOUT_CONSULTA_MS = 2_500;
+/** Teto da transação inteira: a conexão nunca fica presa mais que isto. */
+export const TIMEOUT_TRANSACAO_MS = 8_000;
+/** Depois de uma falha, não recalcula por este tempo (não martela banco ruim). */
+export const PAUSA_APOS_FALHA_MS = 15_000;
+/** Cálculos simultâneos no servidor inteiro, somando todas as contas. */
+export const MAX_CALCULOS_SIMULTANEOS = 2;
+/** O freio de emergência é lido do banco, mas não a cada requisição. */
+export const TTL_INTERRUPTOR_MS = 5_000;
+/**
+ * "Devolvidas" olha só viagens dos últimos 180 dias: sem corte, o custo do count
+ * cresce com todo o histórico de divergentes da conta (índice contaId+data).
+ */
+export const JANELA_DATA_DEVOLVIDAS_DIAS = 180;
 /** A travada mais antiga é medida entre as N mais antigas pela data da viagem. */
 export const AMOSTRA_TRAVADAS = 200;
 
@@ -76,6 +89,7 @@ export function montarSnapshotEscritorio(e: EntradaSnapshot): EscritorioSnapshot
 
   return {
     geradoEm: e.agora.toISOString(),
+    desatualizado: false,
     robo: e.robo,
     contagens: {
       fila: e.fila,
@@ -121,13 +135,48 @@ export class EscritorioSnapshotService {
   private readonly cache = new Map<string, { em: number; valor: EscritorioSnapshot }>();
   private readonly emVoo = new Map<string, Promise<EscritorioSnapshot>>();
   private readonly cacheTravada = new Map<string, { em: number; desde: Date | null }>();
+  private readonly falhouEm = new Map<string, number>();
+  private emCalculo = 0;
+  private interruptor: { em: number; ativo: boolean } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConferenciaConfig,
   ) {}
 
+  /** O Escritório está ligado pela plataforma? Falha de leitura conta como desligado. */
+  async ativo(): Promise<boolean> {
+    if (this.interruptor && Date.now() - this.interruptor.em < TTL_INTERRUPTOR_MS) return this.interruptor.ativo;
+    let ativo = false;
+    try {
+      const c = await comoSistema(() =>
+        this.prisma.configuracaoPlataforma.findUnique({ where: { id: "singleton" }, select: { escritorioAtivo: true } }),
+      );
+      ativo = c?.escritorioAtivo ?? false;
+    } catch {
+      ativo = false;
+    }
+    this.interruptor = { em: Date.now(), ativo };
+    return ativo;
+  }
+
+  /** Liga/desliga e vale já nesta instância (as outras enxergam em até o TTL). */
+  async definirAtivo(ativo: boolean): Promise<boolean> {
+    await comoSistema(() =>
+      this.prisma.configuracaoPlataforma.upsert({
+        where: { id: "singleton" },
+        create: { id: "singleton", escritorioAtivo: ativo },
+        update: { escritorioAtivo: ativo },
+      }),
+    );
+    this.interruptor = { em: Date.now(), ativo };
+    return ativo;
+  }
+
   async snapshot(agora = new Date(), opcoes: { semCache?: boolean } = {}): Promise<EscritorioSnapshot> {
+    if (!opcoes.semCache && !(await this.ativo())) {
+      throw new NotFoundException("O Escritório de Agentes está desligado.");
+    }
     const contaId = contaIdAtual();
     if (opcoes.semCache) return this.calcular(contaId, agora);
 
@@ -136,27 +185,46 @@ export class EscritorioSnapshotService {
     const voando = this.emVoo.get(contaId);
     if (voando) return voando;
 
+    // Banco em apuros (falhou há pouco) ou servidor já ocupado com outros
+    // cálculos: não abre mais uma conexão. Serve o último bom, marcado como
+    // desatualizado, ou responde 503 na hora sem tocar no banco.
+    const falhouHa = Date.now() - (this.falhouEm.get(contaId) ?? 0);
+    if (falhouHa < PAUSA_APOS_FALHA_MS || this.emCalculo >= MAX_CALCULOS_SIMULTANEOS) {
+      return this.servirVelhoOuFalhar(contaId);
+    }
+
+    this.emCalculo++;
     const p = this.calcular(contaId, agora)
       .then((valor) => {
         this.cache.set(contaId, { em: Date.now(), valor });
+        this.falhouEm.delete(contaId);
         return valor;
       })
       .catch((erro) => {
+        this.falhouEm.set(contaId, Date.now());
         // Banco lento ou timeout: o painel prefere um número de 1 minuto atrás
-        // a um erro — e, principalmente, não faz a próxima aba re-disparar.
-        const velho = this.cache.get(contaId);
-        if (velho && Date.now() - velho.em < VALIDADE_STALE_MS) return velho.valor;
-        throw erro;
+        // (marcado como desatualizado) a um erro.
+        return this.servirVelhoOuFalhar(contaId, erro);
       })
-      .finally(() => this.emVoo.delete(contaId));
+      .finally(() => {
+        this.emCalculo--;
+        this.emVoo.delete(contaId);
+      });
     this.emVoo.set(contaId, p);
     return p;
+  }
+
+  private servirVelhoOuFalhar(contaId: string, erro?: unknown): EscritorioSnapshot {
+    const velho = this.cache.get(contaId);
+    if (velho && Date.now() - velho.em < VALIDADE_STALE_MS) return { ...velho.valor, desatualizado: true };
+    throw erro ?? new ServiceUnavailableException("O Escritório está sobrecarregado; tentando de novo em instantes.");
   }
 
   private calcular(contaId: string, agora: Date): Promise<EscritorioSnapshot> {
     const desdeEventos = new Date(agora.getTime() - JANELA_EVENTOS_MS);
     const desde24h = new Date(agora.getTime() - 24 * 3_600_000);
     const desdeData = new Date(agora.getTime() - JANELA_DATA_VALIDADAS_DIAS * 86_400_000);
+    const desdeDataDevolvidas = new Date(agora.getTime() - JANELA_DATA_DEVOLVIDAS_DIAS * 86_400_000);
     const desdeDataChegadas = new Date(agora.getTime() - JANELA_DATA_CHEGADAS_DIAS * 86_400_000);
     const desdeCriacao = new Date(agora.getTime() - JANELA_CRIACAO_VEREDICTOS_DIAS * 86_400_000);
     const doApp = { origemIntegracaoId: null, status: { notIn: STATUS_FORA_FECHAMENTO } };
@@ -174,7 +242,9 @@ export class EscritorioSnapshotService {
         const validadas24h = await tx.viagem.count({
           where: { ...doApp, status: StatusViagem.OK, revisadoEm: { gte: desde24h }, data: { gte: desdeData } },
         });
-        const devolvidas = await tx.viagem.count({ where: { ...doApp, status: StatusViagem.DIVERGENTE } });
+        const devolvidas = await tx.viagem.count({
+          where: { ...doApp, status: StatusViagem.DIVERGENTE, data: { gte: desdeDataDevolvidas } },
+        });
         const ajustadas = await tx.viagem.count({ where: { ...doApp, status: StatusViagem.AJUSTADA, revisadoEm: null } });
         const travadas = await tx.viagem.count({ where: emConferencia });
 
@@ -238,7 +308,7 @@ export class EscritorioSnapshotService {
           ),
         });
       },
-      { maxWait: 3_000, timeout: 20_000 },
+      { maxWait: 3_000, timeout: TIMEOUT_TRANSACAO_MS },
     );
   }
 }
