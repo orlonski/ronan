@@ -247,6 +247,20 @@ posição de propósito (`compartilhamento/viagem-publica.ts`: "mandar isso pro
 cliente é vigiar o motorista, não comprovar a entrega"). Usado em
 `50-voce-decide-quem-ve`.
 
+### 22. O que ele vive na estrada, em casa ninguém entende
+**Como ele diz:** "chego com uma história pra contar — subida de serra com carga, fila
+de três horas no pátio — e em casa ninguém sabe nem o que isso quer dizer."
+**O que custa:** é rotina que só outro motorista reconhece de verdade. Postar no
+Instagram pessoal não acha quem entenda; contar pra família só preocupa. O dia fica
+sem plateia, e sem plateia a vontade de registrar também morre.
+**O que mata:** stories dentro do app — foto do momento, 24h no ar — vistos por
+qualquer motorista aprovado do país, não só da própria transportadora, com reação e
+contagem de "visto por" só pra quem postou
+(`apps/api/src/motorista/stories.service.ts`: `StoriesMotoristaService.feed` e
+`fotoBuffer` não filtram por empresa; `visualizacoes` só devolve a lista pro autor).
+Recado oficial da empresa entra num grupo separado, na frente, pra não se misturar
+com a estrada de quem postou.
+
 ---
 
 ## De onde vem isto, e o que falta
